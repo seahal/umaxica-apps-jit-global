@@ -10,22 +10,28 @@ scope module: :info, as: :info do
       root to: "roots#index"
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
       end
 
       resource :csp_violation_report, only: :create, path: "csp-violation-report"
 
       namespace :api do
         namespace :v0 do
-          # `param: :slug` only renames the path segment to the public
-          # identifier; the route stays fully resourceful.
-          resources :entries, only: %i(index show), param: :slug
+          # `param: :public_id` addresses the resource by its opaque API identity,
+          # distinct from the presentation slug; the route stays fully resourceful.
+          resources :entries, only: %i(index show), param: :public_id
+
+          # Machine-readable health and revision. The literal ".json" is part of the path, not a
+          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+          # These are JSON-only; the controllers answer 406 to any other `Accept`.
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
         end
       end
     end
@@ -38,22 +44,28 @@ scope module: :info, as: :info do
       root to: "roots#index"
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
       end
 
       resource :csp_violation_report, only: :create, path: "csp-violation-report"
 
       namespace :api do
         namespace :v0 do
-          # `param: :slug` only renames the path segment to the public
-          # identifier; the route stays fully resourceful.
-          resources :entries, only: %i(index show), param: :slug
+          # `param: :public_id` addresses the resource by its opaque API identity,
+          # distinct from the presentation slug; the route stays fully resourceful.
+          resources :entries, only: %i(index show), param: :public_id
+
+          # Machine-readable health and revision. The literal ".json" is part of the path, not a
+          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+          # These are JSON-only; the controllers answer 406 to any other `Accept`.
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
         end
       end
     end
@@ -66,22 +78,28 @@ scope module: :info, as: :info do
       root to: "roots#index"
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
       end
 
       resource :csp_violation_report, only: :create, path: "csp-violation-report"
 
       namespace :api do
         namespace :v0 do
-          # `param: :slug` only renames the path segment to the public
-          # identifier; the route stays fully resourceful.
-          resources :entries, only: %i(index show), param: :slug
+          # `param: :public_id` addresses the resource by its opaque API identity,
+          # distinct from the presentation slug; the route stays fully resourceful.
+          resources :entries, only: %i(index show), param: :public_id
+
+          # Machine-readable health and revision. The literal ".json" is part of the path, not a
+          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+          # These are JSON-only; the controllers answer 406 to any other `Accept`.
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
         end
       end
     end

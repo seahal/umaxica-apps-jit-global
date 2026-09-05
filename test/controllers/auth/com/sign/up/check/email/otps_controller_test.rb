@@ -4,6 +4,7 @@
 require "test_helper"
 
 class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   include ActiveSupport::Testing::TimeHelpers
 
   setup do

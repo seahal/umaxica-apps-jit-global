@@ -36,6 +36,19 @@ class HostAuthorizationContractTest < Minitest::Test
     palm-jp.umaxica.app
   ).freeze
 
+  # The subprocess below boots RAILS_ENV=development, which resolves both Valkey
+  # stores through a one-argument ENV.fetch. Neither is ever connected -- the
+  # subprocess only drives ActionDispatch::HostAuthorization against a stub Rack
+  # endpoint, and RedisCacheStore connects lazily -- but both names must be
+  # present or the boot aborts before Host Authorization is built. Supplying them
+  # here keeps the test from depending on whatever the surrounding shell or CI job
+  # happens to export.
+  DEVELOPMENT_BOOT_ENV = {
+    "RAILS_ENV" => "development",
+    "CACHE_REDIS_URL" => "redis://valkey-cache.invalid:6379/0",
+    "RATE_LIMIT_REDIS_URL" => "redis://valkey-rate-limit.invalid:6379/0",
+  }.freeze
+
   def test_effective_development_middleware_accepts_private_origins_and_rejects_an_unknown_host
     runner = <<~'RUBY'
       require "json"
@@ -57,8 +70,7 @@ class HostAuthorizationContractTest < Minitest::Test
     hosts = PRIVATE_ORIGIN_HOSTS + ["evil.example.com"]
     stdout, stderr, status = Open3.capture3(
       cleared_object_storage_env.merge(
-        "RAILS_ENV" => "development",
-        "REDIS_SMOKE_TEST" => "0",
+        DEVELOPMENT_BOOT_ENV,
         "HOST_AUTHORIZATION_TEST_HOSTS" => JSON.generate(hosts),
         "PRIVATE_AUTH_CORPORATE_URL" => "http://configured-auth.com.localhost:3000",
         "PRIVATE_AUTH_STAFF_URL" => "http://configured-auth.org.localhost:3000",
@@ -176,8 +188,7 @@ class HostAuthorizationContractTest < Minitest::Test
 
   def development_published_host_env(unconfigured_site_host)
     cleared_object_storage_env.merge(
-      "RAILS_ENV" => "development",
-      "REDIS_SMOKE_TEST" => "0",
+      DEVELOPMENT_BOOT_ENV,
       "HOST_AUTHORIZATION_TEST_HOSTS" =>
         JSON.generate(BROWSER_FACING_SITE_HOSTS + [unconfigured_site_host, "evil.example.com"]),
       "PUBLIC_AUTH_SERVICE_URL" => "https://auth.umaxica.app",

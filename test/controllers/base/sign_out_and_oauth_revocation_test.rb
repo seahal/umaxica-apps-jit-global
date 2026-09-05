@@ -7,6 +7,7 @@ require "test_helper"
 # redirect and the OAuth token revocation endpoint's rejection of an
 # unauthenticated client.
 class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   self.fixture_table_names = []
 
   test "app sign-out entry redirects to the confirmation page" do

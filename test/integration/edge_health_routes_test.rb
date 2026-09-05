@@ -57,4 +57,19 @@ class EdgeHealthRoutesTest < ActionDispatch::IntegrationTest
       end
     end
   end
+
+  # The machine endpoints carry the literal ".json" as a path segment (`format: false`). The
+  # bare paths and any other API version must not resolve.
+  test "machine health and revision endpoints exist only at the exact /api/v0/*.json paths" do
+    host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
+
+    %w(
+      /api/v0/health /api/v0/revision /api/v1/health.json /api/v1/revision.json
+      /api/v0/liveness.json /health.json/liveness
+    ).each do |path|
+      assert_raises(ActionController::RoutingError, "#{host}#{path} should not be routed") do
+        Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)
+      end
+    end
+  end
 end

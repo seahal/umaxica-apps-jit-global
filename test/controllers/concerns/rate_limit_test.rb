@@ -86,6 +86,7 @@ class RateLimitSharedScopeTwoController < ApplicationController
 end
 
 class RateLimitTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   self.fixture_table_names = []
 
   setup do

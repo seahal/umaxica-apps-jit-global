@@ -33,17 +33,21 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
         get "/api/v0/entries?locale=ja", headers: json_headers(service:, surface:)
 
         assert_response :success
-        assert_equal %w(listed), response.parsed_body.fetch("data").map { |entry| entry.fetch("slug") }
+        data = response.parsed_body.fetch("data")
+
+        assert_equal %w(listed), data.map { |entry| entry.fetch("slug") }
+        assert(data.all? { |entry| entry.fetch("public_id").present? })
         assert_openapi_conform 200
       end
 
-      test "GET /api/v0/entries/{slug} conforms for #{service} on the #{surface} surface" do
+      test "GET /api/v0/entries/{public_id} conforms for #{service} on the #{surface} surface" do
         prepare(service:, surface:)
-        publish("readable", "Readable")
+        entry = publish("readable", "Readable")
 
-        get "/api/v0/entries/readable?locale=ja", headers: json_headers(service:, surface:)
+        get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: json_headers(service:, surface:)
 
         assert_response :success
+        assert_equal entry.public_id, response.parsed_body.fetch("public_id")
         assert_openapi_conform 200
       end
     end
@@ -55,9 +59,9 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
     # member was published as a non-nullable string while the serializer emitted null. The
     # assertion below fails against a schema that gets this wrong.
     prepare(service: "docs", surface: "app")
-    publish("null-summary", "Null Summary", summary: nil)
+    entry = publish("null-summary", "Null Summary", summary: nil)
 
-    get "/api/v0/entries/null-summary?locale=ja", headers: json_headers(service: "docs", surface: "app")
+    get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
 
     assert_response :success
 
@@ -74,9 +78,9 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
     # rendered entry always carries a timestamp. The schema described it as nullable, which
     # described a state that cannot occur; this pins the correction.
     prepare(service: "docs", surface: "app")
-    publish("always-timestamped", "Always Timestamped")
+    entry = publish("always-timestamped", "Always Timestamped")
 
-    get "/api/v0/entries/always-timestamped?locale=ja", headers: json_headers(service: "docs", surface: "app")
+    get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
 
     assert_response :success
     assert_not_nil response.parsed_body.fetch("published_at")
@@ -85,15 +89,15 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
 
   test "a matching validator answers a conforming 304" do
     prepare(service: "docs", surface: "app")
-    publish("revalidated", "Revalidated")
+    entry = publish("revalidated", "Revalidated")
     headers = json_headers(service: "docs", surface: "app")
 
-    get "/api/v0/entries/revalidated?locale=ja", headers: headers
+    get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: headers
 
     assert_response :success
     etag = response.headers.fetch("ETag")
 
-    get "/api/v0/entries/revalidated?locale=ja", headers: headers.merge("If-None-Match" => etag)
+    get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: headers.merge("If-None-Match" => etag)
 
     assert_response :not_modified
     assert_empty response.body
@@ -102,15 +106,66 @@ class OpenapiContentEntriesContractTest < ActionDispatch::IntegrationTest
     assert_openapi_conform 304
   end
 
-  test "an unknown slug answers a conforming problem document" do
+  test "an unknown public_id answers a conforming problem document" do
     prepare(service: "docs", surface: "app")
 
-    get "/api/v0/entries/missing?locale=ja", headers: json_headers(service: "docs", surface: "app")
+    get "/api/v0/entries/unknownpublicid0000001?locale=ja", headers: json_headers(service: "docs", surface: "app")
 
     assert_response :not_found
     assert_equal "application/problem+json", response.media_type
     assert_equal "urn:umaxica:problem:not-found", response.parsed_body.fetch("type")
     assert_openapi_conform 404
+  end
+
+  test "a public_id resolves only through its own cell, never another audience, surface, or locale" do
+    prepare(service: "docs", surface: "app")
+    entry = publish("cell-bound", "Cell Bound")
+    own_host = @host
+
+    # Same public_id, every other cell that routes /api/v0/entries: different
+    # surface, different service, and the same cell in another locale.
+    foreign = [
+      { service: "docs", surface: "com" },
+      { service: "docs", surface: "org" },
+      { service: "help", surface: "app" },
+      { service: "news", surface: "app" },
+      { service: "info", surface: "app" },
+    ]
+    foreign.each do |cell|
+      prepare(**cell)
+      get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: json_headers(**cell)
+
+      assert_response :not_found, "#{cell} must not resolve an app/docs public_id"
+      assert_equal "application/problem+json", response.media_type
+    end
+
+    # Its own cell in a locale it was not published in.
+    publishing_edition(audience: "app", surface: "docs", locale: "en")
+    host!(own_host)
+    get "/api/v0/entries/#{entry.public_id}?locale=en", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :not_found
+
+    # Sanity: it does resolve through its own cell.
+    host!(own_host)
+    get "/api/v0/entries/#{entry.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :success
+  end
+
+  test "a draft or archived entry is not readable by a known public_id" do
+    prepare(service: "docs", surface: "app")
+
+    draft = publishing_draft(edition: @edition, slug: "draft-entry", title: "Draft Entry")
+    get "/api/v0/entries/#{draft.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :not_found
+
+    archived = publish("archived-entry", "Archived Entry")
+    archived.update!(archived_at: Time.current, archive_reason: "test fixture")
+    get "/api/v0/entries/#{archived.public_id}?locale=ja", headers: json_headers(service: "docs", surface: "app")
+
+    assert_response :not_found
   end
 
   test "a collection is bounded even when the client asks for no limit" do

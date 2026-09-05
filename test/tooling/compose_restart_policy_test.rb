@@ -21,7 +21,8 @@ class ComposeRestartPolicyTest < Minitest::Test
   # The observability group is on this list because it is no longer
   # profile-gated: a plain `up` starts all of it.
   RECOVERING_SERVICES = %w(
-    alloy core fakecloud grafana loki prometheus primary replica tempo valkey
+    alloy core fakecloud grafana loki prometheus primary replica tempo valkey-cache
+    valkey-rate-limit
   ).freeze
 
   # Podman applies no backoff, so an unbounded policy turns a bad configuration into
@@ -91,7 +92,7 @@ class ComposeRestartPolicyTest < Minitest::Test
   # `service_healthy` dependency into `service_started`, and nothing else asserts the
   # replica is actually streaming.
   def test_datastores_keep_a_healthcheck
-    %w(primary replica valkey).each do |service|
+    %w(primary replica valkey-cache valkey-rate-limit).each do |service|
       definition = base_compose.fetch("services").fetch(service)
 
       refute_nil(

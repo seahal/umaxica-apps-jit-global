@@ -29,15 +29,16 @@ class InfoSurfacePublishingTest < ActionDispatch::IntegrationTest
       assert_equal "info", json_entry.fetch("namespace")
       assert_equal audience, json_entry.fetch("surface")
 
-      get "/api/v0/entries/#{entry.slugs.first.slug}",
+      get "/api/v0/entries/#{entry.public_id}",
           headers: { "Host" => surface.fetch(:host_fallback), "Accept" => "application/json" }, as: :json
 
       assert_response :success, audience
+      assert_equal entry.public_id, response.parsed_body.fetch("public_id")
       assert_equal entry.slugs.first.slug, response.parsed_body.fetch("slug")
     end
   end
 
-  test "info show returns 404 for an unknown slug" do
+  test "info show returns 404 for an unknown public_id" do
     host! "info.app.localhost"
 
     get "/api/v0/entries/does-not-exist", headers: { "Accept" => "application/json" }, as: :json

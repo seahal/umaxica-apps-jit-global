@@ -17,13 +17,19 @@ host-constrained, so domain and subdomain matter in both development and product
 - Ruby `4.0.x`
 - PostgreSQL
   - Solid Queue
-- Valkey/Redis
+- Valkey/Redis (application cache and rate-limit counters, on separate services)
 - Vite Rails + Stimulus + Turbo
 - Tailwind CSS via Vite
 - Propshaft
 - Vite and `pnpm` for JavaScript build, linting, formatting, and tests
 
 ## Frontend and Assets
+
+UI implementation should treat the Digital Agency of Japan Design System introduction as reading
+before inventing screen patterns. Start at
+[the introduction](https://design.digital.go.jp/dads/introduction/) and
+`docs/reference/digital-agency-design-system.md`. This application's primitives remain in
+`src/components/ui/` and `docs/design.md`.
 
 - JavaScript entrypoints are bundled through Vite Rails from `src/entrypoints`.
 - Stimulus controllers live in `src/controllers`.

@@ -1,6 +1,9 @@
 # typed: false
 # frozen_string_literal: true
 
+# Inclusion-time callbacks are retained because every PublicId record must mint
+# and validate the identifier on create; an explicit per-model hook would
+# duplicate the same persistence contract on every including class.
 module PublicId
   extend ActiveSupport::Concern
 

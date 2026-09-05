@@ -62,16 +62,17 @@ class BaseHealthsControllerTest < ActionDispatch::IntegrationTest
   def assert_health_response
     assert_response :success
     assert_not_predicate response, :redirect?
-    assert_equal "text/html", response.media_type
-    assert_includes response.body, "Health Snapshot"
-    assert_includes response.body, "Generated at"
+    assert_equal "text/plain", response.media_type
+    assert_not_equal "text/html", response.media_type
+    assert_match(/\Astatus: \w+\nstartup: \w+\nliveness: \w+\nreadiness: \w+\n\z/, response.body)
   end
 
-  def assert_probe_response(check)
+  def assert_probe_response(_check)
     assert_response :success
     assert_not_predicate response, :redirect?
-    assert_equal "application/json", response.media_type
-    assert_equal check, response.parsed_body["check"]
+    assert_equal "text/plain", response.media_type
+    assert_not_equal "application/json", response.media_type
+    assert_equal "ok\n", response.body
   end
   private
 

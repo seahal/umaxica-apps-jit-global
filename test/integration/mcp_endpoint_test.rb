@@ -7,6 +7,7 @@ require "test_helper"
 # app, com, and org hosts. Every endpoint speaks the same protocol and offers the same three
 # read-only tools, but must report its own realm and surface and must never answer for another.
 class McpEndpointTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   JSON_HEADERS = {
     "CONTENT_TYPE" => "application/json",
     "HTTP_ACCEPT" => "application/json, text/event-stream",

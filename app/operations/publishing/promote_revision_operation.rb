@@ -61,6 +61,7 @@ module Publishing
           sequence: next_sequence(entry),
         )
       copy_taxonomy_assignments(version)
+      copy_media_usages(version)
       version
     rescue ActiveRecord::RecordNotUnique => e
       # Only a collision on the idempotency index means another promotion of
@@ -122,6 +123,22 @@ module Publishing
       end
     end
 
+    def copy_media_usages(version)
+      revision.media_usages.find_each do |usage|
+        VersionMediaUsage.create!(
+          media_file_id: usage.media_file_id,
+          entry_version: version,
+          role: usage.role,
+          field_path: usage.field_path,
+          block_path: usage.block_path,
+          position: usage.position,
+          alt_text: usage.alt_text,
+          caption: usage.caption,
+          presentation_metadata: usage.presentation_metadata,
+        )
+      end
+    end
+
     def reject_archived_assignments!
       archived = revision.archived_taxonomy_assignments
       return if archived.empty?
@@ -155,14 +172,17 @@ module Publishing
 
       expected_single = revision.single_taxonomy_assignments.count
       expected_multiple = revision.multiple_taxonomy_assignments.count
+      expected_media = revision.media_usages.count
       actual_single = version.single_taxonomy_assignments.count
       actual_multiple = version.multiple_taxonomy_assignments.count
+      actual_media = version.media_usages.count
 
-      unless expected_single == actual_single && expected_multiple == actual_multiple
+      unless expected_single == actual_single && expected_multiple == actual_multiple && expected_media == actual_media
         raise(
           IncompleteVersionError,
-          "version #{version.id} holds #{actual_single}/#{actual_multiple} taxonomy snapshots, " \
-          "expected #{expected_single}/#{expected_multiple}",
+          "version #{version.id} holds #{actual_single}/#{actual_multiple} taxonomy snapshots " \
+          "and #{actual_media} media usages, expected #{expected_single}/#{expected_multiple} " \
+          "and #{expected_media}",
         )
       end
 

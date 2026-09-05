@@ -121,20 +121,6 @@ responses:
         schema:
           $ref: "#/schemas/Problem"
 
-  HealthOk:
-    description: The probe passed.
-    content:
-      application/json:
-        schema:
-          $ref: "#/schemas/HealthResult"
-
-  HealthUnavailable:
-    description: The probe failed.
-    content:
-      application/json:
-        schema:
-          $ref: "#/schemas/HealthResult"
-
 schemas:
   Problem:
     type: object
@@ -229,8 +215,29 @@ schemas:
   Entry:
     type: object
     description: One published entry, rendered from its frozen published version.
-    required: [namespace, surface, slug, locale, title, summary, body, published_at, taxonomy]
+    required:
+      [
+        public_id,
+        namespace,
+        surface,
+        slug,
+        locale,
+        title,
+        summary,
+        body,
+        published_at,
+        updated_at,
+        snapshot_public_id,
+        taxonomy,
+      ]
     properties:
+      public_id:
+        type: string
+        description: >-
+          Opaque entry identifier and the resource identity for
+          `GET /api/v0/entries/{public_id}`. Never a database primary key and not
+          the slug. Treat as an opaque string; its generation scheme is not part
+          of the contract.
       namespace:
         type: string
         description: Content service.
@@ -270,6 +277,13 @@ schemas:
           `publishing_publications.effective_from` is `NOT NULL`, so an entry that renders always
           has one. It was previously described as nullable, which described a state that cannot
           occur.
+      updated_at:
+        type: string
+        format: date-time
+        description: RFC 3339 instant of the published version row. Used for Last-Modified.
+      snapshot_public_id:
+        type: string
+        description: Stable public identifier of the published snapshot used for HTML validators.
       taxonomy:
         type: object
         description: >-
@@ -294,45 +308,53 @@ schemas:
       has_more:
         type: boolean
 
-  HealthResult:
+  CheckStatus:
     type: object
-    description: >-
-      The shared probe contract. See docs/reference/health-endpoints.md.
-    required: [status, check, namespace, dependencies, details]
+    description: One check's verdict in the machine-readable health aggregate.
+    required: [status]
     properties:
       status:
         type: string
-        enum: [ok, unavailable]
-      check:
+        enum: [pass, warn, fail]
+
+  HealthReport:
+    type: object
+    description: >-
+      Machine-readable health aggregate for `GET /api/v0/health.json`. See
+      docs/reference/health-endpoints.md. Carries only the two enum-bounded strings `status`
+      and `checks.*.status`; no internal topology, hostname, dependency name, exception, path,
+      or environment value crosses this boundary.
+    required: [status, checks]
+    properties:
+      status:
         type: string
         description: >-
-          The probe that produced this result. The aggregate `/health` snapshot renders HTML, not
-          JSON, so its `health` value never appears in a JSON response.
-        enum: [liveness, readiness, startup]
-      namespace:
-        type: string
-        description: >-
-          The routed surface that answered, as `<service>/<surface>`. One process answers on many
-          hostnames and the probe bodies were otherwise identical, so a caller that sent the wrong
-          `Host` could not tell which surface replied.
-        example: core/app
-      dependencies:
+          Worst of the three checks. `fail` is served with HTTP 503; `pass` and `warn` with 200.
+        enum: [pass, warn, fail]
+      checks:
         type: object
         description: >-
-          Per-probe dependency map. Empty for liveness and startup; carries `database` for
-          readiness.
-        additionalProperties: true
-      details:
-        type: object
-        required: [generated_at]
+          Per-check verdicts, mapped independently so a readiness failure never changes the
+          dependency-free liveness verdict.
+        required: [startup, liveness, readiness]
         properties:
-          generated_at:
-            type: string
-            format: date-time
-            description: UTC RFC 3339 instant with millisecond precision.
-          revision:
-            type: string
-            description: Deployment revision. Omitted when blank.
-          status:
-            type: string
-            description: Internal status. Present only when the result is degraded.
+          startup:
+            $ref: "#/schemas/CheckStatus"
+          liveness:
+            $ref: "#/schemas/CheckStatus"
+          readiness:
+            $ref: "#/schemas/CheckStatus"
+
+  Revision:
+    type: object
+    description: >-
+      Machine-readable deployment revision for `GET /api/v0/revision.json`.
+    required: [revision]
+    properties:
+      revision:
+        type: string
+        nullable: true
+        description: >-
+          The framework-resolved deployment revision (`Rails.application.revision`). Always
+          present as a member; the value is `null` when no revision is configured, which is a
+          normal state. Never a fabricated identifier.

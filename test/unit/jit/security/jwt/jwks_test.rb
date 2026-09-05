@@ -36,6 +36,20 @@ module Jit
           assert_match(/keys array/, error.message)
         end
 
+        # Valid JSON that is neither of the two shapes a JWK Set may take. Answering with an empty
+        # key collection instead of raising would leave a caller verifying signatures against no
+        # keys at all, which fails open on the next configuration typo.
+        test "rejects json that parses but is neither a jwk set object nor an array" do
+          ["123", '"kid-1"', "true", "null"].each do |raw|
+            error =
+              assert_raises(JitSecurityJwtJwks::Error, "#{raw} must be refused") do
+                JitSecurityJwtJwks.parse_public_collection(raw)
+              end
+
+            assert_equal "must be a JWK Set JSON object or array", error.message
+          end
+        end
+
         test "rejects invalid json" do
           error =
             assert_raises(JitSecurityJwtJwks::Error) do

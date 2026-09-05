@@ -72,18 +72,23 @@ class PublishingPublishedEntriesQuery
     )
   end
 
-  def find_by(slug:)
+  # Resolves a single published entry by its opaque `public_id`, scoped to this
+  # edition. `edition.entries` keeps the lookup inside the request's
+  # audience/surface/locale cell -- a `public_id` belonging to another edition
+  # returns nil, never another cell's row. Drafts, archived entries, and entries
+  # with no active publication return nil so a known id cannot surface unpublished
+  # content. The database primary key and the presentation slug are different
+  # columns, so neither matches here.
+  def find_published(public_id:)
     return unless edition
 
     entry =
-      edition.entry_slugs.canonical
+      edition.entries
         .includes(
-          entry: [
-            :canonical_slug,
-            { active_publication: { entry_version: %i(single_taxonomy_assignments multiple_taxonomy_assignments) } },
-          ],
+          :canonical_slug,
+          active_publication: { entry_version: %i(single_taxonomy_assignments multiple_taxonomy_assignments) },
         )
-        .find_by(slug:)&.entry
+        .find_by(public_id:)
     return unless entry
     return if entry.archived?
     return unless entry.active_publication

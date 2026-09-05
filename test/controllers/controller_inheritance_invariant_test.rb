@@ -39,8 +39,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     "app/controllers/base/app/sign_outs/completions_controller.rb",
     "app/controllers/base/com/sign_outs/completions_controller.rb",
     "app/controllers/base/org/sign_outs/completions_controller.rb",
-    "app/controllers/base/org/support/clients/sessions/emergency_revocations_controller.rb",
-    "app/controllers/base/org/support/operators/sessions/emergency_revocations_controller.rb",
     "app/controllers/base/org/support/visitors/sessions/emergency_revocations_controller.rb",
     "app/controllers/core/app/sign/outs/completions_controller.rb",
     "app/controllers/core/com/sign/outs/completions_controller.rb",

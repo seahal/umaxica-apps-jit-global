@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   include ActiveSupport::Testing::TimeHelpers
 
   setup do

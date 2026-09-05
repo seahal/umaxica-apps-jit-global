@@ -4,6 +4,7 @@
 require "test_helper"
 
 class Auth::Org::Social::SessionsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     host! @host

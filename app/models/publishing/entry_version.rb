@@ -55,7 +55,7 @@ module Publishing
 
     has_many :publications, class_name: "Publishing::Publication", inverse_of: :entry_version,
                             dependent: :restrict_with_exception
-    has_many :media_usages, class_name: "Publishing::MediaUsage", inverse_of: :entry_version,
+    has_many :media_usages, class_name: "Publishing::VersionMediaUsage", inverse_of: :entry_version,
                             dependent: :restrict_with_exception
     # restrict_with_exception, not destroy: a published version's taxonomy
     # history is frozen, and PostgreSQL rejects the delete regardless.

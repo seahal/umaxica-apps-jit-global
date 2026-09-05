@@ -51,7 +51,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "jsdom": "^30.0.1",
-    "knip": "^6.33.0",
+    "knip": "^6.34.0",
     "lefthook": "catalog:",
     "linkinator": "^8.1.0",
     "oxfmt": "catalog:",

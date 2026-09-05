@@ -275,7 +275,8 @@ Details rule. Converting them would break protocol conformance.
 | WebAuthn / passkey ceremony endpoints | Shapes fixed by the WebAuthn specification and the browser API |
 | DBSC endpoints | Device Bound Session Credentials; see `docs/architecture/dbsc.md` |
 | MCP endpoints (`app/controllers/concerns/mcp_endpoint.rb`) | **JSON-RPC 2.0** — the response is produced by the MCP transport, not by application code |
-| `/health/*` | The internal probe contract in `docs/reference/health-endpoints.md`; edge-blocked per `adr/internal-health-endpoint-edge-isolation.md` |
+| `/health`, `/health/*` | Text probe contract (`text/plain`) in `docs/reference/health-endpoints.md`; edge-blocked per `adr/internal-health-endpoint-edge-isolation.md` |
+| `/api/v0/health.json`, `/api/v0/revision.json` | Machine health/revision contract in `docs/reference/health-endpoints.md` (`application/json`, `pass/warn/fail`, `406` on non-JSON `Accept`) — not the Problem Details error format |
 | `/.well-known/*` | The specification defining each resource |
 
 An exemption covers the response format only. Status codes, TLS, logging, rate limiting, and surface

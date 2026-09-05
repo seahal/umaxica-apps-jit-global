@@ -56,8 +56,9 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
   DB URLs, and secrets are injected via ENV to keep the code portable.
 - **Defense in depth**: Signed cookies, JWTs, Turnstile, rate limiting, encryption, and
   `allow_browser versions: :modern` guard every entry point.
-- **Observability-first**: All HTTP, Redis, and ActionMailer operations are instrumented;
-  `/health` + `/v1/health` exist for every host.
+- **Observability-first**: All HTTP, rate-limit store, and ActionMailer operations are instrumented;
+  `/health` (`text/plain`) and `/api/v0/health.json` exist for every host
+  (`docs/reference/health-endpoints.md`).
 - **Composable tooling**: pnpm-managed JavaScript tooling, Vite-backed CSS entrypoints, Foreman +
   Docker Compose for orchestration, GitHub Actions for CI.
 
@@ -66,7 +67,8 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 - Ruby 3.4.7 / Rails 8.x
 - pnpm 12.0.0 / Node 24.19.0 (Active LTS) for JavaScript tooling (Vite-backed)
 - PostgreSQL 18 primaries/replicas per logical database
-- Valkey for caching/rate limiting
+- Valkey for the application cache and for distributed rate-limit counters, on two separate
+  services
 - Cloudflare/ Fastly handle TLS and CDN duties
 
 ---
@@ -81,7 +83,7 @@ Browsers / Mobile Apps
     ▼
 Rails 8 Monolith (Top / Sign / Help / Docs / News / API / BFF)
     │ ├─ Postgres clusters (`app_principal`, `org_ticket`, `com_setting`, etc.)
-    │ ├─ Valkey (sessions, rate limiting, Memorize cache)
+    │ ├─ Valkey cache (Rails.cache) + Valkey rate limit (counters)
     │ ├─ ActionMailer + SMTP / Outbound::Sms
     │ └─ OpenTelemetry exporter (Tempo) + Loki logging
 Downstream: Google Cloud (Run/Build/Storage), Cloudflare R2, Fastly CDN
@@ -91,12 +93,12 @@ Downstream: Google Cloud (Run/Build/Storage), Cloudflare R2, Fastly CDN
 
 | Namespace            | Host variables                                          | Responsibilities                                                                                                           |
 | -------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `Top::Com/App/Org`   | `TOP_CORPORATE_URL`, `TOP_SERVICE_URL`, `TOP_STAFF_URL` | Redirect to `EDGE_*` hosts, render `/health` & `/v1/health`, expose preference UIs (`cookie`, `region`, `theme`, `reset`). |
+| `Top::Com/App/Org`   | `TOP_CORPORATE_URL`, `TOP_SERVICE_URL`, `TOP_STAFF_URL` | Redirect to `EDGE_*` hosts, render `/health` (text) & `/api/v0/health.json`, expose preference UIs (`cookie`, `region`, `theme`, `reset`). |
 | `Auth::App/Org`      | `ID_SERVICE_URL`, `ID_STAFF_URL`                        | Registration (email/phone), authentication, passkeys, OAuth, recovery, withdrawal.                                         |
 | `Help::Com/App/Org`  | `HELP_*`                                                | Contact forms with Turnstile, OTP validation, email/SMS confirmation, success receipts.                                    |
 | `Docs::*`, `News::*` | `DOCS_*`, `NEWS_*`                                      | Documentation and newsroom placeholders with branded health endpoints.                                                     |
 | `Bff::*`             | `BFF_*`                                                 | Preference APIs for non-authenticated clients (email/locale endpoints).                                                    |
-| `Api::*`             | `API_*`                                                 | JSON endpoints (`/v1/health`, `/v1/inquiry/valid_email_addresses`, `/v1/inquiry/valid_telephone_numbers`).                 |
+| `Api::*`             | `API_*`                                                 | JSON endpoints (`/api/v0/health.json`, `/v1/inquiry/valid_email_addresses`, `/v1/inquiry/valid_telephone_numbers`).                 |
 
 Routes live in `config/routes/*.rb`; the main `config/routes.rb` `draw`s each fragment to keep
 concerns scoped.
@@ -112,7 +114,7 @@ concerns scoped.
    (`IdentitiesRecord`, `ComPrincipalRecord`, etc.) to target specific DB clusters. Services (e.g.,
    `Outbound::Sms`, `AccountService`) encapsulate integration logic.
 3. **Integration**: ActionMailer namespaces, Sms providers, OpenTelemetry instrumentation,
-   Redis/Valkey caching, external CDNs/cloud providers.
+   the Valkey rate-limit store, external CDNs/cloud providers.
 
 ---
 
@@ -158,7 +160,7 @@ concerns scoped.
 
 ### 4.4 Docs & News
 
-- Each namespace exposes `root`, `/health`, `/v1/health` with host constraints; upcoming roadmap
+- Each namespace exposes `root`, `/health` (text), `/api/v0/health.json`, and `/revision` with host constraints; upcoming roadmap
   will hydrate documentation/newsroom content via React views (see `src/pages/docs/**` and
   `src/pages/news/**`).
 
@@ -178,8 +180,6 @@ concerns scoped.
 ### 4.6 Background services
 
 - `Outbound::Sms` handles SMS dispatch for OTP-related flows.
-- `Memorize` concern wraps a Redis pool with per-session prefixes and encryption for ephemeral
-  key/value storage.
 
 ---
 
@@ -210,12 +210,19 @@ Sensitive columns leverage Active Record encryption.
 
 ### 5.2 Caching & rate limiting
 
-- SolidCache + Valkey for Rails caching.
-- `RateLimit` concern configures `ActiveSupport::Cache::RedisCacheStore` (URL from credentials) to
-  allow 1,000 req/hour per client by default.
+- `Rails.cache` is an `ActiveSupport::Cache::RedisCacheStore` on Valkey, configured by
+  `CACHE_REDIS_URL` in development and production and `:null_store` in test. Solid Cache was
+  removed: a database-backed cache reads at the call site exactly like durable storage, which is
+  how replay-prevention state and one-shot secrets ended up in it. Every cache entry now carries
+  an explicit TTL and is reconstructible from its source.
+- Rate limiting uses Rails' `rate_limit` DSL against `config.x.rate_limit.store`, a separate
+  `ActiveSupport::Cache::RedisCacheStore` on Valkey configured by `RATE_LIMIT_REDIS_URL`. The
+  default limit is 1,000 req/hour per client.
+- The two stores stay separate even though both are Valkey: development runs `valkey-cache` and
+  `valkey-rate-limit` as distinct services, so a cache flush cannot reset rate-limit windows.
+  Counters and cache entries are both disposable; neither can lose authoritative state.
 - Runtime URL context is resolved from the Preference JWT projection and request-local context, not
   from the obsolete `__Secure-root_app_preferences` cookie.
-- `Memorize` stores short-lived encrypted values keyed by host + session.
 
 ---
 
@@ -261,7 +268,7 @@ Sensitive columns leverage Active Record encryption.
   arguments.
 - **Redirect safety**: `Redirect::ALLOWED_HOSTS` enumerates permitted targets; Base64-encoded jump
   tokens validated before allowing cross-host redirects.
-- **Secrets**: Rails credentials store JWT keys, Cloudflare Turnstile secrets, Redis URLs, AWS keys,
+- **Secrets**: Rails credentials store JWT keys, Cloudflare Turnstile secrets, AWS keys,
   SMTP secrets. Compose `.env` wiring required for local runs.
 - **Logging & auditing**: Rails logs feed Loki; OTEL traces capture request IDs and hostnames for
   auditability.
@@ -272,10 +279,10 @@ Sensitive columns leverage Active Record encryption.
 
 | Interface      | Type          | Description                                                                                                                                 |
 | -------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health`, `/v1/health`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`. |
+| HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health` (text), `/api/v0/health.json`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`. |
 | Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.            |
 | SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                          |
-| Redis/Valkey   | RESP          | Sessions, rate limiting, Memorize store.                                                                                                    |
+| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound. |
 | OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                               |
 | Object storage | S3-compatible | Opt-in RustFS smoke-test integration for local development; production storage is deferred.                                                 |
 

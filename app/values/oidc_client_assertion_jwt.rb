@@ -8,20 +8,6 @@ module OidcClientAssertionJwt
   TOKEN_TYPE = "oidc-client-assertion+jwt"
   TTL = 5.minutes
 
-  class << self
-    # Replay tracking store. Defaults to Rails.cache in runtime environments.
-    # Tests may inject a real store because Rails.cache is :null_store there.
-    # rubocop:disable ThreadSafety/ClassAndModuleAttributes
-    attr_writer :replay_store
-    # rubocop:enable ThreadSafety/ClassAndModuleAttributes
-
-    # rubocop:disable ThreadSafety/ClassInstanceVariable
-    def replay_store
-      @replay_store ||= Rails.cache
-    end
-    # rubocop:enable ThreadSafety/ClassInstanceVariable
-  end
-
   def issue(client_id:, token_url:, now: Time.current, jti: SecureRandom.uuid)
     issue_with_configured_key(client_id: client_id, token_url: token_url, now: now, jti: jti)
   rescue JitSecurityJwtRegistry::ConfigurationError
@@ -52,7 +38,7 @@ module OidcClientAssertionJwt
     JitSecurityJwtKeyring.encode(payload, issuer_id: issuer_id)
   end
 
-  def valid?(client_id:, assertion:, token_url:, now: Time.current, replay_store: self.replay_store)
+  def valid?(client_id:, assertion:, token_url:, now: Time.current)
     header = JitSecurityJwtKeyring.parse_header(assertion)
     return false unless header["alg"] == JitSecurityJwtRegistry::ALGORITHM
     return false unless header["typ"] == TOKEN_TYPE
@@ -81,43 +67,45 @@ module OidcClientAssertionJwt
       payload["typ"] == TOKEN_TYPE &&
       now.to_i < payload["exp"].to_i &&
       consume_jti?(
-        namespace: namespace,
         client_id: client_id,
         jti: payload["jti"],
         exp: payload["exp"],
         now: now,
-        replay_store: replay_store,
       )
   rescue JWT::DecodeError, JitSecurityJwtRegistry::ConfigurationError
     false
   end
 
-  def consume_jti?(namespace:, client_id:, jti:, exp:, now:, replay_store:)
+  # A client assertion is single-use. The record of that use is replay-prevention
+  # state, so it lives in PostgreSQL alongside the other consumed JTIs rather than
+  # in Rails.cache: a cache is allowed to evict, and an eviction here would re-open
+  # the replay window for the remainder of the assertion's lifetime. The unique
+  # index on (purpose, issuer, jti_digest) is what makes the check atomic -- a
+  # concurrent second use loses the insert and is rejected.
+  #
+  # Fails closed. An unavailable database rejects the assertion rather than
+  # accepting one whose uniqueness could not be established.
+  def consume_jti?(client_id:, jti:, exp:, now:)
     return false if jti.blank?
 
-    ttl = exp.to_i - now.to_i + AuthenticationJwtConfiguration.leeway_seconds
-    return false unless ttl.positive?
+    expires_at = Time.zone.at(exp.to_i + AuthenticationJwtConfiguration.leeway_seconds)
+    return false unless expires_at > now
 
-    replay_store.write(
-      replay_cache_key(namespace: namespace, client_id: client_id, jti: jti),
-      true,
-      expires_in: ttl.seconds,
-      unless_exist: true,
+    SecurityConsumedJti.consume!(
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_client_assertion),
+      issuer: client_id,
+      jti: jti,
+      expires_at: expires_at,
     )
-  rescue StandardError => e
+  rescue ActiveRecord::ActiveRecordError => e
     Rails.logger.info(
       JitLogEvent.format(
-        "oidc.client_assertion.replay_store_unavailable",
-        op: "write",
+        "oidc.client_assertion.replay_record_unavailable",
         error_class: e.class.name,
         error_message: e.message,
       ),
     )
     false
-  end
-
-  def replay_cache_key(namespace:, client_id:, jti:)
-    "oidc:client_assertion:#{namespace}:#{client_id}:jti:#{jti}"
   end
 
   def refresh_local_key_material!(client_id:)
@@ -132,5 +120,5 @@ module OidcClientAssertionJwt
     JitSecurityJwtRegistry.private_key_for("oidc_client:#{namespace}").present?
   end
 
-  private_class_method :issue_with_configured_key, :consume_jti?, :replay_cache_key, :refresh_local_key_material!
+  private_class_method :issue_with_configured_key, :consume_jti?, :refresh_local_key_material!
 end

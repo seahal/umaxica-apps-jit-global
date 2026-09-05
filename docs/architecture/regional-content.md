@@ -47,7 +47,8 @@ Regional placement classifies the boundary, not the location of every line of co
 endpoints, and the surface's health and crawler routes. Those are the credential and BFF halves of a
 regional surface, which is consistent with the rule below; the regional RP delivery itself is not
 here. `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` records that split
-for `core`, where the UI origin is a separate Next.js application.
+for `core`. The current Edge UI origin uses TanStack Start; the ADR name retains historical Next.js
+wording. Content-surface cells are listed in `docs/architecture/content-surface-matrix.md`.
 
 ## Current Rule
 

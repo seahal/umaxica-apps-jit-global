@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   include ActiveJob::TestHelper
 
   setup do

@@ -101,12 +101,17 @@ module Auth::App::In
                          :user_identity_totp_credential_status_id,
                        ).inspect}"
 
-      totp_code = ROTP::TOTP.new(@totp.private_key).now
+      # TOTP codes are only valid for a 30-second window, so generation and the
+      # verifying request are pinned to the same instant -- otherwise a slow run can
+      # straddle a window boundary and turn a valid code invalid before it arrives.
+      freeze_time do
+        totp_code = ROTP::TOTP.new(@totp.private_key).now
 
-      with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
-          totp_challenge_form: { token: totp_code },
-        }
+        with_prosopite_paused do
+          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+            totp_challenge_form: { token: totp_code },
+          }
+        end
       end
 
       # Debug: check if the response body contains TOTP verification error
@@ -150,12 +155,14 @@ module Auth::App::In
 
       TurnstileVerifierStub.challenge_response = { "success" => false }
 
-      totp_code = ROTP::TOTP.new(@totp.private_key).now
+      freeze_time do
+        totp_code = ROTP::TOTP.new(@totp.private_key).now
 
-      with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
-          totp_challenge_form: { token: totp_code },
-        }
+        with_prosopite_paused do
+          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+            totp_challenge_form: { token: totp_code },
+          }
+        end
       end
 
       assert_response :unprocessable_content
@@ -171,16 +178,20 @@ module Auth::App::In
         establish_pending_mfa_via_secret_credential!
       end
 
-      totp_code = ROTP::TOTP.new(@totp.private_key).now
-      otp_window_at = ROTP::TOTP.new(@totp.private_key).verify(totp_code.to_s)
+      # The window computed here must be the window the request verifies against, so
+      # generation, the pre-consume write, and the request all share one instant.
+      freeze_time do
+        totp_code = ROTP::TOTP.new(@totp.private_key).now
+        otp_window_at = ROTP::TOTP.new(@totp.private_key).verify(totp_code.to_s)
 
-      # Pre-consume the window -- simulates a concurrent request that beat this one
-      @totp.update!(last_otp_at: Time.zone.at(otp_window_at))
+        # Pre-consume the window -- simulates a concurrent request that beat this one
+        @totp.update!(last_otp_at: Time.zone.at(otp_window_at))
 
-      with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
-          totp_challenge_form: { token: totp_code },
-        }
+        with_prosopite_paused do
+          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+            totp_challenge_form: { token: totp_code },
+          }
+        end
       end
 
       assert_response :unprocessable_content

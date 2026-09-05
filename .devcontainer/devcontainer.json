@@ -16,6 +16,7 @@
   "containerUser": "global",
   "workspaceFolder": "/home/global/workspace",
   "overrideCommand": false,
+  "postCreateCommand": "bundle install && pnpm install && bin/rails db:prepare",
   "forwardPorts": [3000, 3036, 5050],
   "remoteEnv": {
     "EDITOR": "code --wait --reuse-window",

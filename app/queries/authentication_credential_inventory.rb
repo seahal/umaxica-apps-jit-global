@@ -184,13 +184,6 @@ class AuthenticationCredentialInventory
     0
   end
 
-  def aal2_email_count
-    return contact_email_count if actor.respond_to?(:client_emails)
-    return contact_email_count if actor.respond_to?(:visitor_emails)
-
-    0
-  end
-
   def contact_email_count
     if actor.respond_to?(:client_emails)
       return count_scope(

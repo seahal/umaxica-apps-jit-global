@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   self.fixture_table_names = []
 
   setup do

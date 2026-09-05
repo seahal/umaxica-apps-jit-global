@@ -18,10 +18,6 @@ module JitSecurityJwtJwksService
     JitSecurityJwtRegistry.jwks_for("surface:#{JitSecurityJwtRegistry.normalize_namespace(namespace)}")
   end
 
-  def public_keys_for(namespace)
-    jwk_set(namespace).fetch(:keys)
-  end
-
   def normalized_public_jwk(entry)
     JitSecurityJwtJwk.normalize_public(entry)
   rescue JitSecurityJwtJwk::Error

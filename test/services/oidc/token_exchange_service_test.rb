@@ -6,8 +6,6 @@ require "test_helper"
 
 class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   setup do
-    @previous_client_assertion_replay_store = OidcClientAssertionJwt.replay_store
-    OidcClientAssertionJwt.replay_store = ActiveSupport::Cache::MemoryStore.new
     @user = clients(:one)
     @user_session_token = ClientToken.create!(user: @user)
     @code_verifier = SecureRandom.urlsafe_base64(32)
@@ -18,10 +16,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     @client = OidcClientRegistry.find("core-next-rp")
     @redirect_uri = @client.redirect_uris.first
     @client_secret = "test_secret_credential_for_core_app"
-  end
-
-  teardown do
-    OidcClientAssertionJwt.replay_store = @previous_client_assertion_replay_store
   end
 
   test "exchanges valid code for tokens" do

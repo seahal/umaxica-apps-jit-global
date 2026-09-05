@@ -21,14 +21,14 @@ scope module: :core, as: :core do
       end
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Health summary and probes.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
       end
 
       # Crawler policy endpoint.
@@ -59,6 +59,12 @@ scope module: :core, as: :core do
       # Versioned BFF API.
       namespace :api do
         namespace :v0 do
+          # Machine-readable health and revision. The literal ".json" is part of the path, not a
+          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+          # These are JSON-only; the controllers answer 406 to any other `Accept`.
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
+
           # Session summary.
           resource :session, only: :show
 
@@ -108,14 +114,14 @@ scope module: :core, as: :core do
       end
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Health summary and probes.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
       end
 
       # Crawler policy endpoint.
@@ -146,6 +152,12 @@ scope module: :core, as: :core do
       # Versioned BFF API.
       namespace :api do
         namespace :v0 do
+          # Machine-readable health and revision. The literal ".json" is part of the path, not a
+          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+          # These are JSON-only; the controllers answer 406 to any other `Accept`.
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
+
           # Session summary.
           resource :session, only: :show
 
@@ -195,14 +207,14 @@ scope module: :core, as: :core do
       end
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Health summary and probes.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
       end
 
       # Crawler policy endpoint.
@@ -236,6 +248,12 @@ scope module: :core, as: :core do
       # Versioned BFF API.
       namespace :api do
         namespace :v0 do
+          # Machine-readable health and revision. The literal ".json" is part of the path, not a
+          # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+          # These are JSON-only; the controllers answer 406 to any other `Accept`.
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
+
           # Session summary.
           resource :session, only: :show
 
@@ -274,14 +292,24 @@ scope module: :core, as: :core do
       root to: "roots#index"
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Health summary and probes.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a
+      # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+      # These are JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace :api do
+        namespace :v0 do
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
+        end
       end
 
       # CSP report sink; keep configured report-uri path.
@@ -296,14 +324,24 @@ scope module: :core, as: :core do
       root to: "roots#index"
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Health summary and probes.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
       namespace :health do
-        resource :liveness, only: :show
-        resource :readiness, only: :show
-        resource :startup, only: :show
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a
+      # Rails format token (`format: false`), mirroring the `.well-known/jwks.json` precedent.
+      # These are JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace :api do
+        namespace :v0 do
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
+        end
       end
 
       # CSP report sink; keep configured report-uri path.

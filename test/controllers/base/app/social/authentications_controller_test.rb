@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Base::App::Social::AuthenticationsControllerTest < ActionController::TestCase
+  counts_rate_limits!
   tests Base::App::Social::Authentication::CompletionsController
 
   setup do

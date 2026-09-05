@@ -1,6 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
+require_relative "../../test/support/swappable_cache_store"
+
 # The test environment is used exclusively to run your application's
 # test suite. You never need to work with it otherwise. Remember that
 # your test database is "scratch space" for the test suite and is wiped
@@ -29,12 +31,20 @@ Rails.application.configure do
   # Show full error reports.
   config.consider_all_requests_local = true
 
-  # Cache store for test environment. SolidCache is intentionally disabled here:
-  # the cache must not double as a persistent, database-backed store in tests.
+  # Both stores are null by default so no test inherits state it did not ask for.
+  #
+  # Rails.cache: a test that passes only because an earlier test warmed the cache
+  # is a test that does not describe the behaviour it claims to. A null cache
+  # forces every read to go to its real source.
+  #
+  # Rate limiting: the counters are process-global and survive a transaction
+  # rollback, so a shared counting store makes an unrelated controller test fail
+  # with 429 depending on suite order and parallel worker assignment. Tests whose
+  # subject *is* rate limiting opt into a real counting store by declaring
+  # `counts_rate_limits!` (test/support/rate_limit_store_override.rb), which is
+  # where threshold, window, bucket, and 429 behaviour is asserted.
   config.cache_store = :null_store
-  config.x.rate_limit.store = ActiveSupport::Cache::MemoryStore.new
-  # SolidCache shard wiring intentionally left disconnected while :null_store is
-  # the test cache.
+  config.x.rate_limit.store = SwappableCacheStore.new(ActiveSupport::Cache::NullStore.new)
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable

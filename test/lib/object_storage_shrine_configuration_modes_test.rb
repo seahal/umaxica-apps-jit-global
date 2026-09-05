@@ -68,6 +68,64 @@ class ObjectStorageShrineConfigurationModesTest < ActiveSupport::TestCase
     end
   end
 
+  # `mode` is the only thing that decides which backend is built, so a mode neither builder knows
+  # about has to stop rather than fall through to a default. Both builders are pinned: `storages`
+  # runs at boot and `build_storage` runs per boundary, and a silent default in either is how an
+  # upload ends up somewhere nobody chose.
+  test "a mode neither storage builder knows about is refused rather than defaulted" do
+    ObjectStorage::ShrineConfiguration.stub(:mode, :quantum_tape) do
+      %i(storages build_storage).each do |builder|
+        error =
+          assert_raises(ArgumentError, "#{builder} must refuse an unknown mode") do
+            if builder == :storages
+              ObjectStorage::ShrineConfiguration.storages(DEVELOPMENT)
+            else
+              ObjectStorage::ShrineConfiguration.build_storage(
+                boundary: :avatar, prefix: "store", rails_env: DEVELOPMENT,
+              )
+            end
+          end
+
+        assert_equal "unsupported object-storage mode", error.message
+      end
+    end
+  end
+
+  # The production path. `s3_storage` takes its region from configuration and its credentials from
+  # the AWS provider chain, and it must not be handed an endpoint -- that is the S3-compatible
+  # path, and accepting it in production would point production uploads at another operator's
+  # object store.
+  test "the production s3 storage is built from the configured region and carries no endpoint" do
+    with_env(
+      "OBJECT_STORAGE_ENDPOINT" => nil,
+      "OBJECT_STORAGE_REGION" => "jp-north-1",
+      "AWS_ACCESS_KEY_ID" => "test-access-key",
+      "AWS_SECRET_ACCESS_KEY" => "test-secret-key",
+      "AWS_EC2_METADATA_DISABLED" => "true",
+    ) do
+      storage = ObjectStorage::ShrineConfiguration.s3_storage(bucket: "umaxica-test-bucket", prefix: "store")
+
+      assert_kind_of Shrine::Storage::S3, storage
+      assert_equal "umaxica-test-bucket", storage.bucket.name
+      assert_equal "store", storage.prefix
+      assert_equal "jp-north-1", storage.client.config.region
+    end
+  end
+
+  test "an endpoint set on the production path is refused instead of being honoured" do
+    with_env(
+      "OBJECT_STORAGE_ENDPOINT" => "https://objects.example",
+      "OBJECT_STORAGE_REGION" => "jp-north-1",
+    ) do
+      error =
+        assert_raises(ArgumentError) do
+          ObjectStorage::ShrineConfiguration.s3_storage(bucket: "umaxica-test-bucket", prefix: "store")
+        end
+
+      assert_match(/OBJECT_STORAGE_ENDPOINT must not be set in production/, error.message)
+    end
+  end
+
   test "an environment object storage does not serve is refused by name" do
     assert_raises(ArgumentError) do
       ObjectStorage::ShrineConfiguration.mode(ActiveSupport::StringInquirer.new("staging"))

@@ -1,5 +1,10 @@
 # Design Philosophy
 
+This file is a shorter colour-role sketch. Canonical UI primitives and tokens are in
+`docs/design.md`. External implementation reading for UI work is the Digital Agency of Japan
+Design System introduction: `docs/reference/digital-agency-design-system.md` and
+<https://design.digital.go.jp/dads/introduction/>.
+
 ## 1. Color Roles
 
 Colors are defined by their meaning (role) rather than their appearance. This ensures consistency

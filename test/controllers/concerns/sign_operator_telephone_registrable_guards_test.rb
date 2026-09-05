@@ -9,6 +9,7 @@ require "test_helper"
 # an expired session rather than verified, and that repeated attempts from one
 # address are stopped before they become an oracle.
 class SignOperatorTelephoneRegistrableGuardsTest < ActiveSupport::TestCase
+  counts_rate_limits!
   self.fixture_table_names = []
 
   class Harness

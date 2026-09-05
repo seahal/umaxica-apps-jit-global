@@ -32,7 +32,6 @@ module Security
           observed_writes.reject do |sql|
             sql.match?(/\bapp_preferences\b/i) ||
               sql.match?(/\bapp_preference_/i) ||
-              sql.match?(/\bsolid_cache_/i) ||
               sql.match?(/\bsolid_queue_/i)
           end
 

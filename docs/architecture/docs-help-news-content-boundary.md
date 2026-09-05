@@ -13,9 +13,14 @@ This document describes the current responsibility split for `docs`, `help`, and
 
 ## Frontend Ownership
 
-Next.js owns the public frontend for `docs`, `help`, `news`, and `core`.
+Edge owns the public frontend for `docs`, `help`, `news`, `info`, and `core`. Current Edge runtime
+is TanStack Start on Cloudflare Workers. An Astro migration for the twelve content units is
+accepted in Edge `adr/015` but is not deployed. Historical Rails ADRs that name Next.js remain
+history.
 
-Next.js owns:
+The twelve audience × surface cells are listed in `docs/architecture/content-surface-matrix.md`.
+
+Edge owns, when those pages are implemented:
 
 - public HTML;
 - article index pages;
@@ -28,8 +33,10 @@ Next.js owns:
 - public 404 and 410 rendering;
 - locale fallback rendering when needed.
 
-Hono and ReactRouter do not own public HTML rendering, content frontend, SEO, or article pages for
-`docs`, `help`, `news`, or `core`. Hono may remain for bounded uses such as jump behavior.
+**Current CMS integration status:** Rails exposes the read API. Edge does not yet consume
+`/api/v0/entries` for list or detail pages. Do not describe Edge CMS pages as deployed.
+
+Hono may remain for bounded uses such as jump behavior. It does not own public article HTML.
 
 ## Rails Ownership
 
@@ -42,7 +49,7 @@ Rails owns:
 - health endpoints;
 - read-only content persistence;
 - import tasks;
-- read-only `api/v0/entries` contracts consumed by Next.js.
+- read-only `api/v0/entries` contracts intended for Edge consumption (not yet wired in Edge).
 
 Rails must not own public article HTML rendering for these surfaces. Rails root endpoints may
 remain, but they must stay thin and must not render article indexes, article detail pages, SEO
@@ -58,10 +65,12 @@ Rails should conceptually keep:
 
 ```text
 GET /
-GET /health
-GET /health/liveness
+GET /health              # text/plain aggregate
+GET /health/liveness     # text/plain probe
 GET /health/readiness
 GET /health/startup
+GET /api/v0/health.json   # application/json machine health
+GET /api/v0/revision.json
 GET /api/v0/entries
 GET /api/v0/entries/:slug
 ```
@@ -149,5 +158,8 @@ read-only surfaces.
 
 - `adr/publishing-db-content-authority.md`
 - `adr/publishing-taxonomy-architecture.md`
+- `docs/architecture/content-surface-matrix.md`
+- `docs/architecture/publishing-persistence.md`
+- `adr/publishing-persistence-polymorphism-prohibition.md`
 - `docs/architecture/regional-content.md`
 - `docs/architecture/acme-sign-core-base-port.md`

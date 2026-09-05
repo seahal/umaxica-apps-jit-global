@@ -6,6 +6,9 @@
 #
 # PostgreSQL triggers reject UPDATE and DELETE on these tables. The callbacks
 # here exist only to raise a readable Active Record error first.
+#
+# included do is retained so every snapshot table is immutable at the Active
+# Record boundary without each class re-stating the same two callbacks.
 module PublishingTaxonomySnapshot
   extend ActiveSupport::Concern
 

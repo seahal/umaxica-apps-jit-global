@@ -86,11 +86,11 @@ the origin Host/SNI, so it must be a narrowly allowlisted Umaxica surface hostna
 the surface route constraint. See Cloudflare's
 [VPC Services configuration](https://developers.cloudflare.com/workers-vpc/configuration/vpc-services/).
 
-Cloudflare documents cloudflared `2025.7.0` or newer, QUIC, and outbound UDP 7844 for Workers VPC
-tunnels. Cloudflare supports cloudflared releases only for one year, so this repository pins the
-current supported `2026.8.2` release rather than the minimum compatible release. See
+Cloudflare documents cloudflared `2025.7.0` or newer, QUIC via `--protocol auto` or `quic`, and
+outbound UDP 7844 for Workers VPC tunnels. This connector uses `auto` so a UDP blip falls back to
+HTTP/2 instead of exiting. Do not pin `http2`. Cloudflare supports cloudflared releases only for one
+year, so this repository pins the current supported `2026.8.2` release. See
 [Connect with Cloudflare Tunnel](https://developers.cloudflare.com/workers-vpc/configuration/tunnel/).
-Do not switch this connector to HTTP/2 for Workers VPC DNS routing.
 
 Access and Workers VPC are separate route types. Based on that separation, this repository does not
 require `CF-Access-*` headers on the VPC path. This is an operational inference to confirm in the
@@ -99,18 +99,19 @@ Cloudflare account before rollout, not a Rails authentication bypass.
 ## Authenticating the Connector
 
 The Cloudflare account holds two remotely managed development tunnels, and a connector runs exactly
-one of them. Compose therefore defines one connector service per tunnel, each behind its own
+one of them. Compose defines one connector service per tunnel. The primary connector is part of the
+default stack so the Dev Container lifecycle starts it. The alternative connector stays behind a
 profile:
 
-| Service                  | Profile       | Token variable           |
-| :----------------------- | :------------ | :----------------------- |
-| `cloudflare-tunnel`      | `tunnel`      | `CLOUDFLARED_TOKEN`      |
-| `cloudflare-tunnel-edge` | `tunnel-edge` | `CLOUDFLARED_EDGE_TOKEN` |
+| Service                  | Profile                         | Token variable           |
+| :----------------------- | :------------------------------ | :----------------------- |
+| `cloudflare-tunnel`      | none (starts with the stack)    | `CLOUDFLARED_TOKEN`      |
+| `cloudflare-tunnel-edge` | `tunnel-edge`                   | `CLOUDFLARED_EDGE_TOKEN` |
 
 `cloudflare-tunnel-edge` merges `cloudflare-tunnel`'s definition through a YAML anchor, so the two
-differ only in profile and token; the pinned release, the QUIC command, the `frontend` attachment,
-and the crash-loop caps are shared by construction. `test/tooling/compose_local_override_optional_test.rb`
-is the guard.
+differ only in the edge profile and token; the pinned release, the QUIC command, the `frontend`
+attachment, and the crash-loop caps are shared by construction.
+`test/tooling/compose_local_override_optional_test.rb` is the guard.
 
 Each service reads its tunnel's scoped connector token from the repository-local `.env` and passes
 it to cloudflared as `TUNNEL_TOKEN`. Neither is an account API key. Each authorizes a connector to
@@ -143,16 +144,15 @@ A connector started without a token exits within milliseconds, and `restart: on-
 that into a visible, stopped container rather than a restart storm. Read `podman logs` for the
 connector when a tunnel does not come up.
 
-Starting a connector is opt-in by profile. Run these commands from a host terminal, not from inside
-`core`:
+The primary connector starts with `devcontainer up` and with a plain Compose `up`. The alternative
+connector is opt-in. Run these from a host terminal, not from inside `core`:
 
 ```bash
-devcontainer up --workspace-folder .
-podman compose --profile tunnel up -d        # first tunnel
+devcontainer up --workspace-folder .         # starts cloudflare-tunnel
 podman compose --profile tunnel-edge up -d   # alternative tunnel
 ```
 
-Starting both profiles is supported: the two connectors then serve their own tunnels over the same
+Starting both is supported: the two connectors then serve their own tunnels over the same
 private `*.localhost` origins on `frontend`. Nothing in Rails changes with the choice of tunnel —
 the ingress rules and published hostnames live in the Cloudflare account, and Rails Host
 Authorization accepts the same two hostname families either way.
@@ -166,7 +166,7 @@ only that tunnel's token value in `.env`, and recreate its connector. Removing t
 alone does not revoke a copied token at Cloudflare:
 
 ```bash
-podman compose -f compose.yaml --profile tunnel \
+podman compose -f compose.yaml \
   up -d --force-recreate --no-deps cloudflare-tunnel
 podman compose -f compose.yaml --profile tunnel-edge \
   up -d --force-recreate --no-deps cloudflare-tunnel-edge
@@ -202,10 +202,10 @@ podman run --rm --network "$net" docker.io/curlimages/curl:8.16.0 \
   -sS --max-time 5 http://cloudflare-tunnel:2000/ready                    # want: {"status":200,...}
 ```
 
-Then request `/health/liveness` through each private alias. Probe the liveness endpoint, not
-`/health`: `HealthCheckRendering#render_snapshot` answers `head :not_acceptable` unless the request
-negotiates HTML, so `/health` returns `406` to curl's default `Accept: */*`. `/health/liveness` is
-JSON-only and answers `200`. Leave `Host` to curl — it sends `<alias>:3000`, which is the form
+Then request `/health/liveness` through each private alias. Under the 2026-09-03 text health
+contract both `/health` and `/health/liveness` return `text/plain` `200` (they no longer negotiate
+on `Accept`), so either works; `/health/liveness` is the narrower, dependency-free probe and stays
+the recommended target. Leave `Host` to curl — it sends `<alias>:3000`, which is the form
 `config.hosts` carries for the private origins.
 
 The alias list is the `frontend` `aliases:` block of the `core` service in `compose.yaml`; that

@@ -14,19 +14,8 @@ module Sign
       end
 
       test "refresh_reuse_detected returns 100" do
-        # We need to inject events into the SignRiskEngine's view.
-        # Since SignRiskEngine reads from Redis, we should populate Redis (or our mock).
-
-        # Ideally, we stub `SignRiskEngine#score` to use our mock,
-        # BUT the code uses `cat` `REDIS_CLIENT`.
-
-        # Let's try to trust that we can simply create events and persist them if REDIS_CLIENT is available.
-        # If REDIS_CLIENT isn't available in test env, our code returns 0.
-        # The prompt implies we should implement it.
-
-        # Let's see if we can use Minitest::Mock on REDIS_CLIENT if it exists?
-        # Or define it if missing.
-
+        # SignRiskEngine scores from the occurrence tables in PostgreSQL, so the
+        # events are seeded through the emitter rather than through a store double.
         SignRiskEmitter.send(:persist, SignRiskEvent.new("refresh_reuse_detected", payload: { user_id: @user.id }))
 
         assert_equal 100, SignRiskEngine.score(user_id: @user.id)

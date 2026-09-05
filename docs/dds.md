@@ -42,7 +42,8 @@ cross-cutting concerns.
 ```
 Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
     ├─ PostgreSQL (identity, guest, universal, token, etc.)
-    ├─ Valkey (sessions, rate limit, Memorize)
+    ├─ Valkey cache (Rails.cache, TTL-bound)
+    ├─ Valkey rate limit (distributed counters)
     ├─ ActionMailer + SMTP
     ├─ Outbound::Sms
     └─ OpenTelemetry exporter → Tempo / Logs → Loki / Dashboards → Grafana
@@ -68,23 +69,24 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
   - Scopes traffic via `constraints host: ENV["<HOST_VAR>"]`
   - Adds nested modules (e.g., `scope module: :com, as: :com`)
   - Defines RESTful resources for health endpoints, preferences, docs, API, etc.
-- All routes expose `/health` (HTML) and `/v1/health` (JSON) courtesy of controllers mixing in the
-  `Health` concern.
+- All surfaces expose `text/plain` health probes (`/health` aggregate,
+  `/health/{startup,liveness,readiness}`) plus machine JSON `/api/v0/health.json` and
+  `/api/v0/revision.json`, via `HealthCheckRendering` / `ApplicationRevisionRendering` delegating
+  to the `Health` service layer. See `docs/reference/health-endpoints.md`.
 
 ### 3.2 Shared Controller Concerns
 
 | Concern               | Key responsibilities                                                                                             |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `Auth::Base`          | JWT (ES384) issuance/verification (`kid` header + keyring), login/logout helpers, refresh/device cookie handling |
-| `RateLimit`           | Configures `ActiveSupport::Cache::RedisCacheStore` with Valkey to enforce per-request throttles                  |
+| `RateLimit`           | Exposes `config.x.rate_limit.store` (a Valkey-backed `ActiveSupport::Cache::RedisCacheStore`) to the `rate_limit` DSL |
 | `DefaultUrlOptions`   | Reads signed preference cookie to append `lx`, `ri`, `tz` query params                                           |
 | `PreferenceRegions`   | Normalizes locale/timezone inputs, persists to session/cookies, handles errors                                   |
 | `Theme`               | Provides theme editing/updating with shorthand codes and preference cookie syncing                               |
 | `Cookie`              | Stores ePrivacy consent flags in signed cookies                                                                  |
 | `CloudflareTurnstile` | Validates Turnstile tokens via HTTP POST                                                                         |
 | `Redirect`            | Validates allowed redirect hosts and Base64 tokens                                                               |
-| `Memorize`            | Thin Valkey wrapper (encrypted) for per-session ephemeral storage                                                |
-| `Health`              | Implements `show_html`/`show_json` for heartbeat endpoints                                                       |
+| `Health`              | `Health` service layer + `HealthCheckRendering` render text probes and `/api/v0/health.json`                     |
 
 ### 3.3 Top Namespace
 
@@ -178,8 +180,6 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 - `Outbound::Sms` handles SMS dispatch for OTP-related flows.
 - Other service placeholders (`AccountService`, `CoreService`, `EntityService`) mark future
   boundaries (business/customer mgmt, tokens).
-- `RedisMemorize` (inside `Memorize`) encrypts values using `ActiveSupport::MessageEncryptor`
-  (derived from `secret_key_base`).
 
 ### 3.11 Background Work
 
@@ -265,15 +265,33 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 - Auth cookies: access + refresh + device cookies (same security options; environment-dependent
   names).
 - HOTP private key: `cookies.encrypted[:htop_private_key]`.
-- Session: stores preference drafts, OTP metadata, WebAuthn challenges; `Memorize` offers encrypted
-  Valkey storage keyed by host/session.
+- Session: stores preference drafts, OTP metadata, WebAuthn challenges. The session is a Rails
+  cookie store; no session state lives in Valkey.
 
-### 5.3 Redis Usage
+### 5.3 Valkey Usage
 
-- Sessions (if configured) + Rack cache
-- Rate limiting store (Valkey)
-- Memorize key/value store with encryption
-- Potential future cache entries for background work, if introduced later
+Valkey backs two responsibilities, on two physically separate services, under two independent
+configuration contracts. Neither is authoritative.
+
+| Contract               | Store                       | Purpose                           |
+| ---------------------- | --------------------------- | --------------------------------- |
+| `CACHE_REDIS_URL`      | `Rails.cache`               | reconstructible application cache |
+| `RATE_LIMIT_REDIS_URL` | `config.x.rate_limit.store` | distributed rate-limit counters   |
+
+| Property                  | Value                            |
+| ------------------------- | -------------------------------- |
+| Authority                 | none                             |
+| Durable application state | none                             |
+| Loss of the cache         | cache miss, refetch from source  |
+| Loss of the counters      | current rate-limit windows reset |
+
+Every application cache entry carries an explicit TTL; rate-limit entries expire with their window.
+The two stores are separated by service rather than by Redis logical database index, so either can
+be flushed or restarted without touching the other.
+
+Sessions are cookie-backed, Active Job is Solid Queue (PostgreSQL), Flipper flags are
+PostgreSQL-backed, consumed JTIs and risk events are PostgreSQL-backed. Solid Cache is not part of
+the runtime architecture. Adding a third Valkey use case requires an ADR.
 
 ---
 
@@ -281,7 +299,7 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 
 | Interface            | Endpoint(s)                                                                                               | Details                                                                                                                                                                         |
 | -------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP/Turbo           | `/`, `/health`, `/v1/health`, `/preference/*`, `/sign/*`, `/help/contacts`, `/api/v1/inquiry/*`, `/bff/*` | Host-specific responses; `allow_browser` enforces modern clients.                                                                                                               |
+| HTTP/Turbo           | `/`, `/health`, `/api/v0/health.json`, `/preference/*`, `/sign/*`, `/help/contacts`, `/api/v1/inquiry/*`, `/bff/*` | Host-specific responses; `allow_browser` enforces modern clients.                                                                                                               |
 | Cloudflare Turnstile | `https://challenges.cloudflare.com/turnstile/v0/siteverify`                                               | Called server-side with secret key, form response, and client IP.                                                                                                               |
 | ActionMailer         | `Email::{App,Com,Org}::{OtpMailer,AlertMailer,PromotionalMailer}`                                         | OTP, alert, and promotion senders are fixed per surface and purpose, for example `otp@umaxica.app` and `promotion@umaxica.org`. OTP job arguments carry encrypted OTP payloads. |
 | SMS                  | `Outbound::Sms`                                                                                           | Called via `Outbound::Sms.deliver_later` for OTP-related flows; `SMS_PROVIDER` selects the concrete provider. SMS job arguments carry encrypted message bodies.                 |
@@ -294,9 +312,9 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 
 - `.env` / credentials must define hostnames (`TOP_*`, `AUTH_*`, `DOCS_*`, `NEWS_*`, `HELP_*`,
   `BFF_*`, `API_*`, `EDGE_*`, `PEAK_*`), DB hosts (`POSTGRESQL_*`, including the
-  `POSTGRESQL_ACTIVITY_PUB/SUB` pair and `POSTGRESQL_BEHAVIOR_PUB`), Redis URLs
-  (`REDIS_RACK_ATTACK_URL`, `REDIS_SESSION_URL`), Cloudflare Turnstile keys, JWT keys, AWS
-  credentials, OTLP endpoint.
+  `POSTGRESQL_ACTIVITY_PUB/SUB` pair and `POSTGRESQL_BEHAVIOR_PUB`), the Valkey store URLs
+  (`CACHE_REDIS_URL`, `RATE_LIMIT_REDIS_URL`), Cloudflare Turnstile keys, JWT keys, AWS credentials,
+  OTLP endpoint.
 - `compose.yaml` launches the normal infrastructure; the `object-storage` profile adds RustFS with
   four persistent volumes. Other volumes store data per
   service.
@@ -318,7 +336,7 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 - **Authorization**: Action Policy is included; settings controllers call `authorize!`.
 - **Bot mitigation**: Cloudflare Turnstile required for registration/contact forms; server logs
   failures.
-- **Rate limiting**: Configured via `RateLimit` concern (Valkey backend).
+- **Rate limiting**: Rails' `rate_limit` DSL against the Valkey-backed `config.x.rate_limit.store`.
 - **Data encryption**: Active Record encryption for PII (emails, phones, private keys, titles,
   descriptions). `ServiceSiteContact` ensures deterministic encryption for lookups where needed.
 - **Passkeys & OTP**: WebAuthn for passkeys, ROTP for HOTP/TOTP, RQRCode for QR codes,
@@ -341,7 +359,8 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 - Turnstile failures are logged at warn/error level with context.
 - `ServiceSiteContact` `before_create` raises if required content missing to prevent blank
   submissions.
-- OTEL instrumentation emits spans for HTTP requests, Redis calls, and ActionMailer deliveries (once
+- OTEL instrumentation emits spans for HTTP requests, rate-limit store calls, and ActionMailer
+  deliveries (once
   instrumentation enabled).
 - Logs stream to STDOUT → Loki (when Compose stack used) or platform logging (Cloud Run).
 

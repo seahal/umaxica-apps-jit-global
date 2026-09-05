@@ -492,6 +492,14 @@ end
 # helper definitions in this file so every "logged in" request carries a valid
 # access token cookie for the correct actor and surface.
 class Base::Com::Organizations::MembershipsControllerTest
+  test "show returns empty json for a membership the actor may read" do
+    get base_com_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
+        headers: as_visitor_headers(@visitor, host: @host), as: :json
+
+    assert_response :success
+    assert_empty response.parsed_body
+  end
+
   private
 
   # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org/.com)
@@ -602,13 +610,5 @@ class Base::Com::Organizations::MembershipsControllerTest
     base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
     base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
     base
-  end
-
-  test "show returns empty json for a membership the actor may read" do
-    get base_com_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
-        headers: as_visitor_headers(@visitor, host: @host), as: :json
-
-    assert_response :success
-    assert_empty response.parsed_body
   end
 end

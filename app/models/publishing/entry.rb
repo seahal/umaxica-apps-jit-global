@@ -45,8 +45,7 @@ module Publishing
     has_many :slugs, class_name: "Publishing::EntrySlug", inverse_of: :entry, dependent: :restrict_with_exception
     has_many :publications, class_name: "Publishing::Publication", inverse_of: :entry,
                             dependent: :restrict_with_exception
-    has_many :media_usages, class_name: "Publishing::MediaUsage", inverse_of: :entry,
-                            dependent: :restrict_with_exception
+
     has_one :canonical_slug, -> { canonical },
             class_name: "Publishing::EntrySlug", inverse_of: :entry, dependent: :restrict_with_exception
     has_one :active_publication, -> { active },

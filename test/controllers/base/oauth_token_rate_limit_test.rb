@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class BaseOauthTokenRateLimitTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   TokenResult =
     Struct.new(:success, :error, :error_description, keyword_init: true) do
       def success?
@@ -15,7 +16,10 @@ class BaseOauthTokenRateLimitTest < ActionDispatch::IntegrationTest
   setup do
     clear_rate_limit_store
 
-    assert_instance_of ActiveSupport::Cache::MemoryStore, rate_limit_store
+    # `counts_rate_limits!` must actually be in force: with the suite default
+    # NullStore behind the wrapper, every assertion below would pass vacuously
+    # because no request would ever be counted.
+    assert_instance_of ActiveSupport::Cache::MemoryStore, rate_limit_store.__getobj__
   end
 
   teardown do

@@ -8,6 +8,7 @@ require "test_helper"
 # verified against a dummy so the two are indistinguishable in both timing and
 # response.
 class AuthAppUpCheckEmailOtpsSeamsTest < ActiveSupport::TestCase
+  counts_rate_limits!
   self.fixture_table_names = []
 
   class Harness < Auth::App::Sign::Up::Check::Email::OtpsController

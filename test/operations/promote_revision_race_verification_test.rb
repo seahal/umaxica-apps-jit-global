@@ -15,20 +15,22 @@ class PromoteRevisionRaceVerificationTest < ActiveSupport::TestCase
     Publishing::PromoteRevisionOperation.new(revision: revision)
   end
 
-  def revision_double(id:, single: 0, multiple: 0)
+  def revision_double(id:, single: 0, multiple: 0, media: 0)
     double = Object.new
     double.define_singleton_method(:id) { id }
     double.define_singleton_method(:single_taxonomy_assignments) { Struct.new(:count).new(single) }
     double.define_singleton_method(:multiple_taxonomy_assignments) { Struct.new(:count).new(multiple) }
+    double.define_singleton_method(:media_usages) { Struct.new(:count).new(media) }
     double
   end
 
-  def version_double(id:, revision_id:, single: 0, multiple: 0)
+  def version_double(id:, revision_id:, single: 0, multiple: 0, media: 0)
     double = Object.new
     double.define_singleton_method(:id) { id }
     double.define_singleton_method(:entry_revision_id) { revision_id }
     double.define_singleton_method(:single_taxonomy_assignments) { Struct.new(:count).new(single) }
     double.define_singleton_method(:multiple_taxonomy_assignments) { Struct.new(:count).new(multiple) }
+    double.define_singleton_method(:media_usages) { Struct.new(:count).new(media) }
     double
   end
 
@@ -51,7 +53,7 @@ class PromoteRevisionRaceVerificationTest < ActiveSupport::TestCase
         subject.send(:verify_complete!, version_double(id: 9, revision_id: 1, single: 2, multiple: 1))
       end
 
-    assert_match(%r{holds 2/1 taxonomy snapshots, expected 2/3}, error.message)
+    assert_match(%r{holds 2/1 taxonomy snapshots and 0 media usages, expected 2/3 and 0}, error.message)
   end
 
   test "a version that is this revision's complete snapshot is handed back" do

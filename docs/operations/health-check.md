@@ -3,10 +3,18 @@
 This application does not use Rails' default `/up` endpoint for orchestrator health checks. The
 current health endpoints are surface-local and host-constrained:
 
-- `GET /health`
+Text probes (`text/plain; charset=utf-8`, `Cache-Control: no-store`):
+
+- `GET /health` — aggregate, four fixed lines (`status`, `startup`, `liveness`, `readiness`)
 - `GET /health/liveness`
 - `GET /health/readiness`
 - `GET /health/startup`
+
+Machine JSON (`application/json`, `Cache-Control: no-store`, `406` on a non-JSON `Accept`), on
+every surface that also exposes `/revision`:
+
+- `GET /api/v0/health.json` — `{"status":"pass|warn|fail","checks":{…}}`, `fail` → 503
+- `GET /api/v0/revision.json` — `{"revision":"<sha>"}` or `{"revision":null}`
 
 These are **internal-only checkpoints** for orchestrators and monitoring probes, not a user-facing
 contract. Public traffic to them is blocked at the Cloudflare edge (see "Edge Access Policy" below).
@@ -59,12 +67,14 @@ controllers without an explicit authentication mode default to `deny_all`. Rails
 
 ## Endpoint Roles
 
-| Path                | Role                                                                    |
-| ------------------- | ----------------------------------------------------------------------- |
-| `/health`           | HTML snapshot for the current surface (JSON snapshot for JSON clients). |
-| `/health/liveness`  | JSON liveness probe. It must remain dependency-free.                    |
-| `/health/readiness` | JSON readiness probe for dependencies relevant to the surface.          |
-| `/health/startup`   | JSON startup probe for boot-time checks relevant to the surface.        |
+| Path                     | Role                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `/health`                | `text/plain` aggregate for the current surface (four fixed lines).              |
+| `/health/liveness`       | `text/plain` liveness probe (`ok\n` / 503). It must remain dependency-free.     |
+| `/health/readiness`      | `text/plain` readiness probe for dependencies relevant to the surface.          |
+| `/health/startup`        | `text/plain` startup probe for boot-time checks relevant to the surface.        |
+| `/api/v0/health.json`    | `application/json` machine aggregate, `pass/warn/fail` (`fail` → 503).          |
+| `/api/v0/revision.json`  | `application/json` deployment identifier from `Rails.application.revision`.      |
 
 The former `/health/live` and `/health/ready` paths were removed outright (no compatibility shim);
 `test/integration/edge_health_routes_test.rb` guards against their reintroduction. Infrastructure

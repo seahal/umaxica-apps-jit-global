@@ -1,4 +1,4 @@
-# GET /api/v0/entries/{slug}
+# GET /api/v0/entries/{public_id}
 #
 # No `servers`, for the same reason as entries.yml.
 get:
@@ -10,9 +10,11 @@ get:
   operationId: getEntry
   tags: [Content]
   parameters:
-    - name: slug
+    - name: public_id
       in: path
       required: true
+      description: >-
+        Opaque entry identifier. Not the slug and not a database key.
       schema:
         type: string
     - name: locale

@@ -112,6 +112,14 @@ end
 # helper definitions in this file so every "logged in" request carries a valid
 # access token cookie for the correct actor and surface.
 class Base::App::Organizations::MembershipsControllerTest
+  test "show returns empty json for a membership the actor may read" do
+    get base_app_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
+        headers: as_user_headers(@user, host: @host), as: :json
+
+    assert_response :success
+    assert_empty response.parsed_body
+  end
+
   private
 
   def set_access_cookie(token)
@@ -267,13 +275,5 @@ class Base::App::Organizations::MembershipsControllerTest
     base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
     base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
     base
-  end
-
-  test "show returns empty json for a membership the actor may read" do
-    get base_app_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
-        headers: as_user_headers(@user, host: @host), as: :json
-
-    assert_response :success
-    assert_empty response.parsed_body
   end
 end

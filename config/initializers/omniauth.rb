@@ -42,6 +42,7 @@ require Rails.root.join(
   "lib/external_authentication_infrastructure_omniauth_google_oidc_enforcement",
 )
 require Rails.root.join("lib/omniauth/strategies/umaxica_entra")
+require Rails.root.join("lib/entra_omniauth_boot_credentials")
 
 OmniAuth::Strategies::Apple.prepend(
   ExternalAuthenticationInfrastructureOmniauthAppleNonceEnforcement,
@@ -62,12 +63,12 @@ apple_pem = Rails.app.creds.option(:OMNI_AUTH_APPLE_PRIVATE_KEY)
 # Org (staff) Microsoft Entra ID credential. Tenant id and client id are read
 # through ExternalAuthentication::ProviderRegistry, which names them on the
 # provider entry; only the secret is needed here, because it is the one value
-# the OmniAuth client options must carry. Absence fails the boot rather than
-# registering a provider that cannot complete a token exchange.
-entra_client_secret = Rails.app.creds.option(:OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET).to_s
-if entra_client_secret.blank?
-  raise KeyError, "credential OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET is required for the entra provider"
-end
+# the OmniAuth client options must carry. Production still fails boot when the
+# secret is absent. Development and test omit the entra provider instead of
+# requiring an unused IdP credential for CMS and other non-Entra tests.
+entra_client_secret = EntraOmniauthBootCredentials.secret_for_boot(
+  Rails.app.creds.option(:OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET),
+)
 
 module OmniAuthCallbackOrigin
   module_function
@@ -277,18 +278,23 @@ Rails.application.config.middleware.use(OmniAuth::Builder) do
   # and client id come from ProviderRegistry, which reads the credentials the
   # registry entry names, and the strategy applies the tenant-fixed endpoints
   # per request. Callback: GET /social/entra/callback.
-  provider :umaxica_entra,
-           {
-             name: "entra",
-             callback_path: "/social/entra/callback",
-             response_type: "code",
-             response_mode: "query",
-             scope: %i(openid profile),
-             send_nonce: true,
-             pkce: true,
-             discovery: false,
-             client_options: { secret: entra_client_secret },
-           }
+  #
+  # Local boots without a secret skip this provider so publishing tests do not
+  # depend on Entra credentials. Production still required the secret above.
+  if entra_client_secret
+    provider :umaxica_entra,
+             {
+               name: "entra",
+               callback_path: "/social/entra/callback",
+               response_type: "code",
+               response_mode: "query",
+               scope: %i(openid profile),
+               send_nonce: true,
+               pkce: true,
+               discovery: false,
+               client_options: { secret: entra_client_secret },
+             }
+  end
 end
 
 # OmniAuth request phase accepts only the Rails authenticity-token-protected form submission.

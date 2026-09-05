@@ -1,0 +1,42 @@
+# GET /api/v0/revision.json
+#
+# No `servers`: reached only from inside the deployment network, through the tunnel, carrying a
+# real `Host`. Naming a host here would describe an address no client of this description can use.
+#
+# The literal `.json` is part of the path, not a Rails format token: the route is drawn with
+# `format: false` (config/routes/*.rb). The endpoint answers `application/json` only and refuses
+# any other `Accept` with `406` and an empty body.
+#
+# The identifier is the official Rails application revision (`Rails.application.revision`, which
+# the framework resolves from `ENV["REVISION"]`, a `REVISION` file, or Git). A missing revision is
+# a normal state and is rendered as `{"revision": null}`; a value is never fabricated. The text
+# `GET /revision` endpoint renders the same value as `"<revision>\n"` and is not a JSON endpoint,
+# so it is not described here.
+get:
+  summary: Machine-readable deployment revision
+  description: >-
+    Returns the deployment revision identifier, or `null` when the deployment has none. Internal
+    endpoint; no authentication, no database access.
+  security: []
+  operationId: getApiV0Revision
+  tags: [Health]
+  responses:
+    "200":
+      description: The current deployment revision, or `null`.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            enum: [no-store]
+      content:
+        application/json:
+          schema:
+            $ref: "../components.yml#/schemas/Revision"
+    "406":
+      description: >-
+        The request `Accept` excludes `application/json`. The refusal has an empty body.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            enum: [no-store]

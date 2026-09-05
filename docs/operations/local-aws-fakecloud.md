@@ -10,7 +10,8 @@ former RustFS service (S3) and the former standalone Kafka broker (MSK), so ther
 endpoint rather than one emulator per service.
 
 It is **not** behind a Compose profile. A plain `podman compose up` starts it alongside `core`,
-`primary`, `replica`, and `valkey`, because S3 and MSK are meant to be standing development
+`primary`, `replica`, `valkey-cache`, and `valkey-rate-limit`, because S3 and MSK are meant to be
+standing development
 infrastructure rather than a special mode.
 
 ## What Is Available

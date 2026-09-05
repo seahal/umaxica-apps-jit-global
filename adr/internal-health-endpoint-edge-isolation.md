@@ -2,6 +2,14 @@
 
 Accepted: 2026-06-14
 
+> **Wire-format note (2026-09-03):** the response formats described below as "HTML snapshot" and
+> "JSON probe" are superseded by the 2026-09-03 text+JSON health contract. The text probes
+> (`/health`, `/health/{liveness,readiness,startup}`) now return `text/plain`, and a separate
+> machine family (`/api/v0/health.json`, `/api/v0/revision.json`) returns `application/json` with a
+> `pass/warn/fail` vocabulary. See `docs/reference/health-endpoints.md`. The edge-isolation
+> decision in this ADR — that every `/health*` path and the two `/api/v0/*.json` health paths stay
+> internal-only — is unchanged.
+
 ## Context
 
 Every surface (`acme`, `base`, `core`, `sign`, `docs`, `help`, `news`, `palm` across `app`, `com`,

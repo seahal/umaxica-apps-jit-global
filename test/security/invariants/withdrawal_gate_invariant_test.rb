@@ -139,12 +139,6 @@ module Security
             "DBSC edge endpoint owns its device binding boundary",
           "app/controllers/core/com/edge/v0/dbsc_controller.rb" =>
             "DBSC edge endpoint owns its device binding boundary",
-          "app/controllers/base/app/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
-          "app/controllers/base/com/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
-          "app/controllers/base/org/edge/v0/dbsc_controller.rb" =>
-            "DBSC edge endpoint owns its device binding boundary",
         }
 
         assert allowlist.values.all?(&:present?), "Withdrawal gate skip allowlist entries require reasons"

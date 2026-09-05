@@ -51,14 +51,12 @@ services:
     # environment:
     #   MY_LOCAL_FLAG: "1"
 
-# The Cloudflare Tunnel connectors are NOT here. They live in `compose.yaml`, one
-# service per remotely managed tunnel, each behind its own profile, so they are
-# opt-in without needing a file to exist:
+# The Cloudflare Tunnel connectors are NOT here. They live in `compose.yaml`.
+# The primary connector (`cloudflare-tunnel`) starts with the stack and reads
+# CLOUDFLARED_TOKEN from the gitignored root `.env`. The alternative tunnel
+# stays opt-in:
 #
-#   docker compose --profile tunnel up -d        # CLOUDFLARED_TOKEN
 #   docker compose --profile tunnel-edge up -d   # CLOUDFLARED_EDGE_TOKEN
-#
-# with the matching token in the gitignored root `.env`.
 #
 # Remote SSH / Tailscale access is likewise a tracked, opt-in file rather than a
 # local one: `compose.remote-access.yaml`.

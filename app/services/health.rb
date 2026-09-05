@@ -6,6 +6,7 @@ require "timeout"
 module Health
   MissingProfileError = Class.new(StandardError)
   MissingNamespaceError = Class.new(StandardError)
+  MalformedSnapshotError = Class.new(StandardError)
   DeadlineExceeded = Class.new(StandardError)
 
   STATUSES = %i(ok degraded_acceptable unready starting).freeze

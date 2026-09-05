@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   fixtures :clients, :operators, :client_statuses, :operator_statuses, :client_email_statuses
 
   include ActiveSupport::Testing::TimeHelpers

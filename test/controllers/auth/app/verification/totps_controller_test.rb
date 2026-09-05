@@ -173,14 +173,20 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
 
     assert_response :success
 
-    code = ROTP::TOTP.new(private_key).at(Time.current.to_i)
-    consumed_window = ROTP::TOTP.new(private_key).verify(code)
-    credential.update!(last_otp_at: Time.zone.at(consumed_window))
+    # The window computed here must be the window the request verifies against, so
+    # generation, the pre-consume write, and the request all share one instant.
+    consumed_window = nil
 
-    with_prosopite_paused do
-      post auth_app_verification_totp_url(ri: "jp"),
-           params: { verification: { code: code } },
-           headers: @headers
+    freeze_time do
+      code = ROTP::TOTP.new(private_key).at(Time.current.to_i)
+      consumed_window = ROTP::TOTP.new(private_key).verify(code)
+      credential.update!(last_otp_at: Time.zone.at(consumed_window))
+
+      with_prosopite_paused do
+        post auth_app_verification_totp_url(ri: "jp"),
+             params: { verification: { code: code } },
+             headers: @headers
+      end
     end
 
     assert_response :unprocessable_content
@@ -355,11 +361,13 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
 
     TurnstileVerifierStub.challenge_response = { "success" => false }
 
-    code = ROTP::TOTP.new(private_key).at(Time.current.to_i)
-    with_prosopite_paused do
-      post auth_app_verification_totp_url(ri: "jp"),
-           params: { verification: { code: code } },
-           headers: @headers
+    freeze_time do
+      code = ROTP::TOTP.new(private_key).at(Time.current.to_i)
+      with_prosopite_paused do
+        post auth_app_verification_totp_url(ri: "jp"),
+             params: { verification: { code: code } },
+             headers: @headers
+      end
     end
 
     assert_response :unprocessable_content

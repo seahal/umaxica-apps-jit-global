@@ -13,6 +13,7 @@ class DefaultWebRateLimitProbeController < Base::Net::ApplicationController
 end
 
 class DefaultWebRateLimitTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   self.fixture_table_names = []
 
   setup { Rails.configuration.x.rate_limit.fetch(:store).clear }

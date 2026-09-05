@@ -3,6 +3,14 @@
 Date: 2026-08-11 Scope: this Rails repository only. No Next.js, Edge, Workers, Cloudflare
 Dashboard/Access/Tunnel, or DNS change was made or is proposed here.
 
+> **Note (2026-09-03):** this audit describes the health probes as JSON and the `/health`
+> aggregate as an HTML/`406` snapshot. That is superseded by the 2026-09-03 text+JSON health
+> contract — the probes are now `text/plain` and a separate `/api/v0/health.json` +
+> `/api/v0/revision.json` family carries the machine JSON. The Host Authorization findings in §5.1
+> (exact-match of the four singular text probe paths in `lib/health_probe_paths.rb`;
+> `/api/v0/*.json` deliberately not exempt) still hold. Current contract:
+> `docs/reference/health-endpoints.md`.
+
 ## How to read this document
 
 Every claim is tagged so inference is never presented as fact:

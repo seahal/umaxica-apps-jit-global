@@ -2,9 +2,11 @@
 # frozen_string_literal: true
 
 class SignRiskEmitter
-  # TODO: PostgreSQL INSERT latency (~1-3ms) is higher than Redis ZADD (~0.1ms).
-  #   For high-throughput auth endpoints, consider async INSERT via SolidQueue job
-  #   if p99 latency becomes a concern. Monitor occurrence DB write times in production.
+  # Risk events are audit-grade data and stay in PostgreSQL; they are not moved to
+  # the rate-limit Valkey store, which holds no durable application state.
+  # TODO: the synchronous INSERT (~1-3ms) sits on the auth request path. If p99
+  #   latency becomes a concern, move the write to a SolidQueue job. Monitor
+  #   occurrence DB write times in production.
 
   def self.emit(name, **payload)
     return unless feature_enabled?

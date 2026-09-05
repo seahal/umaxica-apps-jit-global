@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AuthLoginCooldownTest < ActiveSupport::TestCase
+  counts_rate_limits!
   class CooldownHarness
     include AuthenticationBase
 

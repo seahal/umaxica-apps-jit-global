@@ -7,6 +7,7 @@ require "base64"
 
 module Auth::App::Up
   class TelephonesControllerTest < ActionDispatch::IntegrationTest
+    counts_rate_limits!
     fixtures :app_preference_chronicle_levels, :app_preference_chronicle_events,
              :client_statuses, :client_telephone_statuses,
              :client_chronicle_events, :client_chronicle_levels

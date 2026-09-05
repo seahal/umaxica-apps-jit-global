@@ -21,8 +21,13 @@
 # Why exact matches and not `start_with?("/health/")`: a prefix test hands the exemption to every
 # future path under `/health/`, silently and at the moment it is added. A new probe that returned
 # richer diagnostics would lose DNS rebinding protection without anyone deciding that it should. The
-# list below is the four endpoints `config/routes/*.rb` actually mounts today; a fifth must be added
-# here on purpose, with the same consideration of what it exposes.
+# list below is the four text probe endpoints `config/routes/*.rb` actually mounts today; a fifth
+# must be added here on purpose, with the same consideration of what it exposes.
+#
+# The machine-JSON endpoints `/api/v0/health.json` and `/api/v0/revision.json` are deliberately
+# NOT listed: they are edge-blocked JSON API routes reached through the tunnel with a real `Host`
+# that is already in `config.hosts`, not orchestrator probes addressing the origin by container
+# name, so they need no Host Authorization exemption.
 # `HealthProbePathsTest` pins both the exact-match behaviour and the current path set.
 module HealthProbePaths
   PATHS = [

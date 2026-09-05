@@ -16,21 +16,31 @@ scope module: :side, as: :side do
       resource :mcp, only: :create
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Basic health summary.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
 
       # Machine-readable health probes.
       namespace :health do
         # Process liveness probe.
-        resource :liveness, only: :show
+        resource :liveness, only: :show, format: false
 
         # Dependency readiness probe.
-        resource :readiness, only: :show
+        resource :readiness, only: :show, format: false
 
         # Boot/startup probe.
-        resource :startup, only: :show
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
+      # JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace(:api) do
+        namespace(:v0) do
+          resource(:health, only: :show, path: "health.json", format: false)
+          resource(:revision, only: :show, path: "revision.json", format: false)
+        end
       end
 
       # Crawler policy endpoint; keep fixed public path.
@@ -84,21 +94,31 @@ scope module: :side, as: :side do
       resource :mcp, only: :create
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Basic health summary.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
 
       # Machine-readable health probes.
       namespace :health do
         # Process liveness probe.
-        resource :liveness, only: :show
+        resource :liveness, only: :show, format: false
 
         # Dependency readiness probe.
-        resource :readiness, only: :show
+        resource :readiness, only: :show, format: false
 
         # Boot/startup probe.
-        resource :startup, only: :show
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
+      # JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace(:api) do
+        namespace(:v0) do
+          resource(:health, only: :show, path: "health.json", format: false)
+          resource(:revision, only: :show, path: "revision.json", format: false)
+        end
       end
 
       # Crawler policy endpoint; keep fixed public path.
@@ -151,21 +171,31 @@ scope module: :side, as: :side do
       resource :mcp, only: :create
 
       # Deployment identifier endpoint.
-      resource :revision, only: :show
+      resource :revision, only: :show, format: false
 
       # Basic health summary.
-      resource :health, only: :show
+      resource :health, only: :show, format: false
 
       # Machine-readable health probes.
       namespace :health do
         # Process liveness probe.
-        resource :liveness, only: :show
+        resource :liveness, only: :show, format: false
 
         # Dependency readiness probe.
-        resource :readiness, only: :show
+        resource :readiness, only: :show, format: false
 
         # Boot/startup probe.
-        resource :startup, only: :show
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
+      # JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace(:api) do
+        namespace(:v0) do
+          resource(:health, only: :show, path: "health.json", format: false)
+          resource(:revision, only: :show, path: "revision.json", format: false)
+        end
       end
 
       # Crawler policy endpoint; keep fixed public path.

@@ -133,10 +133,8 @@ Reopen in Container**. Do not use a rebuild path for routine starts because it r
 Container.
 
 Do not use `--remove-existing-container` on the CLI recovery path. It issues a bare
-`podman rm -f <core>` that ignores dependent containers, and `cloudflare-tunnel` declares
-`depends_on: core`, which podman-compose turns into a podman `--requires` edge. While the tunnel is
-running the removal always fails with `has dependent containers which must be removed before it`.
-Take the whole project down first instead, then start it again:
+`podman rm -f <core>` that ignores the rest of the project. Take the whole project down
+first instead, then start it again:
 
 ```sh
 podman compose --project-name umaxicaappsglobaldc \
@@ -194,8 +192,10 @@ Two rules make that hold, and both are asserted by
    every listed file in full whichever service is named, so one required variable stops
    `devcontainer up` on a machine that never runs that service. This is how the retired
    `compose.custom.yaml` broke clean checkouts: it demanded `CLOUDFLARED_TOKEN` for a
-   connector nobody had asked to start. Opt-in belongs to a `profiles:` entry instead —
-   `cloudflare-tunnel` now sits behind `--profile tunnel` in `compose.yaml`.
+   connector nobody had asked to start. The primary connector is unprofiled so the Dev
+   Container lifecycle starts it; a missing token uses `:-` and `restart: on-failure:3`
+   rather than `${CLOUDFLARED_TOKEN:?}`. The alternative connector stays behind
+   `--profile tunnel-edge`.
 
 The same `-f` also suppresses Compose's auto-discovery of `compose.override.yaml`, so a
 developer's local override applies to a bare `docker compose` and to explicit `-f` runs,
@@ -205,11 +205,11 @@ machine-specific things it documents.
 ### Migrating from `compose.custom.yaml`
 
 `compose.custom.yaml` is deleted. Its `cloudflare-tunnel` service moved into `compose.yaml`
-behind the `tunnel` profile, with `${CLOUDFLARED_TOKEN:-}` instead of `${CLOUDFLARED_TOKEN:?}`.
-Start the connector with:
+as an unprofiled sidecar, with `${CLOUDFLARED_TOKEN:-}` instead of `${CLOUDFLARED_TOKEN:?}`.
+A Dev Container `up` starts it with the rest of the stack. Recreate it with:
 
 ```bash
-podman compose -f compose.yaml --profile tunnel up -d cloudflare-tunnel
+podman compose -f compose.yaml up -d cloudflare-tunnel
 ```
 
 If you kept host devices or personal tooling in your own copy, move them to

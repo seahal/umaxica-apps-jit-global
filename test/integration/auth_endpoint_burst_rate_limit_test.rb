@@ -9,6 +9,7 @@ require "test_helper"
 # stack so a limiter that is declared but never wired is a failing test rather
 # than silent absence of protection.
 class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   include ActiveSupport::Testing::TimeHelpers
 
   BURST_ALLOWANCE = 5

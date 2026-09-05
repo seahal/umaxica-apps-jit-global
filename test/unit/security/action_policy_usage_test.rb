@@ -112,8 +112,6 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/base/org/identity/revocations/others_controller.rb#create",
     "app/controllers/base/org/identity/revocations_controller.rb#create",
     "app/controllers/base/org/identity/sessions_controller.rb#destroy",
-    "app/controllers/base/org/support/clients/sessions/emergency_revocations_controller.rb#destroy",
-    "app/controllers/base/org/support/operators/sessions/emergency_revocations_controller.rb#destroy",
     "app/controllers/base/org/support/visitors/sessions/emergency_revocations_controller.rb#destroy",
 
     # Selector/switcher updates validate the requested account/organization/avatar combination

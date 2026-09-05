@@ -107,8 +107,6 @@ gem "web-push", require: false
 gem "action_push_native", require: false
 # Notification orchestration across delivery channels.
 gem "noticed", "~> 3.0"
-# Solid Cache backend.
-gem "solid_cache"
 # Solid Queue backend.
 gem "solid_queue"
 # Turbo Rails integration.

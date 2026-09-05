@@ -30,7 +30,7 @@ class PublishingPublishedEntriesQueryTest < ActiveSupport::TestCase
     entry.update!(archived_at: Time.current, archive_reason: "withdrawn")
 
     assert_not_includes PublishingPublishedEntriesQuery.call(edition:), entry
-    assert_nil PublishingPublishedEntriesQuery.new(edition:).find_by(slug: "archived-one")
+    assert_nil PublishingPublishedEntriesQuery.new(edition:).find_published(public_id: entry.public_id)
   end
 
   test "excludes a cancelled publication" do
@@ -58,26 +58,39 @@ class PublishingPublishedEntriesQueryTest < ActiveSupport::TestCase
     assert_not_includes PublishingPublishedEntriesQuery.call(edition:), entry
   end
 
-  test "resolves canonical slugs only" do
+  test "find_published resolves a published entry by its public_id" do
     edition = publishing_edition(audience: "app", surface: "info", locale: "ja")
     entry = publishing_publish(entry: publishing_draft(edition:, slug: "canonical-one", title: "Canonical"))
-    Publishing::EntrySlug.create!(
-      entry:, edition:, locale: "ja", slug: "redirect-one", state: "redirect",
-      canonicalized_at: 2.days.ago, redirected_at: 1.day.ago,
-    )
-    query = PublishingPublishedEntriesQuery.new(edition:)
 
-    assert_equal entry, query.find_by(slug: "canonical-one")
-    assert_nil query.find_by(slug: "redirect-one")
+    assert_equal entry, PublishingPublishedEntriesQuery.new(edition:).find_published(public_id: entry.public_id)
   end
 
-  test "find_by_slug returns nil for an entry without an active publication" do
+  test "find_published does not accept the database primary key or the slug" do
     edition = publishing_edition(audience: "app", surface: "info", locale: "ja")
-    publishing_draft(edition:, slug: "no-publication", title: "No Publication")
-
+    entry = publishing_publish(entry: publishing_draft(edition:, slug: "identity-guard", title: "Identity Guard"))
     query = PublishingPublishedEntriesQuery.new(edition:)
 
-    assert_nil query.find_by(slug: "no-publication")
+    assert_nil query.find_published(public_id: entry.id.to_s)
+    assert_nil query.find_published(public_id: "identity-guard")
+  end
+
+  test "find_published will not resolve an entry from another edition" do
+    own = publishing_edition(audience: "app", surface: "info", locale: "ja")
+    other = publishing_edition(audience: "com", surface: "info", locale: "ja")
+    entry = publishing_publish(entry: publishing_draft(edition: own, slug: "cell-bound", title: "Cell Bound"))
+
+    assert_nil PublishingPublishedEntriesQuery.new(edition: other).find_published(public_id: entry.public_id)
+  end
+
+  test "find_published returns nil for a draft or an archived entry" do
+    edition = publishing_edition(audience: "app", surface: "info", locale: "ja")
+    draft = publishing_draft(edition:, slug: "no-publication", title: "No Publication")
+    archived = publishing_publish(entry: publishing_draft(edition:, slug: "was-published", title: "Was Published"))
+    archived.update!(archived_at: Time.current, archive_reason: "withdrawn")
+    query = PublishingPublishedEntriesQuery.new(edition:)
+
+    assert_nil query.find_published(public_id: draft.public_id)
+    assert_nil query.find_published(public_id: archived.public_id)
   end
 
   test "filters by the published version's category and tag slugs" do

@@ -40,7 +40,14 @@ class ExternalAuthenticationGoogleProviderAdapterTest < ActiveSupport::TestCase
     assert_equal "https://accounts.google.com", result.principal.issuer
     assert_equal "configured-google-client-id", result.principal.audience
     assert_equal verified_at, result.principal.verified_at
-    assert_equal "omniauth-google-oauth2/1.2.2", result.principal.verification_authority
+    # The provenance field records which library verified the token, and the adapter reads the
+    # version from the loaded gemspec. Deriving it the same way here keeps the contract asserted
+    # -- name, separator, real loaded version -- without the assertion breaking on every omniauth-google-oauth2
+    # bump, which is what a hard-coded literal here did.
+    expected_authority = "omniauth-google-oauth2/#{Gem.loaded_specs.fetch("omniauth-google-oauth2").version}"
+
+    assert_equal expected_authority, result.principal.verification_authority
+    assert_match(%r{\Aomniauth-google-oauth2/\d+\.\d+\.\d+}, result.principal.verification_authority)
     assert_nil result.credential_candidate
     assert_equal(
       %i(provider subject issuer audience verified_at verification_authority tenant_context),

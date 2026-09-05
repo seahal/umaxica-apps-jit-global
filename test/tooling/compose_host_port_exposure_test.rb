@@ -27,7 +27,7 @@ class ComposeHostPortExposureTest < Minitest::Test
 
   # Services that must never be reachable from the host, at any bind address. Each is consumed
   # only over a Compose network, by service name.
-  NEVER_PUBLISHED_SERVICES = %w(primary replica valkey).freeze
+  NEVER_PUBLISHED_SERVICES = %w(primary replica valkey-cache valkey-rate-limit).freeze
 
   # An IPv4 or IPv6 loopback host address is the only accepted publication target.
   LOOPBACK_HOST_ADDRESSES = ["127.0.0.1", "::1"].freeze
@@ -49,7 +49,7 @@ class ComposeHostPortExposureTest < Minitest::Test
 
     assert_empty offenders.map { |entry| describe(entry) },
                  "PostgreSQL and Valkey are container-only. Reach them as " \
-                 "primary:5432, replica:5432, and valkey:6379."
+                 "primary:5432, replica:5432, valkey-cache:6379, and valkey-rate-limit:6379."
   end
 
   def test_no_service_uses_host_networking

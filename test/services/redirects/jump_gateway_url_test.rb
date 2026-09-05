@@ -71,6 +71,21 @@ class RedirectsJumpGatewayUrlTest < ActiveSupport::TestCase
     end
   end
 
+  # The one exception to the https requirement. A developer runs the gateway over plain http on a
+  # `.localhost` name, and requiring https there would break every local jump redirect; allowing it
+  # anywhere else would let a redirect leave over cleartext. Both halves of the host test are
+  # pinned, since `localhost` itself does not end with `.localhost`.
+  test "a plain http gateway origin is allowed only on a local host name" do
+    ["http://jump.localhost", "http://localhost:3000"].each do |origin|
+      with_env("PUBLIC_JUMP_GATEWAY_URL" => origin) do
+        result = RedirectsJumpGatewayUrl.call("#{"a" * 22}.#{"b" * 22}.#{"c" * 22}")
+
+        assert_predicate result, :ok?, "#{origin} must be usable in a local environment"
+        assert result.value.start_with?("#{origin}/?rt=")
+      end
+    end
+  end
+
   private
 
   def with_env(values)

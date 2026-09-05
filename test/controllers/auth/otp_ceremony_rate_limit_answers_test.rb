@@ -7,6 +7,7 @@ require "test_helper"
 # way: on the code page, with a too-many-requests status and the shared message.
 # Answering differently on one step would tell a caller which step it hit.
 class Auth::OtpCeremonyRateLimitAnswersTest < ActiveSupport::TestCase
+  counts_rate_limits!
   self.fixture_table_names = []
 
   def harness_for(controller_class, record)

@@ -5,8 +5,8 @@ info:
   contact:
     name: API Support
   description: |
-    Machine-facing JSON endpoints served under `/api/v0` on the **org** surface, plus the
-    internal health probes.
+    Machine-facing JSON endpoints served under `/api/v0` on the **org** surface, including the
+    machine-readable health and revision endpoints.
 
     The `app`, `com`, and `org` surfaces are independent trust boundaries served on separate
     hosts, so each has its own description. This one covers the staff and organization surface. An
@@ -20,15 +20,18 @@ info:
     namespaces are absent because they are being converged onto `/api/v0`
     (adr/api-route-vocabulary-consolidation.md).
 
-    `GET /health` is absent because it is not a JSON endpoint: it renders HTML and answers `406`
-    to any other `Accept`. Only the three machine-readable probes below are described.
+    The text operational endpoints -- `GET /health`, `GET /health/{startup,liveness,readiness}`,
+    and `GET /revision` -- are absent because they are not JSON: they render `text/plain` and do
+    not negotiate. Only the machine-readable `/api/v0/health.json` and `/api/v0/revision.json`
+    endpoints are described here.
 
     ## Hosts
 
     `servers` appears only where a host is real, public, and knowable from the repository. The
-    Core paths carry one. The health probes carry none because they are blocked at the edge. The
-    content and Palm paths carry none because their hosts are supplied by deployment environment
-    variables, and the docs and news content editions have no production host at all.
+    Core paths carry one. The health and revision endpoints carry none because they are blocked
+    at the edge. The content and Palm paths carry none because their hosts are supplied by
+    deployment environment variables, and the docs and news content editions have no production
+    host at all.
 
     ## Errors
 
@@ -43,21 +46,19 @@ info:
 
 tags:
   - name: Health
-    description: Internal liveness, readiness, and startup probes. Blocked at the edge.
+    description: >-
+      Machine-readable health aggregate and deployment revision. Blocked at the edge, JSON only.
   - name: Session
     description: Core browser BFF session and token lifecycle, authenticated by first-party cookie.
   - name: Content
     description: Read-only published documentation, help, news, and info entries.
 
 paths:
-  /health/liveness:
-    $ref: "shared/paths/health-liveness.yml"
+  /api/v0/health.json:
+    $ref: "shared/paths/api-v0-health.yml"
 
-  /health/readiness:
-    $ref: "shared/paths/health-readiness.yml"
-
-  /health/startup:
-    $ref: "shared/paths/health-startup.yml"
+  /api/v0/revision.json:
+    $ref: "shared/paths/api-v0-revision.yml"
 
   /api/v0/session:
     $ref: "org/paths/session.yml"
@@ -68,7 +69,7 @@ paths:
   /api/v0/entries:
     $ref: "shared/paths/entries.yml"
 
-  /api/v0/entries/{slug}:
+  /api/v0/entries/{public_id}:
     $ref: "shared/paths/entry.yml"
 
 components:

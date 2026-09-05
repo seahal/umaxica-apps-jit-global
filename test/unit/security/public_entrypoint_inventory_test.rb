@@ -209,9 +209,13 @@ module Security
 
     def public_root?(entry) = get?(entry) && entry.path == "/"
 
-    def public_health?(entry) = get?(entry) && entry.path.start_with?("/health")
+    def public_health?(entry)
+      get?(entry) && (entry.path.start_with?("/health") || entry.path == "/api/v0/health.json")
+    end
 
-    def public_revision?(entry) = get?(entry) && entry.path == "/revision"
+    def public_revision?(entry)
+      get?(entry) && ["/revision", "/api/v0/revision.json"].include?(entry.path)
+    end
 
     def public_csp_report?(entry) = post?(entry) && entry.path == "/csp-violation-report"
 

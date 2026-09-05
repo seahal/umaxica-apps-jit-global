@@ -4,6 +4,7 @@
 require "test_helper"
 
 class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   fixtures :visitors, :operators, :clients
 
   setup do

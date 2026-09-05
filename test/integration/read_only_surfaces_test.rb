@@ -78,26 +78,26 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
       audience: "app", surface: "docs", slug: "visible-entry",
       title: "Visible Entry", locale: "test-show",
     )
-    create_publishing_entry(
+    future = create_publishing_entry(
       audience: "app", surface: "docs", slug: "future-entry", title: "Future Entry", locale: "test-show",
       published_at: 1.day.from_now,
     )
 
     host! ENV.fetch("PRIVATE_DOCS_SERVICE_URL")
-    get docs_app_api_v0_entry_url(slug: published.slugs.canonical.first.slug, locale: "test-show")
+    get docs_app_api_v0_entry_url(public_id: published.public_id, locale: "test-show")
 
     assert_response :success
     assert_equal "visible-entry", response.parsed_body.fetch("slug")
 
-    get docs_app_api_v0_entry_url(slug: "future-entry", locale: "test-show")
+    get docs_app_api_v0_entry_url(public_id: future.public_id, locale: "test-show")
 
     assert_response :not_found
 
-    get "/entries/#{published.slugs.canonical.first.slug}", params: { locale: "test-show" }
+    get "/entries/#{published.public_id}", params: { locale: "test-show" }
 
     assert_response :not_found
 
-    get "/edge/v0/entries/#{published.slugs.canonical.first.slug}", params: { locale: "test-show" }
+    get "/edge/v0/entries/#{published.public_id}", params: { locale: "test-show" }
 
     assert_response :not_found
   end
@@ -107,27 +107,27 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
       audience: "app", surface: "docs", slug: "locale-visible-entry",
       title: "Locale Visible Entry", locale: "ja",
     )
-    create_publishing_entry(
+    draft = create_publishing_entry(
       audience: "app", surface: "docs", slug: "locale-draft-entry", title: "Locale Draft Entry", locale: "ja",
       status: "draft",
     )
-    create_publishing_entry(
+    archived = create_publishing_entry(
       audience: "app", surface: "docs", slug: "locale-archived-entry", title: "Locale Archived Entry", locale: "ja",
       status: "archived",
     )
 
     host! ENV.fetch("PRIVATE_DOCS_SERVICE_URL")
 
-    get docs_app_api_v0_entry_url(slug: published.slugs.canonical.first.slug, ri: "jp")
+    get docs_app_api_v0_entry_url(public_id: published.public_id, ri: "jp")
 
     assert_response :success
     assert_equal published.slugs.canonical.first.slug, response.parsed_body.fetch("slug")
 
-    get docs_app_api_v0_entry_url(slug: "locale-draft-entry", ri: "jp")
+    get docs_app_api_v0_entry_url(public_id: draft.public_id, ri: "jp")
 
     assert_response :not_found
 
-    get docs_app_api_v0_entry_url(slug: "locale-archived-entry", ri: "jp")
+    get docs_app_api_v0_entry_url(public_id: archived.public_id, ri: "jp")
 
     assert_response :not_found
   end
@@ -143,12 +143,12 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
 
     host! ENV.fetch("PRIVATE_DOCS_SERVICE_URL")
 
-    get docs_app_api_v0_entry_url(slug: published.slugs.canonical.first.slug, ri: "zz")
+    get docs_app_api_v0_entry_url(public_id: published.public_id, ri: "zz")
 
     assert_response :success
     assert_equal published.slugs.canonical.first.slug, response.parsed_body.fetch("slug")
 
-    get docs_app_api_v0_entry_url(slug: english.slugs.canonical.first.slug, ri: "us")
+    get docs_app_api_v0_entry_url(public_id: english.public_id, ri: "us")
 
     assert_response :success
     assert_equal english.slugs.canonical.first.slug, response.parsed_body.fetch("slug")
@@ -173,19 +173,20 @@ class ReadOnlySurfacesTest < ActionDispatch::IntegrationTest
       host = ENV.fetch(env_key, fallback)
       host! host
 
-      get public_send(helper, slug: newer.slugs.canonical.first.slug, locale: "test-api", host: host),
+      get public_send(helper, public_id: newer.public_id, locale: "test-api", host: host),
           headers: { "Host" => host, "Accept" => "application/json" },
           as: :json
 
       assert_response :success
       entry = response.parsed_body
 
+      assert_equal newer.public_id, entry.fetch("public_id")
       assert_equal newer.slugs.canonical.first.slug, entry.fetch("slug")
       assert_equal surface, entry.fetch("namespace")
       assert_equal audience, entry.fetch("surface")
       assert_equal "Newer Entry", entry.fetch("title")
 
-      get public_send(helper, slug: "#{audience}-future-entry", locale: "test-api", host: host),
+      get public_send(helper, public_id: "unknownpublicid0000001", locale: "test-api", host: host),
           headers: { "Host" => host, "Accept" => "application/json" },
           as: :json
 

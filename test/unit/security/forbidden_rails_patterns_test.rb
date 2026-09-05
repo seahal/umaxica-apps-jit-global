@@ -94,11 +94,8 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
     app/controllers/auth/com/verification/emails_controller.rb
     app/controllers/auth/org/verification/base_controller.rb
     app/controllers/base/app/edge/v0/cookies_controller.rb
-    app/controllers/base/app/edge/v0/dbsc_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
-    app/controllers/base/com/edge/v0/dbsc_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb
-    app/controllers/base/org/edge/v0/dbsc_controller.rb
     app/controllers/core/app/edge/v0/cookies_controller.rb
     app/controllers/core/app/edge/v0/dbsc_controller.rb
     app/controllers/core/com/edge/v0/cookies_controller.rb

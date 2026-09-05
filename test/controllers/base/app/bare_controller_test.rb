@@ -17,6 +17,8 @@ module Base
       self.fixture_table_names = []
 
       REQUIRED_DESCENDANTS = %w(
+        Base::App::Api::V0::HealthsController
+        Base::App::Api::V0::RevisionsController
         Base::App::CspViolationReportsController
         Base::App::Health::LivenessesController
         Base::App::Health::ReadinessesController

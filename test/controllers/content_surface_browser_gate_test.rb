@@ -32,8 +32,17 @@ class ContentSurfaceBrowserGateTest < ActionDispatch::IntegrationTest
       get path, headers: outdated_headers.merge("Accept" => "application/json")
 
       assert_not_equal 406, response.status, "#{path} refused a probe on browser version grounds"
-      assert_equal "application/json", response.media_type
+      assert_equal "text/plain", response.media_type
+      assert_not_includes response.body, "<html"
     end
+  end
+
+  test "the machine health json endpoint is not gated on browser version" do
+    get "/api/v0/health.json", headers: outdated_headers.merge("Accept" => "application/json")
+
+    assert_not_equal 406, response.status
+    assert_equal "application/json", response.media_type
+    assert_not_includes response.body, "<html"
   end
 
   test "the revision endpoint is not gated on browser version" do

@@ -104,16 +104,6 @@ module Webauthn
       end
     end
 
-    private
-
-    def with_env(overrides)
-      saved = overrides.keys.index_with { |key| ENV[key] }
-      overrides.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
-      yield
-    ensure
-      saved.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
-    end
-
     test "configs compare by relying party id and origin, not by identity" do
       config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.app", origin: "https://auth.umaxica.app")
       same = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.app", origin: "https://auth.umaxica.app")
@@ -123,6 +113,16 @@ module Webauthn
       assert_not_equal config, other_origin
       assert_not_equal config, "auth.umaxica.app"
       assert_equal config.hash, same.hash
+    end
+
+    private
+
+    def with_env(overrides)
+      saved = overrides.keys.index_with { |key| ENV[key] }
+      overrides.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+      yield
+    ensure
+      saved.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
     end
   end
 end

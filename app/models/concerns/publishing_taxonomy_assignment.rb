@@ -4,6 +4,10 @@
 # coherence, vocabulary membership, and kind agreement are enforced by
 # PostgreSQL; the validations here only turn violations into readable errors
 # before the database sees them.
+#
+# included do installs associations and validations: those are the assignment
+# persistence contract, not hidden side effects. Owner belongs_to stays on each
+# concrete class so revision vs version ownership remains visible.
 module PublishingTaxonomyAssignment
   extend ActiveSupport::Concern
 

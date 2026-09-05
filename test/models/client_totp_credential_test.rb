@@ -86,16 +86,20 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
 
   test "verifies totp codes after encryption" do
     secret = ROTP::Base32.random_base32
-    token = ROTP::TOTP.new(secret).now
+    # The code is generated before the record is written and verified after, so the
+    # clock is pinned -- otherwise the 30-second TOTP window can turn over in between.
+    freeze_time do
+      token = ROTP::TOTP.new(secret).now
 
-    record = ClientTotpCredential.create!(
-      user: @user,
-      private_key: secret,
-      last_otp_at: @last_otp_at,
-    )
+      record = ClientTotpCredential.create!(
+        user: @user,
+        private_key: secret,
+        last_otp_at: @last_otp_at,
+      )
 
-    assert_not_equal secret, record.reload.read_attribute_before_type_cast("private_key")
-    assert ROTP::TOTP.new(record.private_key).verify(token)
+      assert_not_equal secret, record.reload.read_attribute_before_type_cast("private_key")
+      assert ROTP::TOTP.new(record.private_key).verify(token)
+    end
   end
 
   test "has last_otp_at attribute" do

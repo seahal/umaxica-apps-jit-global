@@ -202,6 +202,21 @@ module ParallelTestDatabaseCloner
     )
   end
 
+  # A clone is fresh iff it still matches the base database it was templated from, so the
+  # fingerprint has to describe that base -- not merely the files the base was supposed to have been
+  # built from.
+  #
+  # Hashing the migration sources alone is what made this go wrong before. `CREATE DATABASE ...
+  # TEMPLATE` copies whatever the base currently holds, but the stamp asserted what the migration
+  # files currently say, and nothing checked that the base had been rebuilt from them. Once a run
+  # cloned a not-yet-migrated base, every clone carried the old schema under the new sha, and the
+  # stamp then matched forever: `db:migrate:reset` fixed the base and left all twelve workers wrong,
+  # failing with `relation "..." does not exist` against a base where the relation plainly existed.
+  #
+  # `base_schema_digest` closes that by reading the base's real catalog, so any change to the base --
+  # a migration applied, a migration edited in place and replayed, a branch switch, manual DDL --
+  # moves the sha and rebuilds the clones. The migration sources stay in the digest because they are
+  # free here and still catch an edit whose effect on the catalog is nil.
   def schema_sha(config)
     schema_path = ActiveRecord::Tasks::DatabaseTasks.schema_dump_path(config, config.schema_format)
     return nil unless File.exist?(schema_path)
@@ -209,12 +224,45 @@ module ParallelTestDatabaseCloner
     digest = Digest::SHA1.new
     digest << File.binread(schema_path)
     Array(config.migrations_paths).sort.each do |path|
-      Dir.glob(File.join(path, "*.rb")).each do |migration_path|
+      Dir.glob(File.join(path, "*.rb")).sort.each do |migration_path|
         digest << migration_path
         digest << File.binread(migration_path)
       end
     end
+    digest << base_schema_digest(config)
     digest.hexdigest
+  end
+
+  # Every column of every ordinary, partitioned, and view relation in `public`, ordered so the
+  # digest does not depend on catalog scan order. Aggregated in PostgreSQL rather than in Ruby: one
+  # round trip per base database, and nothing but the 32-byte result crosses the wire.
+  BASE_SCHEMA_DIGEST_SQL = <<~SQL.squish
+    select coalesce(md5(string_agg(entry, chr(10) order by entry)), '') as digest
+    from (
+      select c.relname || ':' || a.attname || ':' ||
+             format_type(a.atttypid, a.atttypmod) || ':' || a.attnotnull as entry
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_attribute a on a.attrelid = c.oid
+      where n.nspname = 'public'
+        and c.relkind in ('r', 'p', 'v', 'm')
+        and a.attnum > 0
+        and not a.attisdropped
+    ) columns
+  SQL
+
+  # A base database that does not exist yet has no schema to digest, and
+  # `raise_if_missing_base_databases!` is what reports that -- with the remedy -- a moment later.
+  # Returning a marker here keeps this from raising a bare PG error first.
+  def base_schema_digest(config)
+    connection = connect(config.configuration_hash, config.database)
+    begin
+      connection.exec(BASE_SCHEMA_DIGEST_SQL).first.fetch("digest")
+    ensure
+      connection.close
+    end
+  rescue PG::ConnectionBad
+    "absent"
   end
 
   def connect(config, database)

@@ -30,6 +30,7 @@ module Publishing
       entry.with_lock do
         revision = create_revision(entry)
         copy_taxonomy_assignments(revision)
+        copy_media_usages(revision)
         entry.update!(current_revision: revision)
         revision
       end
@@ -79,6 +80,22 @@ module Publishing
           taxonomy_term_id: assignment.taxonomy_term_id,
           locale: assignment.locale,
           position: assignment.position,
+        )
+      end
+    end
+
+    def copy_media_usages(revision)
+      version.media_usages.find_each do |usage|
+        RevisionMediaUsage.create!(
+          media_file_id: usage.media_file_id,
+          entry_revision: revision,
+          role: usage.role,
+          field_path: usage.field_path,
+          block_path: usage.block_path,
+          position: usage.position,
+          alt_text: usage.alt_text,
+          caption: usage.caption,
+          presentation_metadata: usage.presentation_metadata,
         )
       end
     end

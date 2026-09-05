@@ -204,6 +204,10 @@ valid keyword, `docs.jp.umaxica.app` is gone, and `servers` now appears only on 
 found during that work are also fixed: `GET /health` was described as JSON when it renders HTML, and
 the probe responses carry a `namespace` member that was undocumented.
 
+> Superseded by the 2026-09-03 text+JSON health contract: `/health` and the probes now render
+> `text/plain` (no `namespace` member), and machine JSON moved to `/api/v0/health.json` +
+> `/api/v0/revision.json`. See `docs/reference/health-endpoints.md`.
+
 ### Where the full analysis lives
 
 `plans/rails-nextjs-openapi-contract-audit.md` — the audit, the tool comparison with sources and

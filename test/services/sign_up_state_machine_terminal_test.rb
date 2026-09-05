@@ -26,7 +26,8 @@ class SignUpStateMachineTerminalTest < ActiveSupport::TestCase
 
   test "a ticket without a terminal predicate is judged from its status name" do
     %w(COMPLETED FAILED EXPIRED CANCELLED).each do |status_name|
-      assert machine_for(PlainTicket.new(status_name)).send(:terminal?), status_name
+      assert machine_for(PlainTicket.new(status_name)).send(:terminal?),
+             "expected #{status_name} to be a terminal status"
     end
 
     assert_not machine_for(PlainTicket.new("STARTED")).send(:terminal?)

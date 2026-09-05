@@ -1,0 +1,52 @@
+# GET /api/v0/health.json
+#
+# No `servers`: the health endpoints are blocked at the edge and have no public host. They are
+# reachable only from inside the deployment network, through the tunnel, carrying a real `Host`.
+# Naming a host here would describe an address no client of this description can use.
+#
+# The literal `.json` is part of the path, not a Rails format token: the route is drawn with
+# `format: false` (config/routes/*.rb). The endpoint answers `application/json` only and refuses
+# any other `Accept` with `406` and an empty body (it is an internal probe, not an `/api/v0`
+# Problem Details endpoint).
+get:
+  summary: Machine-readable health aggregate
+  description: >-
+    Internal probe for orchestrators and monitoring, not a user-facing availability contract.
+    Aggregates the startup, liveness, and readiness verdicts into the `pass` / `warn` / `fail`
+    vocabulary. A readiness outage never changes the liveness verdict: liveness is
+    dependency-free. `fail` is served as HTTP 503; `pass` and `warn` as HTTP 200. The body
+    carries no host name, dependency name, exception, path, or environment value.
+  security: []
+  operationId: getApiV0Health
+  tags: [Health]
+  responses:
+    "200":
+      description: The instance is serving. `status` is `pass` or `warn`.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            enum: [no-store]
+      content:
+        application/json:
+          schema:
+            $ref: "../components.yml#/schemas/HealthReport"
+    "503":
+      description: The instance is not serving. `status` is `fail`.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            enum: [no-store]
+      content:
+        application/json:
+          schema:
+            $ref: "../components.yml#/schemas/HealthReport"
+    "406":
+      description: >-
+        The request `Accept` excludes `application/json`. The refusal has an empty body.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            enum: [no-store]

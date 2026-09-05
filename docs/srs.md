@@ -60,8 +60,9 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 - **Frontend toolchain**: Vite Rails with pnpm-managed Vite Plus tooling for Turbo/Stimulus/React
   entrypoints under `src`; browser CSS is bundled through Vite entrypoints while Rails still serves
   non-browser static assets.
-- **Caching & session adjuncts**: Valkey (Redis-compatible) powers request rate limiting, `Memorize`
-  ephemeral storage, signed preference cookies, and Rack session backing for Action Cable.
+- **Cache and rate-limit counters**: Valkey (Redis-compatible) backs two separate, non-authoritative
+  stores -- `Rails.cache` (`CACHE_REDIS_URL`) and the rate-limit counters (`RATE_LIMIT_REDIS_URL`).
+  Sessions are cookie-backed and Active Job is Solid Queue (PostgreSQL). Solid Cache is not used.
 - **Security & identity**: JWT auth cookies (ES256) via the `Authn` concern, WebAuthn passkeys,
   HOTP/TOTP (ROTP), `Outbound::Sms`, and Cloudflare Turnstile for bot defense.
 - **Observability**: OpenTelemetry instrumentation exports to Tempo via OTLP; logs/metrics land in
@@ -73,7 +74,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   | Host examples | Namespace | Responsibilites |
   |---------|---------------|-----------|-----------------| | Top (marketing / preferences) |
   `www.umaxica.com`, `www.umaxica.app`, `www.umaxica.org` | `Top::Com/App/Org` | Redirects to edge,
-  exposes `/health`, `/v1/health`, preference UIs (cookie/region/theme). | | Sign |
+  exposes `/health`, `/api/v0/health.json`, preference UIs (cookie/region/theme). | | Sign |
   `log.umaxica.app`, `log.umaxica.org` | `Sign::App/Org` | Registration (email/phone), OTP,
   passkeys, OAuth (Google/Apple), recovery, withdrawals. | | Help | `help.umaxica.com` |
   `Help::Com/App/Org` | Contact forms, ticket intake (`ServiceSiteContact`), Turnstile enforcement.
@@ -91,14 +92,17 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 - **FR-01**: Each namespace (`top`, `sign`, `bff`, `api`, `docs`, `news`, `help`) must enforce
   host-level constraints defined in `config/routes/*.rb` using `ENV` variables to prevent routing
   leakage.
-- **FR-02**: All surfaces implement HTML (`/health`) and JSON (`/v1/health`) heartbeat endpoints via
-  the shared `Health` concern; responses must be cache-friendly and usable by Fastly/Cloudflare
-  monitors.
+- **FR-02**: All surfaces implement the 2026-09-03 health contract via the shared `Health` service
+  layer: `text/plain` probes at `/health` (four-line aggregate) and
+  `/health/{startup,liveness,readiness}` (`ok\n` / 503), plus machine JSON at
+  `/api/v0/health.json` (`pass/warn/fail`) and `/api/v0/revision.json`. Every response carries
+  `Cache-Control: no-store` (a health verdict must not be cached). Details in
+  `docs/reference/health-endpoints.md`.
 - **FR-03**: Controllers must set consistent default URL parameters (`lx`, `ri`, `tz`) using
   `DefaultUrlOptions` so deep links retain localization context.
-- **FR-04**: Request throttling is enforced through the `RateLimit` concern (Valkey-backed
-  `rate_limit to: 1000 within 1.hour`) for every ActionController except API health, with overrides
-  for test environments.
+- **FR-04**: Request throttling is enforced through the `RateLimit` concern (`rate_limit to: 1000
+  within 1.hour` against the Valkey-backed `config.x.rate_limit.store`) for every ActionController
+  except API health, with overrides for test environments.
 
 ### 4.2 Preference management & localization
 
@@ -201,7 +205,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 | Privacy & Compliance | Preference cookies must capture consent state (GDPR/ePrivacy). PII stored encrypted with separation by database cluster. Audit logs retained ≥ 180 days.                                            |
 | Maintainability      | Namespaced controllers/views keep code per host ≤ 500 LOC; shared concerns (`Authn`, `PreferenceRegions`, `Theme`, etc.) must remain framework-agnostic.                                            |
 | Localization         | UI copy available in Japanese (default) and English; URL params `lx`, `ri`, `tz`, `ct` propagate through redirects and forms.                                                                       |
-| Observability        | OTEL traces for HTTP, Redis, and Action Mailer; structured logs shipped to Loki; uptime monitors poll `/health` + `/v1/health`.                                                                     |
+| Observability        | OTEL traces for HTTP, the Valkey rate-limit store, and Action Mailer; structured logs shipped to Loki; uptime monitors poll `/health` (text) + `/api/v0/health.json`.                                               |
 
 ---
 
@@ -216,18 +220,19 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 - Asset pipeline relies on Vite for browser CSS and pnpm-managed JS tooling for the app UI; Rails
   continues to serve static non-browser assets where appropriate.
 - Dependencies include ROTP, WebAuthn, OmniAuth (Google/Apple), Rswag, Action Policy, Shrine,
-  SolidCache, Fastly gem, AWS SDK.
+  Fastly gem, AWS SDK.
 
 ### 6.2 Environmental & configuration constraints
 
 - Required ENV keys: host mappings (e.g., `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, `API_STAFF_URL`),
-  downstream edge hosts (`EDGE_*`), Redis URLs (`REDIS_RACK_ATTACK_URL`, `REDIS_SESSION_URL`),
+  downstream edge hosts (`EDGE_*`), the rate-limit store URL (`RATE_LIMIT_REDIS_URL`),
   Cloudflare Turnstile secret, JWT private/public keys, SMS provider selector, storage credentials
   (when the optional RustFS profile is used), OTLP endpoint.
 - The devcontainer Compose override publishes the optional RustFS API and console on loopback
   ports 9000/9001 by default; both ports are configurable through `.env`.
-- Foreman/Procfile required for multi-process dev; CI uses GitHub Actions runners with
-  PostgreSQL/Valkey services.
+- Foreman/Procfile required for multi-process dev; CI uses GitHub Actions runners with a PostgreSQL
+  service. CI needs no Valkey service: the test environment's rate-limit store is an in-memory
+  `ActiveSupport::Cache::MemoryStore`.
 
 ### 6.3 External services & integrations
 
@@ -245,7 +250,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 
 | ID    | Condition                                                                                                                                 |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| AC-01 | `GET https://www.umaxica.com/health` returns 200 HTML, `GET .../v1/health` returns JSON `{status:"OK"}` for each host namespace.          |
+| AC-01 | `GET .../health` returns 200 `text/plain` (four-line aggregate); `GET .../api/v0/health.json` returns `{"status":"pass",…}` for each host namespace.          |
 | AC-02 | Editing language/region/timezone/theme updates cookies and redirects back to the proper Top scope with query parameters preserved.        |
 | AC-03 | Email registration flow issues an OTP via ActionMailer only when Turnstile succeeds and saves `UserIdentityEmail` with encrypted address. |
 | AC-04 | Telephone registration rejects invalid E.164 numbers and uses the configured SMS provider.                                                |

@@ -16,6 +16,28 @@ class SurfaceHookMappingTest < ActiveSupport::TestCase
     controller_class.allocate
   end
 
+  # A request double carrying only what the preference hooks read off it.
+  def preference_request(host:)
+    Struct.new(:host, :ssl?, :path, :query_parameters, :format) do
+      def get? = true
+
+      def head? = false
+    end.new(host, false, "/preference", {}, Struct.new(:html?).new(true))
+  end
+
+  # Swaps the ancestor `super` resolves to for a recorder, so an override can be run for real and
+  # still be asked whether it delegated, without standing up the request lifecycle the ancestor
+  # needs. Restored on the way out so no other test sees the replacement.
+  def record_super(owner, name)
+    reached = []
+    original = owner.instance_method(name)
+    owner.send(:define_method, name) { reached << :super_reached }
+    yield
+    reached
+  ensure
+    owner.send(:define_method, name, original)
+  end
+
   test "the com verification base controller answers every seam with visitor models" do
     c = self.class.bare(Auth::Com::Verification::BaseController)
 
@@ -106,20 +128,9 @@ class SurfaceHookMappingTest < ActiveSupport::TestCase
      Auth::Com::PreferencesBaseController,
      Auth::Org::PreferencesBaseController,].each do |controller_class|
       c = self.class.bare(controller_class)
-      localhost = Struct.new(:host, :ssl?, :path, :query_parameters, :format) do
-        def get? = true
-
-        def head? = false
-      end.new("auth.app.localhost", false, "/preference", {}, Struct.new(:html?).new(true))
-      c.define_singleton_method(:request) { localhost }
+      req = preference_request(host: "auth.app.localhost")
+      c.define_singleton_method(:request) { req }
       c.define_singleton_method(:action_name) { "edit" }
-      cookie_calls = []
-      c.define_singleton_method(:set_preferences_cookie) do
-        # exercise the override, then stand in for ActionController's super
-        singleton_class.superclass.instance_method(:set_preferences_cookie).bind_call(self)
-      rescue StandardError
-        cookie_calls << :super_reached
-      end
 
       assert_predicate c, :preference_edit_entry_request?
 
@@ -128,6 +139,49 @@ class SurfaceHookMappingTest < ActiveSupport::TestCase
       c.send(:redirect_localhost_preference_authority!)
 
       assert_equal ["/preference"], redirected, controller_class.name
+    end
+  end
+
+  # The cookie override exists to keep the preference cookie off `.localhost`, where the surface
+  # hosts are not the cookie's domain. Both arms are driven through the real method: the previous
+  # version of this test replaced `set_preferences_cookie` with a singleton before calling it, so
+  # the override's own body never ran and the skip it exists to perform was never asserted.
+  test "the preference controllers hand the cookie to the transport unless the host is localhost" do
+    [Auth::App::PreferencesBaseController,
+     Auth::Com::PreferencesBaseController,
+     Auth::Org::PreferencesBaseController,].each do |controller_class|
+      { "auth.app.localhost" => [], "auth.umaxica.app" => [:super_reached] }.each do |host, expected|
+        c = self.class.bare(controller_class)
+        req = preference_request(host: host)
+        c.define_singleton_method(:request) { req }
+
+        reached = record_super(PreferenceTransport, :set_preferences_cookie) { c.send(:set_preferences_cookie) }
+
+        assert_equal expected, reached, "#{controller_class.name} on #{host}"
+      end
+    end
+  end
+
+  # The actor override refreshes the preference token from the database before the actor is
+  # hydrated, but only on the GET that opens an edit form -- doing it on every request would put a
+  # write on the read path.
+  test "the preference controllers refresh the preference token only when entering an edit form" do
+    [Auth::App::PreferencesBaseController,
+     Auth::Com::PreferencesBaseController,
+     Auth::Org::PreferencesBaseController,].each do |controller_class|
+      { "edit" => 1, "show" => 0 }.each do |action, expected_refreshes|
+        c = self.class.bare(controller_class)
+        req = preference_request(host: "auth.umaxica.app")
+        c.define_singleton_method(:request) { req }
+        c.define_singleton_method(:action_name) { action }
+        refreshes = 0
+        c.define_singleton_method(:refresh_preference_token_from_db_for_edit_entry!) { refreshes += 1 }
+
+        reached = record_super(ActorSupport, :set_current_actor) { c.send(:set_current_actor) }
+
+        assert_equal expected_refreshes, refreshes, "#{controller_class.name} on #{action}"
+        assert_equal [:super_reached], reached, "#{controller_class.name} must always hydrate the actor"
+      end
     end
   end
 end

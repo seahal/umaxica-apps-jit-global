@@ -37,6 +37,7 @@ class CreatePublishingTaxonomy < ActiveRecord::Migration[8.2]
       create_retirement_guard
       create_snapshot_derivation
       create_snapshot_completeness_guard
+      create_media_completeness_guard
       create_promoted_revision_guard
     end
   end
@@ -59,6 +60,7 @@ class CreatePublishingTaxonomy < ActiveRecord::Migration[8.2]
         publishing_vocabulary_structure_guard()
         publishing_promoted_revision_guard()
         publishing_assert_version_snapshot_complete()
+        publishing_assert_version_media_complete()
         publishing_version_single_taxonomy_assignments_snapshot()
         publishing_version_multiple_taxonomy_assignments_snapshot()
         publishing_taxonomy_assignment_scope_guard()
@@ -629,6 +631,73 @@ class CreatePublishingTaxonomy < ActiveRecord::Migration[8.2]
     end
   end
 
+  # Version media is a complete immutable snapshot of the source revision's
+  # placements AND presentation fields. Rails DSL cannot defer a multi-row
+  # equality check until COMMIT.
+  # rubocop:disable Metrics/MethodLength -- one deferred completeness function
+  # rubocop:disable I18n/RailsI18n/DecorateString -- DDL is not user-facing copy
+  def create_media_completeness_guard
+    execute(<<~SQL.squish)
+      CREATE FUNCTION publishing_assert_version_media_complete() RETURNS trigger AS $$
+      DECLARE
+        target_version_id bigint;
+        source_revision_id bigint;
+        mismatch integer;
+      BEGIN
+        IF TG_TABLE_NAME = 'publishing_entry_versions' THEN
+          target_version_id := NEW.id;
+        ELSE
+          target_version_id := NEW.entry_version_id;
+        END IF;
+
+        SELECT entry_revision_id INTO source_revision_id
+        FROM public.publishing_entry_versions WHERE id = target_version_id;
+        IF source_revision_id IS NULL THEN RETURN NULL; END IF;
+
+        SELECT count(*) INTO mismatch FROM (
+          (
+            SELECT media_file_id, role, field_path, block_path, position, alt_text, caption, presentation_metadata
+            FROM public.publishing_revision_media_usages
+            WHERE entry_revision_id = source_revision_id
+            EXCEPT ALL
+            SELECT media_file_id, role, field_path, block_path, position, alt_text, caption, presentation_metadata
+            FROM public.publishing_version_media_usages
+            WHERE entry_version_id = target_version_id
+          )
+          UNION ALL
+          (
+            SELECT media_file_id, role, field_path, block_path, position, alt_text, caption, presentation_metadata
+            FROM public.publishing_version_media_usages
+            WHERE entry_version_id = target_version_id
+            EXCEPT ALL
+            SELECT media_file_id, role, field_path, block_path, position, alt_text, caption, presentation_metadata
+            FROM public.publishing_revision_media_usages
+            WHERE entry_revision_id = source_revision_id
+          )
+        ) AS media_difference;
+        IF mismatch > 0 THEN
+          RAISE EXCEPTION
+            'publishing media: version % usages do not match revision %',
+            target_version_id, source_revision_id
+            USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql SET search_path = pg_catalog, public;
+    SQL
+    %w(publishing_entry_versions publishing_version_media_usages).each do |table|
+      execute(<<~SQL.squish)
+        CREATE CONSTRAINT TRIGGER trg_#{table}_media_complete
+        AFTER INSERT ON public.#{table}
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION publishing_assert_version_media_complete();
+      SQL
+    end
+  end
+  # rubocop:enable Metrics/MethodLength
+  # rubocop:enable I18n/RailsI18n/DecorateString
+
   # Once a revision has been promoted, it is the historical record of what was
   # published. Letting it drift afterwards would leave the version and the
   # revision describing different promotion events, and UNIQUE(entry_revision_id)
@@ -673,6 +742,7 @@ class CreatePublishingTaxonomy < ActiveRecord::Migration[8.2]
     %w(
       publishing_revision_single_taxonomy_assignments
       publishing_revision_multiple_taxonomy_assignments
+      publishing_revision_media_usages
     ).each do |table|
       execute(<<~SQL.squish)
         CREATE TRIGGER trg_#{table}_promoted
@@ -687,6 +757,7 @@ class CreatePublishingTaxonomy < ActiveRecord::Migration[8.2]
       publishing_entry_versions
       publishing_version_single_taxonomy_assignments
       publishing_version_multiple_taxonomy_assignments
+      publishing_version_media_usages
     )
   end
 

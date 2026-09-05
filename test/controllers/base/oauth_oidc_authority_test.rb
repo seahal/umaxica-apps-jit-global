@@ -6,6 +6,7 @@ require "test_helper"
 # require "helpers/auth_helpers"
 
 class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   # include AuthHelpers
 
   TokenResult =

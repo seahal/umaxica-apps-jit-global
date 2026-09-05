@@ -13,6 +13,7 @@ require "test_helper"
 # Each case sends the full quota and then one more request, so it also pins that
 # the quota is not off by one in either direction.
 class SurfaceDefaultWebRateLimitTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   self.fixture_table_names = []
 
   DEFAULT_WEB_QUOTA = 300

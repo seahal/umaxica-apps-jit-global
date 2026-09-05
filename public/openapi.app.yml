@@ -5,8 +5,8 @@ info:
   contact:
     name: API Support
   description: |
-    Machine-facing JSON endpoints served under `/api/v0` on the **app** surface, plus the
-    internal health probes.
+    Machine-facing JSON endpoints served under `/api/v0` on the **app** surface, including the
+    machine-readable health and revision endpoints.
 
     The `app`, `com`, and `org` surfaces are independent trust boundaries served on separate
     hosts, so each has its own description. This one covers the end-user application surface. An
@@ -21,15 +21,18 @@ info:
     namespaces are absent because they are being converged onto `/api/v0`
     (adr/api-route-vocabulary-consolidation.md).
 
-    `GET /health` is absent because it is not a JSON endpoint: it renders HTML and answers `406`
-    to any other `Accept`. Only the three machine-readable probes below are described.
+    The text operational endpoints -- `GET /health`, `GET /health/{startup,liveness,readiness}`,
+    and `GET /revision` -- are absent because they are not JSON: they render `text/plain` and do
+    not negotiate. Only the machine-readable `/api/v0/health.json` and `/api/v0/revision.json`
+    endpoints are described here.
 
     ## Hosts
 
     `servers` appears only where a host is real, public, and knowable from the repository. The
-    Core paths carry one. The health probes carry none because they are blocked at the edge. The
-    content and Palm paths carry none because their hosts are supplied by deployment environment
-    variables, and the docs and news content editions have no production host at all.
+    Core paths carry one. The health and revision endpoints carry none because they are blocked
+    at the edge. The content and Palm paths carry none because their hosts are supplied by
+    deployment environment variables, and the docs and news content editions have no production
+    host at all.
 
     ## Errors
 
@@ -43,7 +46,7 @@ info:
     sets `additionalProperties: false`, so clients must tolerate it and any other unknown member.
 tags:
   - name: Health
-    description: Internal liveness, readiness, and startup probes. Blocked at the edge.
+    description: Machine-readable health aggregate and deployment revision. Blocked at the edge, JSON only.
   - name: Session
     description: Core browser BFF session and token lifecycle, authenticated by first-party cookie.
   - name: Profile
@@ -51,45 +54,76 @@ tags:
   - name: Content
     description: Read-only published documentation, help, news, and info entries.
 paths:
-  /health/liveness:
+  /api/v0/health.json:
     get:
-      summary: Process liveness probe
-      description: Internal probe for orchestrators and monitoring, not a user-facing availability contract.
+      summary: Machine-readable health aggregate
+      description: 'Internal probe for orchestrators and monitoring, not a user-facing availability contract. Aggregates the startup, liveness, and readiness verdicts into the `pass` / `warn` / `fail` vocabulary. A readiness outage never changes the liveness verdict: liveness is dependency-free. `fail` is served as HTTP 503; `pass` and `warn` as HTTP 200. The body carries no host name, dependency name, exception, path, or environment value.'
       security: []
-      operationId: getHealthLiveness
+      operationId: getApiV0Health
       tags:
         - Health
       responses:
         '200':
-          $ref: '#/components/responses/HealthOk'
+          description: The instance is serving. `status` is `pass` or `warn`.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReport'
+        '406':
+          description: The request `Accept` excludes `application/json`. The refusal has an empty body.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
         '503':
-          $ref: '#/components/responses/HealthUnavailable'
-  /health/readiness:
+          description: The instance is not serving. `status` is `fail`.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReport'
+  /api/v0/revision.json:
     get:
-      summary: Dependency readiness probe
-      description: Internal probe for orchestrators and monitoring, not a user-facing availability contract. Reports `database` in `dependencies`. Only the public status is exposed.
+      summary: Machine-readable deployment revision
+      description: Returns the deployment revision identifier, or `null` when the deployment has none. Internal endpoint; no authentication, no database access.
       security: []
-      operationId: getHealthReadiness
+      operationId: getApiV0Revision
       tags:
         - Health
       responses:
         '200':
-          $ref: '#/components/responses/HealthOk'
-        '503':
-          $ref: '#/components/responses/HealthUnavailable'
-  /health/startup:
-    get:
-      summary: Boot completion probe
-      description: Internal probe for orchestrators and monitoring, not a user-facing availability contract.
-      security: []
-      operationId: getHealthStartup
-      tags:
-        - Health
-      responses:
-        '200':
-          $ref: '#/components/responses/HealthOk'
-        '503':
-          $ref: '#/components/responses/HealthUnavailable'
+          description: The current deployment revision, or `null`.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '406':
+          description: The request `Accept` excludes `application/json`. The refusal has an empty body.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
   /api/v0/session:
     servers:
       - url: https://jp.umaxica.app
@@ -283,7 +317,7 @@ paths:
           $ref: '#/components/responses/NotAcceptable'
         '429':
           $ref: '#/components/responses/RateLimited'
-  /api/v0/entries/{slug}:
+  /api/v0/entries/{public_id}:
     get:
       summary: Read one published entry
       description: Served by the docs, help, info, and news services on this surface, each on its own host. The docs and news editions currently have no public ingress.
@@ -292,9 +326,10 @@ paths:
       tags:
         - Content
       parameters:
-        - name: slug
+        - name: public_id
           in: path
           required: true
+          description: Opaque entry identifier. Not the slug and not a database key.
           schema:
             type: string
         - name: locale
@@ -354,51 +389,56 @@ components:
       bearerFormat: JWT
       description: 'Native client access token. Requests that also carry a `Cookie` header are rejected: an endpoint accepts exactly one credential transport.'
   schemas:
-    HealthResult:
+    CheckStatus:
       type: object
-      description: The shared probe contract. See docs/reference/health-endpoints.md.
+      description: One check's verdict in the machine-readable health aggregate.
       required:
         - status
-        - check
-        - namespace
-        - dependencies
-        - details
       properties:
         status:
           type: string
           enum:
-            - ok
-            - unavailable
-        check:
+            - pass
+            - warn
+            - fail
+    HealthReport:
+      type: object
+      description: Machine-readable health aggregate for `GET /api/v0/health.json`. See docs/reference/health-endpoints.md. Carries only the two enum-bounded strings `status` and `checks.*.status`; no internal topology, hostname, dependency name, exception, path, or environment value crosses this boundary.
+      required:
+        - status
+        - checks
+      properties:
+        status:
           type: string
-          description: The probe that produced this result. The aggregate `/health` snapshot renders HTML, not JSON, so its `health` value never appears in a JSON response.
+          description: Worst of the three checks. `fail` is served with HTTP 503; `pass` and `warn` with 200.
           enum:
+            - pass
+            - warn
+            - fail
+        checks:
+          type: object
+          description: Per-check verdicts, mapped independently so a readiness failure never changes the dependency-free liveness verdict.
+          required:
+            - startup
             - liveness
             - readiness
-            - startup
-        namespace:
-          type: string
-          description: The routed surface that answered, as `<service>/<surface>`. One process answers on many hostnames and the probe bodies were otherwise identical, so a caller that sent the wrong `Host` could not tell which surface replied.
-          example: core/app
-        dependencies:
-          type: object
-          description: Per-probe dependency map. Empty for liveness and startup; carries `database` for readiness.
-          additionalProperties: true
-        details:
-          type: object
-          required:
-            - generated_at
           properties:
-            generated_at:
-              type: string
-              format: date-time
-              description: UTC RFC 3339 instant with millisecond precision.
-            revision:
-              type: string
-              description: Deployment revision. Omitted when blank.
-            status:
-              type: string
-              description: Internal status. Present only when the result is degraded.
+            startup:
+              $ref: '#/components/schemas/CheckStatus'
+            liveness:
+              $ref: '#/components/schemas/CheckStatus'
+            readiness:
+              $ref: '#/components/schemas/CheckStatus'
+    Revision:
+      type: object
+      description: Machine-readable deployment revision for `GET /api/v0/revision.json`.
+      required:
+        - revision
+      properties:
+        revision:
+          type: string
+          nullable: true
+          description: The framework-resolved deployment revision (`Rails.application.revision`). Always present as a member; the value is `null` when no revision is configured, which is a normal state. Never a fabricated identifier.
     SessionSummary:
       type: object
       required:
@@ -497,6 +537,7 @@ components:
       type: object
       description: One published entry, rendered from its frozen published version.
       required:
+        - public_id
         - namespace
         - surface
         - slug
@@ -505,8 +546,13 @@ components:
         - summary
         - body
         - published_at
+        - updated_at
+        - snapshot_public_id
         - taxonomy
       properties:
+        public_id:
+          type: string
+          description: Opaque entry identifier and the resource identity for `GET /api/v0/entries/{public_id}`. Never a database primary key and not the slug. Treat as an opaque string; its generation scheme is not part of the contract.
         namespace:
           type: string
           description: Content service.
@@ -543,6 +589,13 @@ components:
           type: string
           format: date-time
           description: RFC 3339 instant with an explicit `Z` offset. Never null. `PublishingEntrySerializer#call` returns nothing at all when there is no active publication, and `publishing_publications.effective_from` is `NOT NULL`, so an entry that renders always has one. It was previously described as nullable, which described a state that cannot occur.
+        updated_at:
+          type: string
+          format: date-time
+          description: RFC 3339 instant of the published version row. Used for Last-Modified.
+        snapshot_public_id:
+          type: string
+          description: Stable public identifier of the published snapshot used for HTML validators.
         taxonomy:
           type: object
           description: Keyed by vocabulary key for this audience and service. A single-valued vocabulary renders one object or null; a multi-valued vocabulary renders an ordered array.
@@ -561,18 +614,6 @@ components:
         has_more:
           type: boolean
   responses:
-    HealthOk:
-      description: The probe passed.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/HealthResult'
-    HealthUnavailable:
-      description: The probe failed.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/HealthResult'
     Problem:
       description: An RFC 9457 problem document.
       content:

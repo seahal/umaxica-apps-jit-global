@@ -20,6 +20,13 @@ development:
     class: DpopProofStatePurgeJob
     schedule: every 15 minutes
 
+  # Delete expired single-use token records (logout requests and tokens, Jump RT
+  # returns, sign-out notices, OIDC client assertions). Same reason: keyed on
+  # expires_at, so RetentionPurgeJob does not reach them.
+  security_consumed_jti_purge:
+    class: SecurityConsumedJtiPurgeJob
+    schedule: every 15 minutes
+
   # adr/unified-enforcement.md, Duration and expiry / Reconciliation: neither
   # job is load-bearing for a security decision -- runtime in-force
   # evaluation is self-sufficient without them (D8). They converge
@@ -69,6 +76,13 @@ production:
   # RetentionPurgeJob which keys on purged_at).
   dpop_proof_state_purge:
     class: DpopProofStatePurgeJob
+    schedule: every 15 minutes
+
+  # Delete expired single-use token records (logout requests and tokens, Jump RT
+  # returns, sign-out notices, OIDC client assertions). Same reason: keyed on
+  # expires_at, so RetentionPurgeJob does not reach them.
+  security_consumed_jti_purge:
+    class: SecurityConsumedJtiPurgeJob
     schedule: every 15 minutes
 
   # adr/unified-enforcement.md, Duration and expiry / Reconciliation: neither

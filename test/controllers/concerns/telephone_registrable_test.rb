@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class TelephoneRegistrableTest < ActiveSupport::TestCase
+  counts_rate_limits!
   class MockRequest
     attr_accessor :remote_ip
 

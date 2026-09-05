@@ -5,16 +5,16 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Base::Org::HealthsControllerTest < ActionDispatch::IntegrationTest
-  test "GET /health returns an html snapshot without redirect" do
+  test "GET /health returns the text/plain aggregate without redirect" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
 
     get base_org_health_url(ri: "jp"), headers: browser_headers
 
     assert_response :success
     assert_not_predicate response, :redirect?
-    assert_equal "text/html", response.media_type
-    assert_includes response.body, "Health Snapshot"
-    assert_includes response.body, "readiness"
+    assert_equal "text/plain", response.media_type
+    assert_not_equal "text/html", response.media_type
+    assert_match(/\Astatus: \w+\nstartup: \w+\nliveness: \w+\nreadiness: \w+\n\z/, response.body)
   end
   private
 

@@ -230,7 +230,16 @@ module PublishingSchema
 
   def create_media(m)
     create_media_files(m)
-    create_media_usages(m)
+    create_owner_media_usages(
+      m, :publishing_revision_media_usages,
+      owner: :entry_revision, owner_table: :publishing_entry_revisions,
+      unique_index: "uidx_publishing_revision_media_usages_position",
+    )
+    create_owner_media_usages(
+      m, :publishing_version_media_usages,
+      owner: :entry_version, owner_table: :publishing_entry_versions,
+      unique_index: "uidx_publishing_version_media_usages_position",
+    )
   end
 
   def create_media_files(m)
@@ -264,16 +273,14 @@ module PublishingSchema
     archive_check(m, files)
   end
 
-  def create_media_usages(m)
-    files = :publishing_media_files
-    usages = :publishing_media_usages
-    m.create_table(usages) do |t|
+  # One owner column per table. entry_id and locale are derived from the owner
+  # revision/version and are not stored here.
+  def create_owner_media_usages(m, table, owner:, owner_table:, unique_index:)
+    owner_id = :"#{owner}_id"
+    m.create_table(table) do |t|
       public_id(t)
-      t.references(:media_file, null: false, foreign_key: { to_table: files, on_delete: :restrict })
-      t.references(:entry, null: false, foreign_key: { to_table: :publishing_entries, on_delete: :restrict })
-      t.bigint(:entry_revision_id)
-      t.bigint(:entry_version_id)
-      t.string(:locale, null: false)
+      t.references(:media_file, null: false, foreign_key: { to_table: :publishing_media_files, on_delete: :restrict })
+      t.references(owner, null: false, foreign_key: { to_table: owner_table, on_delete: :restrict })
       t.string(:role, null: false)
       t.string(:field_path)
       t.string(:block_path)
@@ -283,47 +290,19 @@ module PublishingSchema
       t.jsonb(:presentation_metadata)
       t.timestamps(null: false)
     end
-    finish_public_id(m, usages)
-    add_media_usage_constraints(m, usages)
-    add_media_usage_indexes(m, usages)
-  end
-
-  def add_media_usage_constraints(m, usages)
+    finish_public_id(m, table)
+    m.add_check_constraint(table, "position >= 0", name: "chk_#{table}_position")
     m.add_check_constraint(
-      usages, "num_nonnulls(entry_revision_id, entry_version_id) = 1",
-      name: "chk_publishing_media_owner_xor",
-    )
-    m.add_check_constraint(usages, "position >= 0", name: "chk_publishing_media_position")
-    m.add_check_constraint(
-      usages, "field_path IS NOT NULL OR block_path IS NOT NULL",
-      name: "chk_publishing_media_path",
+      table, "field_path IS NOT NULL OR block_path IS NOT NULL",
+      name: "chk_#{table}_path",
     )
     m.add_check_constraint(
-      usages, "presentation_metadata IS NULL OR jsonb_typeof(presentation_metadata) = 'object'",
-      name: "chk_publishing_presentation_metadata",
-    )
-  end
-
-  def add_media_usage_indexes(m, usages)
-    m.add_index(
-      usages, %i(entry_revision_id role field_path block_path position),
-      unique: true,
-      where: "entry_revision_id IS NOT NULL",
-      name: "uidx_publishing_revision_media_position",
+      table, "presentation_metadata IS NULL OR jsonb_typeof(presentation_metadata) = 'object'",
+      name: "chk_#{table}_presentation_metadata",
     )
     m.add_index(
-      usages, %i(entry_version_id role field_path block_path position),
-      unique: true,
-      where: "entry_version_id IS NOT NULL",
-      name: "uidx_publishing_version_media_position",
-    )
-    m.add_foreign_key(
-      usages, :publishing_entry_revisions, column: %i(entry_revision_id entry_id), primary_key: %i(id entry_id),
-                                           on_delete: :restrict, name: "fk_publishing_media_revision_entry",
-    )
-    m.add_foreign_key(
-      usages, :publishing_entry_versions, column: %i(entry_version_id entry_id), primary_key: %i(id entry_id),
-                                          on_delete: :restrict, name: "fk_publishing_media_version_entry",
+      table, [owner_id, :role, :field_path, :block_path, :position],
+      unique: true, name: unique_index,
     )
   end
 

@@ -19,8 +19,17 @@ allowBuilds:
 # directory name, which put the store at `<project>/~/.local/share/pnpm/store` -- off every cache
 # mount and volume that targets the real home, so nothing was ever reused.
 storeDir: ${HOME}/.local/share/pnpm/store
+# A 3-day quarantine on newly published versions, the npm-side counterpart of the Gemfile's
+# `cooldown: 3`. It is the control that keeps a compromised release from being installed in the
+# window before it is caught and yanked.
 minimumReleaseAge: 4320
 minimumReleaseAgeIgnoreMissingTime: false
+# Without this, `pnpm update` resolves a package still inside the window by appending it to
+# `minimumReleaseAgeExclude` and continuing -- a permanent, silently written exemption from the
+# control above. `true` makes pnpm prompt instead, so an exclusion is only ever added by a
+# person who decided to add it. Per generic/no-silent-fallback.mdc, a supply-chain gate that
+# edits itself out of the way is not a gate.
+minimumReleaseAgeStrict: true
 registries:
   default: https://registry.npmjs.org/
 # What actually enforces package.json#packageManager. The image installs pnpm at the

@@ -13,7 +13,8 @@ module Publishing
         publishing_entry_versions
         publishing_publications
         publishing_media_files
-        publishing_media_usages
+        publishing_revision_media_usages
+        publishing_version_media_usages
       ).each do |table|
         assert PublishingRecord.connection.table_exists?(table), "expected #{table} to exist"
       end
@@ -113,19 +114,8 @@ module Publishing
       }
     end
 
-    test "media usage requires exactly one entry owner" do
-      usage = MediaUsage.new(entry_revision_id: 1, entry_version_id: 1)
-
-      assert_not usage.valid?
-      assert_includes usage.errors[:base], "must belong to exactly one of entry_revision or entry_version"
-    end
-
-    test "media usage accepts one entry owner" do
-      usage = MediaUsage.new(entry_revision_id: 1)
-
-      usage.valid?
-
-      assert_empty usage.errors[:base]
+    test "the exclusive-arc publishing_media_usages table is gone" do
+      assert_not PublishingRecord.connection.table_exists?("publishing_media_usages")
     end
   end
 end

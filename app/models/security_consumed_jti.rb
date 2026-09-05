@@ -6,6 +6,7 @@ class SecurityConsumedJti < AppTicketRecord
     oidc_logout_request: "oidc_logout_request",
     oidc_logout_token: "oidc_logout_token",
     jump_rt_return: "jump_rt_return",
+    oidc_client_assertion: "oidc_client_assertion",
     sign_out_notice: "sign_out_notice",
   }.freeze
 

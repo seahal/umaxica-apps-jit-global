@@ -90,3 +90,34 @@ ExternalAuthentication::FlipperProviderAvailabilityAdapter::PROVIDER_FEATURE_NAM
 # hosts its own routes declare. Production is untouched (this file returns above) -- switching a
 # public FQDN on stays an explicit operator decision made through the Flipper UI.
 FqdnAvailabilityRegistry.flag_names.each { |feature_name| Flipper.enable(feature_name) }
+
+# Deterministic development CMS documents so all twelve public content cells have
+# a published entry. Uses the normal draft -> promote -> publish lifecycle.
+AUDIENCES = %w(app com org).freeze
+SURFACES = %w(info docs news help).freeze
+LOCALES = %w(ja en).freeze
+REGIONAL_SURFACES = %w(docs news help).freeze
+
+AUDIENCES.product(SURFACES, LOCALES).each do |audience, surface, locale|
+  edition =
+    Publishing::Edition.find_or_create_by!(audience:, surface:, locale:) do |record|
+      record.region_code = "jp" if REGIONAL_SURFACES.include?(surface)
+    end
+  slug = "welcome"
+  next if Publishing::EntrySlug.exists?(edition:, slug:)
+
+  title = "#{surface.capitalize} #{audience} (#{locale})"
+  entry = Publishing::Entry.create!(edition:, locale:)
+  Publishing::EntrySlug.create!(
+    entry:, edition:, locale:, slug:, state: "canonical", canonicalized_at: Time.current,
+  )
+  revision = Publishing::EntryRevision.create!(
+    entry:, locale:, title:, summary: "#{title} summary",
+    body: { "text" => "#{title} body" }, schema_version: 1,
+    content_digest: Digest::SHA256.hexdigest("#{audience}-#{surface}-#{locale}-welcome"),
+    sequence: 1,
+  )
+  entry.update!(current_revision: revision)
+  version = Publishing::PromoteRevisionOperation.call(revision:)
+  Publishing::Publication.create!(entry:, entry_version: version, effective_from: 1.hour.ago)
+end

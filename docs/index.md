@@ -119,6 +119,10 @@ Current content-model references:
 - `docs/dictionary/access-terms.md`
 - `docs/dictionary/alphabet.md`
 - `docs/dictionary/glossary.md`
+- `docs/design.md` is this application's UI primitives and token layer.
+- `docs/reference/digital-agency-design-system.md` records the Digital Agency of Japan Design
+  System introduction (<https://design.digital.go.jp/dads/introduction/>) as external
+  implementation reading for UI work.
 - `docs/reference/api-design-standards.md` is the canonical contract for JSON API endpoints and
   carries **only rules backed by a published specification**: RFC 9457 Problem Details errors, RFC
   9110 status and negotiation semantics, RFC 3339 timestamps, RFC 9700 authentication practice, RFC

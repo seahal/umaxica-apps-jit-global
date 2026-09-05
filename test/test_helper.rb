@@ -60,6 +60,7 @@ require_relative "support/turnstile_verifier_stub"
 require_relative "support/outbound_http_stub"
 require_relative "support/login_cooldown_helper"
 require_relative "support/inertia_page_object"
+require_relative "support/rate_limit_store_override"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
@@ -264,6 +265,7 @@ module ActiveSupport
     include FormActionPolicyHelper
     include LoginCooldownHelper
     include OutboundHttpStub
+    include RateLimitStoreOverride
 
     # Physical cores, not logical: measured on a 16C/32T host -- 32 workers lost more in fork +
     # per-worker DB-clone overhead than they gained.
@@ -279,13 +281,13 @@ module ActiveSupport
     ParallelTestDatabaseCloner.install!(workers: parallel_workers)
     parallelize(workers: parallel_workers, parallelize_databases: false)
 
-    # The rate_limit backing store (config.x.rate_limit.store) is a single
-    # MemoryStore instance created once at boot and shared by every test in the
-    # process. Its counters are keyed by request IP (127.0.0.1 for all tests),
-    # so without a reset a rate_limit test's counter leaks into later, unrelated
-    # tests and spuriously 429s them. Clear it before each test for a clean slate
-    # (mutate the same instance with #clear -- replacing it would not reach
-    # controllers that captured the original store at class-load time).
+    # The rate_limit backing store (config.x.rate_limit.store) is created once at
+    # boot and shared by every test in the process, and its counters are keyed by
+    # request IP (127.0.0.1 for all tests). The default target is a NullStore, so
+    # nothing accumulates; this clear covers the window inside a test that
+    # declared `counts_rate_limits!` and swapped a MemoryStore in. Mutate the same
+    # instance with #clear -- replacing it would not reach controllers that
+    # captured the store at class-load time.
     setup { Rails.configuration.x.rate_limit.fetch(:store).clear }
 
     # Social ceremony availability is a Flipper kill switch that fails closed, so the suite's

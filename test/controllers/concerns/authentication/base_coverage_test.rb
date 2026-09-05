@@ -38,6 +38,7 @@ class AuthenticationBaseTestController < ApplicationController
     network_hmac_for_request device_session_refresh_allowed?
     revoke_refresh_session_after_dbsc_failure! token_expired_or_revoked?
     withdrawal_required_session_entry_path
+    actor_current_resource
   )
 
   def index
@@ -3229,5 +3230,97 @@ class AuthenticationBaseCoverageTest
         provider: "google_app", uid: uid, info: { email: email, name: "Google Client" },
         credentials: { token: "google_token", expires_at: 1.hour.from_now.to_i },
       )
+  end
+end
+
+# `actor_current_resource` is the bridge from the installed Actor snapshot to the controller's own
+# resource. Every guard in it is a boundary: the actor_type check keeps an operator's snapshot from
+# resolving on a client surface, the `is_a?(resource_class)` check keeps a resolved subject of the
+# wrong class from being returned as this surface's resource, and the actor_id check refuses a
+# snapshot whose claimed id disagrees with the subject it carries. None of the guards had a test,
+# so a snapshot from another surface would have been returned without one failing.
+class AuthenticationBaseActorCurrentResourceTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
+  ClientResource = Struct.new(:id)
+  OperatorResource = Struct.new(:id)
+
+  setup do
+    @controller = harness_class.new
+    Actor.clear
+  end
+
+  teardown { Actor.clear }
+
+  test "a signed-in client snapshot of the right type and class resolves" do
+    install(actor_type: :client, actor_id: 7, subject: ClientResource.new(7))
+
+    assert_equal 7, @controller.actor_current_resource.id
+  end
+
+  test "an unauthenticated snapshot resolves nothing" do
+    Actor.clear
+
+    assert_nil @controller.actor_current_resource
+  end
+
+  test "a snapshot for another actor type does not resolve on this surface" do
+    install(actor_type: :operator, actor_id: 7, subject: OperatorResource.new(7))
+
+    assert_nil @controller.actor_current_resource
+  end
+
+  test "the unauthenticated singleton is never returned as a resource" do
+    install(actor_type: :client, actor_id: 7, subject: Unauthenticated.instance)
+
+    assert_nil @controller.actor_current_resource
+  end
+
+  test "a blank subject resolves nothing" do
+    install(actor_type: :client, actor_id: 7, subject: nil)
+
+    assert_nil @controller.actor_current_resource
+  end
+
+  test "a subject of the wrong class does not resolve as this surface's resource" do
+    install(actor_type: :client, actor_id: 7, subject: OperatorResource.new(7))
+
+    assert_nil @controller.actor_current_resource
+  end
+
+  test "a snapshot whose claimed actor id disagrees with its subject is refused" do
+    install(actor_type: :client, actor_id: 9, subject: ClientResource.new(7))
+
+    assert_nil @controller.actor_current_resource
+  end
+
+  # A snapshot that carries no actor_id at all is accepted: the id is optional metadata, and the
+  # subject it carries has already been resolved by the pipeline that installed it.
+  test "a snapshot with no claimed actor id still resolves its subject" do
+    install(actor_type: :client, actor_id: nil, subject: ClientResource.new(7))
+
+    assert_equal 7, @controller.actor_current_resource.id
+  end
+
+  private
+
+  def harness_class
+    @harness_class ||=
+      Class.new(AuthenticationBaseTestController) do
+        def self.name = "AuthenticationBaseActorResourceHarness"
+
+        def resource_type = "client"
+
+        def resource_class = AuthenticationBaseActorCurrentResourceTest::ClientResource
+      end
+  end
+
+  def install(actor_type:, actor_id:, subject:)
+    Actor.authn = Actor::Authentication.new(
+      login_public_id: "login-public-id",
+      actor_type: actor_type,
+      actor_id: actor_id,
+    )
+    Actor.subject = subject
   end
 end

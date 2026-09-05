@@ -32,6 +32,30 @@ class OidcClientRegistryHostHelpersTest < ActiveSupport::TestCase
     assert_equal "not a host", OidcClientRegistry.send(:normalize_host, "not a host")
   end
 
+  # A value `normalize_host` hands back unchanged but `URI` refuses to parse. It reaches the
+  # second rescue rather than the IPAddr one, and has to answer "not public" -- treating an
+  # unparsable host as public would let a client register a redirect target nobody can verify.
+  test "public_host? answers false for a host uri cannot parse at all" do
+    assert_not OidcClientRegistry.send(:public_host?, "not a host")
+  end
+
+  # The default arm of the surface host list. `logout_uri_resource_type` only ever asks for the
+  # operator and visitor lists before falling back to "client", so the client list itself is only
+  # reachable by asking for it, and it is what decides which hosts a client post-logout redirect
+  # may name.
+  test "logout_hosts_for falls back to the service hosts for the client surface" do
+    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+
+    %w(client unrecognised).each do |resource_type|
+      result = OidcClientRegistry.send(:logout_hosts_for, resource_type)
+
+      assert_includes result, OidcClientRegistry.send(:normalize_host, hosts.sign_service)
+      assert_includes result, OidcClientRegistry.send(:normalize_host, hosts.auth_service)
+      assert_equal result, result.uniq
+      assert_not_includes result, OidcClientRegistry.send(:normalize_host, hosts.sign_staff)
+    end
+  end
+
   test "logout_uri_resource_type names the surface and answers nil for an unparsable uri" do
     assert_equal "client", OidcClientRegistry.send(:logout_uri_resource_type, "https://example.test/logout")
     assert_nil OidcClientRegistry.send(:logout_uri_resource_type, "http://[bad")

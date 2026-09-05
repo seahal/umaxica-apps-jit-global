@@ -47,9 +47,12 @@ Development is the one environment with two live ingresses, so it is the one env
 ingress delivers a `Host` from its own family, and Rails must admit the `Host` it actually receives
 from each.
 
-`/health` is the deliberate exception: orchestrator and container probes reach the origin directly
-and carry no meaningful `Host`, so production excludes that path from Host Authorization rather than
-allowlisting a probe hostname.
+`/health` and the three singular text probe paths (`/health/{liveness,readiness,startup}`) are the
+deliberate exception: orchestrator and container probes reach the origin directly and carry no
+meaningful `Host`, so production excludes those exact paths from Host Authorization
+(`lib/health_probe_paths.rb`) rather than allowlisting a probe hostname. The machine JSON endpoints
+`/api/v0/health.json` and `/api/v0/revision.json` are reached through the tunnel with a real `Host`
+and are deliberately not exempt.
 
 **A third hostname family is not justified.** Every observed request path resolves its `Host` to a
 member of one of the two existing families. The Workers VPC path is the only one where the value is
@@ -118,8 +121,8 @@ Rails accept it.
 
 | Domain            | Purpose                                                | Never used for                                                                                                    |
 | ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Cloudflare Tunnel | Selected externally reachable Rails ingress            | Service-to-service (Workers/Next.js) traffic                                                                      |
-| Workers VPC       | Cloudflare Worker/Next.js -> Rails, service-to-service | Public browser traffic, operator access                                                                           |
+| Cloudflare Tunnel | Selected externally reachable Rails ingress            | Service-to-service (Workers / Edge) traffic                                                                       |
+| Workers VPC       | Cloudflare Worker / Edge -> Rails, service-to-service  | Public browser traffic, operator access                                                                           |
 | Cloudflare Access | Perimeter for explicitly protected hostnames           | Rails' primary identity system — Rails authentication and authorization remain authoritative regardless of Access |
 
 ## Request Paths
@@ -131,11 +134,11 @@ Browser --(HTTPS)--> Cloudflare edge --(QUIC tunnel)--> cloudflared (compose: cl
   --(private `frontend` network)--> core (Rails)
 ```
 
-- `cloudflared` is configured in `compose.yaml` behind the `tunnel` profile (`cloudflare-tunnel` service, image
+- `cloudflared` is the unprofiled `cloudflare-tunnel` service in `compose.yaml` (image
   `cloudflare/cloudflared:2026.8.2`,
-  `tunnel --protocol quic --metrics 0.0.0.0:2000 run`, and `TUNNEL_TOKEN` resolved from the
-  gitignored repository `.env`). The base `compose.yaml` must never define it. The always-merged
-  development overlay starts the connector during the standard Dev Container lifecycle. It is the
+  `tunnel --no-autoupdate --protocol auto --metrics 0.0.0.0:2000 run`, and `TUNNEL_TOKEN` resolved from the
+  gitignored repository `.env`). A plain Compose `up` and the Dev Container lifecycle both start
+  it. The alternative connector stays behind `--profile tunnel-edge`. It is the
   only component on the `frontend` network besides `core` itself.
 - The connector is attached only to Global's private `frontend` network. Edge and Global do not
   share a Podman network. An Edge Worker reaches Rails through its Cloudflare Workers VPC Service
@@ -196,7 +199,7 @@ Browser --(HTTPS, Access cookie/JWT)--> Cloudflare edge --(Access policy check)-
   merely for "defense in depth" duplicates the connector-side check without a concrete requirement
   driving it.
 
-### 3. Worker/Next.js request through Workers VPC
+### 3. Worker / Edge request through Workers VPC
 
 ```text
 Cloudflare Worker (fetch()) --(Workers VPC binding)--> VPC Service (bound to a Tunnel ID)

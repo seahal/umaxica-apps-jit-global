@@ -12,10 +12,10 @@ return if Rails.env.test?
 # would initialise there too and export into a host that does not resolve,
 # producing a steady trickle of exporter retry warnings.
 #
-# Two-argument fetch, matching config/initializers/redis.rb: this is a toggle
-# with a meaningful off state, not required configuration whose absence should
-# stop the boot. The default is off so that the no-agent environments above stay
-# quiet without each having to set the variable.
+# Two-argument fetch on purpose: this is a toggle with a meaningful off state,
+# not required configuration whose absence should stop the boot. The default is
+# off so that the no-agent environments above stay quiet without each having to
+# set the variable.
 return unless ENV.fetch("OPEN_TELEMETRY", "false") == "true"
 
 require "opentelemetry/sdk"

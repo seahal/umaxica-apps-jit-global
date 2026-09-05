@@ -12,8 +12,15 @@ class IdentityOneTimeReveal
   Payload = Struct.new(:value, :metadata, keyword_init: true)
 
   class << self
-    # Rails.cache is :null_store in test and development. One-time reveals need
-    # a usable short-lived store there so tokens can be consumed after redirect.
+    # Rails.cache is :null_store in test, so a reveal issued in one request could
+    # never be consumed in the next. Tests need a store that actually retains the
+    # payload for the redirect; development and production use Rails.cache itself,
+    # which is Valkey.
+    #
+    # The payload is encrypted, single-use, and carries an explicit 15-minute TTL,
+    # and `consume!` fails closed on a miss: an eviction costs the user a redo of
+    # the flow, it does not reveal anything or leave authoritative state wrong.
+    # That is what makes the cache an acceptable home for it.
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
     attr_writer :store
     # rubocop:enable ThreadSafety/ClassAndModuleAttributes

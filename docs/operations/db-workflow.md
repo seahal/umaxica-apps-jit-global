@@ -3,14 +3,32 @@
 This application uses approximately 25 PostgreSQL databases. Follow these development and test
 environment rules to avoid schema-change incidents.
 
+## Schema Authority
+
+**Migrations are the reconstruction authority** for development and test databases.
+
+Every configured `migrations_paths` directory under `db/` must exist. Reserved databases (`search`,
+`storage`) keep empty directories so Rails cannot skip an owner silently.
+
+Committed `db/*_structure.sql` files are currently PostgreSQL session-setting stubs with no
+`CREATE TABLE` statements. Do not treat them as a loadable schema. `schema_format` remains `:sql`
+and `dump_schema_after_migration` is `false` in every environment. Regenerating populated dumps is a
+separate decision; until then, reconstruct with `bin/rails db:migrate:reset` (or the test suite's
+migration path).
+
+`bin/rails db:verify_no_schema_drift` dumps schema and diffs the committed stubs. While dumps remain
+stubs, that task does not prove object-level reconstruction. Use
+`test/tooling/database_reconstruction_authority_test.rb` and
+`test/tooling/database_migration_path_ownership_test.rb` for the current invariant.
+
 ## Principles
 
 1. **Do not use incremental `bin/rails db:migrate` on a branch with in-progress table-rename
    migrations.** Use `bin/rails db:migrate:reset` so every database is rebuilt from migrations.
 2. **Do not write silent-skip helpers such as `rename_table_if_present`.** Use
    `rename_table_strict`, provided by `MigrationHelpers::SafeTableRename`.
-3. **Run `bin/rails db:verify_no_schema_drift` before committing.** Confirm that applying migrations
-   to clean databases produces the committed schema dumps.
+3. **Do not assume committed `db/*_structure.sql` files reconstruct a database.** Apply migrations
+   to a clean database instead.
 
 ## Why Incremental `db:migrate` Is Unsafe During Renames
 

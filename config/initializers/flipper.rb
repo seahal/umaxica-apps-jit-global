@@ -26,8 +26,7 @@ ActiveSupport.on_load(:active_record) do
   )
 end
 
-# The test suite must not depend on a database connection for flag reads, mirroring the
-# NullRedisClient substitution in config/initializers/redis.rb.
+# The test suite must not depend on a database connection for flag reads.
 Flipper.configure do |config|
   config.adapter do
     if Rails.env.test?

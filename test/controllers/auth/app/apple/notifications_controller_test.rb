@@ -3,6 +3,7 @@
 require "test_helper"
 
 class Auth::App::Apple::NotificationsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   setup do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
   end
@@ -75,8 +76,6 @@ class Auth::App::Apple::NotificationsControllerTest < ActionDispatch::Integratio
   end
 
   test "rate limits notification requests by source IP" do
-    original_store = Rails.configuration.x.rate_limit.fetch(:store)
-    Rails.configuration.x.rate_limit.store = ActiveSupport::Cache::MemoryStore.new
     result = ExternalAuthenticationAppleNotificationIngress::Result.new(status: :accepted, event: nil)
 
     ExternalAuthenticationAppleNotificationIngress.stub(:call, ->(**) { result }) do
@@ -98,7 +97,5 @@ class Auth::App::Apple::NotificationsControllerTest < ActionDispatch::Integratio
     end
 
     assert_response :too_many_requests
-  ensure
-    Rails.configuration.x.rate_limit.store = original_store if original_store
   end
 end

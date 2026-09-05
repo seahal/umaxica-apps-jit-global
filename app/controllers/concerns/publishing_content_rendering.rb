@@ -1,15 +1,44 @@
 # typed: false
 # frozen_string_literal: true
 
-# Renders read-only entries from the central publishing DB. Audience and
-# surface are host-derived, explicit per-controller constants -- never
-# resolved dynamically from a class name or param. See
-# adr/publishing-db-content-authority.md.
+# Renders read-only entries from the central publishing DB. This is one
+# cohesive public-content read contract: resolve the edition, run the published
+# entries query, serialize, apply short shared-cache validators, and render
+# Problem Details on malformed input. Splitting those steps would hide the
+# HTTP contract behind several modules that always run together.
+#
+# Contract: the including controller declares PUBLISHING_AUDIENCE and
+# PUBLISHING_SURFACE as explicit constants. Those values are never inferred
+# from the class name or request path. See adr/publishing-db-content-authority.md
+# and docs/architecture/publishing-persistence.md.
+#
+# This concern installs no callbacks of its own. ApiContentNegotiation, included
+# below, registers before_action filters because content negotiation must run
+# before every JSON action on these endpoints; duplicating those filters on
+# twelve controllers would hide the same contract.
 module PublishingContentRendering
   extend ActiveSupport::Concern
 
   include ProblemDetailsRendering
   include ApiContentNegotiation
+
+  class_methods do
+    def publishing_audience
+      unless const_defined?(:PUBLISHING_AUDIENCE, false)
+        raise(NameError, "#{name} must declare PUBLISHING_AUDIENCE")
+      end
+
+      const_get(:PUBLISHING_AUDIENCE, false)
+    end
+
+    def publishing_surface
+      unless const_defined?(:PUBLISHING_SURFACE, false)
+        raise(NameError, "#{name} must declare PUBLISHING_SURFACE")
+      end
+
+      const_get(:PUBLISHING_SURFACE, false)
+    end
+  end
 
   # Published content is public and identical for every caller on a given host, so it is shared-
   # cacheable. The window is short because a publication is expected to become visible promptly;
@@ -43,7 +72,7 @@ module PublishingContentRendering
   # adr/api-collection-contract.md: a single resource is returned at the top level, with no wrapper
   # key.
   def render_publishing_entry_show
-    entry = publishing_entries_query.find_by(slug: params.expect(:slug))
+    entry = publishing_entries_query.find_published(public_id: params.expect(:public_id))
     return render_problem(:not_found) unless entry
 
     payload = publishing_entry_json(entry)
@@ -102,7 +131,7 @@ module PublishingContentRendering
   # "surface" field is the audience (app/com/org).
   def publishing_entry_json(entry)
     PublishingEntrySerializer.call(
-      entry:, namespace: self.class::PUBLISHING_SURFACE, surface: self.class::PUBLISHING_AUDIENCE,
+      entry:, namespace: self.class.publishing_surface, surface: self.class.publishing_audience,
       vocabularies: publishing_vocabularies,
     )
   end
@@ -113,7 +142,7 @@ module PublishingContentRendering
     @publishing_vocabularies ||=
       Publishing::Vocabulary
         .available
-        .for_scope(audience: self.class::PUBLISHING_AUDIENCE, surface: self.class::PUBLISHING_SURFACE)
+        .for_scope(audience: self.class.publishing_audience, surface: self.class.publishing_surface)
         .order(:key)
         .to_a
   end
@@ -128,7 +157,7 @@ module PublishingContentRendering
   def publishing_edition
     @publishing_edition ||=
       PublishingEditionResolver.call(
-        audience: self.class::PUBLISHING_AUDIENCE, surface: self.class::PUBLISHING_SURFACE, locale: publishing_locale,
+        audience: self.class.publishing_audience, surface: self.class.publishing_surface, locale: publishing_locale,
       )
   end
 

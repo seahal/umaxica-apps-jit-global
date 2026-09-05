@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch::IntegrationTest
+  counts_rate_limits!
   include ActiveSupport::Testing::TimeHelpers
 
   setup do

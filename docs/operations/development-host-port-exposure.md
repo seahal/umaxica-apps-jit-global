@@ -10,7 +10,7 @@ particular service, and a host firewall is not an acceptable substitute for it.
 
 1. **Prefer no publication at all.** If a service is only consumed by other containers, it gets no
    `ports:` entry. Containers reach it by Compose service name over the shared network
-   (`primary:5432`, `valkey:6379`, `kafka:29092`, `tempo:3200`).
+   (`primary:5432`, `valkey-cache:6379`, `valkey-rate-limit:6379`, `kafka:29092`, `tempo:3200`).
 2. **If the host genuinely needs it, publish to loopback only.** Write the bind address explicitly:
    `127.0.0.1:3000:3000`, never `3000:3000`. A `ports:` entry with no host address makes Podman bind
    `0.0.0.0`, which places the service on every host interface — LAN, Wi-Fi, Ethernet, and Tailscale
@@ -43,7 +43,8 @@ changing nothing about host exposure.
 | `core` (Rails, 3000)                   | `127.0.0.1:3000`           | The browser opens the documented `http://<service>.<surface>.localhost:3000` origins, which resolve to `127.0.0.1`. |
 | `core` (Vite, 3036)                    | `127.0.0.1:3036`           | `@vite/client` opens its HMR socket to the dev server from the browser.                                             |
 | `primary`, `replica`                   | none                       | Reached as `primary:5432` / `replica:5432`.                                                                         |
-| `valkey`                               | none                       | Reached as `valkey:6379`.                                                                                           |
+| `valkey-cache`                         | none                       | Reached as `valkey-cache:6379`.                                                                                     |
+| `valkey-rate-limit`                    | none                       | Reached as `valkey-rate-limit:6379`.                                                                                |
 | `loki`, `tempo`, `prometheus`, `alloy` | none                       | Reached only by each other and by Grafana on the `observability` network.                                           |
 | `grafana`                              | none                       | See "Grafana has no host publication" below.                                                                        |
 | `cloudflare-tunnel`                    | none, and none is possible | The connector is outbound-only.                                                                                     |
@@ -103,7 +104,8 @@ podman ps --format 'table {{.Names}}\t{{.Ports}}'
 sudo ss -lntup | grep -E ':(3000|3036|9092|5432|6379)\b'
 ```
 
-Expected: `primary`, `replica`, `valkey`, and `kafka` show a bare container port with no `->`
+Expected: `primary`, `replica`, `valkey-cache`, `valkey-rate-limit`, and `kafka` show a bare
+container port with no `->`
 mapping. `core` shows `127.0.0.1:3000->3000/tcp` and `127.0.0.1:3036->3036/tcp`. No line anywhere
 contains `0.0.0.0:3000`, `0.0.0.0:3036`, `0.0.0.0:9092`, `*:3000`, `*:3036`, or `*:9092`.
 

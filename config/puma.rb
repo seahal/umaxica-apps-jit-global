@@ -32,7 +32,13 @@ threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
 threads threads_count, threads_count
 
 # Specifies the `port` that Puma will listen on to receive requests; default is 3000.
-port ENV.fetch("PORT", 3000)
+# Bind the IPv4 wildcard. The Cloudflare Tunnel connector and the probe containers
+# reach Rails over Podman's `frontend` network, which hands out IPv4 addresses only,
+# so the container-side listener has to accept IPv4. `0.0.0.0` and `[::]` cannot both
+# be bound to the same port on this kernel (dual-stack `[::]` already claims the IPv4
+# wildcard, so the second bind fails EADDRINUSE), and an IPv6-only listener is the one
+# combination the tunnel origin cannot reach.
+bind "tcp://0.0.0.0:#{ENV.fetch("PORT", 3000)}"
 
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart

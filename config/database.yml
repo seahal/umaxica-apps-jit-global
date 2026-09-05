@@ -224,17 +224,6 @@ development:
     database: development_com_signal_db
     host: <%= development_host.call("POSTGRESQL_COM_SIGNAL_SUB") %>
     migrations_paths: db/com_signals_migrate
-  cache:
-    !!merge <<: *development_default
-    database: development_cache_db
-    host: <%= development_host.call("POSTGRESQL_CACHE_PUB") %>
-    migrations_paths: db/caches_migrate
-  cache_replica:
-    !!merge <<: *development_default
-    replica: true
-    database: development_cache_db
-    host: <%= development_host.call("POSTGRESQL_CACHE_SUB") %>
-    migrations_paths: db/caches_migrate
   queue:
     !!merge <<: *development_default
     pool: 5
@@ -493,18 +482,6 @@ test:
     host: <%= test_host %>
     migrations_paths: db/com_signals_migrate
     schema_dump: com_signal_structure.sql
-  cache:
-    !!merge <<: *test_default
-    database: test_cache_db
-    host: <%= test_host %>
-    migrations_paths: db/caches_migrate
-  cache_replica:
-    !!merge <<: *test_default
-    replica: true
-    database: test_cache_replica_db
-    host: <%= test_host %>
-    migrations_paths: db/caches_migrate
-    schema_dump: cache_structure.sql
   queue:
     !!merge <<: *test_default
     database: test_queue_db
@@ -856,23 +833,6 @@ production:
     username: <%= Rails.application.credentials&.DATABASE&.USER || 'neondb_owner' %>
     password: <%= Rails.application.credentials&.DATABASE&.COM_SIGNAL_REPLICA&.PASSWORD %>
     migrations_paths: db/com_signals_migrate
-  cache:
-    !!merge <<: *default
-    database: production_cache_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= Rails.application.credentials&.DATABASE&.CACHE&.HOST %>
-    username: <%= Rails.application.credentials&.DATABASE&.USER || 'neondb_owner' %>
-    password: <%= Rails.application.credentials&.DATABASE&.CACHE&.PASSWORD %>
-    migrations_paths: db/caches_migrate
-  cache_replica:
-    !!merge <<: *default
-    replica: true
-    database: production_cache_db
-    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
-    host: <%= Rails.application.credentials&.DATABASE&.CACHE_REPLICA&.HOST %>
-    username: <%= Rails.application.credentials&.DATABASE&.USER || 'neondb_owner' %>
-    password: <%= Rails.application.credentials&.DATABASE&.CACHE_REPLICA&.PASSWORD %>
-    migrations_paths: db/caches_migrate
   storage:
     !!merge <<: *default
     database: production_storage_db

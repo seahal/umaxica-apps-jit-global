@@ -68,7 +68,7 @@ class ComposeLocalOverrideOptionalTest < Minitest::Test
     # `${VAR:?}` is the fresh-clone breaker that is easy to miss: Compose interpolates
     # every listed file in full whichever service is named, so one required variable stops
     # `devcontainer up` on a machine that never runs that service. Opt-in belongs to a
-    # `profiles:` entry instead, which is what `cloudflare-tunnel` uses.
+    # `profiles:` entry instead, which is what `cloudflare-tunnel-edge` uses.
     STANDARD_COMPOSE_FILES.each do |relative_path|
       directives = directives_of(relative_path)
 
@@ -109,25 +109,56 @@ class ComposeLocalOverrideOptionalTest < Minitest::Test
     end
   end
 
-  def test_the_tunnel_connector_is_opt_in_by_profile
-    # The connector used to be opt-in by living in a separate file whose presence, and
-    # whose required token, decided whether the project started at all. It is standard
-    # configuration now, and `profiles:` is what keeps a plain `up` from starting it.
+  def test_the_primary_tunnel_connector_starts_with_the_devcontainer_stack
+    # The Dev Containers CLI starts every unprofiled service in the merged Compose
+    # files. Gating the primary connector behind `profiles: [tunnel]` kept
+    # `devcontainer up` from creating the sidecar at all, even when
+    # CLOUDFLARED_TOKEN was set. The empty-token case is already bounded by
+    # `${CLOUDFLARED_TOKEN:-}` plus `restart: on-failure:3`.
     services = YAML.safe_load_file(
       File.join(REPOSITORY_ROOT, "compose.yaml"),
       aliases: true,
     ).fetch("services")
-    # One connector per remotely managed tunnel, each behind its own profile: a connector
-    # runs exactly one tunnel, so the choice is which profile a session starts.
-    { "cloudflare-tunnel" => "tunnel", "cloudflare-tunnel-edge" => "tunnel-edge" }
-      .each do |service, profile|
-      connector = services.fetch(service)
+    connector = services.fetch("cloudflare-tunnel")
 
-      assert_includes connector.fetch("profiles"), profile
-      refute connector.key?("depends_on"),
-             "a Compose dependency becomes a container dependency under Podman and breaks " \
-             "the Dev Containers CLI's --remove-existing-container"
-    end
+    refute connector.key?("profiles"),
+           "cloudflare-tunnel must start with a plain compose up / Dev Container lifecycle, " \
+           "not sit behind a profile the CLI never enables"
+    refute connector.key?("depends_on"),
+           "a Compose dependency becomes a container dependency under Podman and breaks " \
+           "the Dev Containers CLI's --remove-existing-container"
+  end
+
+  def test_the_tunnel_connector_keeps_the_process_alive_across_transport_loss
+    # Pinning `--protocol quic` disables the documented HTTP/2 fallback. After a
+    # laptop sleep or UDP 7844 blip, cloudflared can drain every HA connection and
+    # exit 0 ("no more connections active and exiting"). `restart: on-failure`
+    # does not recreate a container that exited 0, which is the "tunnel dies and
+    # stays dead" report. `auto` still prefers QUIC (Workers VPC allows `auto` or
+    # `quic`) and falls back instead of exiting.
+    # https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/#protocol
+    # https://developers.cloudflare.com/workers-vpc/configuration/tunnel/
+    command = YAML.safe_load_file(
+      File.join(REPOSITORY_ROOT, "compose.yaml"),
+      aliases: true,
+    ).fetch("services").fetch("cloudflare-tunnel").fetch("command")
+
+    assert_includes command, "--protocol auto"
+    assert_includes command, "--no-autoupdate"
+    refute_includes command, "--protocol quic"
+  end
+
+  def test_the_edge_tunnel_connector_is_opt_in_by_profile
+    services = YAML.safe_load_file(
+      File.join(REPOSITORY_ROOT, "compose.yaml"),
+      aliases: true,
+    ).fetch("services")
+    connector = services.fetch("cloudflare-tunnel-edge")
+
+    assert_includes connector.fetch("profiles"), "tunnel-edge"
+    refute connector.key?("depends_on"),
+           "a Compose dependency becomes a container dependency under Podman and breaks " \
+           "the Dev Containers CLI's --remove-existing-container"
   end
 
   def test_the_tunnel_connectors_differ_only_in_profile_and_token

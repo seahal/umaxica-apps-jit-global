@@ -6,6 +6,7 @@ require "support/external_identity_test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Omniauth::OmniauthCallbacksControllerTest < ActiveSupport::TestCase
+  counts_rate_limits!
   include ExternalIdentityTestHelper
 
   test "callback routes accept GET only" do

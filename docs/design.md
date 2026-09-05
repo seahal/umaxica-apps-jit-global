@@ -13,6 +13,11 @@ writes a literal.
 where the visual states no unit test can assert — the focus ring, the dark palette, contrast, the
 overlay's position — get checked in a real browser.
 
+Before inventing a screen pattern, read the Digital Agency of Japan Design System introduction as
+implementation guidance: `docs/reference/digital-agency-design-system.md` and
+<https://design.digital.go.jp/dads/introduction/>. That site is an external accessibility-first
+rule set, not this application's component library.
+
 ## 1. Color Roles
 
 Colours are named by their role, never by their appearance, so one name has a light value and a dark

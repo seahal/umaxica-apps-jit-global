@@ -28,6 +28,7 @@ class PublishingEntrySerializer
     return nil unless version
 
     {
+      public_id: entry.public_id,
       namespace: namespace.to_s,
       surface: surface.to_s,
       slug: canonical_slug,
@@ -39,6 +40,8 @@ class PublishingEntrySerializer
       # unable to rely on the field's type.
       body: version.body,
       published_at: current_publication&.effective_from&.iso8601,
+      updated_at: version.updated_at&.iso8601,
+      snapshot_public_id: version.public_id,
       taxonomy: taxonomy(version),
     }
   end

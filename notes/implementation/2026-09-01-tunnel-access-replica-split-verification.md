@@ -119,6 +119,11 @@ session and Rails served its own sign-in surface behind it.
 
 ### `/health` is not a usable transport probe
 
+> Superseded by the 2026-09-03 text+JSON health contract: `/health` and the probes now return
+> `text/plain` `200` without content negotiation, so the `406` behaviour recorded below no longer
+> exists. See `docs/reference/health-endpoints.md`. The rest of this section is kept as the
+> record of what was observed on 2026-09-01.
+
 `app/controllers/concerns/health_check_rendering.rb:22` answers `head :not_acceptable` unless the
 request negotiates HTML. Measured against the running server:
 

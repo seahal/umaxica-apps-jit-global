@@ -82,12 +82,13 @@ class HelpDocsNewsSurfaceSmokeTest < ActionDispatch::IntegrationTest
       assert_equal surface.fetch(:label).downcase, entry.fetch("namespace"), surface.fetch(:label)
       assert_equal "app", entry.fetch("surface"), surface.fetch(:label)
 
-      get "#{surface.fetch(:entries_index_path)}/#{published.slug}",
+      get "#{surface.fetch(:entries_index_path)}/#{published.entry.public_id}",
           params: { locale: "test-smoke" },
           headers: { "Host" => host, "Accept" => "application/json" },
           as: :json
 
       assert_response :success, surface.fetch(:label)
+      assert_equal published.entry.public_id, response.parsed_body.fetch("public_id"), surface.fetch(:label)
       assert_equal published.slug, response.parsed_body.fetch("slug"), surface.fetch(:label)
     end
   end
