@@ -140,10 +140,14 @@ module Base
         end
 
         def authorize_params
-          params.permit(
-            :response_type, :client_id, :redirect_uri, :state,
-            :code_challenge, :code_challenge_method, :scope, :nonce, :screen_hint,
+          # `slice` first: this reads a fixed set of keys and ignores everything else the
+          # request carries (`ri`, the Turnstile token). Permitting without narrowing would
+          # report those as unpermitted, which they are not - they are simply not ours.
+          keys = %i(
+            response_type client_id redirect_uri state
+            code_challenge code_challenge_method scope nonce screen_hint
           )
+          params.slice(*keys).permit(*keys)
         end
       end
     end

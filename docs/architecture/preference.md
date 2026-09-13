@@ -249,7 +249,12 @@ normal required-`ri` lifecycle to add the default region context.
 Preference data flows in one direction for Rails runtime reads:
 
 ```text
-Preference JWT payload (*_preference_access) -> Actor.preferences
+Preference JWT payload (`preference_access` / `__Host-preference_access`) -> Actor.preferences
+
+The Preference JWT is an RFC 9068 `at+jwt` access token. Protocol claims (`iss`, `exp`, `aud`,
+`sub`, `client_id`, `iat`, `jti`, `scope`) sit in the JWT Claims Set. Application preference data
+remains in the private `preferences` object. `sub` is the preference record `public_id`. See
+`adr/rfc9068-access-token-profile.md`.
 ```
 
 The database is the durable storage boundary (SSoT) used by explicit preference write and
@@ -268,7 +273,8 @@ In a normal request, `Actor.preferences` is built in two stages:
 
 1. Build the base preference from the Preference JWT payload (`preference_payload_preferences`), via
    `Actor::Preference.from_jwt`. When no Preference JWT cookie exists (Bearer/OIDC APIs and
-   endpoints that skip `set_preferences_cookie`), fall back to `Actor::Preference::NULL`.
+   endpoints that skip `set_preferences_cookie`), fall back to the default preference values
+   (theme `sy`). `Actor::Preference::NULL` is the unbound-context snapshot, not the guest default.
 2. Overlay valid request-local `lx`, `ct`, and `tz` values when they were explicitly present in the
    request.
 
@@ -297,6 +303,20 @@ Actor.preferences: language=en, theme=sy, timezone=Asia/Tokyo
 
 The page renders in English for that request. The database and Preference JWT remain Japanese until
 an explicit preference write path changes them and reissues a token.
+
+### Region is a regional-bundle reset
+
+A `/preference/region` write is not a single-field write. It rewrites the region-owned locale
+defaults to the region's values in one transaction and marks each one explicit:
+
+| Region | language | date format         | clock  | currency |
+| ------ | -------- | ------------------- | ------ | -------- |
+| `jp`   | `ja`     | `iso` (YYYY-MM-DD)  | 24h    | `jpy`    |
+| `us`   | `en`     | `us` (MM/DD/YYYY)   | 12h    | `usd`    |
+
+The individual language / calendar / clock / currency screens still let a person override any of
+these afterwards; the override is then explicit and survives a later `?ri` change. If any of the
+five child writes fails, the whole change rolls back — a half-applied bundle is never persisted.
 
 Do not reverse this flow.
 

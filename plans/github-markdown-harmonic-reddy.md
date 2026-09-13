@@ -25,7 +25,7 @@ All edits in `.github/workflows/ci.yml`.
 ### 1. Brakeman via the wrapper (line 99)
 
 ```yaml
-        run: bin/brakeman -f sarif -o brakeman.sarif --no-pager --quiet -z
+run: bin/brakeman -f sarif -o brakeman.sarif --no-pager --quiet -z
 ```
 
 `bin/brakeman` already does `require "bundler/setup"`, so no `bundle exec` prefix is needed.
@@ -67,9 +67,9 @@ Notes to carry into the report:
 `i18n-tasks`, `packwerk`, `annotaterb`, `debride`, `flog`, `flay` stay out of CI for now. The task
 required measuring local output volume before gating, and that could not be done: `bundle exec`
 fails in this worktree because the Gemfile's git-sourced Rails checkout is not installed
-(`https://github.com/rails/rails.git (at main@2ecdae9) is not yet checked out`), and `bundle install`
-is a state change outside the agreed scope. Adding an unmeasured gate risks a permanently red job.
-`reek` is intentionally excluded (gem already removed).
+(`https://github.com/rails/rails.git (at main@2ecdae9) is not yet checked out`), and
+`bundle install` is a state change outside the agreed scope. Adding an unmeasured gate risks a
+permanently red job. `reek` is intentionally excluded (gem already removed).
 
 ## Verification
 

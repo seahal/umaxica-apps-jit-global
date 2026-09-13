@@ -1,0 +1,17 @@
+# Config used by `ArchitectureBaseline.measure`: the two architecture cops only, with the
+# `.rubocop_todo.yml` excludes deliberately absent so debt files are still measured.
+inherit_from:
+  - umaxica.yml
+
+AllCops:
+  TargetRubyVersion: 4.0
+  DisabledByDefault: true
+  SuggestExtensions: false
+  Exclude:
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
+    - "log/**/*"
+  Include:
+    - "app/**/*.rb"
+    - "lib/**/*.rb"

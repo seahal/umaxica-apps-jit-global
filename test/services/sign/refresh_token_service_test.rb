@@ -81,10 +81,27 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     rotated = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
     rotated_refresh = rotated[:refresh_token]
 
+    log_output = StringIO.new
+    previous_logger = Rails.logger
+    Rails.logger = Logger.new(log_output)
+
     reuse_result = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
+  ensure
+    Rails.logger = previous_logger if previous_logger
 
     assert_not reuse_result.success?
     assert_equal :refresh_token_reuse_detected, reuse_result.reason
+    assert_includes log_output.string, "Refresh token reuse detected"
+
+    reuse_audit = ChronicleRecord.connected_to(role: :writing) do
+      ClientChronicle.where(
+        event_id: ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        subject_id: user.id.to_s,
+        subject_type: "Client",
+      ).order(occurred_at: :desc).first
+    end
+    assert_predicate reuse_audit, :present?
+    assert_equal "token_family_revoked", reuse_audit.context.deep_stringify_keys.fetch("result")
 
     token.reload
 

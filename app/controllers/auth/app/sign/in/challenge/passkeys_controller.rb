@@ -9,6 +9,7 @@ module Auth
       module In
         module Challenge
           class PasskeysController < ::Auth::App::ApplicationController
+            include ::AuthenticationModeSwitchGuard
             include ::SurfaceInertiaPage
 
             include ::PasskeyCeremonyContext

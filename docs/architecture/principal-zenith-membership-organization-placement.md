@@ -1,5 +1,14 @@
 # Principal / Zenith Membership and Organization Placement
 
+> **Global / Regional ownership settled (2026-09-08):** `adr/global-regional-database-ownership.md`
+> fixes `app_zenith` / `org_zenith` / `com_zenith` as **Global-only** databases holding Global
+> canonical Account / Identity / Organization authority. `Member`, `ClientMembership`, and
+> `Organization` are Global; the decomposition this document audits
+> (`adr/member-client-membership-organization-decomposition-before-placement.md`) is an internal
+> Global matter and does not move those rows to a Regional database. The "regional-ready" and
+> "future regional" placement targets below are superseded: regional-ready data lives in the
+> Regional repository's own application database, not in a `*_principal` key here.
+
 ## Purpose
 
 This document audits the ambiguous placement cluster around `Member`, `ClientMembership`, and

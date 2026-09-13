@@ -11,8 +11,7 @@ endpoint rather than one emulator per service.
 
 It is **not** behind a Compose profile. A plain `podman compose up` starts it alongside `core`,
 `primary`, `replica`, `valkey-cache`, and `valkey-rate-limit`, because S3 and MSK are meant to be
-standing development
-infrastructure rather than a special mode.
+standing development infrastructure rather than a special mode.
 
 ## What Is Available
 
@@ -81,19 +80,18 @@ bin/rails object_storage:prepare
 bin/rails object_storage:verify
 ```
 
-`prepare` creates the Avatar and publishing buckets named by
-`OBJECT_STORAGE_BUCKET_AVATAR` and `OBJECT_STORAGE_BUCKET_PUBLISHING`.
-`verify` checks FakeCloud health, those buckets, one Avatar upload, and one
-publishing upload.
+`prepare` creates the Avatar and publishing buckets named by `OBJECT_STORAGE_BUCKET_AVATAR` and
+`OBJECT_STORAGE_BUCKET_PUBLISHING`. `verify` checks FakeCloud health, those buckets, one Avatar
+upload, and one publishing upload.
 
 The complete storage matrix is:
 
-| Rails environment | Deployment tier | Storage |
-| ----------------- | --------------- | ------- |
-| `test` | not read | In-memory; no S3 network access |
-| `development` | not read | Configured S3-compatible endpoint |
-| `production` | `staging` | Configured S3-compatible endpoint |
-| `production` | `production` | AWS S3 through the platform credential provider |
+| Rails environment | Deployment tier | Storage                                         |
+| ----------------- | --------------- | ----------------------------------------------- |
+| `test`            | not read        | In-memory; no S3 network access                 |
+| `development`     | not read        | Configured S3-compatible endpoint               |
+| `production`      | `staging`       | Configured S3-compatible endpoint               |
+| `production`      | `production`    | AWS S3 through the platform credential provider |
 
 Missing or unrecognized `DEPLOYMENT_TIER` values fail when production storage configuration is
 resolved. There is no production default because accidentally interpreting staging as real

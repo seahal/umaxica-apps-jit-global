@@ -72,15 +72,21 @@ class BaseSwitcherAuthority
   end
 
   def find_account(public_id)
-    public_id.present? && available_accounts.find { |account| account.public_id == public_id }
+    return if public_id.blank?
+
+    available_accounts.find { |account| account.public_id == public_id }
   end
 
   def find_organization(public_id)
-    public_id.present? && available_organizations.find { |organization| organization.public_id == public_id }
+    return if public_id.blank?
+
+    available_organizations.find { |organization| organization.public_id == public_id }
   end
 
   def find_avatar(public_id)
-    public_id.present? && available_avatars.find { |avatar| avatar.public_id == public_id }
+    return if public_id.blank?
+
+    available_avatars.find { |avatar| avatar.public_id == public_id }
   end
 
   private

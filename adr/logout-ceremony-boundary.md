@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted (2026-06-21)
+Accepted (2026-06-21). Amended for Base completion destination by
+`adr/base-lobby-unauthenticated-entry.md`.
 
 ## Context
 

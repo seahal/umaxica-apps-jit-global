@@ -6,8 +6,8 @@ Accepted: 2026-06-14
 > "JSON probe" are superseded by the 2026-09-03 text+JSON health contract. The text probes
 > (`/health`, `/health/{liveness,readiness,startup}`) now return `text/plain`, and a separate
 > machine family (`/api/v0/health.json`, `/api/v0/revision.json`) returns `application/json` with a
-> `pass/warn/fail` vocabulary. See `docs/reference/health-endpoints.md`. The edge-isolation
-> decision in this ADR — that every `/health*` path and the two `/api/v0/*.json` health paths stay
+> `pass/warn/fail` vocabulary. See `docs/reference/health-endpoints.md`. The edge-isolation decision
+> in this ADR — that every `/health*` path and the two `/api/v0/*.json` health paths stay
 > internal-only — is unchanged.
 
 ## Context
@@ -33,8 +33,8 @@ probe JSON or the HTML snapshot to the public has three problems:
 3. It widens the reconnaissance surface by advertising surface topology and dependency shape.
 
 The edge in front of the Rails origin is Cloudflare Tunnel (`cloudflare-tunnel` service in
-`compose.yaml`, `tunnel` profile). There is no in-repo reverse proxy, WAF, or ingress configuration; edge access rules
-are managed on the Cloudflare side. Orchestrator and container probes
+`compose.yaml`, `tunnel` profile). There is no in-repo reverse proxy, WAF, or ingress configuration;
+edge access rules are managed on the Cloudflare side. Orchestrator and container probes
 (`liveness`/`readiness`/`startup`) reach the origin internally, not through the public edge, so an
 edge-level block on public traffic does not affect internal probing.
 

@@ -4,16 +4,15 @@
 
 Accepted (2026-08-31)
 
-This record exists to close a recurring question. Treat it as settled: do not reopen
-"should `bin/rails test` enable CSRF protection?" without new evidence that invalidates the
-reasoning below.
+This record exists to close a recurring question. Treat it as settled: do not reopen "should
+`bin/rails test` enable CSRF protection?" without new evidence that invalidates the reasoning below.
 
 ## Context
 
-`config/environments/test.rb` sets `config.action_controller.allow_forgery_protection = false`.
-The line previously carried the comment "Keep request forgery protection off by default so the
-existing suite can migrate in batches", which reads as a temporary state and invites a periodic
-proposal to flip it to `true`.
+`config/environments/test.rb` sets `config.action_controller.allow_forgery_protection = false`. The
+line previously carried the comment "Keep request forgery protection off by default so the existing
+suite can migrate in batches", which reads as a temporary state and invites a periodic proposal to
+flip it to `true`.
 
 That reading is wrong, and the question has now been raised often enough to be worth recording.
 Three facts drive the decision.
@@ -37,8 +36,8 @@ tests that construct the request shapes that actually matter:
 - `test/integration/csrf_notification_emission_test.rb`
 - `test/integration/preference_web_csrf_test.rb`
 
-Against this, enabling the flag suite-wide would require reworking a large number of existing
-tests for no meaningful gain in assurance. The cost is real and the benefit is close to zero.
+Against this, enabling the flag suite-wide would require reworking a large number of existing tests
+for no meaningful gain in assurance. The cost is real and the benefit is close to zero.
 
 ## Decision
 

@@ -44,7 +44,7 @@ class LocaleInitializerTest < ActiveSupport::TestCase
       assert_equal "Preferences", I18n.t("base.app.preferences.title")
       assert_equal "Manage language, theme, and other preferences in one place.",
                    I18n.t("base.app.preferences.description")
-      assert_equal "Region & Language Settings", I18n.t("base.app.preferences.region_settings")
+      assert_equal "Region Settings", I18n.t("base.app.preferences.region_settings")
       assert_equal "Language Settings", I18n.t("base.app.preferences.language_settings")
       assert_equal "Timezone Settings", I18n.t("base.app.preferences.timezone_settings")
       assert_equal "Cookie Settings", I18n.t("base.app.preferences.cookie_settings")
@@ -68,10 +68,15 @@ class LocaleInitializerTest < ActiveSupport::TestCase
     I18n.with_locale(:en) do
       assert_equal "Language Settings", I18n.t("acme.app.preference.language.edit.heading")
       assert_equal "Language", I18n.t("acme.app.preference.language.edit.language_label")
+      # The region screen adjusts regional defaults but is not the language UI,
+      # so its heading names only the region.
+      assert_equal "Region Settings", I18n.t("acme.app.preference.region.edit.heading")
+      assert_equal "Region Settings", I18n.t("acme.com.preference.region.edit.heading")
+      assert_equal "Region Settings", I18n.t("acme.org.preference.region.edit.heading")
       assert_equal "Date Format", I18n.t("acme.app.preference.date_format.edit.heading")
       assert_equal "Reset Preferences", I18n.t("acme.app.preference.resets.title")
       assert_equal "Clear preference data", I18n.t("acme.app.preference.resets.button")
-      assert_equal "Region & Language Settings", I18n.t("base.app.preferences.region_settings")
+      assert_equal "Region Settings", I18n.t("base.app.preferences.region_settings")
       assert_equal "Language Settings", I18n.t("acme.app.preferences.language_settings")
       assert_equal "Manage language, theme, and other preferences in one place.",
                    I18n.t("acme.app.preferences.description")
@@ -81,7 +86,7 @@ class LocaleInitializerTest < ActiveSupport::TestCase
       assert_equal "Language", I18n.t("acme.app.preference.language.edit.language_label")
       assert_equal "Update Settings", I18n.t("acme.app.preferences.update_settings")
       assert_equal "Submitting...", I18n.t("acme.app.preferences.submitting")
-      assert_equal "Region & Language Settings", I18n.t("acme.app.preferences.region_settings")
+      assert_equal "Region Settings", I18n.t("acme.app.preferences.region_settings")
       assert_equal "Back to Preferences", I18n.t("acme.app.preferences.back_to_settings")
       assert_equal "US Dollar", I18n.t("acme.app.preference.currency.options.usd")
       assert_equal "Japanese Yen", I18n.t("acme.app.preference.currency.options.jpy")
@@ -95,7 +100,7 @@ class LocaleInitializerTest < ActiveSupport::TestCase
 
     I18n.with_locale(:en) do
       assert_equal "Preferences", I18n.t("base.app.preferences.title")
-      assert_equal "Region & Language Settings", I18n.t("acme.app.preferences.regions.title")
+      assert_equal "Region Settings", I18n.t("acme.app.preferences.regions.title")
       assert_equal "Choose your region...", I18n.t("acme.app.preferences.regions.select_region_prompt")
       assert_equal "Region Settings", I18n.t("acme.app.preferences.regions.region_section")
       assert_equal "Select Region", I18n.t("acme.app.preferences.regions.select_region")
@@ -127,7 +132,7 @@ class LocaleInitializerTest < ActiveSupport::TestCase
     assert_nothing_raised { reload_locale_initializer }
 
     I18n.with_locale(:ja) do
-      assert_equal "地域・言語の設定", I18n.t("acme.com.preferences.regions.title")
+      assert_equal "地域設定", I18n.t("acme.com.preferences.regions.title")
       assert_equal "地域を選択してください…", I18n.t("acme.com.preferences.regions.select_region_prompt")
       assert_equal "地域設定", I18n.t("acme.com.preferences.regions.region_section")
       assert_equal "地域を選択", I18n.t("acme.com.preferences.regions.select_region")
@@ -145,7 +150,7 @@ class LocaleInitializerTest < ActiveSupport::TestCase
     assert_nothing_raised { reload_locale_initializer }
 
     I18n.with_locale(:ja) do
-      assert_equal "地域・言語の設定", I18n.t("acme.app.preferences.regions.title")
+      assert_equal "地域設定", I18n.t("acme.app.preferences.regions.title")
       assert_equal "地域を選択してください…", I18n.t("acme.app.preferences.regions.select_region_prompt")
       assert_equal "地域設定", I18n.t("acme.app.preferences.regions.region_section")
       assert_equal "地域を選択", I18n.t("acme.app.preferences.regions.select_region")

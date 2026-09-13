@@ -263,6 +263,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
   def forge_logout_token(surface, payload:)
     JitSecurityJwtKeyring.encode(
       payload,
+      typ: payload["typ"].presence || OidcLogoutTokenCodec::TOKEN_TYPE,
       issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(surface.fetch(:resource_type)),
     )
   end

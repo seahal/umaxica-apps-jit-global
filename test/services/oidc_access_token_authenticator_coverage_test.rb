@@ -72,7 +72,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => [] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -99,7 +99,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -137,7 +137,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"], "iat" => Time.current.to_i }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid", "iat" => Time.current.to_i }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -164,7 +164,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"], "iat" => Time.current.to_i }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid", "iat" => Time.current.to_i }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -206,7 +206,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(false, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           result = authenticator.call
@@ -227,7 +227,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, false) do
@@ -250,7 +250,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -275,7 +275,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -302,7 +302,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     )
     token = Struct.new(:active?, :user).new(true, resource)
 
-    AuthenticationTokenService.stub(:decode, { "scp" => ["openid"] }) do
+    AuthenticationTokenService.stub(:decode, { "scope" => "openid" }) do
       authenticator.stub(:dpop_valid?, true) do
         authenticator.stub(:find_token, token) do
           authenticator.stub(:token_belongs_to_audience?, true) do
@@ -443,8 +443,8 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
 
     resource = Client.create!(status_id: ClientStatus::ACTIVE)
 
-    assert_not authenticator.send(:token_scope_allows_userinfo?, { "scp" => [] })
-    assert authenticator.send(:token_scope_allows_userinfo?, { "scp" => ["openid"] })
+    assert_not authenticator.send(:token_scope_allows_userinfo?, { "scope" => "" })
+    assert authenticator.send(:token_scope_allows_userinfo?, { "scope" => "openid" })
     assert_not authenticator.send(:token_subject_matches?, resource, { "sub" => "wrong" })
     assert authenticator.send(
       :token_subject_matches?, resource,

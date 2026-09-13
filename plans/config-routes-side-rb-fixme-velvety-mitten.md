@@ -12,6 +12,7 @@
   上)。これはルーティング規約違反(FIXME)ではなくパフォーマンス改善の別カテゴリの TODO。
 
 ユーザ確認の結果、このTODOは今回のスコープ外として対応しない方針。**追加の実装作業なし。**
+
 ## 追記2: config/routes/{news,info}.rb の同様のFIXME解消
 
 `info.rb`(3箇所)・`news.rb`(3箇所の`param: :slug` + 3箇所の`module: :entries`)に、docs.rbと同型の
@@ -19,17 +20,15 @@
 
 - `param: :slug`: パスセグメントを公開識別子に変える設定。ADRの禁止リスト対象外で route は resourceful。
 - `module: :entries`(newsのみ): `resources :revisions` を `entries/revisions_controller.rb`
-  (`News::App::Api::V0::Entries::RevisionsController` 等)にネストさせるために必要。これも禁止リスト対象外。
+  (`News::App::Api::V0::Entries::RevisionsController`
+  等)にネストさせるために必要。これも禁止リスト対象外。
 
 docs.rbで採った方針と同じく、ルートは変更せず FIXME を事実コメントに置換。
-`help.rb`にも同型の`# FIXME: remove module: :entries !`が1箇所残っているが、ユーザ指示のスコープ
-(news.rb/info.rbのみ)外のため今回は未対応。
+`help.rb`にも同型の`# FIXME: remove module: :entries !`が1箇所残っているが、ユーザ指示のスコープ (news.rb/info.rbのみ)外のため今回は未対応。
 
-検証: `bin/rails test test/integration/routes/info_route_contract_test.rb
-test/integration/routes/news_route_contract_test.rb
-test/integration/docs_help_news_revisions_test.rb
-test/controllers/help_docs_news_surface_smoke_test.rb` — 12 runs, 0 failures。
-
+検証:
+`bin/rails test test/integration/routes/info_route_contract_test.rb test/integration/routes/news_route_contract_test.rb test/integration/docs_help_news_revisions_test.rb test/controllers/help_docs_news_surface_smoke_test.rb`
+— 12 runs, 0 failures。
 
 ## Context
 
@@ -90,11 +89,14 @@ palm は
 
 コントローラ移設(クラス本体は無変更、モジュール入れ子と completions の親クラス参照のみ更新):
 
-| 旧                                 | 新                                                      |
-| ---------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `side                              | core/{app,com,org}/sign_outs_controller.rb`             | `.../sign/outs_controller.rb` (`X::SignOutsController` → `X::Sign::OutsController`) |
-| `side                              | core/{app,com,org}/sign_outs/completions_controller.rb` | `.../sign/outs/completions_controller.rb`                                           |
-| `palm/app/sign_outs_controller.rb` | `palm/app/sign/outs_controller.rb`                      |
+| 旧 | 新 | | ---------------------------------- |
+------------------------------------------------------- |
+----------------------------------------------------------------------------------- | |
+`side                              | core/{app,com,org}/sign_outs_controller.rb` |
+`.../sign/outs_controller.rb` (`X::SignOutsController` → `X::Sign::OutsController`) | |
+`side                              | core/{app,com,org}/sign_outs/completions_controller.rb` |
+`.../sign/outs/completions_controller.rb` | | `palm/app/sign_outs_controller.rb` |
+`palm/app/sign/outs_controller.rb` |
 
 `render "auth/shared/sign_outs/edit"` 等の明示 render、`sign_out_notice.rb` /
 `acme_logout_transaction_coordinator.rb` の動的 helper 組み立ては helper 名不変のためそのまま。

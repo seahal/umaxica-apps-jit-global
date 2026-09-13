@@ -108,13 +108,19 @@ class OidcIdTokenVerifierTest < ActiveSupport::TestCase
   end
 
   def token_with_claims(overrides)
-    JitSecurityJwtKeyring.encode(valid_claims.merge(overrides), issuer_id: @jwt_issuer_id)
+    claims = valid_claims.merge(overrides)
+    JitSecurityJwtKeyring.encode(claims, typ: claim_typ(claims), issuer_id: @jwt_issuer_id)
   end
 
   def token_with_claims_without(*keys)
     claims = valid_claims
     keys.each { |key| claims.delete(key) }
-    JitSecurityJwtKeyring.encode(claims, issuer_id: @jwt_issuer_id)
+    JitSecurityJwtKeyring.encode(claims, typ: claim_typ(claims), issuer_id: @jwt_issuer_id)
+  end
+
+  # The forged header mirrors the payload typ so wrong-typ cases stay wrong in both places.
+  def claim_typ(claims)
+    claims.stringify_keys["typ"].presence || SecurityJwtOidcIdTokenCodec::TOKEN_TYPE
   end
 
   def valid_claims

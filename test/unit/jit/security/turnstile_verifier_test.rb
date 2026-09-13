@@ -342,6 +342,35 @@ module Jit
         logger.verify
       end
 
+      test "verifying twice runs the real connection builder and never mutates the frozen siteverify URI" do
+        # Regression: VERIFY_URI is a frozen class constant. OutboundHttp::Connection.build used to
+        # hand it straight to Faraday, which mutates the URI's path, so every real Turnstile check
+        # raised FrozenError and returned an "unavailable" failure (HTTP 422 on Google/Apple
+        # sign-up confirmation). Exercise the real builder here and stub only the network POST.
+        TurnstileVerifierStub.enabled = false
+        uri_before = JitSecurityTurnstileVerifier::VERIFY_URI.dup
+        fake_response = Struct.new(:body).new('{"success": true}')
+        real_build = OutboundHttp::Connection.method(:build)
+
+        OutboundHttp::Connection.stub(
+          :build, lambda { |**kwargs|
+                    connection = real_build.call(**kwargs)
+                    connection.define_singleton_method(:post) { |*| fake_response }
+                    connection
+                  },
+        ) do
+          2.times do
+            result = JitSecurityTurnstileVerifier.verify(token: "tok", remote_ip: "1.2.3.4", secret_key: "secret")
+
+            assert result["success"], "verification failed: #{result.inspect}"
+            assert_nil result["error"]
+          end
+        end
+
+        assert_predicate JitSecurityTurnstileVerifier::VERIFY_URI, :frozen?
+        assert_equal uri_before.to_s, JitSecurityTurnstileVerifier::VERIFY_URI.to_s
+      end
+
       private
 
       # siteverify is reached through OutboundHttp::Connection, so the stub

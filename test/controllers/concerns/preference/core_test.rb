@@ -471,6 +471,28 @@ class PreferenceCoreTest < ActiveSupport::TestCase
     end
   end
 
+  test "regional_default_option_ids maps us and jp to the region-owned currency" do
+    us_ids = @controller.send(:regional_default_option_ids, AppPreferenceRegionOption::US)
+
+    assert_equal AppPreferenceCurrencyOption::USD, us_ids.fetch(:currency)
+    assert_equal AppPreferenceLanguageOption::EN, us_ids.fetch(:language)
+    assert_equal AppPreferenceDateFormatOption::US, us_ids.fetch(:date_format)
+    assert_equal AppPreferenceTimeFormatOption::HOUR_12, us_ids.fetch(:time_format)
+
+    jp_ids = @controller.send(:regional_default_option_ids, AppPreferenceRegionOption::JP)
+
+    assert_equal AppPreferenceCurrencyOption::JPY, jp_ids.fetch(:currency)
+    assert_equal AppPreferenceLanguageOption::JA, jp_ids.fetch(:language)
+    assert_equal AppPreferenceDateFormatOption::ISO, jp_ids.fetch(:date_format)
+    assert_equal AppPreferenceTimeFormatOption::HOUR_24, jp_ids.fetch(:time_format)
+  end
+
+  test "regional_default_option_ids returns nil for an unknown region option" do
+    assert_nil @controller.send(:regional_default_option_ids, nil)
+    assert_nil @controller.send(:regional_default_option_ids, 0)
+    assert_nil @controller.send(:regional_default_option_ids, 99)
+  end
+
   test "preference option label suffixes the currency code" do
     I18n.stub(:t, ->(_key) { "US Dollar" }) do
       assert_equal "US Dollar (USD)", @controller.send(:preference_option_label, :currency, "usd")

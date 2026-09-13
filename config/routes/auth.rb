@@ -506,6 +506,23 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
+          # Emergency Access (Restricted Mode). Org only, Passkey only, and no
+          # Entra stage: it is the way in when the Entra path is unavailable.
+          # The ceremony is the same shape as the normal passkey ceremony above
+          # because it is the same implementation with a different ceremony
+          # purpose and post-verification context; only the entry differs.
+          # There is deliberately no emergency sign-up and no emergency
+          # sign-out -- both modes terminate through the canonical
+          # /sign/out ceremony. See docs/security/org-emergency-access.md.
+          namespace :emergency do
+            resource :passkey, only: :new
+
+            namespace :passkey do
+              resource :options, only: :create
+              resource :verification, only: :create
+            end
+          end
+
           resource :secret, only: %i(new create)
           resource :session, only: %i(show update destroy)
 

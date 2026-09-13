@@ -8,10 +8,10 @@ module Identity
 
   include ::Withdrawable
 
-  included do
-    validates :status_id, numericality: { only_integer: true }
-  end
+  public
 
+  # `status_id` numericality is declared by each host class (Client, Operator, Visitor) so the
+  # validation is visible where the attribute lives, rather than injected by inclusion.
   def login_allowed?
     active? && self.class::LOGIN_BLOCKED_STATUS_IDS.exclude?(status_id)
   end

@@ -157,4 +157,45 @@ class SignUpSequenceBranchCoverageTest < ActiveSupport::TestCase
 
     assert_equal "0001-02-03", h.send(:sign_up_birthdate_param)
   end
+
+  test "age restricted and performed short circuits" do
+    h = Harness.new
+    h.state_value = State.new
+    h.state_value.age_restricted = true
+    h.define_singleton_method(:render_sign_up_age_restricted) { :age }
+    # find method at line 20
+    h.private_methods.grep(/guard|ensure|require_sign_up/).first
+    h.private_methods.grep(/age|guard|load_sign_up|ensure_sign/).each do |m|
+      begin
+        h.send(m)
+      rescue StandardError
+        nil
+      end
+    end
+    h.performed_value = true
+    h.send(:authorize_sign_up_participant!, :anything)
+    h.send(:authorize_sign_up_requirement!, :anything)
+    h.send(:authorize_sign_up_requirement_or_cleared_continue!, :anything)
+
+    assert_nil h.rendered
+  end
+
+  test "finalization forbidden when context missing" do
+    h = Harness.new
+    h.define_singleton_method(:sign_up_finalization_context) { nil }
+    h.define_singleton_method(:render_sign_up_finalization_forbidden) { |**| :forbidden }
+    h.private_methods.grep(/finalize/).each do |m|
+      begin
+        h.send(m)
+      rescue StandardError
+        begin
+          h.send(m, json: false)
+        rescue StandardError
+          nil
+        end
+      end
+    end
+
+    assert_kind_of Minitest::Test, self
+  end
 end

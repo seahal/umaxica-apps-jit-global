@@ -38,9 +38,14 @@ export default function Select({
   errorMessage,
   ...props
 }: SelectProps) {
+  const disabledKeys = options
+    .filter((option) => option.isDisabled === true)
+    .map((option) => option.value);
+
   return (
     <AriaSelect
       {...props}
+      disabledKeys={props.disabledKeys ?? disabledKeys}
       isInvalid={Boolean(errorMessage)}
       className="flex flex-col gap-1"
     >

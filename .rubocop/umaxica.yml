@@ -1,0 +1,18 @@
+# Umaxica architecture cops. See docs/architecture/method-visibility-and-concerns.md.
+require:
+  - ../lib/rubocop/cop/umaxica/no_concern_inclusion_hooks
+  - ../lib/rubocop/cop/umaxica/explicit_method_visibility
+
+Umaxica/NoConcernInclusionHooks:
+  Description: "Forbid `included do` / `prepended do` host behavior injection in application concerns."
+  Enabled: true
+  Include:
+    - "app/**/*.rb"
+    - "lib/**/*.rb"
+
+Umaxica/ExplicitMethodVisibility:
+  Description: "Require an explicit public/protected/private declaration for application methods."
+  Enabled: true
+  Include:
+    - "app/**/*.rb"
+    - "lib/**/*.rb"

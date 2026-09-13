@@ -1,5 +1,13 @@
 # Regional And Global Delivery Boundary
 
+> **Database ownership settled (2026-09-08):** `adr/global-regional-database-ownership.md` is the
+> normative decision for which repository owns which database. All currently-populated databases
+> (`*_zenith`, `*_ticket`, `*_setting`, `*_signal`, `avatar`, `publishing`) are **Global-only**.
+> `chronicle`, `occurrence`, `primary`, and `queue` exist independently — never shared — in both
+> Global and Regional. Regional owns a new application database and reads Global content only
+> through `GET /api/v0/entries(/:slug)`. This document describes the _delivery_ boundary; the
+> database ownership map is in the ADR.
+
 > **Partially superseded by Identity Authority inversion:** The old RP vocabulary in this document
 > must not be used to treat `acme/www` as an RP-only boundary. `acme/www` is now the Session, Token,
 > Account, Preference, Authorization, and downstream-token Authority. `core`, `line`, and future

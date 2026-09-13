@@ -92,17 +92,18 @@ describe("destructive identity forms", () => {
         title="Sessions"
         back_link={{ label: "Back", href: "/identity" }}
         empty_message="No active sessions were found."
+        expires_at_description="This session ends at its expiry and cannot be extended."
         columns={{
-          session: "Session",
-          kind: "Kind",
-          binding: "Binding",
+          device: "Device",
+          mode: "Mode",
           last_activity: "Last activity",
           created: "Created",
-          refresh_expires: "Refresh expires",
+          expires_at: "Expires at",
+          status: "Status",
+          action: "Action",
         }}
         bulk_revocations={{
           others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
-          all: { label: "Revoke all", href: "/identity/sessions", confirm: "Sure?" },
         }}
         sessions={[]}
       />,
@@ -112,6 +113,12 @@ describe("destructive identity forms", () => {
     expect(document.querySelector("[role='dialog']")?.textContent).toContain("Sure?");
     answerConfirmation(false);
     expect(submitted).not.toHaveBeenCalled();
+
+    // Confirming replays form.submit(); that callback is the only path that covers the revoke
+    // handler's deferred submission arm.
+    submitFirstForm();
+    answerConfirmation(true);
+    expect(submitted).toHaveBeenCalledTimes(1);
   });
 
   it("guards a secret credential deletion", () => {
@@ -146,6 +153,10 @@ describe("destructive identity forms", () => {
     expect(submitFirstForm().defaultPrevented).toBe(true);
     answerConfirmation(false);
     expect(submitted).not.toHaveBeenCalled();
+
+    submitFirstForm();
+    answerConfirmation(true);
+    expect(submitted).toHaveBeenCalledTimes(1);
   });
 
   it("guards an email address deletion without blocking the preference update", () => {

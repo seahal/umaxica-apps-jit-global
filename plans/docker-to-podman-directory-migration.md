@@ -1,7 +1,7 @@
 # Migration: `docker/` directory to `podman/`
 
-Move the container-support directory from `docker/` to `podman/` in three steps so that no step
-both moves files and switches references at the same time.
+Move the container-support directory from `docker/` to `podman/` in three steps so that no step both
+moves files and switches references at the same time.
 
 ## Step 1 — Duplicate (done 2026-08-10)
 

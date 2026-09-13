@@ -13,7 +13,8 @@ Accepted (2026-07-16)
 Content persistence was duplicated:
 
 1. A lean read model added in June 2026 placed docs, news, and help content-entry tables in each
-   app/com/org zenith database. The public `GET /api/v0/entries(/:slug)` API reads these nine tables.
+   app/com/org zenith database. The public `GET /api/v0/entries(/:slug)` API reads these nine
+   tables.
 2. A legacy CMS model added in July 2026 created 13 tables for each of 12 app/com/org and
    info/docs/news/help combinations: 156 tables containing revisions, versions, publications,
    taxonomy, and media. No delivery path uses this model.
@@ -41,9 +42,8 @@ database. App/com/org identify the publication **audience**, not database placem
 ### 3. Edition Model
 
 **Superseded 2026-09-04 by `adr/publishing-twelve-family-encrypted-persistence.md`.**
-`Publishing::Edition` is removed. The twelve cells are physical table families.
-Locale remains a column inside each family. Region is a family constant, not a
-persisted Edition attribute.
+`Publishing::Edition` is removed. The twelve cells are physical table families. Locale remains a
+column inside each family. Region is a family constant, not a persisted Edition attribute.
 
 ### 4. Keep the `entries` API Noun
 
@@ -51,12 +51,15 @@ Keep these public URLs:
 
 ```text
 GET /api/v0/entries
-GET /api/v0/entries/:slug
+GET /api/v0/entries/:public_id
 ```
 
-Do not rename them to posts, documents, or publications. Do not expose audience, surface,
-placement, or region as query parameters. `Publishing::EditionResolver` derives them from host and
-route boundaries.
+Resource identity is the opaque `public_id`. `slug` is a presentation field on the serialized
+entry, not the path parameter. Do not add slug lookup, `by-slug` routes, or a slug query filter.
+
+Do not rename them to posts, documents, or publications. Do not expose audience, surface, placement,
+or region as query parameters. `Publishing::EditionResolver` derives them from host and route
+boundaries.
 
 ### 5. Do Not Dual-Write
 
@@ -94,10 +97,10 @@ models.
 
 ### 9. Models and Naming
 
-**Superseded 2026-09-04 by `adr/publishing-twelve-family-encrypted-persistence.md`.**
-Define twelve explicit family model trees under `Publishing::{Surface}::{Audience}` plus
-global `Publishing::MediaFile`. Prohibit `constantize` / `Object.const_get` for runtime
-family selection. Persistence naming is surface first, matching management URLs.
+**Superseded 2026-09-04 by `adr/publishing-twelve-family-encrypted-persistence.md`.** Define twelve
+explicit family model trees under `Publishing::{Surface}::{Audience}` plus global
+`Publishing::MediaFile`. Prohibit `constantize` / `Object.const_get` for runtime family selection.
+Persistence naming is surface first, matching management URLs.
 
 ## Consequences
 

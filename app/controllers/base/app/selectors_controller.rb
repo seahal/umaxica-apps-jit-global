@@ -11,6 +11,8 @@ module Base
         authorize!(current_client, to: :show?)
         return render_selector_json if request.format.json?
         return continue_selector_sequence! if current_db_sign_in_flow_for_sequence&.sign_in_selector_pending?
+        # Post-login HTML revisits belong on Switcher. Selector is the pre-access ceremony.
+        return redirect_to(base_app_switcher_path(ri: params[:ri])) if current_session&.selected_actor_context?
 
         result = prepare_selector
         return redirect_to(base_app_dashboard_path(ri: params[:ri])) if result.fetch(:status).to_s == "selected"

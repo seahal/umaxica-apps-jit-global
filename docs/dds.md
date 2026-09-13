@@ -76,17 +76,17 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 
 ### 3.2 Shared Controller Concerns
 
-| Concern               | Key responsibilities                                                                                             |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Auth::Base`          | JWT (ES384) issuance/verification (`kid` header + keyring), login/logout helpers, refresh/device cookie handling |
+| Concern               | Key responsibilities                                                                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `Auth::Base`          | JWT (ES384) issuance/verification (`kid` header + keyring), login/logout helpers, refresh/device cookie handling      |
 | `RateLimit`           | Exposes `config.x.rate_limit.store` (a Valkey-backed `ActiveSupport::Cache::RedisCacheStore`) to the `rate_limit` DSL |
-| `DefaultUrlOptions`   | Reads signed preference cookie to append `lx`, `ri`, `tz` query params                                           |
-| `PreferenceRegions`   | Normalizes locale/timezone inputs, persists to session/cookies, handles errors                                   |
-| `Theme`               | Provides theme editing/updating with shorthand codes and preference cookie syncing                               |
-| `Cookie`              | Stores ePrivacy consent flags in signed cookies                                                                  |
-| `CloudflareTurnstile` | Validates Turnstile tokens via HTTP POST                                                                         |
-| `Redirect`            | Validates allowed redirect hosts and Base64 tokens                                                               |
-| `Health`              | `Health` service layer + `HealthCheckRendering` render text probes and `/api/v0/health.json`                     |
+| `DefaultUrlOptions`   | Reads signed preference cookie to append `lx`, `ri`, `tz` query params                                                |
+| `PreferenceRegions`   | Normalizes locale/timezone inputs, persists to session/cookies, handles errors                                        |
+| `Theme`               | Provides theme editing/updating with shorthand codes and preference cookie syncing                                    |
+| `Cookie`              | Stores ePrivacy consent flags in signed cookies                                                                       |
+| `CloudflareTurnstile` | Validates Turnstile tokens via HTTP POST                                                                              |
+| `Redirect`            | Validates allowed redirect hosts and Base64 tokens                                                                    |
+| `Health`              | `Health` service layer + `HealthCheckRendering` render text probes and `/api/v0/health.json`                          |
 
 ### 3.3 Top Namespace
 
@@ -359,8 +359,7 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 - `ServiceSiteContact` `before_create` raises if required content missing to prevent blank
   submissions.
 - OTEL instrumentation emits spans for HTTP requests, rate-limit store calls, and ActionMailer
-  deliveries (once
-  instrumentation enabled).
+  deliveries (once instrumentation enabled).
 - Logs stream to STDOUT → Loki (when Compose stack used) or platform logging (Cloud Run).
 
 ---

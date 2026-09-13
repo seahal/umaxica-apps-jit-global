@@ -146,15 +146,15 @@ module Palm
           finalize_query = Rack::Utils.parse_nested_query(finalize_uri.query.to_s)
 
           assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), finalize_uri.host
-          assert_equal "/sign/out/complete", finalize_uri.path
+          assert_equal "/lobby", finalize_uri.path
           assert_nil finalize_query["logout_challenge"]
           assert_nil finalize_query["state"]
 
           get jump_rt_url_from_location(response.location)
 
           assert_response :success
-          # The browser lands on the base surface's sign-out completion, which is an Inertia page.
-          assert_equal "base/app/sign_outs/complete", inertia_component
+          # The browser lands on the Base unauthenticated entry after coordinated sign-out.
+          assert_equal "base/app/lobbies/show", inertia_component
           assert_predicate inertia_props.fetch("title"), :present?
         end
 

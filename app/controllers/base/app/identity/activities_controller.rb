@@ -12,8 +12,10 @@ module Base
 
         before_action :authenticate_client!
         before_action :authorize_activity_log!
+
         def index
-          render inertia: true, props: activities_page_props(activity_log.activities.limit(100))
+          activities = activity_log.activities(activity_scope).limit(100)
+          render inertia: true, props: activities_page_props(activities)
         rescue ActiveRecord::ActiveRecordError
           render inertia: true, props: activities_page_props(ClientChronicle.none)
         end
@@ -22,41 +24,32 @@ module Base
 
         def authorize_activity_log! = authorize!(ClientChronicle, to: :index?)
 
-        def activity_log = @activity_log ||= ::Auth::App::Settings::ActivityLogPresenter.new(current_client)
+        def activity_scope
+          subject = ClientChronicle.where(subject_type: "Client", subject_id: current_client.id.to_s)
+          actor = ClientChronicle.where(actor_type: "Client", actor_id: current_client.id)
+          subject.or(actor)
+        end
+
+        def activity_log = @activity_log ||= ::Base::Identity::ActivityLogPresenter.new(surface: :app)
 
         def activities_page_props(activities)
           {
-            title: t("sign.app.settings.activity.index.page_title"),
-            description: t("sign.app.settings.activity.index.description"),
-            empty_message: t("sign.app.settings.activity.index.empty"),
+            title: t("base.shared.identity.activities.title"),
+            description: t("base.shared.identity.activities.description"),
+            empty_message: t("base.shared.identity.activities.empty"),
             back_link: {
               label: t("sign.app.settings.show.back"),
               href: base_app_identity_path(ri: params[:ri]),
             },
-            table_headings: {
-              occurred_at: t("sign.app.settings.activity.index.table.occurred_at"),
-              event: t("sign.app.settings.activity.index.table.event"),
-              ip_address: t("sign.app.settings.activity.index.table.ip_address"),
-              device: "Device",
-              login_method: "Login method",
-              context: t("sign.app.settings.activity.index.table.context"),
-            },
-            activities: activities.map { |activity| serialize_activity(activity) },
+            columns: activity_columns,
+            activities: activities.map { |activity| activity_log.present(activity) }.compact,
           }
         end
 
-        def serialize_activity(activity)
-          occurred_at = activity_log.occurred_at(activity)
-
-          {
-            event_id: activity.event_id,
-            occurred_at: occurred_at.present? ? I18n.l(occurred_at, format: :long) : "",
-            event_label: activity_log.event_label(activity).to_s,
-            ip_address: activity_log.ip_address(activity).to_s,
-            user_agent_summary: activity_log.user_agent_summary(activity).to_s,
-            login_method: activity_log.login_method(activity).to_s,
-            context_text: activity_log.context_text(activity).to_s,
-          }
+        def activity_columns
+          %i(occurred_at activity device source risk).index_with do |column|
+            t("base.shared.identity.activities.columns.#{column}")
+          end
         end
       end
     end

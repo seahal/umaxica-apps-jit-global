@@ -62,8 +62,8 @@ constraints host: URI.parse(ENV.fetch("PALM_SERVICE_URL")).host
 ## side.rb（現在: boot_config）
 
 `side_service` は `base_service` のエイリアス。base*key ロジックは `SIDE_SERVICE_URL` →
-`BASE_SERVICE_URL` → `PUBLIC_BASE_SERVICE_URL` の順で参照する。`base.rb`
-との一貫性から `PUBLIC_BASE*\*\_URL` を使う（base.rb と同一ホスト）。
+`BASE_SERVICE_URL` → `PUBLIC_BASE_SERVICE_URL` の順で参照する。`base.rb` との一貫性から
+`PUBLIC_BASE*\*\_URL` を使う（base.rb と同一ホスト）。
 
 ```ruby
 # 変更前

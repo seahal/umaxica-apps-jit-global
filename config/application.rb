@@ -52,7 +52,11 @@ module Jit
     # the omniauth_openid_connect gem's own OmniAuth::Strategies module
     # (capitalized "OmniAuth"); Zeitwerk's inflection for the directory name
     # ("Omniauth") would otherwise collide with it.
-    config.autoload_lib(ignore: %w(assets tasks omniauth))
+    # `rubocop` holds lib/rubocop/cop/umaxica/*.rb, the repository's custom
+    # architecture cops. They subclass RuboCop::Cop::Base, which only exists
+    # under `bin/rubocop`; autoloading them into the application would raise at
+    # boot and, under eager loading, take the whole app down.
+    config.autoload_lib(ignore: %w(assets tasks omniauth rubocop))
 
     # Configuration for the application, engines, and railties goes here.
     #

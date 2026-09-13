@@ -287,14 +287,14 @@ development:
     database: development_avatar_db
     host: <%= development_host.call("POSTGRESQL_AVATAR_SUB") %>
     migrations_paths: db/avatars_migrate
-  # Feature flags (Flipper). Deliberately has no replica: a flag is read immediately
+  # Rails default database. Durable, low-frequency, application-wide configuration
+  # (currently Flipper). Deliberately has no replica: a flag is read immediately
   # after it is toggled, and replication lag would surface as a flip that "did not apply".
-  platform:
+  primary:
     !!merge <<: *development_default
-    database: development_platform_db
-    host: <%= development_host.call("POSTGRESQL_PLATFORM_PUB") %>
-    migrations_paths: db/platform_migrate
-    schema_dump: platform_structure.sql
+    database: development_primary_db
+    host: <%= development_host.call("POSTGRESQL_PRIMARY_PUB") %>
+    migrations_paths: db/migrate
 # Warning: The database defined as "test" will be erased and
 # re-generated from your development database when you run "rake".
 # Do not set this db to the same as development or production.
@@ -540,12 +540,11 @@ test:
     host: <%= test_host %>
     migrations_paths: db/avatars_migrate
     schema_dump: avatar_structure.sql
-  platform:
+  primary:
     !!merge <<: *test_default
-    database: test_platform_db
+    database: test_primary_db
     host: <%= test_host %>
-    migrations_paths: db/platform_migrate
-    schema_dump: platform_structure.sql
+    migrations_paths: db/migrate
 production:
   publishing:
     !!merge <<: *default
@@ -925,13 +924,12 @@ production:
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
     migrations_paths: db/avatars_migrate
-  # Feature flags (Flipper). No replica by design; see the development section.
-  platform:
+  # Rails default database. No replica by design; see the development section.
+  primary:
     !!merge <<: *default
-    database: production_platform_db
+    database: production_primary_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_PGHOST") %>
     username: <%= production_value.call("NEON_PGUSER") %>
     password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/platform_migrate
-    schema_dump: platform_structure.sql
+    migrations_paths: db/migrate

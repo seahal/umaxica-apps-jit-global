@@ -14,7 +14,9 @@ repository-language exception for dictionary definitions; all other prose is Eng
 
 - Definition: The authentication subject — the runtime actor that owns credentials and sessions and
   performs login. Implemented per surface as `Client` (app), `Operator` (org), and `Visitor` (com).
+
 <!-- repository-language: allow-next-line reason=localized-gloss -->
+
 - 和訳: ログイン・認証の主体（runtime actor）。資格情報とセッションを保持する。
 - Context: `app`, `org`, `com`. Authentication, current-context, authorization, and token
   vocabulary.
@@ -33,7 +35,9 @@ repository-language exception for dictionary definitions; all other prose is Eng
 - Definition: The service-usage subject, bound to one Identity. It is a member of one or more
   Organizations and operates Avatars (app/org only). Canonical models: `Persona` (app), `Agent`
   (org), `Individual` (com), each including the `Account` concern.
+
 <!-- repository-language: allow-next-line reason=localized-gloss -->
+
 - 和訳: サービス利用の主体。Identity に紐づき、Organization に所属し、Avatar を操作する（app/org のみ）。
 - Context: `app`, `org`, `com` (zenith realm).
 - Notes:
@@ -54,7 +58,9 @@ repository-language exception for dictionary definitions; all other prose is Eng
   models: `Enterprise` (app), `Bureau` (org), `Company` (com), each including the `Collective`
   concern, with hierarchical `*Unit` nodes (`EnterpriseUnit` / `BureauUnit` / `CompanyUnit`) backed
   by closure tables (`parent_id` immutable).
+
 <!-- repository-language: allow-next-line reason=localized-gloss -->
+
 - 和訳: 階層的な組織単位かつ課金単位（＝Collective）。ソロ個人も 1 つ持つ。
 - Context: `app`, `org`, `com` (zenith realm). For `com` the Organization (`Company`) is internal
   only and is not exposed in UI/API entrypoints.
@@ -75,7 +81,9 @@ repository-language exception for dictionary definitions; all other prose is Eng
 - Definition: The SNS-facing embodiment, operated by one or more Accounts (`Persona` / `Agent`). It
   is an **app/org capability only — `com` (Visitor / Individual) cannot use Avatars.** It may be an
   Organization-owned asset. It has a mutable moniker and a mutable handle.
+
 <!-- repository-language: allow-next-line reason=localized-gloss -->
+
 - 和訳: SNS 表出体。1 つ以上の Account が操作。app/org のみ、com 不可。
 - Context: `app`, `org`.
 - Notes:
@@ -93,7 +101,9 @@ repository-language exception for dictionary definitions; all other prose is Eng
 
 - Definition: An Avatar's mutable, user-visible identifier, displayed with a leading `@` and stored
   canonically without `@`. Unique among non-system handles.
+
 <!-- repository-language: allow-next-line reason=localized-gloss -->
+
 - 和訳: Avatar の可変識別子。`@` 付きで表示し、`@` なしで保存する。
 - Context: `app`, `org` (Avatar domain).
 - Notes:
@@ -109,7 +119,9 @@ repository-language exception for dictionary definitions; all other prose is Eng
 - Definition: The immutable, externally-exposed identifier for a core entity. Internal `id` (the DB
   primary key) is never exposed externally. NanoID-21 by default, globally unique by DB constraint,
   immutable for Identity / Account / Organization / Avatar.
+
 <!-- repository-language: allow-next-line reason=localized-gloss -->
+
 - 和訳: 外部公開用の不変識別子。内部 `id` は外部に出さない。
 - Context: all surfaces.
 - Notes:

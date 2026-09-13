@@ -3,8 +3,7 @@
 ## Context
 
 - Original plan: `plans/apple-google-external-authentication-architecture-audit.md`
-- Prior implementation note:
-  `notes/implementation/2026-07-24-external-authentication-phase-1.md`
+- Prior implementation note: `notes/implementation/2026-07-24-external-authentication-phase-1.md`
 - Implementation date: 2026-07-24
 
 ## Implemented Contracts
@@ -45,8 +44,8 @@
 
 Per-Use-Case Results will be introduced with the corresponding Login, Signup, Link, and Unlink Use
 Case slices. Defining their payloads before the repository ports and Use Cases exist would either
-leak current Active Record models into the new contract or introduce an untyped generic payload.
-The approved status sets remain fixed by the audit; this sequencing does not change them.
+leak current Active Record models into the new contract or introduce an untyped generic payload. The
+approved status sets remain fixed by the audit; this sequencing does not change them.
 
 ## Verification
 

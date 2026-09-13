@@ -12,6 +12,12 @@
 > supersede the older compatibility-route language below. Retired non-exception Auth settings routes
 > must be removed without redirect, alias, or `410 Gone` compatibility shims.
 
+> **Global / Regional database ownership (2026-09-08):** `adr/global-regional-database-ownership.md`
+> confirms that the databases backing this authority — `*_zenith` (Account / Identity /
+> Organization), `*_ticket` (Session / Token / OIDC), `*_setting` (Preference) — are **Global-only**
+> and are never owned or written by the future Regional repository. Regional trusts acme-issued
+> downstream tokens; it does not read a Global database directly.
+
 ## Current Boundary
 
 `acme/www` is the Session, Token, Account, Preference, Authorization, and downstream-token
@@ -45,7 +51,9 @@ inversion plans, not a competing source of truth.
 Current browser route contract keeps Acme as the only OP/AS authority. RP browser start and callback
 routes use `/oidc/authorization` and `/oidc/callback`; Acme owns the protocol `/oauth/*` surface and
 `/oidc/logout`, while RP local sign-out remains `/sign/out/new`, `/sign/out/edit`, `/sign/out`, and
-`/sign/out/complete`. Social login entry points use `/social/:provider/sign/in`,
+`/sign/out/complete` on Auth, Core, Side, and Palm. Base local sign-out confirms on
+`/sign/out/edit`, mutates on `POST /sign/out`, and completes with `303` to `/lobby`. Social login
+entry points use `/social/:provider/sign/in`,
 `/social/:provider/sign/up`, and `/social/:provider/callback`. `google` and `apple` are canonical
 provider names; `google_app` is retained only in historical or compatibility data.
 
@@ -110,3 +118,20 @@ authorization, or freshness state.
 - `plans/identity-authority-inversion-implementation.md`
 - `docs/security/credential-gateway.md`
 - `docs/security/session-token-authority.md`
+
+## Org Emergency Access
+
+Org Emergency Access (`docs/security/org-emergency-access.md`) adds no Sign-owned session or token
+authority. It reuses the same shared session-establishment path as normal org sign-in, and the
+authentication context it records is produced by the shared claim builder
+(`AuthorizationTokenClaims`) that the authority side already owns, from a column on the session row.
+
+Two compatibility seams are stated explicitly rather than left implicit:
+
+- The org credential-gateway controllers still call `establish_signed_in_session!` directly. That is
+  pre-existing bounded legacy from the migration, not something Emergency Access introduced or
+  widened; the Emergency ceremony was deliberately implemented on the same path rather than given
+  one of its own.
+- Step-up freshness continues to be committed on the authority side by
+  `IdentityStepUpCeremonyFreshnessCommitter`. The Emergency prohibition is enforced there as well as
+  at the ceremony entry, so the refusal lives with the authority that owns the decision.

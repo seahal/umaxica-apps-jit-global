@@ -16,7 +16,8 @@ get:
   summary: Machine-readable deployment revision
   description: >-
     Returns the deployment revision identifier, or `null` when the deployment has none, together
-    with the RFC 3339 UTC render timestamp. Internal endpoint; no authentication, no database access.
+    with the RFC 3339 UTC render timestamp. Internal endpoint; no authentication, no database
+    access.
   security: []
   operationId: getApiV0Revision
   tags: [Health]

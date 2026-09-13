@@ -4,7 +4,7 @@
 # Side owns the Rails control-plane surface.
 scope module: :side, as: :side do
   # App control-plane host. Hosts listed declaratively (DRY intentionally broken).
-  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_service.host, "side.app.localhost"].compact do
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_service.host, "wide.app.localhost"].compact do
     # App surface controllers.
     scope module: :app, as: :app do
       # Thin landing endpoint.
@@ -52,6 +52,17 @@ scope module: :side, as: :side do
       # Control-plane settings index.
       resource :settings, only: :show
 
+      # Web preference JSON authority for this surface's own chrome controls (theme, cookie
+      # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
+      # it the theme/cookie controls rendered in the Side chrome POST to a route that does not
+      # exist, so a choice changes the page but is never persisted.
+      namespace :web do
+        namespace :v0 do
+          resource :theme, only: %i(show update)
+          resource :cookie, only: %i(show update)
+        end
+      end
+
       # Signed-in dashboard.
       resource :dashboard, only: :show
 
@@ -82,7 +93,7 @@ scope module: :side, as: :side do
 
   # Corporate control-plane host.
   constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_corporate.host,
-                     "side.com.localhost",].compact do
+                     "wide.com.localhost",].compact do
     # Corporate surface controllers.
     scope module: :com, as: :com do
       # Thin landing endpoint.
@@ -130,6 +141,17 @@ scope module: :side, as: :side do
       # Control-plane settings index.
       resource :settings, only: :show
 
+      # Web preference JSON authority for this surface's own chrome controls (theme, cookie
+      # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
+      # it the theme/cookie controls rendered in the Side chrome POST to a route that does not
+      # exist, so a choice changes the page but is never persisted.
+      namespace :web do
+        namespace :v0 do
+          resource :theme, only: %i(show update)
+          resource :cookie, only: %i(show update)
+        end
+      end
+
       # Signed-in dashboard.
       resource :dashboard, only: :show
 
@@ -159,7 +181,7 @@ scope module: :side, as: :side do
   end
 
   # Staff control-plane host.
-  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_staff.host, "side.org.localhost"].compact do
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_staff.host, "wide.org.localhost"].compact do
     # Staff surface controllers.
     scope module: :org, as: :org do
       # Thin landing endpoint.
@@ -206,6 +228,17 @@ scope module: :side, as: :side do
 
       # Control-plane settings index.
       resource :settings, only: :show
+
+      # Web preference JSON authority for this surface's own chrome controls (theme, cookie
+      # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
+      # it the theme/cookie controls rendered in the Side chrome POST to a route that does not
+      # exist, so a choice changes the page but is never persisted.
+      namespace :web do
+        namespace :v0 do
+          resource :theme, only: %i(show update)
+          resource :cookie, only: %i(show update)
+        end
+      end
 
       # Signed-in dashboard.
       resource :dashboard, only: :show

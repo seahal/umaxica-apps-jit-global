@@ -55,7 +55,13 @@ class StepUpResolver
   attr_reader :token, :requirement, :now
 
   def satisfied?
+    # An Emergency (Restricted Mode) session is not eligible to perform
+    # Step-Up-protected operations at all. This is an authentication-context
+    # decision, not a freshness one, so it precedes every freshness check: a
+    # session that somehow carried step-up columns still cannot satisfy a
+    # requirement here. See docs/security/org-emergency-access.md.
     return true unless requirement.step_up_required?
+    return false if emergency_authentication_context?
 
     usable_token? &&
       requirement.aal_supported? &&
@@ -73,6 +79,10 @@ class StepUpResolver
 
   def usable_token?
     token.present? && token.currently_usable?
+  end
+
+  def emergency_authentication_context?
+    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
   end
 
   def satisfied_at

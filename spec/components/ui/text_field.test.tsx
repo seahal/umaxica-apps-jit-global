@@ -146,4 +146,15 @@ describe("TextField", () => {
 
     expect(screen.getByLabelText("Address").getAttribute("name")).toBe("client[email]");
   });
+
+  it("forwards autoCapitalize onto the control when the field asks for it", () => {
+    render(
+      <TextField
+        label="Operator"
+        autoCapitalize="characters"
+      />,
+    );
+
+    expect(screen.getByLabelText("Operator").getAttribute("autocapitalize")).toBe("characters");
+  });
 });

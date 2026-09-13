@@ -102,6 +102,56 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     assert_equal "Account Standing", inertia_props.fetch("title")
   end
 
+  test "app activity log lists only normalized activity for the signed-in client" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! host
+    client = clients(:one)
+    token = ClientToken.create!(
+      user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+    )
+    ChronicleRecord.connected_to(role: :writing) do
+      ClientChronicle.create!(
+        subject_id: client.id.to_s, subject_type: "Client", event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+        context: {
+          provider: "google", auth_method: "social", oidc_client_id: "private-client-id",
+          "sign-rp": "internal-rp", social_session_limitation: "private-policy",
+          user_agent: "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/128.0",
+        },
+        ip_address: "10.2.3.4", occurred_at: 10.minutes.ago,
+      )
+      ClientChronicle.create!(
+        subject_id: client.id.to_s, subject_type: "Client", event_id: ClientChronicleEvent::TOKEN_REFRESHED,
+        context: { secret: "refresh-secret-sentinel" }, occurred_at: 1.minute.ago,
+      )
+    end
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
+    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    access_token = AuthenticationToken.encode(
+      client, host: host, session_public_id: token.public_id,
+      resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+
+    get base_app_identity_activities_url(ri: "jp", host: host),
+        headers: {
+          "Authorization" => "Bearer #{access_token}",
+          "Client-Agent" => "Mozilla/5.0",
+          "Host" => host,
+          "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+        }
+
+    assert_response :success
+    assert_equal %w(occurred_at activity device source risk), inertia_props.fetch("columns").keys
+    rows = inertia_props.fetch("activities")
+    assert_equal 1, rows.length
+    assert_equal "Googleでサインイン", rows.first.fetch("activity")
+    assert_equal "低", rows.first.fetch("risk")
+    %w(10.2.3.4 private-client-id internal-rp private-policy refresh-secret-sentinel).each do |value|
+      assert_not_includes response.body, value
+    end
+  end
+
   test "com activity log lists the visitor's own recorded activity" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
@@ -110,6 +160,25 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
     )
+    ChronicleRecord.connected_to(role: :writing) do
+      ClientChronicle.create!(
+        subject_id: visitor.id.to_s, subject_type: "Visitor", event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+        context: {
+          provider: "google", auth_method: "social", oidc_client_id: "private-client-id",
+          "sign-rp": "internal-rp", social_session_limitation: "private-policy",
+          user_agent: "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/128.0",
+        },
+        ip_address: "10.2.3.4", occurred_at: 10.minutes.ago,
+      )
+      ClientChronicle.create!(
+        subject_id: visitor.id.to_s, subject_type: "Visitor", event_id: ClientChronicleEvent::LOGIN_FAILED,
+        context: { auth_method: "internal-auth-value" }, ip_address: "192.168.1.5", occurred_at: 5.minutes.ago,
+      )
+      ClientChronicle.create!(
+        subject_id: visitor.id.to_s, subject_type: "Visitor", event_id: ClientChronicleEvent::TOKEN_REFRESHED,
+        context: { secret: "refresh-secret-sentinel" }, occurred_at: 1.minute.ago,
+      )
+    end
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
     access_token = AuthenticationToken.encode(
@@ -127,8 +196,15 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
         }
 
     assert_response :success
-    assert_equal I18n.t("sign.app.settings.activity.index.page_title"), inertia_props.fetch("title")
-    assert_kind_of Array, inertia_props.fetch("activities")
+    assert_equal I18n.t("base.shared.identity.activities.title"), inertia_props.fetch("title")
+    assert_equal %w(occurred_at activity device source risk), inertia_props.fetch("columns").keys
+    rows = inertia_props.fetch("activities")
+    assert_equal ["サインインに失敗", "Googleでサインイン"], rows.map { |row| row.fetch("activity") }
+    assert_equal ["中", "低"], rows.map { |row| row.fetch("risk") }
+    assert_equal %w(occurred_at activity device source risk risk_rank), rows.last.keys
+    %w(10.2.3.4 192.168.1.5 private-client-id internal-rp private-policy internal-auth-value refresh-secret-sentinel).each do |value|
+      assert_not_includes response.body, value
+    end
   end
 
   test "org activity log lists the operator's own recorded activity" do
@@ -139,6 +215,25 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
     )
+    ChronicleRecord.connected_to(role: :writing) do
+      OperatorChronicle.create!(
+        subject_id: operator.id.to_s, subject_type: "Operator", event_id: OperatorChronicleEvent::LOGIN_SUCCESS,
+        context: {
+          provider: "google", auth_method: "social", oidc_client_id: "private-operator-client",
+          "sign-rp": "internal-operator-rp", social_session_limitation: "private-policy",
+          user_agent: "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/128.0",
+        },
+        ip_address: "172.16.0.2", occurred_at: 10.minutes.ago,
+      )
+      OperatorChronicle.create!(
+        subject_id: operator.id.to_s, subject_type: "Operator", event_id: OperatorChronicleEvent::LOGIN_FAILED,
+        context: { auth_method: "internal-auth-value" }, ip_address: "10.0.0.5", occurred_at: 5.minutes.ago,
+      )
+      OperatorChronicle.create!(
+        subject_id: operator.id.to_s, subject_type: "Operator", event_id: OperatorChronicleEvent::TOKEN_REFRESHED,
+        context: { secret: "refresh-secret-sentinel" }, occurred_at: 1.minute.ago,
+      )
+    end
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
     access_token = AuthenticationToken.encode(
@@ -156,8 +251,47 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
         }
 
     assert_response :success
-    assert_equal I18n.t("sign.org.settings.activity.index.page_title"), inertia_props.fetch("title")
-    assert_kind_of Array, inertia_props.fetch("activities")
+    assert_equal I18n.t("base.shared.identity.activities.title"), inertia_props.fetch("title")
+    assert_equal %w(occurred_at activity device source risk), inertia_props.fetch("columns").keys
+    rows = inertia_props.fetch("activities")
+    assert_equal ["サインインに失敗", "Googleでサインイン"], rows.map { |row| row.fetch("activity") }
+    assert_equal ["中", "低"], rows.map { |row| row.fetch("risk") }
+    assert_equal %w(occurred_at activity device source risk risk_rank), rows.last.keys
+    %w(172.16.0.2 10.0.0.5 private-operator-client internal-operator-rp private-policy internal-auth-value refresh-secret-sentinel).each do |value|
+      assert_not_includes response.body, value
+    end
+  end
+
+  test "app birthdate page sends a client without a step-up method to the auth setup host" do
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! base_host
+    client = Client.create!
+    token = ClientToken.create!(
+      user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
+    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    access_token = AuthenticationToken.encode(
+      client, host: base_host, session_public_id: token.public_id,
+              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+
+    get base_app_identity_birthdate_url(ri: "jp", host: base_host),
+        headers: {
+          "Authorization" => "Bearer #{access_token}",
+          "Client-Agent" => "Mozilla/5.0",
+          "Host" => base_host,
+          "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+        }
+
+    assert_response :redirect
+    uri = URI.parse(response.location)
+
+    assert_equal auth_host, uri.host
+    assert_equal "/verification/setup/new", uri.path
   end
 
   test "com birthdate page sends a visitor without a fresh step-up through the verification setup" do
@@ -185,7 +319,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
         }
 
     assert_response :redirect
-    assert_match %r{/verification/setup/new}, response.location
+    uri = URI.parse(response.location)
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), uri.host
+    assert_equal "/verification/setup/new", uri.path
   end
 
   test "app standing page rejects an unauthenticated request" do

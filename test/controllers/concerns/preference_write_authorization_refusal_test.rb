@@ -94,13 +94,27 @@ class PreferenceWriteAuthorizationRefusalTest < ActiveSupport::TestCase
     assert ClientPreference.exists?(@resource_pref.id), "the mirror must survive an unauthorized reset"
   end
 
-  test "the region and language write for someone else's mirror is refused" do
+  test "the region and regional-defaults write for someone else's mirror is refused" do
+    PreferenceClassRegistry.option_class("App", :currency).ensure_defaults!
+    PreferenceClassRegistry.option_class("App", :date_format).ensure_defaults!
+    PreferenceClassRegistry.option_class("App", :time_format).ensure_defaults!
+    PreferenceClassRegistry.option_class("App", :region).ensure_defaults!
+    currency = @browser_pref.app_preference_currency ||
+      @browser_pref.create_app_preference_currency!(option_id: AppPreferenceCurrencyOption::JPY)
+    date_format = @browser_pref.app_preference_date_format ||
+      @browser_pref.create_app_preference_date_format!(option_id: AppPreferenceDateFormatOption::ISO)
+    time_format = @browser_pref.app_preference_time_format ||
+      @browser_pref.create_app_preference_time_format!(option_id: AppPreferenceTimeFormatOption::HOUR_24)
     ctx = build_context(preference_region: { option_id: PreferenceClassRegistry.option_class("App", :region)::US.to_s })
     ctx.instance_variable_set(:@preference_region, @browser_pref.app_preference_region)
     ctx.instance_variable_set(:@preference_language, @browser_pref.app_preference_language)
+    ctx.instance_variable_set(:@preference_currency, currency)
+    ctx.instance_variable_set(:@preference_date_format, date_format)
+    ctx.instance_variable_set(:@preference_time_format, time_format)
 
-    assert_raises(PreferenceOperationError) { ctx.send(:update_region_and_language_preferences!) }
+    assert_raises(PreferenceOperationError) { ctx.send(:update_region_and_regional_defaults!) }
 
     assert_equal PreferenceLifecycleSurfaces::JA, @browser_pref.app_preference_language.reload.option_id
+    assert_equal AppPreferenceCurrencyOption::JPY, currency.reload.option_id
   end
 end

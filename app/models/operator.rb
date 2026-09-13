@@ -80,6 +80,7 @@ class Operator < OrgPrincipalRecord
   MAX_PUBLIC_ID_RETRIES = 5
 
   attribute :status_id, default: OperatorStatus::NOTHING
+  validates :status_id, numericality: { only_integer: true }
   mfa_level_reference OperatorMfaLevel
   mfa_status_reference OperatorMfaStatus
 

@@ -2,9 +2,10 @@
 # frozen_string_literal: true
 
 class SecurityJwtPreferenceTokenCodec
-  JWT_ALGORITHM = "ES384"
+  JWT_ALGORITHM = SecurityJwtRfc9068AccessTokenProfile::ALGORITHM
   ACCESS_TOKEN_TTL = SecurityTokenLifetimes::PREFERENCE_JWT_TTL
-  TOKEN_TYPE = "preference-access-token"
+  TOKEN_TYPE = SecurityJwtRfc9068AccessTokenProfile::TOKEN_TYPE
+  PREFERENCE_SCOPE = "preference"
   AudienceMismatchError = Class.new(StandardError)
 
   class << self
@@ -17,7 +18,7 @@ class SecurityJwtPreferenceTokenCodec
         payload,
         jwt_private_key_for_active(issuer_id),
         JWT_ALGORITHM,
-        { kid: jwt_active_kid(issuer_id), typ: TOKEN_TYPE },
+        { kid: jwt_active_kid(issuer_id), typ: TOKEN_TYPE, alg: JWT_ALGORITHM },
       )
     rescue JWT::EncodeError, OpenSSL::PKey::PKeyError, ArgumentError, TypeError => e
       Rails.logger.error(JitLogEvent.format("preference.token.encoding_failed", error_class: e.class.name))
@@ -125,23 +126,26 @@ class SecurityJwtPreferenceTokenCodec
     def build_payload(preferences, host, preference_type, public_id, jti)
       now = Time.current.to_i
       {
-        preferences: preferences,
-        host: jwt_configuration.host_scope_for(host),
-        preference_type: preference_type,
-        public_id: public_id,
-        jti: jti,
-        typ: TOKEN_TYPE,
-        iss: jwt_configuration.issuer,
-        aud: jwt_configuration.audience_for(host),
-        iat: now,
-        exp: now + Integer(ACCESS_TOKEN_TTL.to_s, 10),
+        "iss" => jwt_configuration.issuer,
+        "exp" => now + Integer(ACCESS_TOKEN_TTL.to_s, 10),
+        "aud" => jwt_configuration.audience_for(host),
+        "sub" => public_id.to_s,
+        "client_id" => jwt_configuration.client_id,
+        "iat" => now,
+        "nbf" => now,
+        "jti" => jti,
+        "scope" => PREFERENCE_SCOPE,
+        "preferences" => preferences,
+        "host" => jwt_configuration.host_scope_for(host),
+        "preference_type" => preference_type,
+        "public_id" => public_id,
       }
     end
 
     def decode_options(host)
       {
         algorithms: [JWT_ALGORITHM],
-        required_claims: %w(iss aud typ exp iat public_id jti preference_type),
+        required_claims: %w(iss aud exp iat nbf sub client_id jti public_id preference_type scope),
         leeway: jwt_configuration.leeway_seconds,
         verify_iss: true,
         iss: jwt_configuration.issuer,
@@ -153,48 +157,36 @@ class SecurityJwtPreferenceTokenCodec
     end
 
     def validate_payload(payload, host)
-      return nil unless payload.is_a?(Hash)
-      return nil unless payload["typ"] == TOKEN_TYPE
+      return nil unless SecurityJwtRfc9068AccessTokenProfile.claims_structurally_valid?(payload)
+      return nil unless payload["scope"] == PREFERENCE_SCOPE
       return nil unless host_matches?(payload["host"], host)
-      return nil unless audience_matches?(payload["aud"], host)
+      return nil unless audience_matches?(payload["aud"], payload["host"])
+      return nil unless payload["public_id"].is_a?(String) && payload["public_id"].present?
+      return nil unless payload["preference_type"].is_a?(String) && payload["preference_type"].present?
+      return nil unless payload["sub"] == payload["public_id"]
 
       payload
     end
 
     def valid_header?(header)
-      return false if header.blank?
-      return false unless header["alg"] == JWT_ALGORITHM
-      return false if header["kid"].blank?
-
-      header["typ"] == TOKEN_TYPE
+      SecurityJwtRfc9068AccessTokenProfile.header_valid?(header)
     end
 
     def report_invalid_header(host:, header:)
-      reason =
-        if header.blank? || header["alg"].blank?
-          "MALFORMED_TOKEN"
-        elsif header["kid"].blank?
-          "MISSING_KID"
-        elsif header["alg"] == "none"
-          "ALG_NONE"
-        elsif header["alg"] != JWT_ALGORITHM
-          "ALG_MISMATCH"
-        elsif header["typ"].blank?
-          "MISSING_TYP"
-        else
-          "TYP_MISMATCH"
-        end
-
-      JitSecurityJwtAnomalyReporter.report_preference(host: host, header: header, reason: reason)
+      JitSecurityJwtAnomalyReporter.report_preference(
+        host: host,
+        header: header,
+        reason: SecurityJwtRfc9068AccessTokenProfile.header_rejection_reason(header),
+      )
     end
 
     def report_invalid_payload(host:, header:, payload:)
       reason =
-        if payload["typ"] != TOKEN_TYPE
-          "TYP_MISMATCH"
+        if !SecurityJwtRfc9068AccessTokenProfile.claims_structurally_valid?(payload)
+          "CLAIM_INVALID"
         elsif payload["host"].blank? || !host_matches?(payload["host"], host)
           "HOST_MISMATCH"
-        elsif !audience_matches?(payload["aud"], host)
+        elsif !audience_matches?(payload["aud"], payload["host"])
           "AUD_MISMATCH"
         else
           "OTHER"
@@ -239,7 +231,7 @@ class SecurityJwtPreferenceTokenCodec
       payload, = JWT.decode(token, nil, false)
       return {} unless payload.is_a?(Hash)
 
-      payload.slice("iss", "aud", "typ", "jti")
+      payload.slice("iss", "aud", "jti")
     rescue JWT::DecodeError
       {}
     end
@@ -264,23 +256,23 @@ class SecurityJwtPreferenceTokenCodec
       )
     end
 
+    # The host claim must be exactly the scope this request host would be
+    # issued, and must share the request host's registrable domain. Either
+    # check alone is too loose: the scope mapping is per-TLD, and the domain
+    # check alone would accept any sibling host's token.
     def host_matches?(host_claim, host)
-      return false if host_claim.blank?
+      return false unless host_claim.is_a?(String) && host_claim.present?
 
-      host == host_claim ||
-        host.end_with?(".#{host_claim}") ||
-        host_family(host_claim) == host_family(host)
+      host_claim == jwt_configuration.host_scope_for(host) &&
+        registrable_domain(host_claim) == registrable_domain(host)
     end
 
-    def audience_matches?(aud_claim, host)
-      normalize_audiences(aud_claim).any? do |aud|
-        host == aud ||
-          host.end_with?(".#{aud}") ||
-          host_family(aud) == host_family(host)
-      end
+    # `aud` must name the host scope itself, not merely a host in the same family.
+    def audience_matches?(aud_claim, host_claim)
+      normalize_audiences(aud_claim).include?(host_claim)
     end
 
-    def host_family(host)
+    def registrable_domain(host)
       parts = host.to_s.split(".")
       return host.to_s if parts.length < 3
 

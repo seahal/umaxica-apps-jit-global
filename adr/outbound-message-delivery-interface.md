@@ -6,11 +6,11 @@ Accepted: 2026-05-18
 
 Partially superseded by `adr/notification-orchestration-via-noticed.md` on 2026-08-07.
 
-This ADR is retained for traceability. Its payload shape (`to`, `title`, `body`), its `Outbound::Result`
-return value, and its requirement that sensitive payloads be encrypted before entering job arguments
-remain in force. Superseded are the reservation of the `Notification` name away from message delivery
-and the requirement that domain call sites address `Outbound::*` directly; notifiers are now the entry
-point, and `Outbound::*` is the transport they call.
+This ADR is retained for traceability. Its payload shape (`to`, `title`, `body`), its
+`Outbound::Result` return value, and its requirement that sensitive payloads be encrypted before
+entering job arguments remain in force. Superseded are the reservation of the `Notification` name
+away from message delivery and the requirement that domain call sites address `Outbound::*`
+directly; notifiers are now the entry point, and `Outbound::*` is the transport they call.
 
 ## Context
 

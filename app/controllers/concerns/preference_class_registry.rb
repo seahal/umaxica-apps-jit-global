@@ -309,7 +309,10 @@ module PreferenceClassRegistry
     return event_name if event_name.is_a?(Integer)
 
     constant_name = AUDIT_EVENT_NAME_REMAP.fetch(event_name.to_s, event_name.to_s)
-    return event_name unless audit_event_class.const_defined?(constant_name, false)
+    unless audit_event_class.const_defined?(constant_name, false)
+      raise ArgumentError,
+            "unknown preference audit event #{event_name.inspect} for #{audit_event_class}"
+    end
 
     audit_event_class.const_get(constant_name)
   end

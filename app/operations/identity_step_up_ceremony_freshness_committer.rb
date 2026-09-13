@@ -43,6 +43,12 @@ class IdentityStepUpCeremonyFreshnessCommitter
 
   def validate!
     raise IdentityStepUpCeremonyContract::Error, "token is required" if token.blank?
+    # An Emergency (Restricted Mode) session is not eligible to hold step-up
+    # freshness at all. Rejecting the commit here means that even a ceremony
+    # result that was somehow produced under an Emergency session cannot be
+    # turned into usable freshness on the session row.
+    raise IdentityStepUpCeremonyContract::Error,
+          "authentication context is not eligible for step-up" if emergency_authentication_context?
     raise IdentityStepUpCeremonyContract::Error,
           "result actor does not match current actor" unless result["actor_ref"].to_s == token_actor_ref
     raise IdentityStepUpCeremonyContract::Error,
@@ -53,6 +59,10 @@ class IdentityStepUpCeremonyFreshnessCommitter
           "result method does not match ceremony" unless result["method"].to_s == expected_method
     raise IdentityStepUpCeremonyContract::Error,
           "result AAL is insufficient" unless aal_rank(result["aal"]) >= aal_rank(expected_aal)
+  end
+
+  def emergency_authentication_context?
+    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
   end
 
   def update_token!

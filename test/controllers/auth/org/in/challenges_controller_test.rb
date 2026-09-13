@@ -8,6 +8,8 @@ require "base64"
 # pending operator actually holds an active passkey, so a factor the server
 # would reject is never advertised.
 class Auth::Org::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
+  include OrgEntraFirstStageHelper
+
   fixtures :operators, :operator_secret_credentials, :operator_statuses,
            :operator_secret_credential_statuses, :operator_secret_credential_kinds,
            :operator_token_binding_methods, :operator_token_kinds, :operator_token_statuses,
@@ -54,9 +56,10 @@ class Auth::Org::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
 
+    complete_org_entra_first_stage!(@staff)
+
     post auth_org_sign_in_secret_path(ri: "jp"), params: {
       secret_credential_login_form: {
-        identifier: @staff.public_id,
         secret_credential_value: @raw_secret_credential,
       },
       "cf-turnstile-response": "test_token",
@@ -74,9 +77,10 @@ class Auth::Org::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "show tells an operator with no usable factor that no method is available" do
+    complete_org_entra_first_stage!(@staff)
+
     post auth_org_sign_in_secret_path(ri: "jp"), params: {
       secret_credential_login_form: {
-        identifier: @staff.public_id,
         secret_credential_value: @raw_secret_credential,
       },
       "cf-turnstile-response": "test_token",

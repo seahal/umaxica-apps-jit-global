@@ -15,16 +15,26 @@ module Auth
         include ::SurfaceInertiaPage
         include AppSocialCeremonyEntry
         include AppSignUpEntryPage
+        include ::AuthenticationModeSwitchGuard
 
         AUTHENTICATION_MODE = :open
 
         # Login intent doesn't require auth; link/step-up intents are checked
         # in require_social_link_step_up! and prepare_social_auth_intent!.
         declare_authentication_mode! :open, only: :create
+        before_action :reject_sign_in_intent_while_authenticated!, only: :create
         before_action :require_social_link_step_up!, only: :create
 
         def create
           handoff_social_ceremony!
+        end
+
+        private
+
+        def reject_sign_in_intent_while_authenticated!
+          return if params[:intent].to_s == "link"
+
+          reject_new_sign_in_if_authenticated!
         end
       end
     end

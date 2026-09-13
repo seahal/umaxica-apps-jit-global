@@ -20,8 +20,8 @@ tailnet hostname and the toolchain differ. **Fix something here, fix it in all t
 | sshd config          | `/etc/ssh/remote-sshd_config` (baked, 0444 root)                                             |
 | sshd wrapper         | `/usr/local/bin/remote-sshd-entrypoint` (baked, 0555 root)                                   |
 | authorized keys      | `.secrets/codex_authorized_keys` → `/home/global/.config/umaxica/authorized_keys`, read-only |
-| sshd host key        | volume `umaxicaappsglobaldc_sshd-host-keys` → `/home/global/.local/state/remote-sshd`     |
-| Tailscale node state | volume `umaxicaappsglobaldc_tailscale-state` → `/home/global/.local/state/tailscale`      |
+| sshd host key        | volume `umaxicaappsglobaldc_sshd-host-keys` → `/home/global/.local/state/remote-sshd`        |
+| Tailscale node state | volume `umaxicaappsglobaldc_tailscale-state` → `/home/global/.local/state/tailscale`         |
 | tailnet hostname     | `umaxica-global-core`                                                                        |
 | tailnet tag          | `tag:umaxica-devcontainer`                                                                   |
 
@@ -204,8 +204,8 @@ volumes, which deregisters the node and forces a fresh enrolment.
   checklist that expects `bun --version` is checking for something no repository in this group
   ships.
 
-- **The compose project name is `umaxicaappsglobaldc`,** set in `.devcontainer/compose.yaml`.
-  It carries no separators because the Dev Containers CLI derives its own project name from
+- **The compose project name is `umaxicaappsglobaldc`,** set in `.devcontainer/compose.yaml`. It
+  carries no separators because the Dev Containers CLI derives its own project name from
   `devcontainer.json`'s `name` by stripping every non-alphanumeric character and passes it as
   `--project-name`; a separated value in the Compose files would put a bare `podman compose` in a
   second project that collides with the Dev Container over the `global-devcontainer-*` container

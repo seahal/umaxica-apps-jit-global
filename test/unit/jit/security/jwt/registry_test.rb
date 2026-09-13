@@ -29,7 +29,8 @@ module Jit
             issuers = JitSecurityJwtRegistry.reload!
 
             assert_equal "auth-kid", issuers.fetch("auth").current_kid
-            assert_equal %w(umaxica-api), issuers.fetch("auth").audiences
+            assert_equal %w(umaxica-api-client umaxica-api-visitor umaxica-api-operator),
+                         issuers.fetch("auth").audiences
             assert_equal "pref-kid", issuers.fetch("preference").current_kid
             assert_equal(
               Rails.configuration.x.boot_config.fetch(:hosts).base_origins.map(&:to_s),

@@ -23,7 +23,7 @@ class IdentitySocialCeremonyResult
 
   def self.issue(attributes, issuer_id:, now: Time.current)
     result = new(attributes.merge(default_claims(attributes, now: now)), now: now)
-    JitSecurityJwtKeyring.encode(result.payload, issuer_id: issuer_id)
+    JitSecurityJwtKeyring.encode(result.payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
   end
 
   def self.decode(token, issuer_id:, now: Time.current)

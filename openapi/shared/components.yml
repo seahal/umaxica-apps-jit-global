@@ -42,28 +42,18 @@ parameters:
       no security scheme for a double-submit CSRF token in any version, so it is described here as
       an ordinary required header.
 
-  Limit:
-    name: limit
+  Page:
+    name: page
     in: query
     description: >-
-      Page size, 1 to 100, defaulting to 20. A value outside the bounds is clamped rather than
-      refused, so a tuning mistake cannot become an error. A value that is not a whole number is a
-      malformed request and is refused with 400.
+      1-based page number. Omitted, it defaults to 1. The page size is server-controlled (20
+      entries). Callers send a logical page number, not a SQL OFFSET. A value that is not a whole
+      number greater than or equal to 1, and a page past the last page, are refused with 400 rather
+      than silently answering with the first page.
     schema:
       type: integer
       minimum: 1
-      maximum: 100
-      default: 20
-
-  Cursor:
-    name: cursor
-    in: query
-    description: >-
-      Opaque continuation token from a previous response's `page.next_cursor`. Pass it back
-      verbatim. A cursor that does not verify is refused with 400 rather than silently answering
-      with the first page.
-    schema:
-      type: string
+      default: 1
 
   IfNoneMatch:
     name: If-None-Match
@@ -226,7 +216,9 @@ schemas:
     properties:
       error:
         type: string
-        description: Machine-readable refusal. `missing_preference_access_token` when the write token is absent.
+        description:
+          Machine-readable refusal. `missing_preference_access_token` when the write token is
+          absent.
 
   ColorTheme:
     type: object
@@ -234,7 +226,9 @@ schemas:
     properties:
       theme:
         type: string
-        description: Stored color-theme code (`li`/`dr`/`sy`) or the canonical option (`light`/`dark`/`system`).
+        description:
+          Stored color-theme code (`li`/`dr`/`sy`) or the canonical option
+          (`light`/`dark`/`system`).
 
   Entry:
     type: object
@@ -258,10 +252,9 @@ schemas:
       public_id:
         type: string
         description: >-
-          Opaque entry identifier and the resource identity for
-          `GET /api/v0/entries/{public_id}`. Never a database primary key and not
-          the slug. Treat as an opaque string; its generation scheme is not part
-          of the contract.
+          Opaque entry identifier and the resource identity for `GET /api/v0/entries/{public_id}`.
+          Never a database primary key and not the slug. Treat as an opaque string; its generation
+          scheme is not part of the contract.
       namespace:
         type: string
         description: Content service.
@@ -318,19 +311,29 @@ schemas:
   Page:
     type: object
     description: >-
-      Collection page metadata (adr/api-collection-contract.md). `has_more` is authoritative;
-      `next_cursor` is null whenever it is false.
-    required: [next_cursor, has_more]
+      Offset page coordinates for a collection (adr/api-collection-offset-pagination.md).
+      `previous` and `next` are null when there is no adjacent page. The page size is not part of
+      the envelope: it is a server-side constant.
+    required: [current, previous, next, last]
     properties:
-      next_cursor:
-        type: string
+      current:
+        type: integer
+        minimum: 1
+        description: The requested page number that this envelope describes.
+      previous:
+        type: integer
         nullable: true
-        description: >-
-          Opaque continuation token. It is signed, so it cannot be constructed by a client, and it
-          carries no database primary key. Its encoding may change without a version bump; a client
-          must pass it back verbatim and must not parse it.
-      has_more:
-        type: boolean
+        minimum: 1
+        description: The previous page number, or null on the first page.
+      next:
+        type: integer
+        nullable: true
+        minimum: 1
+        description: The next page number, or null on the last page.
+      last:
+        type: integer
+        minimum: 1
+        description: The last page number for the current filtered collection.
 
   CheckStatus:
     type: object
@@ -370,7 +373,7 @@ schemas:
             $ref: "#/schemas/CheckStatus"
       namespace:
         type: string
-        pattern: '^[a-z]+/[a-z]+$'
+        pattern: "^[a-z]+/[a-z]+$"
         description: >-
           The `<frame>/<brand>` controller namespace that handled the request.
       timestamp:
@@ -389,9 +392,9 @@ schemas:
         type: string
         nullable: true
         description: >-
-          The framework-resolved deployment revision (`Rails.application.revision`). Always
-          present as a member; the value is `null` when no revision is configured, which is a
-          normal state. Never a fabricated identifier.
+          The framework-resolved deployment revision (`Rails.application.revision`). Always present
+          as a member; the value is `null` when no revision is configured, which is a normal state.
+          Never a fabricated identifier.
       timestamp:
         type: string
         format: date-time

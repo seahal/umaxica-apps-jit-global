@@ -2,8 +2,8 @@
 
 > **Superseded in part (2026-08-22).** The per-organization multi-tenant reasoning below —
 > `UmaxicaEntra#active_connection_from_params`, `#configure_for_connection!`, the cushion page that
-> exists because "there is no Entra tenant to send the operator to", and the
-> `connection_public_id` / `?connection=` contract — was replaced by
+> exists because "there is no Entra tenant to send the operator to", and the `connection_public_id`
+> / `?connection=` contract — was replaced by
 > `adr/org-entra-single-tenant-credential-configuration.md` (accepted 2026-08-11). The tenant,
 > client, and client secret now come from Rails credentials for a single tenant; the strategy has no
 > connection-resolution methods and `Auth::Org::Social::SessionsController` carries no input. The
@@ -21,8 +21,8 @@
 - Implementation date: 2026-08-04
 
 The Entra ceremony (strategy, callback, session issuance, settings management) already existed and
-worked end to end. Only the entry point was missing: nothing linked to
-`/social/entra/session/new`, so the page was reachable only by someone who already had its URL.
+worked end to end. Only the entry point was missing: nothing linked to `/social/entra/session/new`,
+so the page was reachable only by someone who already had its URL.
 
 ## Decisions Made During Implementation
 
@@ -55,8 +55,8 @@ worked end to end. Only the entry point was missing: nothing linked to
     cases.
 
 - Decision: gate the entry point on `ProviderSurfacePolicy` plus
-  `external_authentication_start_available?` (the `:social_ceremony_org_entra` Flipper feature), not only
-  on the strategy's own gate.
+  `external_authentication_start_available?` (the `:social_ceremony_org_entra` Flipper feature), not
+  only on the strategy's own gate.
   - Why: without it, a kill switch during an incident would still render a live-looking button and
     only fail after the operator pressed it. Mirrors `UmaxicaEntra#entra_start_available?`.
 
@@ -85,7 +85,8 @@ worked end to end. Only the entry point was missing: nothing linked to
     ceremony does not render sign up link on sign in page" — an RP that asked for a sign-in must not
     be offered a detour into sign-up. The reciprocal link on the sign-up page follows the same rule,
     which is now asserted too.
-  - Alternatives considered: unconditional links; rejected because they break that existing contract.
+  - Alternatives considered: unconditional links; rejected because they break that existing
+    contract.
 
 ## Deviations From Plan
 
@@ -132,10 +133,10 @@ worked end to end. Only the entry point was missing: nothing linked to
   - `test/policies/external_authentication/provider_surface_policy_test.rb`
   - RuboCop on all touched Ruby files
 
-- Tests not run: the app-surface social suites
-  (`test/integration/social_auth_*`), since no app-surface or shared controller code changed. The one
-  shared file touched, `app/views/auth/shared/_social_provider_button.html.erb`, changed only in its
-  documentation comment.
+- Tests not run: the app-surface social suites (`test/integration/social_auth_*`), since no
+  app-surface or shared controller code changed. The one shared file touched,
+  `app/views/auth/shared/_social_provider_button.html.erb`, changed only in its documentation
+  comment.
 
 - Manual end-to-end against a live Entra tenant was not performed; it needs an ACTIVE
   `OrganizationEntraConnection` and real Microsoft credentials.

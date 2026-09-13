@@ -15,7 +15,7 @@ models, services, controllers, or namespaces do not imply sign-side authority.
 
 ## User-Facing Ceremony
 
-The browser ceremony is surface-local and uses the same shape on every browser surface:
+The browser ceremony is surface-local. Auth, Core, Side, and Palm use:
 
 - `GET /sign/out/new`
 - `GET /sign/out/edit`
@@ -24,7 +24,17 @@ The browser ceremony is surface-local and uses the same shape on every browser s
 
 `GET /sign/out/new` is a redirect-only entry point. `GET /sign/out/edit` is the confirmation page.
 `POST /sign/out` is the local logout action or RP launcher, depending on surface authority.
-`GET /sign/out/complete` is the friendly completion page and is safe to reload.
+`GET /sign/out/complete` on those surfaces is the friendly completion page and is safe to reload.
+
+Base app, com, and org no longer expose `/sign/out/complete`. Base local sign-out is PRG onto the
+canonical unauthenticated entry:
+
+- `POST /sign/out` performs local cleanup, stores a one-time `SignOutNotice`, and answers `303` to
+  `GET /lobby`
+- `GET /lobby` is the Base anonymous entry; authenticated actors are redirected to `/dashboard`
+- the sign-out message is consumed on that GET and does not persist on later visits
+
+See `adr/base-lobby-unauthenticated-entry.md`.
 
 `/sign/out/edit?sot=` is retired from the normal browser flow. Completion is session-bound, not URL
 token-bound.
@@ -56,7 +66,9 @@ Reachability must stay open because authenticated-only routing would break legit
 - logout confirmation after the session has already expired (TTL lapse mid-flow);
 - the OIDC end-session confirmation, where `/sign/out/edit` is shared with the Acme IdP and session
   state is not stable across the RP↔IdP round trip (see "Acme OIDC End-Session" below);
-- idempotent revisits of `/sign/out/complete` (reload, back button, bookmark), which must stay safe.
+- idempotent revisits of Auth/Core/Side `/sign/out/complete` (reload, back button, bookmark), which
+  must stay safe. Base has no completion GET; revisiting `/lobby` after the notice is consumed shows
+  the ordinary anonymous entry.
 
 Summary: **reachability = `:open`; execution = `current_resource` guard.** Both layers must remain.
 Removing the guard would be the real bug; removing the openness would break expired-session and OIDC
@@ -71,7 +83,7 @@ Acme app/com/org surfaces own direct session mutation. Local logout:
 3. clears acme auth cookies and request-local actor state;
 4. records logout audit through the existing authority path;
 5. stores a one-time completion marker in the fresh session;
-6. redirects to the same surface's `/sign/out/complete`.
+6. redirects to the same surface's `/sign/out/complete` (Auth/Core/Side) or Base `/lobby`.
 
 Acme local logout must not self-redirect to `/oidc/logout` or mint `id_token_hint` for itself.
 
@@ -83,7 +95,8 @@ Sign/Core/Base browser surfaces are RPs. Their `POST /sign/out` actions:
 2. clear or reset the local RP session;
 3. store an opaque state token in the fresh Rails session;
 4. redirect to the corresponding Acme surface's `GET /oidc/logout`;
-5. complete on the RP surface's `/sign/out/complete` after the Acme end-session flow returns.
+5. complete on the RP surface's `/sign/out/complete` after the Acme end-session flow returns, or on
+   Base `/lobby` when the originating surface is Base.
 
 The RP completion marker is session-bound and one-time. The browser may revisit completion safely,
 but the server must not re-assert a fresh logout from stale state.

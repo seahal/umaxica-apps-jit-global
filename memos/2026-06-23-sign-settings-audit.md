@@ -754,8 +754,8 @@ gem の PostgreSQL advisory lock OID 警告。テスト結果に影響なし。
   が発生する可能性。app の edit は `:private` 宣言があるが `authenticate_client!`
   が hookされていない。
 - **先に必要な作業:** `AUTHENTICATION_MODE = :private`
-  の基底クラス enforcement 機構を確認し、`:private`
-  モードが実際に before*action として `authenticate*\*!` を呼ぶかどうかを確認
+  の基底クラス enforcement 機構を確認し、`:private` モードが実際に before*action として
+  `authenticate*\*!` を呼ぶかどうかを確認
 - **追加すべきテスト:** 未認証リクエストが適切に 302 で弾かれることの確認テスト（各サーフェス ×
   edit/index）
 - **想定リスク:** `:open`

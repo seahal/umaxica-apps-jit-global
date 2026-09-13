@@ -27,7 +27,7 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
-  test "post sign out revokes the current session and reaches completion" do
+  test "post sign out revokes the current session and reaches the lobby" do
     token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
@@ -39,16 +39,24 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     get jump_rt_url_from_location(response.location)
 
     assert_response :success
-    assert_equal "base/org/sign_outs/complete", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
-  end
+    assert_equal "base/org/lobbies/show", inertia_component
+    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("notice").fetch("title")
 
-  test "post sign out without a resolved session renders friendly completion" do
-    post base_org_sign_out_url(host: @host, ri: "jp")
+    get base_org_lobby_url(host: @host, ri: "jp")
 
     assert_response :success
-    assert_equal "base/org/sign_outs/complete", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_nil inertia_props["notice"]
+  end
+
+  test "post sign out without a resolved session redirects to the lobby" do
+    post base_org_sign_out_url(host: @host, ri: "jp")
+
+    assert_response :see_other
+    get jump_rt_url_from_location(response.location)
+
+    assert_response :success
+    assert_equal "base/org/lobbies/show", inertia_component
+    assert_nil inertia_props["notice"]
   end
 
   private

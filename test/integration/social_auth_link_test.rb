@@ -111,7 +111,8 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
         headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
           .merge("X-STRICT-SOCIAL-STATE" => "1")
 
-    assert_response :forbidden
+    assert_response :conflict
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
 
     identity = ClientAppleIdentity.find_by(uid: uid)
 
@@ -136,7 +137,8 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
           headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
     end
 
-    assert_response :forbidden
+    assert_response :conflict
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
 
     identity = ClientAppleIdentity.find_by(uid: uid)
 

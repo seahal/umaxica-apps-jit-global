@@ -41,22 +41,21 @@ is wired, revisit this paragraph.
 Recorded so the portal return URLs and client identifiers can be compared with what the application
 actually sends. Source: `config/initializers/omniauth.rb`.
 
-| Setting | Value |
-| --- | --- |
-| Callback origin | Fixed, from `PUBLIC_AUTH_SERVICE_URL`; localhost permitted outside production only. Not derived from the request host. |
-| Apple callback path | `/social/apple/callback`, `GET` only |
-| Apple response mode / type | `query` / `code` |
-| Apple scope | *(empty)* — name and email are deliberately not requested |
-| Apple nonce | Enforced at the strategy boundary; an ID token without the nonce fails authentication |
-| Apple notification endpoint | `POST /apple/notifications` (`config/routes/auth.rb`) |
-| Google callback path | `/social/google/callback` |
-| Google scope / access type | `openid` / `online` — no refresh token is requested |
-| OmniAuth request phase | `POST` only |
+| Setting                     | Value                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Callback origin             | Fixed, from `PUBLIC_AUTH_SERVICE_URL`; localhost permitted outside production only. Not derived from the request host. |
+| Apple callback path         | `/social/apple/callback`, `GET` only                                                                                   |
+| Apple response mode / type  | `query` / `code`                                                                                                       |
+| Apple scope                 | _(empty)_ — name and email are deliberately not requested                                                              |
+| Apple nonce                 | Enforced at the strategy boundary; an ID token without the nonce fails authentication                                  |
+| Apple notification endpoint | `POST /apple/notifications` (`config/routes/auth.rb`)                                                                  |
+| Google callback path        | `/social/google/callback`                                                                                              |
+| Google scope / access type  | `openid` / `online` — no refresh token is requested                                                                    |
+| OmniAuth request phase      | `POST` only                                                                                                            |
 
-Credential key names the application reads, values never displayed:
-`OMNI_AUTH_APPLE_CLIENT_ID`, `OMNI_AUTH_APPLE_TEAM_ID`, `OMNI_AUTH_APPLE_KEY_ID`,
-`OMNI_AUTH_APPLE_PRIVATE_KEY`, `OMNI_AUTH_GOOGLE_APP_CLIENT_ID`,
-`OMNI_AUTH_GOOGLE_APP_CLIENT_SECRET`.
+Credential key names the application reads, values never displayed: `OMNI_AUTH_APPLE_CLIENT_ID`,
+`OMNI_AUTH_APPLE_TEAM_ID`, `OMNI_AUTH_APPLE_KEY_ID`, `OMNI_AUTH_APPLE_PRIVATE_KEY`,
+`OMNI_AUTH_GOOGLE_APP_CLIENT_ID`, `OMNI_AUTH_GOOGLE_APP_CLIENT_SECRET`.
 
 ## Procedure
 
@@ -115,8 +114,8 @@ exports of non-secret configuration where policy permits.
 - Confirm at least one non-Apple authentication method is available. Passkey, email, and secret
   credential sign-in are present on the App surface.
 - Confirm an Apple-only user sees the alternative-credential warning
-  (`app/views/base/shared/identities/_apple_only_credential_warning.html.erb`) and that it disappears
-  once another credential is added.
+  (`app/views/base/shared/identities/_apple_only_credential_warning.html.erb`) and that it
+  disappears once another credential is added.
 
 ## If portal access is lost before completion
 

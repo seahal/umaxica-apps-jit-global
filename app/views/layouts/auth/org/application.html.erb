@@ -20,18 +20,6 @@
   <header>
     <%= render "layouts/shared/flash_messages" %>
     <%= render "layouts/shared/current_banner", tld: :org, domain: :sign, region: :global %>
-    <% unless @hide_auth_navigation %>
-      <nav aria-label="Primary">
-        <ul>
-          <% if logged_in? %>
-            <li><%= link_to t("sign.org.layout.nav.logout"), new_auth_org_sign_out_path %></li>
-          <% else %>
-            <li><%= link_to t("sign.org.layout.nav.sign_up"), auth_org_sign_up_url %></li>
-            <li><%= link_to t("sign.org.layout.nav.log_in"), auth_org_sign_in_url %></li>
-          <% end %>
-        </ul>
-      </nav>
-    <% end %>
     <p><strong><%= link_to ENV.fetch("BRAND_NAME"), auth_org_root_path %></strong> (org)</p>
   </header>
 

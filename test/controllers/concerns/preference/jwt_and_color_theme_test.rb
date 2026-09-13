@@ -41,15 +41,15 @@ class PreferenceOptionMappingTest < ActiveSupport::TestCase
 end
 
 class PreferenceJwtConfigurationTest < ActiveSupport::TestCase
-  test "jwt configuration reads environment values for leeway and issuer" do
+  test "jwt configuration reads the issuer from the environment and uses the fixed leeway" do
     with_env(
       "PREFERENCE_JWT_ACTIVE_KID" => "kid-1",
-      "PREFERENCE_JWT_LEEWAY_SECONDS" => "45",
       "PREFERENCE_JWT_ISSUER" => "jit-test",
     ) do
       assert_equal JitSecurityJwtRegistry.issuer("preference").current_kid,
                    PreferenceJwtConfiguration.active_kid
-      assert_equal 45, PreferenceJwtConfiguration.leeway_seconds
+      assert_equal SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS,
+                   PreferenceJwtConfiguration.leeway_seconds
       assert_equal "jit-test", PreferenceJwtConfiguration.issuer
       expected = Rails.configuration.x.boot_config.fetch(:hosts).base_origins.map(&:host)
       expected.concat(%w(app.localhost org.localhost com.localhost localhost))
@@ -146,16 +146,25 @@ class PreferenceTokenTest < ActiveSupport::TestCase
     assert_nil PreferenceToken.decode(token, host: "log.umaxica.com")
   end
 
-  test "audience_matches handles allowed and rejected audiences" do
-    assert PreferenceToken.send(:audience_matches?, ["app.localhost"], "id.app.localhost")
+  test "audience_matches requires the host scope itself in aud" do
+    assert PreferenceToken.send(:audience_matches?, ["app.localhost"], "app.localhost")
+    assert_not PreferenceToken.send(:audience_matches?, ["app.localhost"], "id.app.localhost")
     assert_not PreferenceToken.send(:audience_matches?, ["app.localhost"], "evil.localhost")
   end
 
   test "validate_payload accepts matching payload" do
     payload = {
-      "typ" => PreferenceToken::TOKEN_TYPE,
-      "host" => "app.localhost",
+      "iss" => PreferenceJwtConfiguration.issuer,
+      "exp" => 1,
       "aud" => ["app.localhost"],
+      "sub" => "pref-1",
+      "client_id" => PreferenceJwtConfiguration.client_id,
+      "iat" => 1,
+      "jti" => "jti-1",
+      "scope" => "preference",
+      "host" => "app.localhost",
+      "public_id" => "pref-1",
+      "preference_type" => "AppPreference",
     }
 
     assert_equal payload, PreferenceToken.send(:validate_payload, payload, "id.app.localhost")
@@ -163,9 +172,17 @@ class PreferenceTokenTest < ActiveSupport::TestCase
 
   test "validate_payload rejects invalid type host and audience" do
     payload = {
-      "typ" => PreferenceToken::TOKEN_TYPE,
-      "host" => "app.localhost",
+      "iss" => PreferenceJwtConfiguration.issuer,
+      "exp" => 1,
       "aud" => ["app.localhost"],
+      "sub" => "pref-1",
+      "client_id" => PreferenceJwtConfiguration.client_id,
+      "iat" => 1,
+      "jti" => "jti-1",
+      "scope" => "preference",
+      "host" => "app.localhost",
+      "public_id" => "pref-1",
+      "preference_type" => "AppPreference",
     }
 
     assert_nil PreferenceToken.send(:validate_payload, payload.merge("typ" => "wrong"), "id.app.localhost")
@@ -233,30 +250,29 @@ class PreferenceTokenTest < ActiveSupport::TestCase
       PreferenceToken.send(
         :report_invalid_payload, host: "app.localhost", header: {}, payload: { "typ" => "wrong" },
       )
-      token_type = PreferenceToken::TOKEN_TYPE
+      valid_claims = {
+        "iss" => "urn:umaxica:test:preference",
+        "exp" => 1,
+        "aud" => ["app.localhost"],
+        "sub" => "pref-1",
+        "client_id" => "umaxica-preference-web",
+        "iat" => 1,
+        "jti" => "jti-1",
+        "scope" => "preference",
+        "public_id" => "pref-1",
+        "preference_type" => "AppPreference",
+      }
       PreferenceToken.send(
         :report_invalid_payload, host: "app.localhost", header: {},
-                                 payload: {
-                                   "typ" => token_type,
-                                   "host" => "evil.localhost",
-                                   "aud" => ["app.localhost"],
-                                 },
+                                 payload: valid_claims.merge("host" => "evil.localhost"),
       )
       PreferenceToken.send(
         :report_invalid_payload, host: "app.localhost", header: {},
-                                 payload: {
-                                   "typ" => token_type,
-                                   "host" => "app.localhost",
-                                   "aud" => ["evil.localhost"],
-                                 },
+                                 payload: valid_claims.merge("host" => "app.localhost", "aud" => ["evil.localhost"]),
       )
       PreferenceToken.send(
         :report_invalid_payload, host: "app.localhost", header: {},
-                                 payload: {
-                                   "typ" => token_type,
-                                   "host" => "app.localhost",
-                                   "aud" => ["app.localhost"],
-                                 },
+                                 payload: valid_claims.merge("host" => "app.localhost"),
       )
       PreferenceToken.send(
         :report_claim_error, host: "app.localhost", header: {},
@@ -295,7 +311,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
 
     assert_equal(
       %w(
-        TYP_MISMATCH
+        CLAIM_INVALID
         HOST_MISMATCH
         AUD_MISMATCH
         OTHER

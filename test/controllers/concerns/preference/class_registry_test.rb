@@ -26,5 +26,25 @@ module Preference
       assert_equal ComPreferenceChronicle, PreferenceClassRegistry.audit_class_for(ComPreference)
       assert_equal OrgPreferenceChronicleEvent, PreferenceClassRegistry.audit_event_class_for(OrgPreference)
     end
+
+    test "resolves a named preference audit event to its fixed id" do
+      assert_equal AppPreferenceChronicleEvent::UPDATE_PREFERENCE_LANGUAGE,
+                   PreferenceClassRegistry.audit_event_id_for(
+                     AppPreferenceChronicleEvent,
+                     "UPDATE_PREFERENCE_LANGUAGE",
+                   )
+    end
+
+    test "rejects an unknown preference audit event name instead of writing event id 0" do
+      error =
+        assert_raises(ArgumentError) do
+          PreferenceClassRegistry.audit_event_id_for(
+            AppPreferenceChronicleEvent,
+            "PREFERENCE_LANGUAGE_UPDATED",
+          )
+        end
+
+      assert_match(/unknown preference audit event/, error.message)
+    end
   end
 end

@@ -12,6 +12,13 @@ Source of truth: `app/services/oidc_discovery_document.rb`, `app/services/oidc_i
 both `["ES384"]`. The OpenID Connect Core conformance profiles expect `RS256` support; Acme
 **intentionally does not** offer `RS256`.
 
+First-party JWT access tokens (`auth_access` and preference access) follow RFC 9068 in token
+structure, claims, semantics, and validation requirements. ES384 is the sole supported signing
+algorithm. UMAXICA intentionally does not implement the RFC 9068 §2.1 requirement that conforming
+authorization servers and resource servers include RS256 among their supported signature
+algorithms. ES384 itself is permitted by RFC 9068; the deviation is the absence of RS256 support.
+See `adr/rfc9068-access-token-profile.md`.
+
 This is a deliberate private profile:
 
 - All ID Tokens and client assertions are EC P-384 / ES384.
@@ -21,7 +28,7 @@ This is a deliberate private profile:
 
 The logout completion URI is not part of discovery. Discovery continues to publish
 `end_session_endpoint` as `https://<acme-surface-host>/oidc/logout`; browser completion returns to
-the RP or Acme surface-local `/sign/out/complete`.
+the RP surface-local `/sign/out/complete`, or Base `/lobby` when the RP is a Base host.
 
 If `RS256` is ever required, it must be implemented end to end (key rotation, JWKS publication, ID
 token signing selection, client-assertion verification, and tests) rather than advertised in

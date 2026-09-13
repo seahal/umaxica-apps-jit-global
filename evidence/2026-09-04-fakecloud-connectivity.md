@@ -2,11 +2,11 @@
 
 ## Verification scope
 
-Verified read-only connectivity from the repository development container to the FakeCloud
-service on 2026-09-04. No FakeCloud resources were created, modified, or deleted.
+Verified read-only connectivity from the repository development container to the FakeCloud service
+on 2026-09-04. No FakeCloud resources were created, modified, or deleted.
 
-The Compose service name resolved inside the container, while the host-loopback publication was
-not part of this verification. The verified endpoint was:
+The Compose service name resolved inside the container, while the host-loopback publication was not
+part of this verification. The verified endpoint was:
 
 ```text
 http://fakecloud:4566
@@ -54,7 +54,7 @@ curl --silent --show-error --fail --max-time 5 \
 Result:
 
 ```json
-{"clusters":[]}
+{ "clusters": [] }
 ```
 
 The EKS read API was reachable and reported no configured clusters.
@@ -76,7 +76,7 @@ Result:
 
 ## Limits of this evidence
 
-This record proves network reachability, successful read-only API responses, and one S3 object
-round trip from the current development container. It does not prove persistence across a
-FakeCloud restart, Terraform provisioning, EKS workload execution, host-side access through
-`127.0.0.1:4566`, or compatibility with real AWS.
+This record proves network reachability, successful read-only API responses, and one S3 object round
+trip from the current development container. It does not prove persistence across a FakeCloud
+restart, Terraform provisioning, EKS workload execution, host-side access through `127.0.0.1:4566`,
+or compatibility with real AWS.

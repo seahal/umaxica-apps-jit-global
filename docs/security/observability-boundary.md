@@ -101,12 +101,12 @@ constrained explicitly:
   the same three `csrf_*.action_controller` events and writes `payload[:message]` verbatim. That
   message is built by `unverified_request_warning_message` and can read
   `HTTP Origin header (...) didn't match request.base_url (...)` — free text that never passes
-  through `JitLogEvent.format`, so `ObservabilityRedactor` does not see it.
-  `config/application.rb` sets `config.action_controller.log_warning_on_csrf_failure = false` so the
-  redacted event is the single record. `config/environments/development.rb` sets it back to `true`:
-  locally the raw reason is the signal that makes a blocked request diagnosable, and the log holds no
-  real user data. The test environment inherits `false`, where `allow_forgery_protection` is off by
-  default and CSRF detection is opt-in per test.
+  through `JitLogEvent.format`, so `ObservabilityRedactor` does not see it. `config/application.rb`
+  sets `config.action_controller.log_warning_on_csrf_failure = false` so the redacted event is the
+  single record. `config/environments/development.rb` sets it back to `true`: locally the raw reason
+  is the signal that makes a blocked request diagnosable, and the log holds no real user data. The
+  test environment inherits `false`, where `allow_forgery_protection` is off by default and CSRF
+  detection is opt-in per test.
 - **Every `Rails.event` subscription must be name-filtered.** `ObservabilityRedactor` is wired into
   `Rails.logger`, Sentry, and OpenTelemetry, but not into `Rails.event`. Framework structured-event
   subscribers are attached by default and forward raw payloads with filtering disabled

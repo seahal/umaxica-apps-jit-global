@@ -45,6 +45,11 @@ module CoreBrowserCredentialContract
   end
 
   def encode_access_token(resource:, token_record:, host:, resource_type:, expires_at: ACCESS_TTL.from_now)
+    expires_at = SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: expires_at,
+      absolute_expiry: token_record.discarded_at,
+    )
+
     AuthenticationTokenService.encode(
       resource,
       host: host,
@@ -55,9 +60,16 @@ module CoreBrowserCredentialContract
       oidc_jti: token_record.try(:oidc_jti),
       expires_at: expires_at,
       scopes: %w(openid profile:read self:read),
-      issuer: AuthenticationJwtConfiguration.issuer(resource_type),
+      issuer: AuthenticationJwtConfiguration.issuer,
       audiences: [ACCESS_AUDIENCE],
       jwt_issuer_id: core_jwt_issuer_id(resource_type),
+    )
+  end
+
+  def access_token_expires_at_for(token_record:, now: Time.current)
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: now + ACCESS_TTL,
+      absolute_expiry: token_record.discarded_at,
     )
   end
 
@@ -66,7 +78,7 @@ module CoreBrowserCredentialContract
       token,
       host: host,
       resource_type: resource_type,
-      issuer: AuthenticationJwtConfiguration.issuer(resource_type),
+      issuer: AuthenticationJwtConfiguration.issuer,
       audiences: [ACCESS_AUDIENCE],
       jwt_issuer_id: core_jwt_issuer_id(resource_type),
     )

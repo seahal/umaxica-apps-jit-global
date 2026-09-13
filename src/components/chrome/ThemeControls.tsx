@@ -1,8 +1,7 @@
 // React port of the `theme` Stimulus controller.
 //
-// A choice applies to the document immediately and is then persisted; the stored preference is the
-// authority, so the control reconciles with whatever the server answers rather than assuming the
-// write succeeded.
+// A choice is reported first; the colour changes only after the server accepts the write and
+// returns the stored theme. Applying first made a failed persist look successful until refresh.
 import { useEffect, useRef, useState } from "react";
 
 import RadioGroup from "@/components/ui/RadioGroup";
@@ -68,12 +67,16 @@ export default function ThemeControls({ controls }: { controls: ChromeThemeContr
   }
 
   const select = (next: Theme) => {
+    // In-flight writes outrank a slower stored-preference read, the same as a completed choice.
     chosen.current = true;
-    setTheme(next);
-    applyTheme(next);
 
     const persist = async () => {
       const stored = await persistTheme(next, csrfToken());
+      if (!stored) {
+        chosen.current = false;
+        return;
+      }
+
       setTheme(stored);
       applyTheme(stored);
     };

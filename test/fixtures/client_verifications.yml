@@ -21,4 +21,4 @@
 # Foreign Keys
 #
 #  fk_rails_...  (user_token_id => client_tokens.id) ON DELETE => cascade
-  #
+#

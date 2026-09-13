@@ -2,14 +2,13 @@
 
 ## Context
 
-Twelve Next.js apps on Cloudflare Workers (separate repo) will reach this Rails app via
-Workers VPC Service → existing Cloudflare Tunnel → Podman `frontend` network → Rails.
-The task is to prove, per host, that each of the twelve origins
-(`info|help|news|docs`.`app|com|org`.localhost) is reachable and correctly host-routed from the
-cloudflared private-network position, and to produce the exact operator-side VPC Service
-configuration. The five browser-facing surfaces (base/auth/palm/core/side) were finished this
-morning and are out of scope except for regression preservation. Prefer zero code changes; edit
-only where evidence shows a gap.
+Twelve Next.js apps on Cloudflare Workers (separate repo) will reach this Rails app via Workers VPC
+Service → existing Cloudflare Tunnel → Podman `frontend` network → Rails. The task is to prove, per
+host, that each of the twelve origins (`info|help|news|docs`.`app|com|org`.localhost) is reachable
+and correctly host-routed from the cloudflared private-network position, and to produce the exact
+operator-side VPC Service configuration. The five browser-facing surfaces (base/auth/palm/core/side)
+were finished this morning and are out of scope except for regression preservation. Prefer zero code
+changes; edit only where evidence shows a gap.
 
 ## Established facts (Phase 1 pre-verified by read-only exploration)
 
@@ -19,8 +18,8 @@ only where evidence shows a gap.
   token via `TUNNEL_TOKEN: ${CLOUDFLARED_TOKEN}` env (not argv), attached to `frontend` only.
 - All twelve aliases already exist on `core`'s `frontend` network (`compose.yaml` lines ~189–207).
 - Existing probe: `bin/tunnel-origin-check` — ephemeral pinned `curlimages/curl:8.16.0@sha256:…`
-  container on the compose-labeled `frontend` network, probes `http://<host>:3000/health` for all
-  27 origin hosts including the twelve. This IS the Phase 4 mechanism; reuse it.
+  container on the compose-labeled `frontend` network, probes `http://<host>:3000/health` for all 27
+  origin hosts including the twelve. This IS the Phase 4 mechanism; reuse it.
 - Existing contract doc: `docs/operations/cloudflare-private-origin.md` (transport invariant,
   Workers VPC prerequisites: cloudflared ≥2025.7.0, QUIC, UDP 7844, TUNNEL_TOKEN).
 - Rails routing: each of the twelve hosts has a literal host constraint in
@@ -45,17 +44,17 @@ only where evidence shows a gap.
 - developers.cloudflare.com/workers-vpc/configuration/vpc-services/ — the configured VPC Service
   target controls routing: "The host provided in the fetch() operation is not used to route
   requests"; "The port provided in the fetch() operation is ignored." Fetch URL hostname populates
-  the HTTP Host header (and SNI). Hostname targets need `resolver_network` (tunnel ID);
-  cloudflared resolves via the default system resolver of its network position (= Podman
-  aardvark-dns inside the container ⇒ compose aliases resolve).
+  the HTTP Host header (and SNI). Hostname targets need `resolver_network` (tunnel ID); cloudflared
+  resolves via the default system resolver of its network position (= Podman aardvark-dns inside the
+  container ⇒ compose aliases resolve).
 - developers.cloudflare.com/workers-vpc/configuration/tunnel/ — cloudflared ≥ 2025.7.0; QUIC
   required (`auto` or `quic`); outbound UDP 7844 must be allowed; tunnel ingress/published-hostname
   rules NOT required for Workers VPC (routing handled by the VPC Service). HTTP/2-only transport is
   therefore insufficient — QUIC is mandated.
 - Consequence: ONE VPC Service targeting the Rails service (target hostname `core`, the compose
-  service DNS name — narrowest stable Podman-DNS name, no container IP), `http_port: 3000`, with
-  the twelve `fetch()` URL hostnames selecting surfaces via Host routing. Twelve VPC Services are
-  NOT required. (Optionally target `info.app.localhost` etc. would also resolve, but `core` is the
+  service DNS name — narrowest stable Podman-DNS name, no container IP), `http_port: 3000`, with the
+  twelve `fetch()` URL hostnames selecting surfaces via Host routing. Twelve VPC Services are NOT
+  required. (Optionally target `info.app.localhost` etc. would also resolve, but `core` is the
   single stable service name.)
 - Re-verify these pages during execution (Phase 2 of the audit) and cite exact sections; also spot
   check docs.podman.io on network aliases/DNS (aardvark-dns resolves compose `aliases` on
@@ -73,13 +72,9 @@ only where evidence shows a gap.
 3. **Phase 4 — private reachability** — start the compose stack if not running
    (`podman compose up -d core cloudflare-tunnel` + deps as needed), then run
    `bin/tunnel-origin-check` (already probes all twelve from the cloudflared `frontend` network via
-   ephemeral pinned curl). Record exact PASS/FAIL per host. Matrix: Host | DNS | TCP/HTTP |
-   /health.
+   ephemeral pinned curl). Record exact PASS/FAIL per host. Matrix: Host | DNS | TCP/HTTP | /health.
 4. **Phase 5 — routing proof** — run the existing focused contract tests:
-   `bin/rails test test/integration/routes/info_route_contract_test.rb
-   test/integration/routes/help_route_contract_test.rb
-   test/integration/routes/news_route_contract_test.rb
-   test/integration/routes/docs_route_contract_test.rb`
+   `bin/rails test test/integration/routes/info_route_contract_test.rb test/integration/routes/help_route_contract_test.rb test/integration/routes/news_route_contract_test.rb test/integration/routes/docs_route_contract_test.rb`
    These already assert all twelve localhost hosts → expected `<surface>/<tier>` controllers. Only
    add/tighten tests if a host case is actually missing (from exploration: all twelve are covered —
    expect zero test additions).
@@ -90,18 +85,18 @@ only where evidence shows a gap.
    surface-rendered response, not 403 Blocked hosts). Also probe an unrelated host (e.g.
    `Host: evil.example`) → expect blocked response. This is effective Rack behavior, not grep. Note
    in the report the `:3000`-suffixed allowlist literals are inert for matching and that bare-host
-   coverage comes from boot_config/env_hosts; make NO Rails config change if all twelve pass.
-   If any host fails, minimal fix: add the bare literal to `localhost_tunnel_hosts` (portless) in
+   coverage comes from boot_config/env_hosts; make NO Rails config change if all twelve pass. If any
+   host fails, minimal fix: add the bare literal to `localhost_tunnel_hosts` (portless) in
    `config/environments/development.rb` with red→green probe evidence.
-6. **Phase 7 — cloudflared readiness** — already satisfied by current config
-   (2025.7.0 ≥ minimum, `--protocol quic`, token via env not argv, shared `frontend` network).
-   Expected: zero changes. UDP 7844 egress: report BLOCKED EXTERNALLY (repo cannot prove host
-   firewall). Validate with `podman compose config`. Regression evidence for the five morning
-   surfaces: `bin/tunnel-origin-check` PASS rows for base/auth/core/side/palm hosts (already in the
-   script) — no compose diff ⇒ no regression risk.
+6. **Phase 7 — cloudflared readiness** — already satisfied by current config (2025.7.0 ≥ minimum,
+   `--protocol quic`, token via env not argv, shared `frontend` network). Expected: zero changes.
+   UDP 7844 egress: report BLOCKED EXTERNALLY (repo cannot prove host firewall). Validate with
+   `podman compose config`. Regression evidence for the five morning surfaces:
+   `bin/tunnel-origin-check` PASS rows for base/auth/core/side/palm hosts (already in the script) —
+   no compose diff ⇒ no regression risk.
 7. **Phase 8 / docs** — if `docs/operations/cloudflare-private-origin.md` lacks the exact VPC
-   Service operator contract, add a small section (in Japanese per user preference for docs? —
-   NOTE: repository language policy requires English for repo files; follow
+   Service operator contract, add a small section (in Japanese per user preference for docs? — NOTE:
+   repository language policy requires English for repo files; follow
    `docs/reference/repository-language-policy.md` → English in-repo, Japanese for the chat report)
    documenting:
    ```

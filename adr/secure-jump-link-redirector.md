@@ -27,7 +27,10 @@ Rails issues only signed, short-lived Jump redirect tokens.
 
 The external Jump gateway verifies the inbound Rails-issued token against the issuing surface JWKS.
 For an internal return, the gateway issues its own signed return token and redirects back to the
-app. The app verifies that returned token with `JumpRt::ReturnVerifier`.
+app. The app verifies that returned token with `JumpRtReturnVerifier` against the Jump public JWKS
+only (`https://jump.umaxica.net/.well-known/jwks.json` derived from the configured Jump origin).
+Return tokens are ES384, at most 30 seconds, with 5 seconds of clock leeway. JWKS fetch failures
+fail closed. Rails must not hold the Jump gateway private key.
 
 This Rails app must not expose `jump_*` route helpers, DB-backed `JumpLink` models, or
 `JumpLinkable` lifecycle behavior.

@@ -54,9 +54,8 @@ Reviewの重複コピーに過ぎない。ファイル名と役割を一致さ�
   - `coverage` (`COVERAGE=true bin/rails test test/`を独立ジョブに分離。line
     91%運用中/spec要求95%の相違はユーザー確認事項、下記参照)
   - `database-consistency` は削除(`database_consistency` gemが非推奨`ActiveRecord::Base.connection`
-    を呼び出しており、このアプリのRails `8.2.0.alpha`では`ActiveSupport::DeprecationException`で
-    即座に落ちる。gem側の非互換でありCI設定側では直せないため、ジョブごと除去する。ユーザー指示により
-    確定)
+    を呼び出しており、このアプリのRails
+    `8.2.0.alpha`では`ActiveSupport::DeprecationException`で即座に落ちる。gem側の非互換でありCI設定側では直せないため、ジョブごと除去する。ユーザー指示により確定)
   - `lint-js` / `test-js` (`pnpm -s run ci` 相当。package.jsonの`ci`スクリプトを利用)
   - Docker Buildx/image-scan/SBOMジョブは削除
 - **`dependency-review.yml`**: 1本化。重複する`ci.yml`(旧)側のdependency reviewは削除。
@@ -114,37 +113,32 @@ Actions側はCoverageジョブを独立させつつ、それ以外は`bin/ci`相
 
 ## フォローアップ(ユーザーが`.github/workflows/`へ適用後に判明した事項)
 
-`.github/workflows/`はこの実行環境からは書き込めない(読み取り専用mount)ため、Claudeは修正版ファイル
-をスクラッチ領域に書き出し、ユーザー側で`.github/workflows/`へ上書き適用してもらう運用を継続する。
+`.github/workflows/`はこの実行環境からは書き込めない(読み取り専用mount)ため、Claudeは修正版ファイルをスクラッチ領域に書き出し、ユーザー側で`.github/workflows/`へ上書き適用してもらう運用を継続する。
 
 1. **YAMLアンカー/エイリアスの撤去**: `test-rails`ジョブの`env: &rails-test-env`を`coverage`ジョブが
    `env: *rails-test-env`で参照していたが、`devops-actions/actionlint@v0.1.10`が使うactionlint
-   1.7.9のパーサーがこのエイリアスを"mapping"として認識できず`syntax-check`エラーになった
-   (`.github/workflows/ci.yml:280: env is alias node but mapping node is expected`)。
-   アンカー参照をやめ、`coverage`ジョブに`test-rails`と同じ`env:`ブロックを直接展開する。適用済み。
-2. **`database-consistency`ジョブの削除が未反映**: 前回「gemがもう使えないので外して」との指示を受け
-   削除版を提示したが、現在のリポジトリの`.github/workflows/ci.yml`には`database-consistency`
+   1.7.9のパーサーがこのエイリアスを"mapping"として認識できず`syntax-check`エラーになった (`.github/workflows/ci.yml:280: env is alias node but mapping node is expected`)。アンカー参照をやめ、`coverage`ジョブに`test-rails`と同じ`env:`ブロックを直接展開する。適用済み。
+2. **`database-consistency`ジョブの削除が未反映**: 前回「gemがもう使えないので外して」との指示を受け削除版を提示したが、現在のリポジトリの`.github/workflows/ci.yml`には`database-consistency`
    ジョブ(422〜497行目)がまだ残っている。改めて削除版を作成し提示する。
 3. **`lint-js`ステップの分割**: `pnpm -s run ci`を1ステップで実行していたため、GitHub Actions UI上で
-   `format:check` / `lint` / `typecheck` / `test:coverage`の個別の成否・実行履歴が見えなかった。
-   ユーザー確認の上、4つの個別ステップ(`pnpm -s run format:check`, `pnpm -s run lint`,
-   `pnpm -s run typecheck`, `pnpm -s run test:coverage`)に分割する。
-4. **`coverage`ジョブの実行範囲**: PRでも毎回実行する現状維持を確認済み(push/pull_request両方の
-   トリガーに変更なし)。
+   `format:check` / `lint` / `typecheck` /
+   `test:coverage`の個別の成否・実行履歴が見えなかった。ユーザー確認の上、4つの個別ステップ(`pnpm -s run format:check`,
+   `pnpm -s run lint`, `pnpm -s run typecheck`, `pnpm -s run test:coverage`)に分割する。
+4. **`coverage`ジョブの実行範囲**:
+   PRでも毎回実行する現状維持を確認済み(push/pull_request両方のトリガーに変更なし)。
 5. **`test-rails`と`coverage`の2ジョブ構成**: そのまま維持することを確認済み(Coverage計測時は
-   `test/test_helper.rb`側の設定で並列ワーカーが1本に強制され通常テストよりはるかに遅いため、速い
-   フィードバックループを妨げないよう分離する、という元の監査方針どおり)。
+   `test/test_helper.rb`側の設定で並列ワーカーが1本に強制され通常テストよりはるかに遅いため、速いフィードバックループを妨げないよう分離する、という元の監査方針どおり)。
 
 ## 「クレデンシャル取得失敗」の調査結果(2026-07-21)
 
-ユーザーから「Rails Testsがクレデンシャルを取れず失敗しているようだ。CIはローカルの認証情報をそのまま
-使いたくないので別途採用したいが、そもそもこのエラー自体が問題かもしれない」との指摘があり、
+ユーザーから「Rails
+Testsがクレデンシャルを取れず失敗しているようだ。CIはローカルの認証情報をそのまま使いたくないので別途採用したいが、そもそもこのエラー自体が問題かもしれない」との指摘があり、
 `gh run view 29813758744 --log-failed`(develop push, `Rails Tests`ジョブ)を調査した。
 
-**結論: GitHub Actions Secrets(`RAILS_MASTER_KEY`等)の取得失敗ではない。** ログ中に"Credentials"という
-文字列が頻出するのは、直前に走っているマイグレーション名(`ConsolidateRetentionOnCredentialsSymbol`,
-`CreateClientSecretCredentialCeremonyTransactions`等 — アプリケーションドメインの「認証情報
-(secret credential)」を表すテーブル名)であり、CIのシークレット機構とは無関係。
+**結論: GitHub Actions Secrets(`RAILS_MASTER_KEY`等)の取得失敗ではない。**
+ログ中に"Credentials"という文字列が頻出するのは、直前に走っているマイグレーション名(`ConsolidateRetentionOnCredentialsSymbol`,
+`CreateClientSecretCredentialCeremonyTransactions`等 — アプリケーションドメインの「認証情報 (secret
+credential)」を表すテーブル名)であり、CIのシークレット機構とは無関係。
 
 実際の失敗は`bin/rails db:prepare`内の`db:seed`ステップで、`db/seeds.rb:38`
 (`staff.save!`)が`ActiveRecord::RecordInvalid`で落ちている:
@@ -157,26 +151,24 @@ MFAステータスを入力してください, 公開範囲を入力してくだ
 `app/models/operator.rb:86,88,91,94`に`belongs_to :staff_status`, `:mfa_level`, `:mfa_status`,
 `:visibility`があり(Rails既定でbelongs_toは必須)、`db/seeds.rb:36-38`のOperator(staff)生成では
 `status_id`しかセットしておらず、`mfa_level_id` / `mfa_status_id` / `visibility_id`が未設定のまま
-`save!`している。同じseeds.rbの直前のClientブロック(17-22行目)は4項目とも正しくセットしている
-(`ClientStatus::ACTIVE`, `ClientVisibility::USER`, `ClientMfaLevel::NOTHING`,
+`save!`している。同じseeds.rbの直前のClientブロック(17-22行目)は4項目とも正しくセットしている (`ClientStatus::ACTIVE`,
+`ClientVisibility::USER`, `ClientMfaLevel::NOTHING`,
 `ClientMfaStatus::UNCONFIGURED`)ため対称的に欠落が分かる。Operator側の対応する定数は
 `OperatorStatus::ACTIVE`, `OperatorVisibility::USER`, `OperatorMfaLevel::NOTHING`,
-`OperatorMfaStatus::UNCONFIGURED`(`app/models/operator_mfa_level.rb`,
-`operator_mfa_status.rb`, `operator_visibility.rb`で確認済み)。
+`OperatorMfaStatus::UNCONFIGURED`(`app/models/operator_mfa_level.rb`, `operator_mfa_status.rb`,
+`operator_visibility.rb`で確認済み)。
 
-**このバグはCI固有ではない**: ローカルでも新規DBに対して`bin/rails db:prepare`を実行すれば同じ理由で
-必ず落ちる(既存DBでは`find_or_initialize_by`が既存レコードを拾うため気づかれていなかった可能性が高い)。
-CIのRails Testsジョブが毎回まっさらなPostgresサービスコンテナで`db:prepare`するようになったことで
-表面化した。
+**このバグはCI固有ではない**: ローカルでも新規DBに対して`bin/rails db:prepare`を実行すれば同じ理由で必ず落ちる(既存DBでは`find_or_initialize_by`が既存レコードを拾うため気づかれていなかった可能性が高い)。CIのRails
+Testsジョブが毎回まっさらなPostgresサービスコンテナで`db:prepare`するようになったことで表面化した。
 
-**対応方針**: `db/seeds.rb:38`の前に、Client側と同様に`staff.mfa_level_id = OperatorMfaLevel::NOTHING`,
-`staff.mfa_status_id = OperatorMfaStatus::UNCONFIGURED`, `staff.visibility_id =
-OperatorVisibility::USER`を追加する。CI設定(secrets/認証情報)側の変更は不要。
+**対応方針**:
+`db/seeds.rb:38`の前に、Client側と同様に`staff.mfa_level_id = OperatorMfaLevel::NOTHING`,
+`staff.mfa_status_id = OperatorMfaStatus::UNCONFIGURED`,
+`staff.visibility_id = OperatorVisibility::USER`を追加する。CI設定(secrets/認証情報)側の変更は不要。
 
-**「CIではローカルの認証情報を使いたくない」という別件について**: ユーザー確認済み。現状の`ci.yml`は
-既にGitHub Actions Secretsの`RAILS_MASTER_KEY`と使い捨てのPostgres/Valkeyサービスコンテナを使ってお
-り、ローカルの`config/master.key`や実データは使っていない設計で問題ない。追加のCI専用credentials発
-行作業は不要。
+**「CIではローカルの認証情報を使いたくない」という別件について**: ユーザー確認済み。現状の`ci.yml`は既にGitHub
+Actions
+Secretsの`RAILS_MASTER_KEY`と使い捨てのPostgres/Valkeyサービスコンテナを使っており、ローカルの`config/master.key`や実データは使っていない設計で問題ない。追加のCI専用credentials発行作業は不要。
 
 ## 実CI再チェック結果(2026-07-21、run 29817342379)
 
@@ -184,33 +176,31 @@ OperatorVisibility::USER`を追加する。CI設定(secrets/認証情報)側の�
 `gh run view --log-failed`で再調査した。
 
 **`Rails Tests`失敗 — 設定ミス(CI側のバグ)と確認**:
+
 ```
 app/controllers/base/app/application_controller.rb:93:in 'fetch': key not found: "PUBLIC_BASE_SERVICE_URL" (KeyError)
 ```
+
 アプリのコントローラ群(`app/controllers/**/application_controller.rb`ほか多数)は
 `PUBLIC_BASE_SERVICE_URL` / `PUBLIC_BASE_CORPORATE_URL` / `PUBLIC_BASE_STAFF_URL` /
 `PUBLIC_CORE_SERVICE_URL` / `PUBLIC_CORE_CORPORATE_URL` / `PUBLIC_CORE_STAFF_URL` /
 `PUBLIC_SIDE_SERVICE_URL` / `PUBLIC_SIDE_CORPORATE_URL` / `PUBLIC_SIDE_STAFF_URL` /
 `PUBLIC_PALM_SERVICE_URL` / `PUBLIC_AUTH_SERVICE_URL` / `PUBLIC_AUTH_CORPORATE_URL` /
 `PUBLIC_AUTH_STAFF_URL`(ENV.fetch必須)に依存しているが、`ci.yml`の`test-rails`/`coverage`
-ジョブの`env:`にはこれらが1つも設定されていない。ローカルdevcontainerでは`PUBLIC_*`系が
-devcontainer環境変数として既に約24個定義されており(`env | grep '^PUBLIC_'`で確認済み)、
-`test/test_helper.rb`は`PUBLIC_AUTH_*`3つだけをテスト用に上書きするに留まる(それ以外は
-devcontainer側の値に依存)。つまりローカルでは気づかれず、CIのまっさらな環境で初めて欠落が
-表面化した。→ `ci.yml`の`test-rails`/`coverage`ジョブの`env:`に上記`PUBLIC_*`変数を追加する
-必要がある(値はテスト用ダミーホスト名でよい。他のドメインURL変数と同じ命名パターンに揃える)。
+ジョブの`env:`にはこれらが1つも設定されていない。ローカルdevcontainerでは`PUBLIC_*`系がdevcontainer環境変数として既に約24個定義されており(`env | grep '^PUBLIC_'`で確認済み)、
+`test/test_helper.rb`は`PUBLIC_AUTH_*`3つだけをテスト用に上書きするに留まる(それ以外はdevcontainer側の値に依存)。つまりローカルでは気づかれず、CIのまっさらな環境で初めて欠落が表面化した。→
+`ci.yml`の`test-rails`/`coverage`ジョブの`env:`に上記`PUBLIC_*`変数を追加する必要がある(値はテスト用ダミーホスト名でよい。他のドメインURL変数と同じ命名パターンに揃える)。
 
 **`Ruby Linting`失敗 — 設定ミスではなく既知の残存offenseと確認**:
+
 ```
 ##[error]ThreadSafety/ClassAndModuleAttributes: Avoid mutating class and module attributes.
 ```
-これは前回「rubocopは今の段階で止めてくれていい」と合意した残り23件のoffenseのうちの1つ
-(`--fail-fast`のため最初に踏んだファイルで停止しているだけ)。CI設定側の問題ではない。
 
-**`lint-js`(vitest)の分割について確認**: 依頼のあった分割は「別ジョブに分ける」ではなく
-「`pnpm -s run ci`という1コマンドをジョブ内の4ステップ(format:check/lint/typecheck/
-test:coverage)に分割する」だった。現在の`ci.yml`(422〜446行目)は既にこの4ステップ構成に
-なっており、対応済み。今回のrunでも`JavaScript Checks (oxlint, oxfmt, typecheck, vitest)`
+これは前回「rubocopは今の段階で止めてくれていい」と合意した残り23件のoffenseのうちの1つ (`--fail-fast`のため最初に踏んだファイルで停止しているだけ)。CI設定側の問題ではない。
+
+**`lint-js`(vitest)の分割について確認**: 依頼のあった分割は「別ジョブに分ける」ではなく「`pnpm -s run ci`という1コマンドをジョブ内の4ステップ(format:check/lint/typecheck/
+test:coverage)に分割する」だった。現在の`ci.yml`(422〜446行目)は既にこの4ステップ構成になっており、対応済み。今回のrunでも`JavaScript Checks (oxlint, oxfmt, typecheck, vitest)`
 ジョブはsuccess。
 
 ## db/seeds.rb 修正(ユーザー承認済み)
@@ -227,4 +217,5 @@ staff.mfa_status_id = OperatorMfaStatus::UNCONFIGURED
 staff.save!
 ```
 
-修正後、`bin/rails db:prepare`(新規DB)がRails Testsジョブと同条件で成功することをローカルで確認する。
+修正後、`bin/rails db:prepare`(新規DB)がRails
+Testsジョブと同条件で成功することをローカルで確認する。

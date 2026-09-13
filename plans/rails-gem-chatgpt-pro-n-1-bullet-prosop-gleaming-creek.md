@@ -20,7 +20,7 @@ turned up a defect that motivates the change independently of the gem choice:
   are on the sign-in path and one is on the bot-check path, so a slow or hung upstream stalls a
   request-handling thread for a minute.
 - Timeout values, error rescue lists, and logging are duplicated and inconsistent across the four
-  call sites that *do* set timeouts.
+  call sites that _do_ set timeouts.
 
 `faraday (2.14.3)` is already resolved in `Gemfile.lock` (pulled in by `openid_connect`, `oauth2`,
 `signet`, `googleauth`, `rack-oauth2`, `webfinger`), and
@@ -76,9 +76,9 @@ Migrate in two batches so the risky ones land separately.
 **Batch A — read-only JWKS/discovery GETs.** Idempotent, so a bounded retry is safe and is the real
 win over the current code:
 
-- `app/lib/external_sign_in/entra_jwks_cache.rb:39-46` — *currently has no timeout*
-- `app/services/org_entra_sign_in_preflight.rb:115-124` — *currently has no timeout*; also narrow the
-  `rescue StandardError` to the specific network/parse errors, matching
+- `app/lib/external_sign_in/entra_jwks_cache.rb:39-46` — _currently has no timeout_
+- `app/services/org_entra_sign_in_preflight.rb:115-124` — _currently has no timeout_; also narrow
+  the `rescue StandardError` to the specific network/parse errors, matching
   `apple_notification_jwks_cache.rb`
 - `app/adapters/external_authentication/apple_notification_jwks_cache.rb:36-50`
 - `app/values/jump_rt_return_verifier.rb:141-158`
@@ -99,8 +99,7 @@ transport moves.
   adding connection-level retry would multiply attempts. Transport swap only.
 
 `app/services/outbound_sms_providers_aws_sns.rb` is out of scope — it goes through the AWS SDK's
-Seahorse transport and is already retried at
-`app/jobs/outbound/sms_delivery_job.rb:10`.
+Seahorse transport and is already retried at `app/jobs/outbound/sms_delivery_job.rb:10`.
 
 ### 4. Regression guard
 
@@ -111,20 +110,20 @@ reappearing; without it the migration decays.
 
 ## Files
 
-| File | Change |
-|---|---|
-| `Gemfile` | declare `faraday` |
-| `app/lib/outbound_http/connection.rb` | new — connection factory |
-| `app/lib/external_sign_in/entra_jwks_cache.rb` | Batch A + **add timeout** |
-| `app/services/org_entra_sign_in_preflight.rb` | Batch A + **add timeout**, narrow rescue |
-| `app/adapters/external_authentication/apple_notification_jwks_cache.rb` | Batch A |
-| `app/values/jump_rt_return_verifier.rb` | Batch A |
-| `lib/external_authentication_infrastructure_omniauth_google_oidc_enforcement.rb` | Batch A |
-| `app/services/oidc_rp_token_client.rb` | Batch B, no retry |
-| `lib/jit_security_turnstile_verifier.rb` | Batch B + **add timeout** |
-| `app/jobs/oidc_backchannel_logout_delivery_job.rb` | Batch B, transport only |
-| `test/lib/outbound_http/connection_test.rb` | new |
-| `test/security/invariants/no_direct_net_http_test.rb` | new |
+| File                                                                             | Change                                   |
+| -------------------------------------------------------------------------------- | ---------------------------------------- |
+| `Gemfile`                                                                        | declare `faraday`                        |
+| `app/lib/outbound_http/connection.rb`                                            | new — connection factory                 |
+| `app/lib/external_sign_in/entra_jwks_cache.rb`                                   | Batch A + **add timeout**                |
+| `app/services/org_entra_sign_in_preflight.rb`                                    | Batch A + **add timeout**, narrow rescue |
+| `app/adapters/external_authentication/apple_notification_jwks_cache.rb`          | Batch A                                  |
+| `app/values/jump_rt_return_verifier.rb`                                          | Batch A                                  |
+| `lib/external_authentication_infrastructure_omniauth_google_oidc_enforcement.rb` | Batch A                                  |
+| `app/services/oidc_rp_token_client.rb`                                           | Batch B, no retry                        |
+| `lib/jit_security_turnstile_verifier.rb`                                         | Batch B + **add timeout**                |
+| `app/jobs/oidc_backchannel_logout_delivery_job.rb`                               | Batch B, transport only                  |
+| `test/lib/outbound_http/connection_test.rb`                                      | new                                      |
+| `test/security/invariants/no_direct_net_http_test.rb`                            | new                                      |
 
 ## Test impact
 
@@ -177,31 +176,28 @@ should continue to appear with the `net_http` adapter underneath.
 
 ## Deviations from this plan during implementation
 
-1. **No retry, anywhere.** The plan proposed a bounded retry for the idempotent
-   Batch A fetches. Faraday 2 moved retry into the separate `faraday-retry` gem,
-   which is not in `Gemfile.lock`, so this would have meant adding a dependency
-   and installing it over the network to serve a benefit no current call site
-   asked for. Dropped on YAGNI grounds; the change is now purely timeout and
-   transport unification. `OutboundHttp::Connection` takes no retry argument, so
-   adding one later is a deliberate edit rather than a flag flip.
+1. **No retry, anywhere.** The plan proposed a bounded retry for the idempotent Batch A fetches.
+   Faraday 2 moved retry into the separate `faraday-retry` gem, which is not in `Gemfile.lock`, so
+   this would have meant adding a dependency and installing it over the network to serve a benefit
+   no current call site asked for. Dropped on YAGNI grounds; the change is now purely timeout and
+   transport unification. `OutboundHttp::Connection` takes no retry argument, so adding one later is
+   a deliberate edit rather than a flag flip.
 
-2. **`lib/jit_security_turnstile_verifier.rb` keeps its broad
-   `rescue StandardError`.** The plan allowed narrowing it after checking the
-   test. No test covers a network-error branch there, and that rescue is what
-   routes an unreachable Cloudflare into the `unavailable: true` degraded-mode
-   path. Narrowing it blind would have been a change to the bot-check failure
-   disposition, which is outside this change. The timeout was added as planned.
+2. **`lib/jit_security_turnstile_verifier.rb` keeps its broad `rescue StandardError`.** The plan
+   allowed narrowing it after checking the test. No test covers a network-error branch there, and
+   that rescue is what routes an unreachable Cloudflare into the `unavailable: true` degraded-mode
+   path. Narrowing it blind would have been a change to the bot-check failure disposition, which is
+   outside this change. The timeout was added as planned.
 
-3. **`require_https` is a required argument, not an internal policy.** The plan
-   described unconditional HTTPS enforcement. `OidcBackchannelLogoutDeliveryJob`
-   posted with `use_ssl: uri.scheme == "https"`, so the scheme comes from the
-   client registration; forcing HTTPS there would have been a silent behaviour
-   change. Each call site now states its policy, and every one except that job
-   requires HTTPS.
+3. **`require_https` is a required argument, not an internal policy.** The plan described
+   unconditional HTTPS enforcement. `OidcBackchannelLogoutDeliveryJob` posted with
+   `use_ssl: uri.scheme == "https"`, so the scheme comes from the client registration; forcing HTTPS
+   there would have been a silent behaviour change. Each call site now states its policy, and every
+   one except that job requires HTTPS.
 
-4. **The invariant test is broader than planned.** It bans `URI.open`, `OpenURI`,
-   `HTTParty`, `RestClient`, `Excon`, and `Typhoeus` alongside `Net::HTTP`, and
-   adds a second test that `Faraday.default_adapter` is never reassigned.
+4. **The invariant test is broader than planned.** It bans `URI.open`, `OpenURI`, `HTTParty`,
+   `RestClient`, `Excon`, and `Typhoeus` alongside `Net::HTTP`, and adds a second test that
+   `Faraday.default_adapter` is never reassigned.
 
 ## Verification results
 
@@ -213,7 +209,8 @@ and succeeds in the container).
 - `bundle exec brakeman --no-pager`: **0 security warnings, 0 errors**.
 - Full suite `bin/rails test`: **10375 runs, 58994 assertions, 1 failure, 0 errors, 1 skip**.
 
-The single failure is `ViteAssetNonceTest#test_every_Vite_asset_tag_on_an_Inertia_page_carries_the_response_nonce`
+The single failure is
+`ViteAssetNonceTest#test_every_Vite_asset_tag_on_an_Inertia_page_carries_the_response_nonce`
 ("expected the entrypoint to emit modulepreload links"). It is **pre-existing and unrelated**: it
 fails identically with every change in this branch stashed, and it reports a stale Vite build
 manifest rather than anything on the HTTP path. It needs a fresh `pnpm build`, not a fix here.

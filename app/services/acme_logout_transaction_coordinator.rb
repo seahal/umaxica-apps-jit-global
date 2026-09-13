@@ -114,7 +114,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
       )
     when "base", "acme"
       helper.public_send(
-        complete_base_out_helper_name(surface_name),
+        base_completion_helper_name(surface_name),
         ri: region,
         host: host,
         protocol: http_or_https(host),
@@ -183,7 +183,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     "side_#{surface_name}_sign_out_completion_url"
   end
 
-  def self.complete_base_out_helper_name(surface_name)
-    "base_#{surface_name}_sign_out_completion_url"
+  def self.base_completion_helper_name(surface_name)
+    "base_#{surface_name}_lobby_url"
   end
 end

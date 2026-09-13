@@ -21,9 +21,10 @@ controls live: `OutboundEmailSuspensionInterceptor` stops all mail, `OutboundSms
 SMS bodies out of job arguments.
 
 What the adapters do not express is the layer above them. There is no single object that answers
-"this event happened, so these people are notified, over these channels". Every call site chooses one
-surface and one channel, and a message that should fan out to two channels has no home. The adapters
-also duplicate a fan-out and configuration mechanism that a maintained library already provides.
+"this event happened, so these people are notified, over these channels". Every call site chooses
+one surface and one channel, and a message that should fan out to two channels has no home. The
+adapters also duplicate a fan-out and configuration mechanism that a maintained library already
+provides.
 
 `adr/outbound-message-delivery-interface.md` reserved the name `Notification` away from external
 message delivery, so that in-app notification records, notification preferences, and a notification
@@ -56,8 +57,8 @@ Transports are not replaced. A delivery method calls the existing surface mailer
 - Sensitive payloads are encrypted with `OutboundSensitivePayload` **before** `Notifier.with` is
   called, in the caller's process. Noticed serializes `params` verbatim into the delivery job, so
   this is the only point at which plaintext can be kept out of the job arguments. The recipient's
-  address is read from the recipient inside the delivery method's `params` proc, at perform time,
-  so it does not reach the job arguments either.
+  address is read from the recipient inside the delivery method's `params` proc, at perform time, so
+  it does not reach the job arguments either.
 - The Noticed email delivery method is configured without `enqueue`, so it calls `deliver_now`
   inside the Noticed job. One message remains one job.
 

@@ -97,7 +97,7 @@ module Base
                            ),
                            with: :exception
 
-      public
+      private
 
       def oidc_client_id
         # Historical name for Base's own browser/local-session RP client; Base does not own this callback.
@@ -159,6 +159,16 @@ module Base
 
       def actor_verification_path(**args)
         base_app_verification_path(**args)
+      end
+
+      # Bootstrap setup is a credential ceremony owned by Auth, so it must cross the host boundary
+      # instead of resolving the Auth-only path against the current Base origin.
+      def actor_verification_setup_path(**args)
+        new_auth_app_verification_setup_url(
+          **args,
+          host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          protocol: "https",
+        )
       end
 
       def cross_host_redirect_allowed?

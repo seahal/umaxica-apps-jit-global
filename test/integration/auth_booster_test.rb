@@ -225,6 +225,13 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
     ClientStatus.find_or_create_by!(id: 1)
     Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
     post "/test_auth_login"
+    warn(
+      { body: response.body,
+        cookies: response.cookies.to_h.slice(
+          AuthenticationCookieName.access,
+          AuthenticationCookieName.refresh,
+        ), }.inspect,
+    )
 
     access_cookie = response.cookies[AuthenticationCookieName.access]
     cookies[AuthenticationCookieName.access] = access_cookie

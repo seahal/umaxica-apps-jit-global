@@ -44,32 +44,39 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_base_org_sign_out_path(ri: "jp")
   end
 
-  test "app sign-out completion page renders for a browser that has signed out" do
+  test "app sign-out mutation answers with no-store and redirects to the lobby" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
-    get base_app_sign_out_completion_url(ri: "jp", host: host), headers: { "Host" => host }
+    post base_app_sign_out_url(ri: "jp", host: host), headers: { "Host" => host }
 
-    assert_response :success
-    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_response :see_other
+    assert_equal base_app_lobby_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 
-  test "com sign-out completion page renders for a browser that has signed out" do
+  test "the retired app sign-out completion route is not recognized" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{host}/sign/out/complete", method: :get)
+    end
+  end
+
+  test "the retired com sign-out completion route is not recognized" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    host! host
 
-    get base_com_sign_out_completion_url(ri: "jp", host: host), headers: { "Host" => host }
-
-    assert_response :success
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{host}/sign/out/complete", method: :get)
+    end
   end
 
-  test "org sign-out completion page renders for a browser that has signed out" do
+  test "the retired org sign-out completion route is not recognized" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    host! host
 
-    get base_org_sign_out_completion_url(ri: "jp", host: host), headers: { "Host" => host }
-
-    assert_response :success
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{host}/sign/out/complete", method: :get)
+    end
   end
 
   test "app sign-out confirmation page renders for an anonymous browser" do

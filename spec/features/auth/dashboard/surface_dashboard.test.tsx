@@ -1,5 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@inertiajs/react", () => ({
+  Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 
 import SurfaceDashboard, { type SurfaceDashboardProps } from "@/features/auth/SurfaceDashboard";
 import RootLanding from "@/features/landing/RootLanding";
@@ -72,6 +78,27 @@ describe("SurfaceDashboard", () => {
 
     expect(markup).toContain("Selector: handled by the sign-in guard sequence");
     expect(markup).not.toMatch(/<a[^>]*>Selector: handled by the sign-in guard sequence<\/a>/u);
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const markup = renderToStaticMarkup(
+      <SurfaceDashboard
+        {...props}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = markup.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = markup.search(/<h1[^>]*>Dashboard<\/h1>/u);
+
+    expect(markup).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
+  });
+
+  it("omits the up link when the server did not send one", () => {
+    const markup = renderToStaticMarkup(<SurfaceDashboard {...props} />);
+
+    expect(markup).not.toContain('href="/dashboard?ri=jp"');
   });
 });
 

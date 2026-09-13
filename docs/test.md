@@ -85,13 +85,13 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
   sanitization, Turnstile failure handling, PII encryption.
 - **Cache and rate-limit stores in test**: both default to `ActiveSupport::Cache::NullStore`, so no
   test inherits state it did not ask for. A test that passes only because an earlier test warmed the
-  cache does not describe the behaviour it claims to, and rate-limit counters are keyed by request IP
-  -- identical for every test -- so a shared counting store makes unrelated tests 429 depending on
-  suite order. Cache tests stub `Rails.cache` with a `MemoryStore`; rate-limit tests declare
+  cache does not describe the behaviour it claims to, and rate-limit counters are keyed by request
+  IP -- identical for every test -- so a shared counting store makes unrelated tests 429 depending
+  on suite order. Cache tests stub `Rails.cache` with a `MemoryStore`; rate-limit tests declare
   `rate_limit_counters!` (or wrap an exercise in `with_rate_limit_counters`, both in
   `test/test_helper.rb`), which points `TestSupport::SwappableCacheStore` at a `MemoryStore` behind
-  the store controllers captured at class-load time. Neither store reaches an external
-  Valkey in test or CI.
+  the store controllers captured at class-load time. Neither store reaches an external Valkey in
+  test or CI.
 - **Performance tests**: Dedicated k6/wrk scenarios are deferred. Add them only when a concrete load
   target and environment are defined.
 - **Observability verification**: OTEL traces appear in Tempo; Loki logs capture Turnstile failures;
@@ -103,11 +103,11 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
 
 ## 5. Test Environments
 
-| Env                     | Purpose                                 | Stack                                                                                                                           |
-| ----------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Env                     | Purpose                                 | Stack                                                                                                                                     |
+| ----------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Local                   | Developer loop                          | Podman Compose (Postgres primaries/replicas, Valkey, optional RustFS, Loki, Tempo, Grafana), Foreman with Rails + pnpm-managed JS tooling |
-| Staging                 | Integrated QA, performance & regression | Mirrors production hostnames, uses managed Postgres/Valkey, OTEL exports to staging Tempo                                       |
-| Production Verification | Smoke tests post-deploy                 | Fastly/Cloudflare fronted hosts, managed infra                                                                                  |
+| Staging                 | Integrated QA, performance & regression | Mirrors production hostnames, uses managed Postgres/Valkey, OTEL exports to staging Tempo                                                 |
+| Production Verification | Smoke tests post-deploy                 | Fastly/Cloudflare fronted hosts, managed infra                                                                                            |
 
 **Data**: Seed states provided via fixtures; Compose services start with empty DBs. Sensitive data
 must be synthetic. Contact forms require Turnstile test keys or bypass for automated runs.
@@ -122,7 +122,7 @@ must be synthetic. Contact forms require Turnstile test keys or bypass for autom
 | Sign::App/Org     | `log.umaxica.app`, `log.umaxica.org`                    | Registration (email/phone), passkey/TOTP, JWT cookies, logout, withdrawal  |
 | Help::Com/App/Org | `help.umaxica.com`, etc.                                | Contact form validation, Turnstile, encrypted persistence, email/SMS hooks |
 | Docs::_/News::_   | `docs.umaxica.*`, `news.umaxica.*`                      | Health endpoints, React hydration placeholder                              |
-| API::\*           | `api.umaxica.*`                                         | `/health` (text), `/api/v0/health.json`, inquiry validation endpoints                      |
+| API::\*           | `api.umaxica.*`                                         | `/health` (text), `/api/v0/health.json`, inquiry validation endpoints      |
 | BFF::\*           | `bff.umaxica.*`                                         | Preference APIs, locale propagation                                        |
 
 ---
@@ -134,13 +134,13 @@ must be synthetic. Contact forms require Turnstile test keys or bypass for autom
 - **TC-ROUTE-001** Top root redirect (per host): GET `/` and expect 302 to `EDGE_*` host with
   `allow_other_host`.
 - **TC-ROUTE-002** Health endpoints: GET `/health` and `/health/{startup,liveness,readiness}`
-  (`text/plain`) and `GET /api/v0/health.json` (`application/json`, `pass/warn/fail`) for each
-  host. Verify status (200/503), exact body, `Cache-Control: no-store`, and `406` on a non-JSON
-  `Accept` to the `.json` endpoint.
+  (`text/plain`) and `GET /api/v0/health.json` (`application/json`, `pass/warn/fail`) for each host.
+  Verify status (200/503), exact body, `Cache-Control: no-store`, and `406` on a non-JSON `Accept`
+  to the `.json` endpoint.
 - **TC-ROUTE-003** Host constraint enforcement: hitting `top` routes with mismatched host
   returns 404.
-- **TC-ROUTE-004** Rate limit guard: simulate >1,000 requests/hour to sign/help endpoints; expect
-  429. Valkey backs the limiter in development and production; the test declares
+- **TC-ROUTE-004** Rate limit guard: simulate >1,000 requests/hour to sign/help endpoints;
+  expect 429. Valkey backs the limiter in development and production; the test declares
   `rate_limit_counters!` and asserts against a deterministic in-process store.
 
 ### 7.2 Preferences & Cookies

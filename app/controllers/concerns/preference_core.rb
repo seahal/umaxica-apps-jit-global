@@ -23,8 +23,11 @@ module PreferenceCore
     with_preference_connection(:writing) do
       @preference_region = load_or_refresh_preference_child("Region", option_id: nil)
       @preference_language = load_or_refresh_preference_child("Language", option_id: nil)
+      @preference_date_format = load_or_refresh_preference_child("DateFormat", option_id: nil)
+      @preference_time_format = load_or_refresh_preference_child("TimeFormat", option_id: nil)
+      @preference_currency = load_or_refresh_preference_child("Currency", option_id: nil)
 
-      update_region_and_language_preferences!
+      update_region_and_regional_defaults!
     end
   end
 
@@ -514,32 +517,42 @@ module PreferenceCore
     session[:language] = option_id_to_language(@preference_language.option_id, preference_prefix)
   end
 
-  def update_region_and_language_preferences!
+  # The child options a region owns and the constant that names each one's value per region. A
+  # region change is a regional-bundle reset: it rewrites language, date format, clock format
+  # and currency to the region's defaults and marks each one explicit, the same way it has
+  # always done for language. Individual screens still let a person override any of them afterwards.
+  REGIONAL_DEFAULT_OPTION_NAMES = {
+    "jp" => { language: :JA, date_format: :ISO, time_format: :HOUR_24, currency: :JPY },
+    "us" => { language: :EN, date_format: :US, time_format: :HOUR_12, currency: :USD },
+  }.freeze
+
+  REGIONAL_DEFAULT_AUDIT_EVENTS = {
+    language: "UPDATE_PREFERENCE_LANGUAGE",
+    date_format: "UPDATE_PREFERENCE_DATE_FORMAT",
+    time_format: "UPDATE_PREFERENCE_TIME_FORMAT",
+    currency: "UPDATE_PREFERENCE_CURRENCY",
+  }.freeze
+
+  def update_region_and_regional_defaults!
     region_attributes = sanitize_option_id(preference_region_params, option_type: :region)
-    language_attributes = {
-      PreferenceIoKeys::Params::OPTION_ID => language_option_id_for_region_option(
-        region_attributes[PreferenceIoKeys::Params::OPTION_ID],
-      ),
-    }.compact
-    raise PreferenceOperationError if language_attributes.blank?
+    derived_option_ids = regional_default_option_ids(region_attributes[PreferenceIoKeys::Params::OPTION_ID])
+    raise PreferenceOperationError if derived_option_ids.blank?
 
     resource_pref = preference_write_resource_preference!
     authorize_resource_preference_write!(resource_pref)
 
     with_dual_write_transaction(resource_pref) do
-      update_preference_child_with_audit(@preference_region, region_attributes, "UPDATE_PREFERENCE_REGION")
-      mark_preference_field_explicit!(:region)
-      write_resource_preference_option!(
-        resource_pref, :region,
-        region_attributes[PreferenceIoKeys::Params::OPTION_ID],
-      ) if resource_pref
+      write_regional_bundle_field!(
+        resource_pref, :region, @preference_region,
+        region_attributes[PreferenceIoKeys::Params::OPTION_ID], "UPDATE_PREFERENCE_REGION",
+      )
 
-      update_preference_child_with_audit(@preference_language, language_attributes, "UPDATE_PREFERENCE_LANGUAGE")
-      mark_preference_field_explicit!(:language)
-      write_resource_preference_option!(
-        resource_pref, :language,
-        language_attributes[PreferenceIoKeys::Params::OPTION_ID],
-      ) if resource_pref
+      derived_option_ids.each do |field, option_id|
+        write_regional_bundle_field!(
+          resource_pref, field, instance_variable_get(:"@preference_#{field}"),
+          option_id, REGIONAL_DEFAULT_AUDIT_EVENTS.fetch(field),
+        )
+      end
     end
 
     reload_preferences_and_reissue_token!(sync_resource: false)
@@ -548,13 +561,21 @@ module PreferenceCore
     raise PreferenceOperationError
   end
 
-  def language_option_id_for_region_option(region_option_id)
-    region = option_id_to_region(region_option_id, preference_prefix)
-    option_class = PreferenceClassRegistry.option_class(preference_prefix, :language)
+  def write_regional_bundle_field!(resource_pref, field, child, option_id, audit_event)
+    update_preference_child_with_audit(child, { PreferenceIoKeys::Params::OPTION_ID => option_id }, audit_event)
+    mark_preference_field_explicit!(field)
+    write_resource_preference_option!(resource_pref, field, option_id) if resource_pref
+  end
 
-    case region
-    when "jp" then option_class::JA
-    when "us" then option_class::EN
+  # region option id -> { language:, date_format:, time_format:, currency: } option ids, or nil
+  # when the submitted region is not one this application models.
+  def regional_default_option_ids(region_option_id)
+    region = option_id_to_region(region_option_id, preference_prefix)
+    names = REGIONAL_DEFAULT_OPTION_NAMES[region]
+    return nil if names.nil?
+
+    names.to_h do |field, constant_name|
+      [field, PreferenceClassRegistry.option_class(preference_prefix, field).const_get(constant_name)]
     end
   end
 

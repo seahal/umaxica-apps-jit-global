@@ -68,14 +68,37 @@ module OidcCallback
     code_verifier = oidc_flow_value("code_verifier") || session.delete(:oidc_code_verifier)
     raise InvalidCallbackState, "OIDC PKCE verifier missing" if code_verifier.blank?
 
+    token_url = oidc_token_url
     OidcRpTokenClient.call(
-      token_url: oidc_token_url,
+      token_url: token_url,
       client_id: oidc_client_id,
       client_secret: oidc_client_secret,
       code: params[:code],
       redirect_uri: oidc_callback_url,
       code_verifier: code_verifier,
+      require_https: oidc_token_endpoint_requires_https?(token_url),
     )
+  end
+
+  def oidc_token_endpoint_requires_https?(token_url)
+    return true unless Rails.env.local?
+
+    uri = URI.parse(token_url)
+    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+    allowed_hosts =
+      [hosts.base_service.host, hosts.base_corporate.host, hosts.base_staff.host]
+        .map { |host| host.to_s.downcase }
+    local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
+
+    !(
+      uri.scheme == "http" &&
+      allowed_hosts.include?(uri.host.to_s.downcase) &&
+      uri.port == local_port &&
+      uri.path == "/oauth/token" &&
+      uri.userinfo.blank? && uri.query.blank? && uri.fragment.blank?
+    )
+  rescue URI::InvalidURIError
+    true
   end
 
   def verify_id_token!(id_token)

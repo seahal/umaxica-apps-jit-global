@@ -31,6 +31,7 @@ class OidcLogoutTokenCodec
 
       JitSecurityJwtKeyring.encode(
         payload,
+        typ: TOKEN_TYPE,
         issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(resource_type),
       )
     end

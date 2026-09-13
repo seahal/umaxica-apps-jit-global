@@ -281,24 +281,24 @@ describe("persistTheme", () => {
     expect(present(init, "the request options").headers).not.toHaveProperty("X-CSRF-Token");
   });
 
-  test("keeps the requested theme when the response carries no theme", async () => {
+  test("returns null when the response carries no theme", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) }),
     );
 
-    await expect(persistTheme("dark", "csrf-token")).resolves.toBe("dark");
+    await expect(persistTheme("dark", "csrf-token")).resolves.toBeNull();
   });
 
-  test("keeps the requested theme when the endpoint rejects the write", async () => {
+  test("returns null when the endpoint rejects the write", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 422 }));
 
-    await expect(persistTheme("system", "csrf-token")).resolves.toBe("system");
+    await expect(persistTheme("system", "csrf-token")).resolves.toBeNull();
   });
 
-  test("keeps the requested theme when the request itself fails", async () => {
+  test("returns null when the request itself fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
-    await expect(persistTheme("light", "csrf-token")).resolves.toBe("light");
+    await expect(persistTheme("light", "csrf-token")).resolves.toBeNull();
   });
 });

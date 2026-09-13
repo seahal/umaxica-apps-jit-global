@@ -43,7 +43,12 @@ module JitSecurityJwtRegistry
   ConfigurationError = Class.new(StandardError)
 
   DEFAULT_KID = "default"
-  DEFAULT_AUTH_AUDIENCES = ["umaxica-api"].freeze
+  AUTH_AUDIENCE_ENV_NAMES = %w(
+    AUTH_JWT_CLIENT_AUDIENCES AUTH_JWT_VISITOR_AUDIENCES AUTH_JWT_OPERATOR_AUDIENCES
+  ).freeze
+  # Development convenience only; every non-local environment must configure
+  # the jump gateway explicitly.
+  LOCAL_JUMP_GATEWAY_AUDIENCE = "https://jump.umaxica.net"
 
   # kid substrings that mark non-production / throwaway signing material. Such a
   # kid must never appear outside local Rails environments: it means dev/test/
@@ -125,6 +130,8 @@ module JitSecurityJwtRegistry
   def build_issuers
     source = JitSecurityJwtKeySource.new
     records = {}
+    auth_audiences = AUTH_AUDIENCE_ENV_NAMES.flat_map { |name| source.csv(name) }
+    auth_audiences.uniq!
     records["auth"] = build_keyset_issuer(
       source: source,
       id: "auth",
@@ -132,7 +139,7 @@ module JitSecurityJwtRegistry
       public_keyset_name: :AUTH_JWT_PUBLIC_KEYSET,
       active_kid: source.fetch("AUTH_JWT_ACTIVE_KID", nil),
       issuer: source.fetch("AUTH_JWT_ISSUER", nil),
-      audiences: source.csv("AUTH_JWT_AUDIENCES").presence || DEFAULT_AUTH_AUDIENCES,
+      audiences: auth_audiences.freeze,
       revoked_kids: source.csv("AUTH_JWT_REVOKED_KIDS"),
     )
     records["preference"] = build_keyset_issuer(
@@ -142,7 +149,7 @@ module JitSecurityJwtRegistry
       public_keyset_name: :PREFERENCE_JWT_PUBLIC_KEYSET,
       active_kid: source.fetch("PREFERENCE_JWT_ACTIVE_KID", nil),
       issuer: source.fetch("PREFERENCE_JWT_ISSUER", nil),
-      audiences: preference_audiences(source: source),
+      audiences: preference_hosts_from_boot_config,
       revoked_kids: source.csv("PREFERENCE_JWT_REVOKED_KIDS"),
     )
 
@@ -183,7 +190,7 @@ module JitSecurityJwtRegistry
       public_keyset_source: "JWT_#{namespace}_PUBLIC_KEYSET",
       revoked_kids: source.csv("JWT_#{namespace}_REVOKED_KIDS"),
       issuer: surface_issuer_origin(namespace),
-      audiences: [source.fetch("PUBLIC_JUMP_GATEWAY_URL", source.fetch("JUMP_GATEWAY_URL", "https://jump.umaxica.net"))].freeze,
+      audiences: [jump_gateway_audience(source)].freeze,
     )
   rescue JitSecurityJwtIssuerBuilder::Error => e
     raise ConfigurationError, e.message
@@ -206,20 +213,17 @@ module JitSecurityJwtRegistry
     raise ConfigurationError, e.message
   end
 
-  def preference_audiences(source:)
-    hosts = preference_hosts_from_boot_config
-    return hosts if hosts.present?
+  def jump_gateway_audience(source)
+    configured = source.fetch("PUBLIC_JUMP_GATEWAY_URL", nil).presence || source.fetch("JUMP_GATEWAY_URL", nil).presence
+    return configured if configured
+    return LOCAL_JUMP_GATEWAY_AUDIENCE if Rails.env.local?
 
-    audiences = [
-      source.fetch("PUBLIC_BASE_SERVICE_URL", source.fetch("BASE_SERVICE_URL", "base.app.localhost")),
-      source.fetch("PUBLIC_BASE_CORPORATE_URL", source.fetch("BASE_CORPORATE_URL", "base.com.localhost")),
-      source.fetch("PUBLIC_BASE_STAFF_URL", source.fetch("BASE_STAFF_URL", "base.org.localhost")),
-    ]
-    audiences.compact!
-    audiences.map!(&:to_s)
-    audiences.freeze
+    raise ConfigurationError, "PUBLIC_JUMP_GATEWAY_URL is required outside local environments"
   end
 
+  # An empty list is left for `validate_record_metadata!` to reject, so a
+  # preference keyring without configured surface hosts fails at boot instead
+  # of signing tokens for a guessed audience.
   def preference_hosts_from_boot_config
     boot_config =
       begin

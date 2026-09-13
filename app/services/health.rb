@@ -272,6 +272,10 @@ module Health
         OrgSettingRecord,
       ],
     )
+
+    # The bootstrap resolver has no authoritative store yet. Readiness therefore checks only the
+    # process boundary; a storage check belongs here when a persistence decision is accepted.
+    Guid = Base.new(cache_key: "guid-net", surface_label: "guid", record_classes: [])
   end
 
   # Liveness probe: only confirms the Rails process can respond.

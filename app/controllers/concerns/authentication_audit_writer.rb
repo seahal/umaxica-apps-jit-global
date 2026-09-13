@@ -92,12 +92,13 @@ class AuthenticationAuditWriter
 
   # Builds audit record without saving
   def self.build_audit(audit_class, event_id, resource:, actor:, ip_address:, context: {})
-    audit = audit_class.new(
+    attributes = {
       actor: actor,
       event_id: event_id,
-      ip_address: ip_address,
       occurred_at: Time.current,
-    )
+    }
+    attributes[:ip_address] = ip_address if ip_address.present?
+    audit = audit_class.new(attributes)
     audit.context = context if context.present? && audit.respond_to?(:context=)
 
     if actor
@@ -258,6 +259,8 @@ class AuthenticationAuditWriter
         "LOGOUT" => ClientChronicleEvent::LOGOUT,
         "LOGIN_FAILED" => ClientChronicleEvent::LOGIN_FAILED,
         "TOKEN_REFRESHED" => ClientChronicleEvent::TOKEN_REFRESHED,
+        "STEP_UP_FAILED" => ClientChronicleEvent::STEP_UP_FAILED,
+        "REFRESH_TOKEN_REUSE_DETECTED" => ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
       }
     when "OperatorChronicle"
       {
@@ -266,6 +269,8 @@ class AuthenticationAuditWriter
         "LOGOUT" => OperatorChronicleEvent::LOGOUT,
         "LOGIN_FAILED" => OperatorChronicleEvent::LOGIN_FAILED,
         "TOKEN_REFRESHED" => OperatorChronicleEvent::TOKEN_REFRESHED,
+        "STEP_UP_FAILED" => OperatorChronicleEvent::STEP_UP_FAILED,
+        "REFRESH_TOKEN_REUSE_DETECTED" => OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
       }
     when "AppPreferenceChronicle"
       {

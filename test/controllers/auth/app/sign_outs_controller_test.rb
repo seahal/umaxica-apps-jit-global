@@ -82,7 +82,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
 
     assert_equal @base_host, location.host
-    assert_equal "/sign/out/complete", location.path
+    assert_equal "/lobby", location.path
     assert_predicate token.reload, :revoked?
   end
 

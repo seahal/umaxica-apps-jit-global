@@ -45,8 +45,8 @@ registering a provider that cannot complete an exchange.
 
 ### Client authentication is a client secret held in Rails credentials
 
-Client authentication is `client_secret_basic` (`client_auth_method: :basic`), with the secret in
-Rails encrypted credentials. Certificate-based `private_key_jwt` is not used, and
+Client authentication is `client_secret_post` (`client_auth_method: :client_secret_post`), with the
+secret in Rails encrypted credentials. Certificate-based `private_key_jwt` is not used, and
 `ExternalAuthentication::EntraClientAssertionAdapter` was deleted.
 
 This reverses `org-entra-id-sign-in-boundary.md`'s "Do not create or store a client secret", and it
@@ -126,6 +126,59 @@ Previously an inactive or absent connection stopped a tenant. Now the strategy v
 token against the single configured tenant, so a token from any other tenant is rejected before
 identity resolution. Revoking one person's access is an identity-state change
 (`SUSPENDED`/`REVOKED`), which the resolver honours and which is covered by test.
+
+## Amendment (2026-09-09): client_secret_post and boot-time credential validation
+
+Two parts of the decision above are refined; nothing else in this ADR changes.
+
+### Client authentication moved from `client_secret_basic` to `client_secret_post`
+
+The original decision specified `client_auth_method: :basic`, which rack-oauth2 renders as an
+`Authorization: Basic` header. The strategy now passes `:client_secret_post`, which rack-oauth2 has
+no named branch for, so it falls through to the default that puts `client_id` and `client_secret` in
+the token request body and sends no `Authorization` header. Entra's v2.0 token endpoint accepts
+both.
+
+The reason to prefer the POST body form is that `client_secret_basic` requires the client id and
+secret to be `application/x-www-form-urlencoded` **before** base64 encoding, per RFC 6749 §2.3.1.
+That is a step implementations disagree about, and getting it wrong on a secret containing reserved
+characters produces an authentication failure that looks like a wrong secret. `client_secret_post`
+has no such encoding subtlety, and it keeps the credential in one place instead of split across a
+header and a body.
+
+The wire shape is pinned by `test/contracts/omniauth_entra_token_request_contract_test.rb`, which
+drives the real `Rack::OAuth2::Client` with the transport stubbed and asserts that the credentials
+are in the body and that no `Authorization` header is sent. That test is the regression detector for
+a future rack-oauth2 upgrade that changes this fall-through.
+
+### All three Entra credentials are validated at boot
+
+The original wording — "Missing configuration raises at boot naming the key" — was only true of
+`OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET`. Tenant id and client id were read lazily through
+`ExternalAuthentication::ProviderRegistry` on the first sign-in, so a deployment missing either
+booted healthy and failed at the first staff sign-in instead.
+
+`EntraOmniauthBootCredentials.resolve_for_boot` now validates all three in
+`config/initializers/omniauth.rb`:
+
+| Credential | Required | Shape |
+| --- | --- | --- |
+| `OMNI_AUTH_ENTRA_ORG_TENANT_ID` | yes | non-blank, UUID |
+| `OMNI_AUTH_ENTRA_ORG_CLIENT_ID` | yes | non-blank, UUID |
+| `OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET` | yes | non-blank |
+
+The UUID rule also rejects `common`, `organizations` and `consumers` as tenant ids, which this ADR
+already forbids, so the single-tenant constraint is now enforced at boot rather than only by
+convention.
+
+Validation is presence and shape only. Boot performs no network I/O, so it cannot depend on
+Microsoft being reachable; semantic checks (issuer metadata, tenant reachability, redirect URI)
+remain in `OrgEntraSignInPreflight`. No credential value appears in an exception message or a log —
+the errors name the key only.
+
+Development and test still boot without any Entra credentials, and omit the provider, so non-Entra
+suites do not need an IdP credential. A **partially** configured local environment fails rather than
+silently disabling staff sign-in.
 
 ## Consequences
 

@@ -3,7 +3,10 @@
 require "test_helper"
 
 class AvatarImageAttachmentTest < ActiveSupport::TestCase
-  PNG = ["89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c4944415408d763f80f00000101000518d84e0000000049454e44ae426082"].pack("H*")
+  PNG_HEX =
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de" \
+    "0000000c4944415408d763f80f00000101000518d84e0000000049454e44ae426082"
+  PNG = [PNG_HEX].pack("H*")
 
   setup do
     @capability = AvatarCapability.find(AvatarCapability::NORMAL)
@@ -30,7 +33,9 @@ class AvatarImageAttachmentTest < ActiveSupport::TestCase
     assert_not @avatar.image_data.key?("url")
     assert_equal "avatar", Avatar.connection_db_config.name
     persisted = Avatar.lease_connection.select_value(
+      # rubocop:disable I18n/RailsI18n/DecorateString
       Avatar.sanitize_sql_array(["SELECT image_data FROM avatars WHERE id = ?", @avatar.id]),
+      # rubocop:enable I18n/RailsI18n/DecorateString
     )
 
     assert_not_nil persisted

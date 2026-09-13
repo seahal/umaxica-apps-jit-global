@@ -36,8 +36,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     get new_auth_app_sign_in_email_url(ri: "jp"),
         headers: as_user_headers(user, host: @host)
 
-    assert_response :bad_request
-    assert_includes response.body, I18n.t("sign.app.authentication.email.new.you_have_already_logged_in")
+    assert_response :conflict
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_includes response.headers["Cache-Control"], "no-store"
   end
 
   test "reject already logged in staff" do

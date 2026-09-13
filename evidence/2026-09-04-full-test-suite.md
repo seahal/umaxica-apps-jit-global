@@ -2,8 +2,8 @@
 
 ## Scope
 
-Ran the complete Rails and Vitest suites on 2026-09-04 after preparing the production-shaped
-staging object-storage configuration.
+Ran the complete Rails and Vitest suites on 2026-09-04 after preparing the production-shaped staging
+object-storage configuration.
 
 ## Initial result
 
@@ -54,5 +54,5 @@ It is the existing `OidcRpBrowserFlowTest` case for the app email sign-in sessio
 explicitly blocked on repository issue 846. It was not treated as a passing test or removed as part
 of this unrelated verification.
 
-Targeted RuboCop checks for the four adjusted test files reported no offenses, and `git diff
---check` reported no whitespace errors.
+Targeted RuboCop checks for the four adjusted test files reported no offenses, and
+`git diff --check` reported no whitespace errors.

@@ -93,7 +93,7 @@ en:
         region:
           edit:
             description: Change the region used for regional defaults such as currency and formats.
-            heading: Region & Language Settings
+            heading: Region Settings
             region_label: Region
         resets:
           back: Back to preferences
@@ -143,7 +143,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
           region_section: Region Settings
@@ -154,7 +154,7 @@ en:
             JP: Japan - 日本
             US: United States - USA
             USA: United States - USA
-          title: Region & Language Settings
+          title: Region Settings
         reset_settings: Reset Settings
         submitting: Submitting...
         theme:
@@ -245,7 +245,7 @@ en:
         region:
           edit:
             description: Change the region used for regional defaults such as currency and formats.
-            heading: Region & Language Settings
+            heading: Region Settings
             region_label: Region
         resets:
           back: Back to preferences
@@ -308,7 +308,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
           cancel: Cancel
@@ -332,7 +332,7 @@ en:
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
           timezone_section: Timezone Settings
-          title: Region & Language Settings
+          title: Region Settings
           update_settings: Update Settings
         reset_settings: Reset Settings
         submitting: Submitting...
@@ -435,7 +435,7 @@ en:
         region:
           edit:
             description: Change the region used for regional defaults such as currency and formats.
-            heading: Region & Language Settings
+            heading: Region Settings
             region_label: Region
         resets:
           back: Back to preferences
@@ -508,7 +508,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
           cancel: Cancel
@@ -532,7 +532,7 @@ en:
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
           timezone_section: Timezone Settings
-          title: Region & Language Settings
+          title: Region Settings
           update_settings: Update Settings
         reset_settings: Reset Settings
         submitting: Submitting...
@@ -933,6 +933,9 @@ en:
     step_up:
       canceled: Cancel verification
       completed: Continue
+      emergency_unavailable:
+        This session was established through Emergency Access and cannot perform step-up
+        verification. Sign out and sign in normally to continue.
       invalid_request: Invalid verification request.
       method_unavailable: Selected verification method is unavailable.
       register_methods_required: No step-up methods available. Please register passkey/email/totp.
@@ -1084,7 +1087,7 @@ en:
         language_settings: Language Settings
         motion_settings: Motion Settings
         pagination_settings: Page Size
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
         reset_settings: Reset Settings
@@ -1228,7 +1231,7 @@ en:
         language_settings: Language Settings
         motion_settings: Motion Settings
         pagination_settings: Page Size
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
         reset_settings: Reset Settings
@@ -1394,7 +1397,7 @@ en:
         language_settings: Language Settings
         motion_settings: Motion Settings
         pagination_settings: Page Size
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
         reset_settings: Reset Settings
@@ -1407,6 +1410,101 @@ en:
         update_success: Preferences updated successfully
       roots:
         message: Thin landing endpoint.
+    shared:
+      lobby:
+        title: Lobby
+        heading: Lobby
+        description: Sign in to continue.
+        sign_in: Sign in
+      dashboard:
+        title: Dashboard
+        description: Signed in
+        sections:
+          primary_links: Primary links
+          protocol_links: Protocol links
+          publishing: Publishing
+        links:
+          account: Account
+          authorize_sign_in: Authorize (sign in)
+          authorize_sign_up: Authorize (sign up)
+          avatar: Avatar
+          dashboard: Dashboard
+          identity: Identity
+          jwks: JWKS
+          logout: Logout
+          oidc_discovery: OIDC discovery
+          organization: Organization
+          root: Root
+          selector: Selector
+          switcher: Switcher
+          userinfo: UserInfo
+      identity:
+        up_link: Back to top
+        activities:
+          title: Activity history
+          description: Recent security-related activity for your account.
+          empty: No activities to show.
+          unknown_device: Unknown device
+          unknown_location: Location unavailable
+          columns:
+            occurred_at: Occurred at
+            activity: Activity
+            device: Device
+            source: Source
+            risk: Risk
+          events:
+            sign_in: Signed in
+            google_sign_in: Signed in with Google
+            apple_sign_in: Signed in with Apple
+            google_account_created: Account created with Google
+            apple_account_created: Account created with Apple
+            email_account_created: Account created with email
+            telephone_account_created: Account created with phone number
+            sign_out: Signed out
+            sign_in_failed: Sign-in failed
+            step_up_completed: Step-up authentication completed
+            step_up_failed: Step-up authentication failed
+            session_revoked: Session ended
+            security_change: Security settings changed
+            session_security_alert: Session ended for security reasons
+          risks:
+            none: None
+            low: Low
+            medium: Medium
+            high: High
+            critical: Critical
+        sessions:
+          title: Sessions
+          empty: No active sessions.
+          unknown_device: Unknown device
+          expires_at_description: This session ends at this time. This limit cannot be extended.
+          current_session: Current session
+          active: Active
+          normal: Normal
+          emergency: Emergency
+          unknown_mode: Unknown
+          revoke: Revoke
+          columns:
+            device: Device
+            last_activity: Last activity
+            created: Created
+            expires_at: Expires at
+            status: Status
+            mode: Mode
+            action: Action
+        sections:
+          account: Account
+          profile: Profile
+          security: Security
+        links:
+          activities: Activity
+          birthdate: Birthdate
+          emails: Email
+          secrets: Secrets
+          sessions: Sessions
+          standing: Account standing
+          telephones: Telephone
+          withdrawal: Withdrawal
   com_document_categories:
     "%{id}": com_document_category_%{id}
     announcement: Announcement
@@ -1524,7 +1622,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           region_section: Region Settings
           select_language_selector:
@@ -1542,7 +1640,7 @@ en:
             ETC_UTC: Coordinated Universal Time (UTC)
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
-          title: Region & Language Settings
+          title: Region Settings
         submitting: Submitting...
         timezone_settings: Timezone Settings
         update_settings: Update Settings
@@ -2045,6 +2143,8 @@ en:
         Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
       pii_required: Please enter your email address or telephone number
       sign_count_mismatch: Passkey security verification failed
+      sign_in_transaction_required:
+        Your sign-in session has expired or was not started with Microsoft. Please start over.
       verification_failed: Passkey verification failed
       verification_required: Passkey registration must be completed through WebAuthn verification.
   hello: Hello world 2
@@ -2246,6 +2346,10 @@ en:
           light: Light
           system: Follow system setting
         title: Theme settings
+      restricted_mode:
+        description: Step-up verification and the operations that require it are unavailable.
+        label: Restricted Mode - Emergency Access
+        sign_out: Sign out and sign in normally
   mail:
     common:
       cta: Learn more
@@ -2294,6 +2398,16 @@ en:
       recovery_identity_required:
         To register a passkey or secret_credential, please register and verify at least one email
         address or phone number first.
+  info:
+    app:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+    com:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+    org:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
   news:
     app:
       preferences:
@@ -3010,12 +3124,6 @@ en:
           cannot_revoke_current: The current session cannot be revoked.
           session_revoked: Session revoked.
           sessions_revoked: Sessions revoked.
-      layout:
-        nav:
-          log_in: Log In
-          logout: Log Out
-          settings: Settings
-          sign_up: Sign Up
       outs:
         destroy:
           success: You have been signed out.
@@ -3499,12 +3607,6 @@ en:
         checkpoints:
           show:
             title: Sign-in check
-      layout:
-        nav:
-          log_in: Log In
-          logout: Log Out
-          settings: Settings
-          sign_up: Sign Up
       preferences:
         footer:
           dashboard: DASHBOARD
@@ -3611,6 +3713,18 @@ en:
           new:
             registration: Need an account?
             you_have_already_logged_in: You are already signed in.
+        emergency:
+          passkey:
+            new:
+              description:
+                Sign in with the staff ID and your existing passkey. Microsoft sign-in is not used.
+              identifier_label: ID
+              identifier_placeholder: Enter the staff ID
+              page_title: Emergency Access
+              restricted_mode_notice:
+                This sign-in produces a restricted session. Step-up verification and the operations that
+                require it are unavailable until you sign out and sign in normally.
+              submit: Sign in with passkey
         entra:
           errors:
             authentication_method_locked:
@@ -3648,6 +3762,10 @@ en:
               administrator.
             page_title: Sign in with Microsoft
             submit: Sign in with Microsoft
+        mode_switch:
+          sign_out_required:
+            You are already signed in. Changing the sign-in mode requires signing out first
+            (%{sign_out_url}).
         new:
           back: Back
           back_link: Back
@@ -3655,6 +3773,7 @@ en:
           links:
             apple: Apple
             email: Email
+            emergency: Emergency Access (Restricted Mode)
             entra: Sign in with Microsoft
             google: Google
             passkey: Passkey
@@ -3669,6 +3788,7 @@ en:
             identifier_label: ID
             identifier_placeholder: Enter the staff ID
             page_title: Sign in with passkey
+            secret_credential: Lost your passkey? Use your secret instead
             submit: Sign in with passkey
         recovery:
           new:
@@ -3728,12 +3848,6 @@ en:
           promoted: Session promoted.
           session_revoked: Session revoked.
           sessions_revoked: Sessions revoked.
-      layout:
-        nav:
-          log_in: Log In
-          logout: Log Out
-          settings: Settings
-          sign_up: Sign Up
       outs:
         destroy:
           success: You have been signed out.

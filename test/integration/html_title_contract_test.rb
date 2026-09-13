@@ -27,9 +27,9 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"), tld: "APP" },
     { host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"), tld: "COM" },
     { host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"), tld: "ORG" },
-    { host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost"), tld: "APP" },
-    { host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "side.com.localhost"), tld: "COM" },
-    { host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "side.org.localhost"), tld: "ORG" },
+    { host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"), tld: "APP" },
+    { host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"), tld: "COM" },
+    { host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"), tld: "ORG" },
     { host: ENV.fetch("PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"), tld: "APP" },
     { host: "core.dev.localhost", tld: "DEV" },
   ].freeze

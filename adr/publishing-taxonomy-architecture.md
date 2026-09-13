@@ -12,15 +12,15 @@ Accepted (2026-08-01)
 
 `adr/publishing-db-content-authority.md` §6 deferred taxonomy: the central `publishing` database
 shipped with eight tables and no vocabulary of any kind, and the six legacy CMS taxonomy tables per
-surface family were not copied. That deferral required a separate ADR before any taxonomy
-migration, model, service, or API could be added. This is that ADR.
+surface family were not copied. That deferral required a separate ADR before any taxonomy migration,
+model, service, or API could be added. This is that ADR.
 
 At the time of writing nothing in this system is deployed. The edge repository
 (`seahal/umaxica-apps-edge`) contains no consumer of the Rails read API, so the public JSON contract
 has no downstream dependency yet. Deliberate breaking corrections are therefore cheaper now than
 they will ever be again.
 
-Two questions had to be settled together. The first is what taxonomy *is* in this codebase, given
+Two questions had to be settled together. The first is what taxonomy _is_ in this codebase, given
 that "category", "language", "region", "author", and "version" had all been described as filtering
 dimensions at various points. The second is where the integrity of an assignment lives, given that
 the rest of the publishing schema already proves locale coherence with composite foreign keys rather
@@ -33,7 +33,7 @@ than with Active Record validations.
 **Taxonomy** is a controlled vocabulary whose terms an author assigns to content. Category and Tag
 are the initial vocabularies.
 
-**Facet** — a read-side filtering or navigation dimension — is deliberately *not* built as an
+**Facet** — a read-side filtering or navigation dimension — is deliberately _not_ built as an
 abstraction in this change. There is no generic facet registry and no provider protocol, because
 there is no caller that two providers would serve. Language and Region remain derivable from data
 that is already authoritative:
@@ -65,14 +65,14 @@ scope until its semantics are separated from deployment region and publication p
 A vocabulary is a **row**, not a table and not a class. Adding "topic" or "audience_level" later
 requires no migration and no Ruby.
 
-A vocabulary's *structural kind* is fixed and closed:
+A vocabulary's _structural kind_ is fixed and closed:
 
-| Kind | Cardinality | Shape |
-|---|---|---|
-| `single_hierarchical` | at most one term per vocabulary per revision or version | tree |
-| `multiple_ordered_flat` | any number of terms, author-ordered | flat list |
+| Kind                    | Cardinality                                             | Shape     |
+| ----------------------- | ------------------------------------------------------- | --------- |
+| `single_hierarchical`   | at most one term per vocabulary per revision or version | tree      |
+| `multiple_ordered_flat` | any number of terms, author-ordered                     | flat list |
 
-Category is `single_hierarchical`; Tag is `multiple_ordered_flat`. Adding a *kind* is a deliberate
+Category is `single_hierarchical`; Tag is `multiple_ordered_flat`. Adding a _kind_ is a deliberate
 change to tables, constraints, code, and tests — not a configuration value.
 
 `Publishing::TaxonomyKind` is an explicit frozen map of two provider objects. There is no
@@ -82,19 +82,19 @@ on the structural kind, never on an individual vocabulary key: no code branches 
 
 ### Vocabulary is scoped by physical content family
 
-**Amended 2026-09-04 by `adr/publishing-twelve-family-encrypted-persistence.md`.**
-A vocabulary belongs to exactly one of the twelve physical families (for example
+**Amended 2026-09-04 by `adr/publishing-twelve-family-encrypted-persistence.md`.** A vocabulary
+belongs to exactly one of the twelve physical families (for example
 `publishing_docs_app_vocabularies`). `UNIQUE(key)` is per family table. There are no
 `audience`/`surface` columns on vocabulary rows.
 
-Locale is *not* part of vocabulary scope. One vocabulary row serves every locale, because locale
+Locale is _not_ part of vocabulary scope. One vocabulary row serves every locale, because locale
 belongs to terms.
 
 ### Terms are locale-specific
 
 The Japanese and English term for the same idea are independent rows carrying `locale NOT NULL`.
 This is what makes locale coherence provable: an assignment's locale is tied by composite foreign
-key to both its revision or version *and* its term, so a `ja` revision cannot reference an `en`
+key to both its revision or version _and_ its term, so a `ja` revision cannot reference an `en`
 term. A shared-concept-with-translated-labels design would have moved that guarantee out of
 PostgreSQL and into Rails, which the surrounding schema does not do.
 
@@ -121,9 +121,9 @@ rendering): vocabulary public id, key and kind, term public id, slug and name, t
 breadcrumb path, locale, and position. Renaming, reordering, or moving a term afterwards cannot
 change what an already-published version displays.
 
-The breadcrumb path is the only JSONB column in the taxonomy schema, and it is not a metadata bag:
-a CHECK constraint validates that it is an array of objects whose `public_id`, `slug`, and `name`
-are all strings.
+The breadcrumb path is the only JSONB column in the taxonomy schema, and it is not a metadata bag: a
+CHECK constraint validates that it is an array of objects whose `public_id`, `slug`, and `name` are
+all strings.
 
 Vocabulary and term rows are archived, never deleted. Every foreign key uses `ON DELETE RESTRICT`.
 
@@ -131,9 +131,9 @@ Vocabulary and term rows are archived, never deleted. Every foreign key uses `ON
 
 Once a revision has been promoted, it is the historical record of what was published. If it could
 still change, the revision and its version would describe different promotion events, and
-`UNIQUE(entry_revision_id)` makes a corrected second version impossible. PostgreSQL therefore rejects
-UPDATE and DELETE of a promoted revision, and rejects INSERT, UPDATE, and DELETE of its taxonomy
-assignments. Draft revisions remain fully editable.
+`UNIQUE(entry_revision_id)` makes a corrected second version impossible. PostgreSQL therefore
+rejects UPDATE and DELETE of a promoted revision, and rejects INSERT, UPDATE, and DELETE of its
+taxonomy assignments. Draft revisions remain fully editable.
 
 ### Snapshots are derived, never trusted
 
@@ -156,64 +156,65 @@ Archiving is reversible through an ordinary update.
 A vocabulary's `public_id`, `audience`, `surface`, `key`, and `kind` are frozen once it has terms. A
 vocabulary with no terms may still be corrected.
 
-Sibling order is deterministic: `UNIQUE NULLS NOT DISTINCT (vocabulary_id, locale, parent_id,
-position)` covers hierarchical siblings and, because flat vocabularies always have a NULL parent,
-gives them per-vocabulary-and-locale position uniqueness through the same index.
+Sibling order is deterministic:
+`UNIQUE NULLS NOT DISTINCT (vocabulary_id, locale, parent_id, position)` covers hierarchical
+siblings and, because flat vocabularies always have a NULL parent, gives them
+per-vocabulary-and-locale position uniqueness through the same index.
 
 ### Archived terms restore into drafts but block promotion
 
-Restoring a version rebuilds a draft from the version's *live* foreign keys, never by looking terms
+Restoring a version rebuilds a draft from the version's _live_ foreign keys, never by looking terms
 up again by snapshot slug or name, so restoration is deterministic. A term that has since been
 archived is allowed into the restored draft — otherwise old content could never be reopened — and
 `Publishing::PromoteRevision` refuses to publish it, raising
 `Publishing::ArchivedTaxonomyAssignmentError` with the vocabulary key, term public id, term slug,
 and revision public id a future authoring UI needs to resolve the conflict.
 
-An archived *ancestor* blocks promotion too. A category whose breadcrumb passes through a retired
+An archived _ancestor_ blocks promotion too. A category whose breadcrumb passes through a retired
 parent cannot be rendered coherently, so the error reports every obsolete step on the path, not only
 the assigned leaf.
 
 Restoring the same version twice deliberately produces two distinct revisions: each restore is a new
-editing session. Restoration is therefore *not* idempotent, and a future public write endpoint must
+editing session. Restoration is therefore _not_ idempotent, and a future public write endpoint must
 carry its own transport-level idempotency key. A disabled button in a UI is not network idempotency.
 
 ### Lifecycle operations own their transactions
 
-`Publishing::PromoteRevision`, `RestoreVersion`, and `MoveTaxonomySubtree` are explicit
-domain operations, not model callbacks and not generic `*Service` dumping grounds. Each opens its
-own transaction and takes the row locks it needs. Promotion in particular must commit a version and
+`Publishing::PromoteRevision`, `RestoreVersion`, and `MoveTaxonomySubtree` are explicit domain
+operations, not model callbacks and not generic `*Service` dumping grounds. Each opens its own
+transaction and takes the row locks it needs. Promotion in particular must commit a version and
 every one of its snapshots together or not at all, and that boundary belongs somewhere a reader can
 see it rather than scattered across `after_create` hooks.
 
 Promotion is retry-safe. `UNIQUE(entry_revision_id)` on `publishing_entry_versions` is the
-idempotency anchor: a concurrent second attempt loses the insert, re-reads the winner, and *verifies*
-it is a complete snapshot of the same revision before returning it, rather than trusting whatever row
-it happens to find.
+idempotency anchor: a concurrent second attempt loses the insert, re-reads the winner, and
+_verifies_ it is a complete snapshot of the same revision before returning it, rather than trusting
+whatever row it happens to find.
 
 ### PostgreSQL is the final integrity authority
 
 Active Record validations exist for readable errors only. Every invariant that spans rows or tables
 is enforced by the database, including invariants that a `CHECK` constraint cannot express:
 
-| Invariant | Mechanism |
-|---|---|
-| vocabulary kind matches the assignment table | `CHECK` + composite FK `(vocabulary_id, vocabulary_kind) → (id, kind)` |
-| term belongs to the assigned vocabulary and locale | composite FK `(taxonomy_term_id, vocabulary_id, locale)` |
-| assignment locale matches its revision or version | composite FK `(owner_id, locale)` |
-| single-valued cardinality | `UNIQUE(owner_id, vocabulary_id)` |
-| ordered multi-valued uniqueness | `UNIQUE(owner, vocabulary, term)` and `UNIQUE(owner, vocabulary, position)` |
-| flat vocabularies have no hierarchy | `CHECK` on `parent_id` / `depth` |
-| depth equals parent depth plus one | `publishing_taxonomy_term_hierarchy_guard` trigger |
-| no cycles | same trigger, recursive CTE over ancestors |
-| vocabulary scope matches the entry's edition | `publishing_taxonomy_assignment_scope_guard` constraint trigger |
-| version rows and snapshots never change | `publishing_reject_mutation` trigger |
-| a promoted revision and its assignments never change | `publishing_promoted_revision_guard` trigger |
-| snapshots are derived, not supplied | `publishing_derive_taxonomy_snapshot` BEFORE INSERT trigger |
-| a version's snapshots match its revision exactly | `publishing_assert_version_snapshot_complete` deferred constraint trigger |
-| vocabularies and terms are never deleted | `publishing_reject_retirement_by_deletion` trigger |
-| a vocabulary's structure is frozen once it has terms | `publishing_vocabulary_structure_guard` trigger |
-| sibling order is deterministic | `UNIQUE NULLS NOT DISTINCT (vocabulary_id, locale, parent_id, position)` |
-| breadcrumb steps carry exactly three string keys | `publishing_valid_term_path` + CHECK |
+| Invariant                                            | Mechanism                                                                   |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| vocabulary kind matches the assignment table         | `CHECK` + composite FK `(vocabulary_id, vocabulary_kind) → (id, kind)`      |
+| term belongs to the assigned vocabulary and locale   | composite FK `(taxonomy_term_id, vocabulary_id, locale)`                    |
+| assignment locale matches its revision or version    | composite FK `(owner_id, locale)`                                           |
+| single-valued cardinality                            | `UNIQUE(owner_id, vocabulary_id)`                                           |
+| ordered multi-valued uniqueness                      | `UNIQUE(owner, vocabulary, term)` and `UNIQUE(owner, vocabulary, position)` |
+| flat vocabularies have no hierarchy                  | `CHECK` on `parent_id` / `depth`                                            |
+| depth equals parent depth plus one                   | `publishing_taxonomy_term_hierarchy_guard` trigger                          |
+| no cycles                                            | same trigger, recursive CTE over ancestors                                  |
+| vocabulary scope matches the entry's edition         | `publishing_taxonomy_assignment_scope_guard` constraint trigger             |
+| version rows and snapshots never change              | `publishing_reject_mutation` trigger                                        |
+| a promoted revision and its assignments never change | `publishing_promoted_revision_guard` trigger                                |
+| snapshots are derived, not supplied                  | `publishing_derive_taxonomy_snapshot` BEFORE INSERT trigger                 |
+| a version's snapshots match its revision exactly     | `publishing_assert_version_snapshot_complete` deferred constraint trigger   |
+| vocabularies and terms are never deleted             | `publishing_reject_retirement_by_deletion` trigger                          |
+| a vocabulary's structure is frozen once it has terms | `publishing_vocabulary_structure_guard` trigger                             |
+| sibling order is deterministic                       | `UNIQUE NULLS NOT DISTINCT (vocabulary_id, locale, parent_id, position)`    |
+| breadcrumb steps carry exactly three string keys     | `publishing_valid_term_path` + CHECK                                        |
 
 Version immutability is enforced by trigger rather than by callback alone because `update_column`,
 `update_all`, direct SQL, and maintenance scripts all bypass Active Record. The model-level
@@ -234,20 +235,20 @@ Edition identity remains `(audience, surface, locale)`. No `placement` column wa
 OR (surface IN ('docs','news','help') AND region_code IS NOT NULL AND region_code ~ '^[a-z]{2}$')
 ```
 
-The regional surfaces are enumerated explicitly rather than written as `surface <> 'info'` so that an
-unknown future surface cannot silently become regional.
+The regional surfaces are enumerated explicitly rather than written as `surface <> 'info'` so that
+an unknown future surface cannot silently become regional.
 
 ### Archive semantics, stated explicitly
 
-| Question | Answer |
-|---|---|
-| Can a vocabulary or term be unarchived? | Yes, by clearing `archived_at` and `archive_reason` together. |
-| Can a parent be archived while active children remain? | Yes. The children stay addressable and editable; they simply cannot be promoted. |
+| Question                                                     | Answer                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Can a vocabulary or term be unarchived?                      | Yes, by clearing `archived_at` and `archive_reason` together.                    |
+| Can a parent be archived while active children remain?       | Yes. The children stay addressable and editable; they simply cannot be promoted. |
 | Can a term slug or vocabulary key be reused after archiving? | No. The uniqueness index still covers archived rows, so identity stays reserved. |
-| Can a live draft retain archived terms? | Yes — that is how restoring an old version stays possible. |
-| Can published versions retain archived terms? | Yes. A published snapshot is history and does not become invalid. |
-| Can a vocabulary or term be physically deleted? | Never, by trigger, even with no references. |
-| Does archiving a term hide already-published content? | No. The entry stays published and stays findable by its published snapshot slug. |
+| Can a live draft retain archived terms?                      | Yes — that is how restoring an old version stays possible.                       |
+| Can published versions retain archived terms?                | Yes. A published snapshot is history and does not become invalid.                |
+| Can a vocabulary or term be physically deleted?              | Never, by trigger, even with no references.                                      |
+| Does archiving a term hide already-published content?        | No. The entry stays published and stays findable by its published snapshot slug. |
 
 ## Deliberate breaking API changes
 
@@ -258,8 +259,8 @@ once:
    JSONB carried a `text` key, leaving consumers unable to rely on the field's type.
 2. **`taxonomy` is a new required key** on every serialized entry, rendered from the published
    version's snapshots. An unassigned entry renders `{"category": null, "tag": []}`.
-3. **An archived entry is no longer served**, even while a publication window is still open. This was
-   previously a gap rather than a decision.
+3. **An archived entry is no longer served**, even while a publication window is still open. This
+   was previously a gap rather than a decision.
 
 The serialized entry now has exactly these keys, and a contract test pins them:
 
@@ -271,19 +272,19 @@ namespace  surface  slug  locale  title  summary  body  published_at  taxonomy
 audience (`app`/`com`/`org`). These names are confusing but were left alone: renaming them is a
 separate decision from this change.
 
-Index filtering accepts `?category=<slug>` and `?tag=<slug>`, matched against the published version's
-**snapshot** slugs — the same frozen values the response renders, never the live term. A URL built
-from published JSON therefore keeps working after the term is renamed, moved, or archived, and a
-term's new name never retroactively matches content published under its old one. Matching is exact:
-a parent category does not select its descendants. An unknown filter term returns an empty list
-rather than falling back to the unfiltered one. No general query-language syntax was invented.
+Index filtering accepts `?category=<slug>` and `?tag=<slug>`, matched against the published
+version's **snapshot** slugs — the same frozen values the response renders, never the live term. A
+URL built from published JSON therefore keeps working after the term is renamed, moved, or archived,
+and a term's new name never retroactively matches content published under its old one. Matching is
+exact: a parent category does not select its descendants. An unknown filter term returns an empty
+list rather than falling back to the unfiltered one. No general query-language syntax was invented.
 
 The taxonomy object is assembled from the vocabularies that exist for the edition's audience and
-surface, keyed by vocabulary key and shaped by structural kind. Adding a vocabulary row adds a key to
-the response; no serializer, promotion, or restore branch knows the words "category" or "tag".
+surface, keyed by vocabulary key and shaped by structural kind. Adding a vocabulary row adds a key
+to the response; no serializer, promotion, or restore branch knows the words "category" or "tag".
 
-The nine nested public Revision endpoints for docs, news, and help were deleted. They returned
-`[]` and `{}` unconditionally and never represented a real contract.
+The nine nested public Revision endpoints for docs, news, and help were deleted. They returned `[]`
+and `{}` unconditionally and never represented a real contract.
 
 ## Consequences
 
@@ -291,8 +292,8 @@ The nine nested public Revision endpoints for docs, news, and help were deleted.
 - Historical rendering is stable under vocabulary maintenance: archive, rename, and reorder freely.
 - An author must resolve archived terms before republishing restored content. This is intentional
   friction at the publishing boundary, not an error to be worked around.
-- Cross-database transactions remain unnecessary: taxonomy lives in the same `publishing` database as
-  the content it describes, so promotion stays atomic.
+- Cross-database transactions remain unnecessary: taxonomy lives in the same `publishing` database
+  as the content it describes, so promotion stays atomic.
 - The legacy CMS taxonomy DDL, its drop-approval infrastructure, and the migration audit task were
   removed rather than retained alongside the new schema. Nothing was deployed, so there is no
   production cleanup left pending and no risk of table-name collision (`{surface}_{family}_*` versus

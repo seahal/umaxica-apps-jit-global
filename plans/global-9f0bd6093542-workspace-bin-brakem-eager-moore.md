@@ -108,12 +108,16 @@ parity, since the concern is shared).
 
 ## Critical files
 
-| File                                                                                      | Change                                                                 |
-| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --- | -------------- |
-| `app/services/oidc_end_session_request.rb`                                                | Line 70: add `                                                         |     | request.head?` |
-| `app/controllers/concerns/sign_oidc_logout.rb`                                            | Line 24: add `                                                         |     | request.head?` |
-| `test/services/oidc/end_session_request_test.rb`                                          | Add HEAD-equivalence test mirroring the existing GET test at L148      |
-| `test/controllers/acme/app/oidc/logouts_controller_test.rb` (and `com/`, `org/` siblings) | Add HEAD-does-not-perform-logout coverage for the `id_token_hint` flow |
+| File | Change | |
+----------------------------------------------------------------------------------------- |
+---------------------------------------------------------------------- | --- | -------------- | |
+`app/services/oidc_end_session_request.rb` | Line 70: add
+`                                                         |     | request.head?` | |
+`app/controllers/concerns/sign_oidc_logout.rb` | Line 24: add
+`                                                         |     | request.head?` | |
+`test/services/oidc/end_session_request_test.rb` | Add HEAD-equivalence test mirroring the existing
+GET test at L148 | | `test/controllers/acme/app/oidc/logouts_controller_test.rb` (and `com/`, `org/`
+siblings) | Add HEAD-does-not-perform-logout coverage for the `id_token_hint` flow |
 
 ## Required harness rules
 

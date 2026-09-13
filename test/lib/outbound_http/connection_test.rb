@@ -70,6 +70,43 @@ class OutboundHttpConnectionTest < ActiveSupport::TestCase
     end
   end
 
+  test "a frozen URI constant passed as the endpoint is not mutated during construction" do
+    # Callers such as JitSecurityTurnstileVerifier::VERIFY_URI hand in a frozen
+    # URI class constant. Faraday mutates the URI it is given (it sets #path on
+    # it), so the connection builder must not pass the caller's object straight
+    # through: that raised FrozenError and every Turnstile check failed with a
+    # spurious "unavailable" result.
+    endpoint = URI("https://provider.example/turnstile/v0/siteverify").freeze
+
+    connection =
+      OutboundHttp::Connection.build(
+        url: endpoint,
+        open_timeout: 2,
+        read_timeout: 5,
+        require_https: true,
+      )
+
+    assert_equal "provider.example", connection.url_prefix.host
+    assert_equal "/turnstile/v0/siteverify", endpoint.path, "the caller's URI was mutated"
+    assert_predicate endpoint, :frozen?
+  end
+
+  test "a shared mutable URI constant is left unchanged so it is safe to reuse across threads" do
+    # Faraday rewrites an empty path to "/" on the URI it is handed, so a shared
+    # constant without an explicit path would be mutated under other threads.
+    endpoint = URI("https://provider.example")
+
+    OutboundHttp::Connection.build(
+      url: endpoint,
+      open_timeout: 2,
+      read_timeout: 5,
+      require_https: true,
+    )
+
+    assert_equal "", endpoint.path, "the caller's URI was mutated in place"
+    assert_equal "https://provider.example", endpoint.to_s
+  end
+
   test "the shared faraday default adapter is left alone" do
     assert_equal :net_http, OutboundHttp::Connection.default_adapter
     assert_equal [Faraday::Error], OutboundHttp::Connection::NETWORK_ERRORS

@@ -37,9 +37,9 @@ Containers CLI can invoke `podman compose`, and Podman otherwise prefers an inst
 2. Run **Dev Containers: Rebuild and Reopen in Container** from the Command Palette.
 3. After the first successful build, use **Dev Containers: Reopen in Container** for routine starts.
 
-VS Code reads `.devcontainer/devcontainer.json`, combines the shared infrastructure and core Compose files,
-provisions the configured features, runs the lifecycle commands, and opens `/home/global/workspace`
-as user `global`.
+VS Code reads `.devcontainer/devcontainer.json`, combines the shared infrastructure and core Compose
+files, provisions the configured features, runs the lifecycle commands, and opens
+`/home/global/workspace` as user `global`.
 
 ## CLI Equivalent
 
@@ -133,8 +133,8 @@ Reopen in Container**. Do not use a rebuild path for routine starts because it r
 Container.
 
 Do not use `--remove-existing-container` on the CLI recovery path. It issues a bare
-`podman rm -f <core>` that ignores the rest of the project. Take the whole project down
-first instead, then start it again:
+`podman rm -f <core>` that ignores the rest of the project. Take the whole project down first
+instead, then start it again:
 
 ```sh
 podman compose --project-name umaxicaappsglobaldc \
@@ -157,7 +157,6 @@ databases and re-clone the replica afterwards.
 - [Container Engine Notes (Podman / Docker)](container-engine-podman-notes.md)
 - [Development Container Targets](development-container-targets.md)
 - [Development Host Port Exposure](development-host-port-exposure.md)
-
 
 ## The Compose file contract
 
@@ -186,33 +185,31 @@ then `Dev Containers: Reopen in Container`, or the `devcontainer up` invocation 
 Two rules make that hold, and both are asserted by
 `test/tooling/compose_local_override_optional_test.rb`:
 
-1. **Every `dockerComposeFile` entry is a tracked file.** The Dev Containers CLI passes each
-   entry to Compose as `-f`, so an entry a clone does not contain fails the whole `up` at
-   configuration resolution with a bare `no such file or directory`.
-2. **No file on that path uses a required `${VAR:?}` interpolation.** Compose interpolates
-   every listed file in full whichever service is named, so one required variable stops
-   `devcontainer up` on a machine that never runs that service. This is how the retired
-   `compose.custom.yaml` broke clean checkouts: it demanded `CLOUDFLARED_TOKEN` for a
-   connector nobody had asked to start. The primary connector is unprofiled so the Dev
-   Container lifecycle starts it; a missing token uses `:-` and `restart: on-failure:3`
-   rather than `${CLOUDFLARED_TOKEN:?}`. The alternative connector stays behind
-   `--profile tunnel-edge`.
+1. **Every `dockerComposeFile` entry is a tracked file.** The Dev Containers CLI passes each entry
+   to Compose as `-f`, so an entry a clone does not contain fails the whole `up` at configuration
+   resolution with a bare `no such file or directory`.
+2. **No file on that path uses a required `${VAR:?}` interpolation.** Compose interpolates every
+   listed file in full whichever service is named, so one required variable stops `devcontainer up`
+   on a machine that never runs that service. This is how the retired `compose.custom.yaml` broke
+   clean checkouts: it demanded `CLOUDFLARED_TOKEN` for a connector nobody had asked to start. The
+   primary connector is unprofiled so the Dev Container lifecycle starts it; a missing token uses
+   `:-` and `restart: on-failure:3` rather than `${CLOUDFLARED_TOKEN:?}`. The alternative connector
+   stays behind `--profile tunnel-edge`.
 
-The same `-f` also suppresses Compose's auto-discovery of `compose.override.yaml`, so a
-developer's local override applies to a bare `docker compose` and to explicit `-f` runs,
-not to the editor. Copy `compose.override.yaml.example` only if you want one of the
-machine-specific things it documents.
+The same `-f` also suppresses Compose's auto-discovery of `compose.override.yaml`, so a developer's
+local override applies to a bare `docker compose` and to explicit `-f` runs, not to the editor. Copy
+`compose.override.yaml.example` only if you want one of the machine-specific things it documents.
 
 ### Migrating from `compose.custom.yaml`
 
-`compose.custom.yaml` is deleted. Its `cloudflare-tunnel` service moved into `compose.yaml`
-as an unprofiled sidecar, with `${CLOUDFLARED_TOKEN:-}` instead of `${CLOUDFLARED_TOKEN:?}`.
-A Dev Container `up` starts it with the rest of the stack. Recreate it with:
+`compose.custom.yaml` is deleted. Its `cloudflare-tunnel` service moved into `compose.yaml` as an
+unprofiled sidecar, with `${CLOUDFLARED_TOKEN:-}` instead of `${CLOUDFLARED_TOKEN:?}`. A Dev
+Container `up` starts it with the rest of the stack. Recreate it with:
 
 ```bash
 podman compose -f compose.yaml up -d cloudflare-tunnel
 ```
 
-If you kept host devices or personal tooling in your own copy, move them to
-`compose.override.yaml` (see `compose.override.yaml.example`) and delete the old file. It was
-tracked, so `git pull` removes it for you unless you have local modifications.
+If you kept host devices or personal tooling in your own copy, move them to `compose.override.yaml`
+(see `compose.override.yaml.example`) and delete the old file. It was tracked, so `git pull` removes
+it for you unless you have local modifications.

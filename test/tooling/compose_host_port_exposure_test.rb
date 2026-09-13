@@ -42,6 +42,13 @@ class ComposeHostPortExposureTest < Minitest::Test
                  "service to the LAN."
   end
 
+  def test_devcontainer_rails_uses_a_distinct_host_port
+    core = load_compose(".devcontainer/compose.yaml").fetch("services").fetch("core")
+
+    assert_includes core.fetch("ports"), "127.0.0.1:3001:3000"
+    assert_not_includes core.fetch("ports"), "127.0.0.1:3000:3000"
+  end
+
   def test_datastore_publications_are_loopback_only
     offenders =
       each_published_port.select do |entry|
@@ -99,8 +106,8 @@ class ComposeHostPortExposureTest < Minitest::Test
     end
   end
 
-  # Compose accepts both the short string form ("127.0.0.1:3000:3000") and the long mapping form
-  # ({"target" => 3000, "published" => "3000", "host_ip" => "127.0.0.1"}). Anything this method
+  # Compose accepts both the short string form ("127.0.0.1:3001:3000") and the long mapping form
+  # ({"target" => 3000, "published" => "3001", "host_ip" => "127.0.0.1"}). Anything this method
   # cannot resolve to a host address is reported rather than assumed safe.
   def published_host_address(port)
     return port["host_ip"].to_s if port.is_a?(Hash)

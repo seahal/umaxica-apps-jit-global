@@ -32,7 +32,8 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_response :success
     assert_equal "base/app/dashboards/show", inertia_component
-    assert_equal "Dashboard", inertia_props.fetch("title")
+    assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
+    refute inertia_props.key?("description")
 
     links = inertia_props.fetch("sections").flat_map { |section| section.fetch("items") }
     hrefs = links.map { |link| link.fetch("href") }
@@ -40,21 +41,25 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_includes hrefs, base_app_root_path(ri: "jp")
     assert_includes hrefs, base_app_dashboard_path(ri: "jp")
-    assert_equal base_app_accounts_path(ri: "jp"), labelled.fetch("Account")
-    assert_equal base_app_organizations_path(ri: "jp"), labelled.fetch("Organization")
-    assert_equal base_app_avatars_path(ri: "jp"), labelled.fetch("Avatar")
-    assert_equal base_app_switcher_path(ri: "jp"), labelled.fetch("Switcher")
-    assert_equal base_app_identity_path(ri: "jp"), labelled.fetch("Identity")
-    assert_includes hrefs, base_app_selector_path(ri: "jp")
+    assert_equal base_app_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
+    assert_equal base_app_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
+    assert_equal base_app_avatars_path(ri: "jp"), labelled.fetch(dashboard_label(:avatar))
+    assert_equal base_app_switcher_path(ri: "jp"), labelled.fetch(dashboard_label(:switcher))
+    assert_equal base_app_identity_path(ri: "jp"), labelled.fetch(dashboard_label(:identity))
+    assert_equal base_app_identity_sessions_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
+    assert_not_includes hrefs, base_app_selector_path(ri: "jp")
+    assert_not labelled.key?(dashboard_label(:selector))
     assert_includes hrefs, new_base_app_sign_out_path(ri: "jp")
     # The dashboard only links to ceremonies; it never posts a logout itself.
     assert_select "form[action^=?]", base_app_oidc_logout_path, count: 0
     assert_includes hrefs, base_app_oidc_authorization_path(ri: "jp", screen_hint: "signin")
     assert_includes hrefs, base_app_oidc_authorization_path(ri: "jp", screen_hint: "signup")
-    assert_includes labelled.keys, "OIDC discovery"
-    assert_includes labelled.keys, "JWKS"
-    assert_includes labelled.keys, "UserInfo"
+    assert_includes labelled.keys, dashboard_label(:oidc_discovery)
+    assert_includes labelled.keys, dashboard_label(:jwks)
+    assert_includes labelled.keys, dashboard_label(:userinfo)
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
+    assert_no_match(/サインイン済み|Signed in/i, response.body)
   end
 
   test "shared dashboard render uses the surface-local authorization entrypoint" do
@@ -69,9 +74,63 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
         .to_h { |link| [link.fetch("label"), link.fetch("href")] }
 
     assert_equal base_app_oidc_authorization_path(ri: "jp", screen_hint: "signin"),
-                 labelled.fetch("Authorize (sign in)")
+                 labelled.fetch(dashboard_label(:authorize_sign_in))
     assert_equal base_app_oidc_authorization_path(ri: "jp", screen_hint: "signup"),
-                 labelled.fetch("Authorize (sign up)")
+                 labelled.fetch(dashboard_label(:authorize_sign_up))
+  end
+
+  test "identity_show_links_up_to_the_dashboard" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+
+    get base_app_identity_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/app/identities/show", inertia_component
+    assert_equal I18n.t("base.shared.identity.up_link", locale: :ja), inertia_props.dig("up_link", "label")
+    assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
+  end
+
+  test "identity_show_links_to_identity_pages" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+
+    get base_app_identity_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    labelled =
+      inertia_props.fetch("sections")
+        .flat_map { |section| section.fetch("items") }
+        .to_h { |link| [link.fetch("label"), link.fetch("href")] }
+
+    assert_equal base_app_identity_emails_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.emails", locale: :ja))
+    assert_equal base_app_identity_telephones_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.telephones", locale: :ja))
+    assert_equal base_app_identity_birthdate_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
+    assert_equal base_app_identity_secrets_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
+    assert_not_includes labelled.values, base_app_identity_sessions_path(ri: "jp")
+    assert_equal base_app_identity_activities_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
+    assert_equal base_app_identity_standing_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.standing", locale: :ja))
+    assert_equal auth_app_settings_passkeys_url(ri: "jp", host: @sign_host, protocol: "https"),
+                 labelled.fetch(I18n.t("controller.sign.app.setting.index.passkey", locale: :ja))
+    assert_equal auth_app_settings_totps_url(ri: "jp", host: @sign_host, protocol: "https"),
+                 labelled.fetch(I18n.t("controller.sign.app.setting.index.totp", locale: :ja))
+    assert_equal auth_app_settings_google_url(ri: "jp", host: @sign_host, protocol: "https"),
+                 labelled.fetch(I18n.t("controller.sign.app.setting.index.google", locale: :ja))
+    assert_equal auth_app_settings_apple_url(ri: "jp", host: @sign_host, protocol: "https"),
+                 labelled.fetch(I18n.t("controller.sign.app.setting.index.apple", locale: :ja))
+    assert_equal base_app_identity_mfa_challenge_path(ri: "jp"),
+                 labelled.fetch(I18n.t("sign.app.settings.show.mfa", locale: :ja))
+    assert_equal base_app_identity_mfa_reset_path(ri: "jp"),
+                 labelled.fetch(I18n.t("sign.app.settings.show.mfa_reset", locale: :ja))
+    assert_equal new_base_app_identity_withdrawal_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.withdrawal", locale: :ja))
+    assert_not_includes labelled.values, new_base_app_sign_out_path(ri: "jp")
   end
 
   test "welcome_requires_authentication" do
@@ -81,6 +140,11 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   private
+
+  # Requests use ri=jp, so the dashboard renders its Japanese copy.
+  def dashboard_label(key)
+    I18n.t(key, scope: "base.shared.dashboard.links", locale: :ja)
+  end
 
   def select_token!(surface:, principal:, token:)
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)

@@ -146,6 +146,18 @@ describe("auth/com sign-up OTP screens", () => {
     expect(markup).toContain('name="visitor_telephone[pass_code]"');
     expect(markup).toContain("認証コードが正しくありません");
   });
+
+  it("lists validation messages without a heading when the server sent none", () => {
+    const markup = renderToStaticMarkup(
+      <ComSignUpEmailEdit
+        {...otpProps}
+        errors={["認証コードが正しくありません"]}
+      />,
+    );
+
+    expect(markup).toContain("認証コードが正しくありません");
+    expect(markup).not.toContain("<h2");
+  });
 });
 
 describe("auth/com sign-up checkpoint screens", () => {

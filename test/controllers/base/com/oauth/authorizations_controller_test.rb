@@ -62,6 +62,14 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
 
   # The login_challenge branch resolves a stored transaction. An unknown one must not echo the
   # model or primary key that was looked up.
+  test "a region identifier on the request is ignored rather than treated as unpermitted" do
+    assert_difference -> { VisitorOidcAuthorizationTransaction.pending.count }, +1 do
+      get base_com_oauth_authorization_url(host: @host, **authorize_params),
+          params: { ri: "jp" },
+          headers: host_headers(@host)
+    end
+  end
+
   test "an unknown login challenge is refused with a fixed description" do
     get base_com_oauth_authorization_url(host: @host, login_challenge: SecureRandom.uuid),
         headers: host_headers(@host)

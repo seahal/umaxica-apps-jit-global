@@ -35,7 +35,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
-  test "post sign out revokes the current session and completes on the base surface" do
+  test "post sign out revokes the current session and completes on the base lobby" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
@@ -44,18 +44,23 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_predicate token.reload, :revoked?
 
-    # Completion is surface-local: the browser must not be handed to another host,
-    # and the completion marker must not travel in the URL.
+    # Completion is surface-local PRG onto the unauthenticated entry: the browser must not be
+    # handed to another host, and the one-time notice must not travel in the URL.
     location = URI.parse(response.location)
 
     assert_equal @host, location.host
-    assert_equal base_app_sign_out_completion_path(ri: "jp"), location.request_uri
+    assert_equal base_app_lobby_path(ri: "jp"), location.request_uri
 
     get response.location
 
     assert_response :success
-    assert_equal "base/app/sign_outs/complete", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_equal "base/app/lobbies/show", inertia_component
+    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("notice").fetch("title")
+
+    get base_app_lobby_url(host: @host, ri: "jp")
+
+    assert_response :success
+    assert_nil inertia_props["notice"]
   end
 
   # `encrypt_history` keeps this tab's history entries encrypted, but the key that decrypts them
@@ -70,29 +75,40 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert inertia_page.fetch("clearHistory"),
-           "the sign-out completion page must carry clearHistory so Back cannot restore a signed-in page"
+           "the lobby after sign-out must carry clearHistory so Back cannot restore a signed-in page"
   end
 
   # The flag is consumed by the render that follows sign-out. A later page must not keep clearing
   # history, which would discard the signed-out visitor's ordinary navigation state.
-  test "clear history is not repeated on the page after the sign out completion" do
+  test "clear history is not repeated on the page after the sign out lobby" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
     post base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
     get response.location
-    get edit_base_app_sign_out_url(host: @host, ri: "jp")
+    get base_app_lobby_url(host: @host, ri: "jp")
 
     assert_response :success
     assert_not inertia_page.fetch("clearHistory")
   end
 
-  test "post sign out without a resolved session renders friendly completion" do
+  test "post sign out without a resolved session redirects to the lobby" do
     post base_app_sign_out_url(host: @host, ri: "jp")
 
+    assert_response :see_other
+    assert_equal base_app_lobby_path(ri: "jp"), URI.parse(response.location).request_uri
+
+    get response.location
+
     assert_response :success
-    assert_equal "base/app/sign_outs/complete", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_equal "base/app/lobbies/show", inertia_component
+    assert_nil inertia_props["notice"]
+  end
+
+  test "the retired sign out completion route is not recognized" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{@host}/sign/out/complete", method: :get)
+    end
   end
 
   private

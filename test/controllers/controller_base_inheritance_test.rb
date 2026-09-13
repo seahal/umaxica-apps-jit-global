@@ -24,6 +24,7 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Docs::App::BareController,
     Docs::Com::BareController,
     Docs::Org::BareController,
+    Guid::Net::BareController,
     Help::App::BareController,
     Help::Com::BareController,
     Help::Org::BareController,

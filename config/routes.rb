@@ -11,6 +11,9 @@ Rails.application.routes.draw do
   # Info owns public informational content.
   draw :info
 
+  # GUID owns domain-level globally-unique-identifier resolution.
+  draw :guid
+
   # Core owns the regional BFF surface.
   draw :core
 
@@ -28,6 +31,9 @@ Rails.application.routes.draw do
 
   # News owns the public news content surface.
   draw :news
+
+  # Edit owns the staff Publishing management surface.
+  draw :edit
 
   # Any host that reached the app without matching a surface above is unknown;
   # answer it here rather than leaking a routing error.

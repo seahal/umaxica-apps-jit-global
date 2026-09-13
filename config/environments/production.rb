@@ -201,9 +201,9 @@ Rails.application.configure do
     "auth.umaxica.app",
     "auth.umaxica.com",
     "auth.umaxica.org",
-    "side-jp.umaxica.app",
-    "side-jp.umaxica.com",
-    "side-jp.umaxica.org",
+    "www-jp.umaxica.app",
+    "www-jp.umaxica.com",
+    "www-jp.umaxica.org",
     "www.umaxica.app",
     "www.umaxica.com",
     "www.umaxica.org",
@@ -227,6 +227,8 @@ Rails.application.configure do
     boot_hosts.info_service.host,
     boot_hosts.info_corporate.host,
     boot_hosts.info_staff.host,
+    boot_hosts.guid_service.host,
+    boot_hosts.edit_staff.host,
   ]
   # The docs and news surfaces have no host entry. Their only entries here were
   # `docs.*.localhost` and `news.*.localhost` -- private development ingress names, which

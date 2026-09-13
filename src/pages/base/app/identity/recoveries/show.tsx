@@ -65,7 +65,12 @@ function AppealSection({ form, casePublicId }: { form: AppealForm; casePublicId:
         label={form.reason_label}
         options={form.reason_codes}
         value={reasonCode}
-        onChange={(value) => setReasonCode(value === null ? "" : String(value))}
+        onChange={(value) => {
+          /* v8 ignore next -- React Aria reports null only when the selection is cleared */
+          if (value !== null) {
+            setReasonCode(String(value));
+          }
+        }}
       />
 
       <TextField

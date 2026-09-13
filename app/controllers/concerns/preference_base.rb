@@ -133,20 +133,21 @@ module PreferenceBase
   end
 
   def set_color_theme
-    theme = normalize_theme(actor_preference_theme)
-    theme ||= "sy"
+    source = color_theme_preference_source
+    theme = normalize_theme(public_option_cookie_value(source, THEME_COOKIE_KEY, :theme))
 
     write_preference_cookie(THEME_COOKIE_KEY, theme)
-    write_public_option_cookies(Actor.preferences)
+    write_public_option_cookies(source)
     @color_theme = theme
     nil
   end
 
-  def actor_preference_theme
-    preference = Actor.preferences
-    return if preference.null?
+  def color_theme_preference_source
+    load_access_token_payload if respond_to?(:load_access_token_payload, true)
+    payload = preference_payload_preferences if respond_to?(:preference_payload_preferences, true)
+    return payload if payload.is_a?(Hash) && payload.present?
 
-    preference.theme
+    Actor.preferences
   end
 
   def write_public_option_cookies(source)
@@ -368,10 +369,9 @@ module PreferenceBase
 
     ChronicleRecord.connected_to(role: :writing) do
       ensure_model_defaults!(preference_audit_level_class)
-
-      if normalized_event_id.present?
-        preference_audit_event_class.find_or_create_by!(id: normalized_event_id)
-      end
+      # Seed the full event catalog once. Per-id find_or_create_by! N+1s when a
+      # region change writes language, date format, clock, and currency as one bundle.
+      ensure_model_defaults!(preference_audit_event_class) if normalized_event_id.present?
 
       preference_audit_class.create!(
         subject_id: @preferences.id.to_s,

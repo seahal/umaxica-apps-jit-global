@@ -265,7 +265,12 @@ ARG DOCKER_USER
 ARG DOCKER_GROUP
 ARG GITHUB_ACTIONS
 ARG BUN_VERSION
+# `exec`-created sessions inherit no login shell, so SHELL is unset and every
+# tool that shells out (Dev Containers CLI, git, editors, agents) falls back to
+# /bin/sh -- dash here. The account's shell is already bash; this makes the
+# environment agree with it.
 ENV HOME=/home/${DOCKER_USER} \
+    SHELL=/bin/bash \
     CORE_WORKLOAD_USER=${DOCKER_USER} \
     CORE_WORKLOAD_GROUP=${DOCKER_GROUP}
 WORKDIR ${HOME}/workspace

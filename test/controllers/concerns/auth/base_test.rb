@@ -247,8 +247,8 @@ module Auth
       assert_equal %w(client operator visitor), AuthenticationBase::VALID_ACTOR_TYPES
     end
 
-    test "Token.extract_act returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_act(nil)
+    test "Token.extract_resource_type returns nil for nil payload" do
+      assert_nil AuthenticationToken.extract_resource_type(nil)
     end
 
     test "begin_sign_in_sequence stores only safe encoded return paths" do
@@ -493,10 +493,6 @@ module Auth
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
     end
 
-    test "Token.extract_type returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_type(nil)
-    end
-
     test "Token.extract_session_id returns nil for nil payload" do
       assert_nil AuthenticationToken.extract_session_id(nil)
     end
@@ -611,10 +607,8 @@ module Auth
       assert_equal ["/default", {}], harness.redirected
     end
 
-    test "JwtConfiguration.issuer respects resource_type" do
-      assert_equal "urn:umaxica:test:auth:client", AuthenticationJwtConfiguration.issuer("client")
-      assert_equal "urn:umaxica:test:auth:operator", AuthenticationJwtConfiguration.issuer("operator")
-      assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer("invalid")
+    test "JwtConfiguration.issuer is the test-environment authorization-server identity" do
+      assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer
     end
 
     test "JwtConfiguration.audiences requires distinct resource-specific env" do
@@ -642,12 +636,6 @@ module Auth
       ) do
         assert_raises(ArgumentError) { AuthenticationJwtConfiguration.audiences("client") }
       end
-    end
-
-    test "JwtConfiguration.token_type returns correct format" do
-      assert_equal "auth-access-token;client", AuthenticationJwtConfiguration.token_type("client")
-      assert_equal "auth-access-token;operator", AuthenticationJwtConfiguration.token_type("operator")
-      assert_raises(ArgumentError) { AuthenticationJwtConfiguration.token_type("invalid") }
     end
 
     private

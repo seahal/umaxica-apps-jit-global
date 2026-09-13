@@ -17,6 +17,8 @@ class Base::Org::AccountsControllerTest < ActionDispatch::IntegrationTest
     get base_org_accounts_url(ri: "jp", host: @host), headers: as_staff_headers(@staff, host: @host)
 
     assert_response :success
+    assert_equal I18n.t("actions.up", locale: :ja), inertia_props.dig("up_link", "label")
+    assert_equal base_org_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "show resolves by public_id" do

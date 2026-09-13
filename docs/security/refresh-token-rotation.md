@@ -44,6 +44,26 @@ Acme refresh rotation must:
 - return refreshed access tokens to the default AAL1 context unless acme policy explicitly says
   otherwise.
 
+### Absolute Session Lifetime
+
+Refresh-token expiry is an internal token lifetime. **Session Expires At** is the absolute session
+lifetime ceiling: successful refresh rotation MUST NOT extend it. The current root-token schema has
+no second timestamp: `discarded_at` is initialized at session establishment, used to reject refresh
+after that instant, and copied unchanged across rotation. Its user-facing meaning is therefore the
+fixed session ceiling, never a sliding refresh expiry. OIDC usage rows retain their separate
+`refresh_token_expires_at` internally, clamped to the root session ceiling. Newly issued Access and
+Refresh Tokens also end no later than that ceiling. Logout scheduling, forced termination, or revoke
+may end the session earlier. Reaching the ceiling invalidates refresh and authenticated session
+resolution, so rotation cannot revive it. The implementation contract is covered by
+`test/services/refresh_token_absolute_expiry_test.rb`,
+`test/values/session_absolute_expiry_value_test.rb`,
+`test/services/oidc/token_exchange_service_test.rb`, and
+`test/integration/core_browser_api_boundary_test.rb`.
+
+Successful refresh rotation remains internal to the user-facing activity history while its existing
+Chronicle event is retained for audit. Replay detection is separately classified as a high-risk,
+user-attention event.
+
 Step-up freshness is not sticky across refresh. A refresh must not extend `recent_auth`, `sudo`,
 `last_step_up_at`, or equivalent freshness.
 

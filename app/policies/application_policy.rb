@@ -11,6 +11,15 @@ class ApplicationPolicy < ActionPolicy::Base
   alias_rule :edit?, to: :update?
   alias_rule :new?, to: :create?
 
+  # Session capability layer. Authorization is DB role AND session capability
+  # AND the ordinary policy rule; an authentication context can only ever
+  # narrow what the actor's roles already allow, never widen it.
+  #
+  # The check is a pre-check rather than a condition inside each rule so that a
+  # newly added sensitive action is covered without anyone remembering to guard
+  # it (docs/security/org-emergency-access.md).
+  pre_check :deny_capability_restricted_context
+
   def edit? = update?
 
   def new? = create?
@@ -42,6 +51,27 @@ class ApplicationPolicy < ActionPolicy::Base
 
   relation_scope do |relation|
     relation.none
+  end
+
+  # Named by the pre_check above; Action Policy resolves it on the policy
+  # instance, so it is not part of the policy's public rule vocabulary.
+  def deny_capability_restricted_context
+    rule = result&.rule
+    return if rule.blank?
+
+    deny! unless authentication_context.permits_rule?(rule)
+  end
+
+  # The trusted authentication context of the current session, read from the
+  # signed access token. An absent claim is a session minted before Emergency
+  # Access existed and is Normal; an unrecognised value carries no capabilities
+  # at all, so a tampered or unknown context denies rather than defaulting open.
+  def authentication_context
+    AuthorizationTokenClaims.authentication_context(current_token)
+  end
+
+  def emergency_session?
+    authentication_context.emergency?
   end
 
   protected

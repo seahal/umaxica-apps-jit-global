@@ -8,6 +8,7 @@ module Base
         include ::SurfaceInertiaPage
 
         AUTHENTICATION_MODE = :private
+        declare_authentication_mode! :private
 
         before_action :authenticate_visitor!
         before_action :set_session, only: %i(show destroy)
@@ -20,7 +21,14 @@ module Base
 
         def show
           authorize!(@session)
-          render inertia: true, props: show_page_props
+          row = serialize_session_row(@session)
+          render inertia: true, props: {
+            title: t("base.shared.identity.sessions.title"),
+            back_link: { label: t("sign.app.settings.show.back"), href: base_com_identity_sessions_path(ri: params[:ri]) },
+            expires_at_description: t("base.shared.identity.sessions.expires_at_description"),
+            session: row,
+            columns: session_columns,
+          }
         end
 
         def destroy
@@ -34,80 +42,62 @@ module Base
         def index_page_props
           sessions = @sessions.map { |session| serialize_session_row(session) }
           {
-            title: "Sessions",
-            back_link: { label: "Back", href: base_com_identity_path(ri: params[:ri]) },
-            columns: ["Session", "Kind", "Binding", "Last activity", "Created", "Refresh expires", ""],
-            empty_message: t("base.com.identity.sessions.index.empty_message"),
-            current_label: "current",
-            bulk_actions: bulk_session_action_props(sessions),
+            title: t("base.shared.identity.sessions.title"),
+            back_link: { label: t("sign.app.settings.show.back"), href: base_com_identity_path(ri: params[:ri]) },
+            empty_message: t("base.shared.identity.sessions.empty"),
+            expires_at_description: t("base.shared.identity.sessions.expires_at_description"),
+            columns: session_columns,
+            bulk_revocations: bulk_session_action_props(sessions),
             sessions: sessions,
           }
         end
 
-        # Bulk revocation was only offered when another session existed, and the page keeps that
-        # rule on the server: an action the actor cannot use is absent from the props, not hidden.
+        def session_columns
+          %i(device last_activity created expires_at status action).index_with do |column|
+            t("base.shared.identity.sessions.columns.#{column}")
+          end
+        end
+
         def bulk_session_action_props(sessions)
-          return unless sessions.any? { |session| !session.fetch(:current) }
+          return unless sessions.any? { |session| session.fetch(:revoke).present? }
 
           {
-            revoke_others: {
-              label: "Revoke other sessions",
-              url: base_com_identity_other_sessions_path(ri: params[:ri]),
+            others: {
+              label: t("sign.app.settings.sessions.revoke.others_button"),
+              href: base_com_identity_other_sessions_path(ri: params[:ri]),
               confirm: t("base.com.identity.sessions.index.revoke_others_confirm"),
-            },
-            revoke_all: {
-              label: "Revoke all sessions",
-              url: base_com_identity_session_set_path(ri: params[:ri]),
-              confirm: t("base.com.identity.sessions.index.revoke_all_confirm"),
             },
           }
         end
 
         def serialize_session_row(session)
-          current = current_session_record?(session)
+          row = ::Base::Identity::SessionPresenter.new.present(
+            session, current: current_session_record?(session), surface: :com,
+          )
+          row[:revoke] = session_revoke_action(session)
+          row
+        end
+
+        def session_revoke_action(session)
+          return if current_session_record?(session)
+
           {
-            public_id: session.public_id,
-            current: current,
-            status: session.visitor_token_status_id.to_s,
-            kind: session.visitor_token_kind_id.to_s,
-            binding: session.dbsc_enabled? ? "DBSC" : "NORMAL",
-            last_activity: l(session.last_used_at || session.created_at, format: :short),
-            created: l(session.created_at, format: :short),
-            refresh_expires: l(session.discarded_at, format: :short),
-            revoke: if current
-                      nil
-                    else
-                      {
-                        label: "Revoke",
-                        url: base_com_identity_session_path(session.public_id, ri: params[:ri]),
-                        confirm: t("base.com.identity.sessions.index.revoke_confirm"),
-                      }
-                    end,
+            label: t("base.shared.identity.sessions.revoke"),
+            href: base_com_identity_session_path(session.public_id, ri: params[:ri]),
+            confirm: t("base.com.identity.sessions.index.revoke_confirm"),
           }
         end
 
-        def show_page_props
-          {
-            title: "Session",
-            back_link: { label: "Back", href: base_com_identity_sessions_path(ri: params[:ri]) },
-            items: [
-              { term: "Session", description: @session.public_id },
-              { term: "Kind", description: @session.visitor_token_kind_id.to_s },
-              { term: "Binding", description: @session.dbsc_enabled? ? "DBSC" : "NORMAL" },
-            ],
-          }
-        end
+        def visible_sessions = current_visitor.visitor_tokens.session_inventory
 
-        def visible_sessions
-          current_visitor.visitor_tokens.session_inventory
-        end
-
-        def set_session
-          @session = visible_sessions.find_by!(public_id: params.expect(:id))
-        end
+        def set_session = @session = visible_sessions.find_by!(public_id: params.expect(:id))
 
         def current_session_record?(session)
-          session&.public_id == current_session_public_id
+          return false unless session
+
+          session.id == current_session&.id ||
+            session.public_id == current_session_public_id ||
+            (session.device_session_id.present? && session.device_session_id == current_session&.device_session_id)
         end
 
         def revoke_selected_session!(session)

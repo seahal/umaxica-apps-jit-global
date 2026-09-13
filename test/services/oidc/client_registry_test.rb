@@ -141,13 +141,20 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_equal original_client.redirect_uris, restored_client.redirect_uris
   end
 
-  test "post logout redirect uris end at sign out completion" do
-    %w(sign-rp base-rails-rp core-next-rp).each do |client_id|
+  test "sign and core post logout redirect uris end at sign out completion" do
+    %w(sign-rp core-next-rp).each do |client_id|
       client = OidcClientRegistry.find!(client_id)
 
       assert client.post_logout_redirect_uris.all? { |uri| URI.parse(uri).path == "/sign/out/complete" },
              "#{client_id} should complete at /sign/out/complete"
     end
+  end
+
+  test "base rails rp completes on the base lobby and keeps side completion" do
+    client = OidcClientRegistry.find!("base-rails-rp")
+    paths = client.post_logout_redirect_uris.map { |uri| URI.parse(uri).path }.uniq.sort
+
+    assert_equal %w(/lobby /sign/out/complete), paths
   end
 
   test "sign and core clients expose registered logout receiver uris" do
@@ -404,7 +411,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
     [
       ENV.fetch("PUBLIC_BASE_SERVICE_URL", ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
-      ENV.fetch("PUBLIC_SIDE_SERVICE_URL", ENV.fetch("SIDE_SERVICE_URL", "side.app.localhost")),
+      ENV.fetch("PUBLIC_SIDE_SERVICE_URL", ENV.fetch("SIDE_SERVICE_URL", "wide.app.localhost")),
     ].each do |host|
       assert_includes redirect_hosts, host
       assert_includes client.domains, host

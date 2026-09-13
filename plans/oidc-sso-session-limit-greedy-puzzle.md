@@ -323,7 +323,7 @@ end
 
 - Jump redirect のジャンプページが Sign 認証を持っていて `authenticate!` が 2 回走る場合  
   → `initiate_oidc_session!` が 2 回呼ばれ、2 回目の `request.original_url`（Jump URL）が  
-   pt として書き込まれ、その path 部分（`/jump?...`）が最終 redirect 先になる可能性
+  pt として書き込まれ、その path 部分（`/jump?...`）が最終 redirect 先になる可能性
 
 ### E. session-limit resume failure
 

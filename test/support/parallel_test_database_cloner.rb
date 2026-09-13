@@ -224,7 +224,7 @@ module ParallelTestDatabaseCloner
     digest = Digest::SHA1.new
     digest << File.binread(schema_path)
     Array(config.migrations_paths).sort.each do |path|
-      Dir.glob(File.join(path, "*.rb")).sort.each do |migration_path|
+      Dir.glob(File.join(path, "*.rb")).each do |migration_path|
         digest << migration_path
         digest << File.binread(migration_path)
       end

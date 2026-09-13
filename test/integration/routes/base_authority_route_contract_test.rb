@@ -161,9 +161,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "base/app/sign_outs/completions", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/sign/out/complete", method: :get },
+      { controller: "base/app/lobbies", action: "show" },
+      { path: "http://#{BASE_APP_HOST}/lobby", method: :get },
     )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/sign/out", method: :delete)
@@ -513,9 +517,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "base/com/sign_outs/completions", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/sign/out/complete", method: :get },
+      { controller: "base/com/lobbies", action: "show" },
+      { path: "http://#{BASE_COM_HOST}/lobby", method: :get },
     )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out", method: :delete)
@@ -736,9 +744,13 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "base/org/sign_outs/completions", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/sign/out/complete", method: :get },
+      { controller: "base/org/lobbies", action: "show" },
+      { path: "http://#{BASE_ORG_HOST}/lobby", method: :get },
     )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/sign/out", method: :delete)

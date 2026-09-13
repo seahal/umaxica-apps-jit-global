@@ -276,12 +276,16 @@ distributed as follows.
 
 #### Integrated into `purge_at`
 
-| Old column                             | Target model                                                                                                                          | Integration basis                                                                         |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --- | ---------------------------------------------------------- |
-| `deletable_at`                         | 24+ models (as mentioned above)                                                                                                       | Confirmed                                                                                 |
-| `shreddable_at`                        | User/Customer/Avatar/Member/Operator/Staff (6)                                                                                        | Confirmed                                                                                 |
-| `scheduled_purge_at`                   | User, Customer                                                                                                                        | `withdrawals_controller.rb:140` operates the same as `deletable_at                        |     | = scheduled_purge_at`, view also refers to the same column |
-| `expires_at` (audit/chronicle variant) | app/com/org*contact_chronicle, *\_document*audit, *\_preference*chronicle, *\_timeline*audit, staff/user_chronicle, *\_activity (13+) | Retention period of `default: now + 7.years`, purely means "can be deleted after 7 years" |
+| Old column | Target model | Integration basis | | -------------------------------------- |
+-------------------------------------------------------------------------------------------------------------------------------------
+| ----------------------------------------------------------------------------------------- | --- |
+---------------------------------------------------------- | | `deletable_at` | 24+ models (as
+mentioned above) | Confirmed | | `shreddable_at` | User/Customer/Avatar/Member/Operator/Staff (6) |
+Confirmed | | `scheduled_purge_at` | User, Customer | `withdrawals_controller.rb:140` operates the
+same as `deletable_at                        |     | = scheduled_purge_at`, view also refers to the
+same column | | `expires_at` (audit/chronicle variant) | app/com/org*contact_chronicle,
+*\_document*audit, *\_preference*chronicle, *\_timeline*audit, staff/user_chronicle, *\_activity
+(13+) | Retention period of `default: now + 7.years`, purely means "can be deleted after 7 years" |
 
 #### Delete (dead column)
 
@@ -722,9 +726,9 @@ vp test # JS It shouldn't affect the side, but just in case
    through models distributed in a DB in one job. 1 Catch failures in each model, leave only a log,
    and continue with other models error A swallowing pattern may be required (recommended).
 4. **Forensic distinction loss of `compromised_at`** — `compromised_at` and `lapses_at` in
-   single_use_token system When integrated with
-   ``Compromised / The distinction between “revoke/natural expire” disappears from the DB. Alternatively, Single use When a token is compromised, the corresponding `\*\_occurrence`
-   record (security event log) is specified in ADR.
+   single_use_token system When integrated with ``Compromised / The distinction between
+   “revoke/natural expire” disappears from the DB. Alternatively, Single use When a token is
+   compromised, the corresponding `\*\_occurrence` record (security event log) is specified in ADR.
 5. **rename of `published_at`** — past participle + future time discomfort problem. Out of scope of
    this PR, issue [#789](https://github.com/seahal/umaxica-apps-global/issues/789) Separated into.
    This will not be discussed again in this conversation.

@@ -1,5 +1,7 @@
 inherit_from:
   - .rubocop/rubocop_ast.yml
+  - .rubocop/umaxica.yml
+  - .rubocop_todo.yml
 
 # ============================================================
 # RuboCop Configuration
@@ -1197,6 +1199,14 @@ Rake/MethodDefinitionInTask:
 # ---------- I18n ----------
 I18n/RailsI18n:
   Enabled: true
+
+# Developer-facing diagnostics from the architecture harness itself. These strings are never
+# rendered to a user and must not be localized.
+I18n/RailsI18n/DecorateString:
+  Exclude:
+    - "lib/architecture_baseline.rb"
+    - "lib/rubocop/cop/umaxica/*.rb"
+    - "test/tooling/architecture_baseline_test.rb"
 
 # Ban inline default: literal in t() and I18n.t()
 # Ref: F3. i18n inline default: literal ban

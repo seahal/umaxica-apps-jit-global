@@ -1,6 +1,8 @@
 # API Collection Contract: Envelope and Cursor Pagination
 
-**Status:** Accepted (2026-08-16); implemented (2026-08-22)
+**Status:** Accepted (2026-08-16); implemented (2026-08-22); pagination mechanism superseded
+(2026-09-10) by `adr/api-collection-offset-pagination.md`. The `{ data, page }` envelope and
+unwrapped single-resource object remain in force.
 
 > This ADR recorded a target contract and deferred it as externally breaking. The migration
 > constraint rested on a premise that a later audit disproved, and the contract was implemented on
@@ -9,7 +11,9 @@
 
 ## Status
 
-Accepted (2026-08-16).
+Accepted (2026-08-16) for the success envelope. **Pagination mechanism superseded** on 2026-09-10
+by `adr/api-collection-offset-pagination.md` (Pagy offset pages). Do not implement the signed
+cursor described below.
 
 **No standard governs this area.** HTTP defines no pagination mechanism and no response-envelope
 convention. This record therefore states a repository decision and names the de facto practice it

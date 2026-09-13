@@ -215,9 +215,8 @@ Total of 3 files (per-boundary). 13 files (current Align to the structure of
   25 locations, available at `grep -rn "occurred_at: Time.current"`).
 - The display side is `app/controllers/sign/{app,com,org}/settings/activities_controller.rb`.
   `COALESCE(occurred_at, created_at) DESC` and `activity.occurred_at || activity.created_at` This is
-  a patchwork implementation of
-  ``Records without occurrence_at fall back to created_at'' (= already For operational purposes, it is assumed that `occurred_at`
-  semantically matches created_at).
+  a patchwork implementation of ``Records without occurrence_at fall back to created_at'' (= already
+  For operational purposes, it is assumed that `occurred_at` semantically matches created_at).
 
 ### problem
 

@@ -15,14 +15,14 @@ const { default: SurfaceDashboard } = await import("@/features/auth/SurfaceDashb
 const { default: WelcomeShow } = await import("@/features/self_service/WelcomeShow");
 const { default: StandingShow } = await import("@/features/identity/StandingShow");
 const { default: SignOutConfirmation } = await import("@/features/sign_out/SignOutConfirmation");
-const { default: SignOutCompletion } = await import("@/features/sign_out/SignOutCompletion");
+const { default: Lobby } = await import("@/features/lobby/Lobby");
 
 const { default: AppDashboardShow } = await import("@/pages/base/app/dashboards/show");
 const { default: AppIdentityShow } = await import("@/pages/base/app/identities/show");
 const { default: AppWelcomeShow } = await import("@/pages/base/app/welcomes/show");
 const { default: AppStandingShow } = await import("@/pages/base/app/identity/standings/show");
 const { default: AppSignOutEdit } = await import("@/pages/base/app/sign_outs/edit");
-const { default: AppSignOutComplete } = await import("@/pages/base/app/sign_outs/complete");
+const { default: AppLobbyShow } = await import("@/pages/base/app/lobbies/show");
 const { default: AppOidcLogoutShow } = await import("@/pages/base/app/oidc/logouts/show");
 
 const { default: ComDashboardShow } = await import("@/pages/base/com/dashboards/show");
@@ -30,7 +30,7 @@ const { default: ComIdentityShow } = await import("@/pages/base/com/identities/s
 const { default: ComWelcomeShow } = await import("@/pages/base/com/welcomes/show");
 const { default: ComStandingShow } = await import("@/pages/base/com/identity/standings/show");
 const { default: ComSignOutEdit } = await import("@/pages/base/com/sign_outs/edit");
-const { default: ComSignOutComplete } = await import("@/pages/base/com/sign_outs/complete");
+const { default: ComLobbyShow } = await import("@/pages/base/com/lobbies/show");
 const { default: ComOidcLogoutShow } = await import("@/pages/base/com/oidc/logouts/show");
 
 const warning = {
@@ -136,6 +136,25 @@ describe("SignOutConfirmation", () => {
   });
 });
 
+describe("Lobby", () => {
+  it("offers sign in and shows a one-shot sign-out notice when the server sent one", () => {
+    const markup = renderToStaticMarkup(
+      <Lobby
+        title="Lobby"
+        heading="Lobby"
+        description="Sign in to continue."
+        sign_in={{ label: "Sign in", href: "/oidc/authorization?screen_hint=signin" }}
+        notice={{ title: "You are signed out", description: "Access ends soon." }}
+      />,
+    );
+
+    expect(markup).toContain("You are signed out");
+    expect(markup).toContain("Access ends soon.");
+    expect(markup).toContain('href="/oidc/authorization?screen_hint=signin"');
+    expect(markup).toContain("<output");
+  });
+});
+
 describe("base/app and base/com page modules", () => {
   it("re-export the shared components for their own surface", () => {
     expect(AppDashboardShow).toBe(SurfaceDashboard);
@@ -143,7 +162,7 @@ describe("base/app and base/com page modules", () => {
     expect(AppWelcomeShow).toBe(WelcomeShow);
     expect(AppStandingShow).toBe(StandingShow);
     expect(AppSignOutEdit).toBe(SignOutConfirmation);
-    expect(AppSignOutComplete).toBe(SignOutCompletion);
+    expect(AppLobbyShow).toBe(Lobby);
     expect(AppOidcLogoutShow).toBe(SignOutConfirmation);
 
     expect(ComDashboardShow).toBe(SurfaceDashboard);
@@ -151,7 +170,7 @@ describe("base/app and base/com page modules", () => {
     expect(ComWelcomeShow).toBe(WelcomeShow);
     expect(ComStandingShow).toBe(StandingShow);
     expect(ComSignOutEdit).toBe(SignOutConfirmation);
-    expect(ComSignOutComplete).toBe(SignOutCompletion);
+    expect(ComLobbyShow).toBe(Lobby);
     expect(ComOidcLogoutShow).toBe(SignOutConfirmation);
   });
 });

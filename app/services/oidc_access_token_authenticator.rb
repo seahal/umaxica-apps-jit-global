@@ -112,7 +112,7 @@ class OidcAccessTokenAuthenticator < ApplicationService
   end
 
   def token_scope_allows_userinfo?(payload)
-    Array(payload["scp"]).include?("openid")
+    AuthorizationTokenClaims.scopes(payload).include?("openid")
   end
 
   def token_subject_matches?(resource, payload)

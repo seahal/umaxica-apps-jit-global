@@ -10,11 +10,11 @@ without resolving it.
 Three different hostnames were treated as the Core surface's public host, in three places that were
 all live:
 
-| Hostname | Where it appears |
-| --- | --- |
-| `jp.umaxica.app` | `docs/operations/core-nextjs-zero-cookie-edge-contract.md`, which names it the "Canonical public Core host" |
-| `core-jp.umaxica.{app,com,org}` | `compose.yaml` `PUBLIC_CORE_*_URL` (since migrated to `jp.umaxica.*`), and the `boot_hosts.core_*` entries in `config/environments/production.rb` |
-| `jpx.umaxica.{app,com,org}` | hardcoded in `config/environments/production.rb` `config.hosts`, and the non-production defaults in `ConfigValues::HostFamilyValues` (`core_service`/`core_corporate`/`core_staff`) |
+| Hostname                        | Where it appears                                                                                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jp.umaxica.app`                | `docs/operations/core-nextjs-zero-cookie-edge-contract.md`, which names it the "Canonical public Core host"                                                                         |
+| `core-jp.umaxica.{app,com,org}` | `compose.yaml` `PUBLIC_CORE_*_URL` (since migrated to `jp.umaxica.*`), and the `boot_hosts.core_*` entries in `config/environments/production.rb`                                   |
+| `jpx.umaxica.{app,com,org}`     | hardcoded in `config/environments/production.rb` `config.hosts`, and the non-production defaults in `ConfigValues::HostFamilyValues` (`core_service`/`core_corporate`/`core_staff`) |
 
 Production `config.hosts` accepted both the `core-jp.*` and `jpx.*` families, so the ambiguity was
 not merely documentary — the origin answered to both.
@@ -67,8 +67,8 @@ remains reachable on the `PRIVATE_*` ingress for smoke tests.
 - `ConfigValues::HostFamilyValues#core_key` resolves `PUBLIC_CORE_*_URL` in preference to
   `CORE_*_URL`. This is the reverse of `#base_key`/`#side_key`/`#auth_key`, and deliberately so:
   `config/routes/core.rb` constrains the surface on `PUBLIC_CORE_*_URL || CORE_*_URL`, so boot
-  config must resolve the same host the route constraint accepts. Before this, a deployment that
-  set only `PUBLIC_CORE_SERVICE_URL` routed correctly but registered `jpx.umaxica.app` as its
+  config must resolve the same host the route constraint accepts. Before this, a deployment that set
+  only `PUBLIC_CORE_SERVICE_URL` routed correctly but registered `jpx.umaxica.app` as its
   `core-next-rp` redirect URI.
 - `OidcClientStoresStaticClientStore.boot_host_for` maps the `PUBLIC_CORE_*` keys, so the
   `core-next-rp` redirect URIs no longer carry literal `jpx.*` defaults.
@@ -96,9 +96,9 @@ enforcement described in `docs/operations/core-nextjs-zero-cookie-edge-contract.
 
 ### No external identity provider re-registration is required
 
-The Core host rename does not touch any externally registered redirect URI. Google, Apple, and
-Entra call back to `/social/{google,apple,entra}/callback`, which are routed only on the Auth and
-Base surfaces (`config/routes/auth.rb`, `config/routes/base.rb`) under their `PUBLIC_AUTH_*` and
+The Core host rename does not touch any externally registered redirect URI. Google, Apple, and Entra
+call back to `/social/{google,apple,entra}/callback`, which are routed only on the Auth and Base
+surfaces (`config/routes/auth.rb`, `config/routes/base.rb`) under their `PUBLIC_AUTH_*` and
 `PUBLIC_BASE_*` host constraints. `config/routes/core.rb` routes no `social` path at all, and
 `config/initializers/omniauth.rb` sets only `callback_path`, never a host.
 

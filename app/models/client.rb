@@ -99,6 +99,7 @@ class Client < AppPrincipalRecord
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.user.recovery_identity_required")
 
   attribute :status_id, default: ClientStatus::NOTHING
+  validates :status_id, numericality: { only_integer: true }
   mfa_level_reference ClientMfaLevel
   mfa_status_reference ClientMfaStatus
 

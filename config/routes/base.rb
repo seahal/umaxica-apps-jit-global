@@ -17,6 +17,7 @@ scope(module: :base, as: :base) do
       # whole endpoint.
       resource :mcp, only: :create
 
+      resource :lobby, only: :show
       resource :welcome, only: :show
       resource :dashboard, only: :show
       resource :selector, only: %i(show update)
@@ -89,11 +90,9 @@ scope(module: :base, as: :base) do
       get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
 
-      # Base owns the post-authentication sign-out confirmation flow.
+      # Base owns the post-authentication sign-out confirmation flow. Completion is PRG to /lobby.
       scope path: :sign do
-        resource :termination, path: "out", controller: :sign_outs, as: :sign_out, only: %i(new edit create) do
-          resource :completion, only: :show, path: "complete", module: :sign_outs
-        end
+        resource :termination, path: "out", controller: :sign_outs, as: :sign_out, only: %i(new edit create)
       end
 
       namespace(:oidc) do
@@ -223,7 +222,6 @@ scope(module: :base, as: :base) do
         end
 
         resources :sessions, only: %i(index show destroy)
-        resource :revocation, only: :destroy, path: "sessions", controller: "revocations/alls", as: :session_set
         resource :revocation, only: :destroy, path: "other_sessions", controller: "revocations/others",
                               as: :other_sessions
 
@@ -257,6 +255,7 @@ scope(module: :base, as: :base) do
       # whole endpoint.
       resource :mcp, only: :create
 
+      resource :lobby, only: :show
       resource :welcome, only: :show
       resource :dashboard, only: :show
       resource :selector, only: %i(show update)
@@ -326,11 +325,9 @@ scope(module: :base, as: :base) do
       get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
 
-      # Base owns the post-authentication sign-out confirmation flow.
+      # Base owns the post-authentication sign-out confirmation flow. Completion is PRG to /lobby.
       scope path: :sign do
-        resource :termination, path: "out", controller: :sign_outs, as: :sign_out, only: %i(new edit create) do
-          resource :completion, only: :show, path: "complete", module: :sign_outs
-        end
+        resource :termination, path: "out", controller: :sign_outs, as: :sign_out, only: %i(new edit create)
       end
 
       namespace(:oidc) do
@@ -404,7 +401,6 @@ scope(module: :base, as: :base) do
           resource :removal, only: :create
         end
         resources :sessions, only: %i(index show destroy)
-        resource :revocation, only: :destroy, path: "sessions", controller: "revocations/alls", as: :session_set
         resource :revocation, only: :destroy, path: "other_sessions", controller: "revocations/others",
                               as: :other_sessions
 
@@ -437,6 +433,7 @@ scope(module: :base, as: :base) do
       # whole endpoint.
       resource :mcp, only: :create
 
+      resource :lobby, only: :show
       resource :welcome, only: :show
       resource :dashboard, only: :show
       resource :selector, only: %i(show update)
@@ -506,30 +503,6 @@ scope(module: :base, as: :base) do
       get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
       get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
 
-      # Staff Publishing CMS. The URL is surface and audience only; locale is not a
-      # path segment. Each cell maps to every Edition with that surface and audience.
-      resource :publishing, only: [], module: :publishing do
-        publishing_audiences = %i(app com org)
-        %i(info docs news help).each do |publishing_surface|
-          resource publishing_surface, only: [], module: publishing_surface do
-            publishing_audiences.each do |publishing_audience|
-              resource publishing_audience, only: [], module: publishing_audience do
-                # Publishing and archiving change a different row than a
-                # revision does, so each is its own nested resource rather
-                # than a verb on the entry: a publication window is created
-                # and ended, and an entry's archive state is set and cleared.
-                resources :entries, only: %i(index new create show edit update) do
-                  scope module: :entries do
-                    resources :publications, only: %i(create destroy)
-                    resource :archive, only: %i(create destroy)
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-
       # Staff management areas.
       resource :configuration, only: :show
       resources :accounts, only: %i(index show)
@@ -565,11 +538,9 @@ scope(module: :base, as: :base) do
       end
       resources :billing, only: :index
 
-      # Base owns the post-authentication sign-out confirmation flow.
+      # Base owns the post-authentication sign-out confirmation flow. Completion is PRG to /lobby.
       scope path: :sign do
-        resource :termination, path: "out", controller: :sign_outs, as: :sign_out, only: %i(new edit create) do
-          resource :completion, only: :show, path: "complete", module: :sign_outs
-        end
+        resource :termination, path: "out", controller: :sign_outs, as: :sign_out, only: %i(new edit create)
       end
 
       namespace(:oidc) do
@@ -636,7 +607,6 @@ scope(module: :base, as: :base) do
           resource :removal, only: :create
         end
         resources :sessions, only: %i(index show destroy)
-        resource :session_set, path: "sessions", only: :destroy, controller: "revocations/alls"
         resource :other_sessions, only: :destroy, controller: "revocations/others"
 
         resources :activities, only: :index

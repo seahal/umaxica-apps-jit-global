@@ -20,7 +20,9 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
   end
 
   test "every UV policy purpose is required and enforced server-side" do
-    assert_equal %i(registration direct_sign_in mfa_challenge ordinary_step_up high_risk_step_up).sort,
+    assert_equal %i(
+      registration direct_sign_in emergency_sign_in mfa_challenge ordinary_step_up high_risk_step_up
+    ).sort,
                  Webauthn::UvPolicy::REGISTRY.keys.sort
 
     Webauthn::UvPolicy::REGISTRY.each_value do |policy|

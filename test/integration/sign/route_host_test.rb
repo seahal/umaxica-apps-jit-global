@@ -118,9 +118,9 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
 
   def sign_route_product_hosts
     {
-      side_service: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "side.app.localhost")),
-      side_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "side.com.localhost")),
-      side_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "side.org.localhost")),
+      side_service: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "wide.app.localhost")),
+      side_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "wide.com.localhost")),
+      side_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "wide.org.localhost")),
       core_service: OpenStruct.new(host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")),
       core_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")),
       core_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost")),

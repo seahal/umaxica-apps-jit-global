@@ -53,9 +53,10 @@ module Auth
           logout_current_session!(reason: "user_logout")
 
           redirect_to(
-            auth_app_sign_out_completion_url(
+            base_app_lobby_url(
               host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
               protocol: "https",
+              ri: params[:ri],
             ),
             status: :see_other,
             allow_other_host: true,

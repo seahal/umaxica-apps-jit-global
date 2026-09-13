@@ -29,6 +29,35 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     assert_equal "dr", response.parsed_body["theme"]
   end
 
+  # The JS-readable `language` cookie is a write-only mirror for the browser. Rails resolves the
+  # locale from the preference JWT (via Actor.preferences) and the `?lx` overlay only; a stale or
+  # forged `language` cookie must not become a second source of truth that overrides it. The
+  # resolution code is shared by the base, auth, and side application controllers.
+  test "a conflicting language cookie does not override the region-seeded locale" do
+    cookies[PreferenceIoKeys::Cookies::LANGUAGE] = "en"
+
+    get edit_base_app_preference_theme_url(ri: "jp")
+
+    assert_response :success
+    assert_select "html[lang=?]", "ja"
+  end
+
+  test "a conflicting language cookie does not override an explicit saved language" do
+    # An anonymous session that explicitly chose English on the language screen.
+    get edit_base_app_preference_language_url(ri: "jp")
+    patch base_app_preference_language_url(ri: "jp"),
+          params: { preference_language: { option_id: AppPreferenceLanguageOption::EN.to_s } }
+
+    assert_response :redirect
+
+    cookies[PreferenceIoKeys::Cookies::LANGUAGE] = "ja"
+
+    get edit_base_app_preference_theme_url(ri: "jp")
+
+    assert_response :success
+    assert_select "html[lang=?]", "en"
+  end
+
   test "signed-in theme read reflects the same token-side value after adoption" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)

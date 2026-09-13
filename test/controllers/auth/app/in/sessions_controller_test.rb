@@ -715,6 +715,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       host: host,
       session_public_id: token.public_id,
       expires_at: expires_at,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(host, "client"),
     )
     browser_headers.merge(
       "Host" => host,

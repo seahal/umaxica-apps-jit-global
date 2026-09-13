@@ -4,14 +4,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import ThemeControls from "@/components/chrome/ThemeControls";
+import { readString } from "@/lib/payload";
 import type { ChromeThemeControls } from "@/types/inertia";
 
-import { jsonResponse, stubFetchByMethod } from "../../support/http";
+import { jsonBody, jsonResponse, stubFetchAnswering, stubFetchByMethod } from "../../support/http";
 
 // The React port of the `theme` Stimulus controller is verified against the same behaviour: the
-// stored preference read on mount, a choice applied to the document and persisted, the server
-// answer reconciled back into the control, and the system setting followed while "system" is
-// selected.
+// stored preference read on mount, a choice persisted then applied from the server's answer, and
+// the system setting followed while "system" is selected.
 const controls: ChromeThemeControls = {
   hidden: false,
   title: "テーマ",
@@ -240,7 +240,7 @@ describe("ThemeControls mount", () => {
 });
 
 describe("ThemeControls selection", () => {
-  test("applies the choice to the document and persists it", async () => {
+  test("persists the choice and applies the theme the server stored", async () => {
     const fetchMock = stubFetch({ theme: "dr" });
 
     await mount();
@@ -271,22 +271,52 @@ describe("ThemeControls selection", () => {
     expect(document.documentElement.dataset["theme"]).toBe("light");
   });
 
-  test("keeps the choice applied when the write fails", async () => {
+  test("leaves the rendered theme in place when the write fails", async () => {
+    document.documentElement.dataset["theme"] = "dark";
     stubFetch(new Error("offline"));
 
     await mount();
     await choose("light");
 
+    expect(selectedTheme()).toBe("dark");
+    expect(document.documentElement.dataset["theme"]).toBe("dark");
+  });
+
+  test("does not apply a colour until the server accepts the write", async () => {
+    document.documentElement.dataset["theme"] = "light";
+    const { settlePending } = stubFetchByMethod({ GET: jsonResponse({ theme: "li" }) });
+
+    await mount();
     expect(selectedTheme()).toBe("light");
+
+    act(() => {
+      radio("dark")?.click();
+    });
+
     expect(document.documentElement.dataset["theme"]).toBe("light");
+    expect(selectedTheme()).toBe("light");
+
+    await act(async () => {
+      settlePending(jsonResponse({ theme: "dr" }));
+    });
+
+    expect(selectedTheme()).toBe("dark");
+    expect(document.documentElement.dataset["theme"]).toBe("dark");
   });
 
   test("follows the system setting while system is the selected theme", async () => {
-    stubFetch({ theme: "sy" });
+    const storedCode: Record<string, string> = { dark: "dr", system: "sy" };
+    stubFetchAnswering({
+      GET: () => jsonResponse({}, 404),
+      PATCH: (init) =>
+        jsonResponse({ theme: storedCode[String(readString(jsonBody(init), "theme"))] }),
+    });
 
     await mount();
     await choose("dark");
+    expect(selectedTheme()).toBe("dark");
     await choose("system");
+    expect(selectedTheme()).toBe("system");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
 
     mediaMatches = true;

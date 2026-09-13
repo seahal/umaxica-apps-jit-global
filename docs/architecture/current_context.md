@@ -130,8 +130,9 @@ screen renders. This refresh is a bounded preference-screen entry flow and must 
 
 Authenticated request setup must not repair a missing or malformed preference access-token by
 reading the preference database. Treat that as a token failure and route it through the normal
-failure path. `Actor::Preference::NULL` is reserved for unauthenticated, bearer-only, or explicitly
-preference-free paths that are designed to run without a preference token.
+failure path. A request that has not loaded a Preference JWT uses the default preference values
+(theme `sy`) rather than `Actor::Preference::NULL`. `Actor::Preference::NULL` is reserved for an
+unbound context (jobs, mailers, tests, and the empty snapshot before a request installs state).
 
 ## Authentication
 

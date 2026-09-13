@@ -80,9 +80,9 @@ observability に限定) を同時に書く必要がある。これを Phase 0 �
    - `request.body.read` を **controller (concern) で全部読み込んでから**
      service に渡す (`csp_violation_report.rb:15`)。`MAX_BODY_BYTES = 64.kilobytes` チェックは
      **read 完了後** `service#call` 内で `raw_body.bytesize > MAX_BODY_BYTES`
-     (line 50)。→ 攻撃者が 1GB の Content-Length を投げた場合、read 段階で全部メモリに乗る。
-     **Rack 側 (`config.action_dispatch.maximum_request_form_size` 相当) または
-     `request.body.read(MAX_BODY_BYTES + 1)` で **読み込み量を制限**するべき。**現状の欠陥。\*\*
+     (line 50)。→ 攻撃者が 1GB の Content-Length を投げた場合、read 段階で全部メモリに乗る。**Rack 側 (`config.action_dispatch.maximum_request_form_size`
+     相当) または `request.body.read(MAX_BODY_BYTES + 1)` で
+     **読み込み量を制限**するべき。**現状の欠陥。\*\*
    - field truncate: ✅ `MAX_STRING_LENGTH = 256`
    - invalid encoding: ✅ `encode("UTF-8", invalid: :replace, undef: :replace, replace: "")` 済み
    - URL scrub (query/fragment 除去): ✅ `sanitize_url` で実施

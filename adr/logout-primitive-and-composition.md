@@ -26,8 +26,8 @@ therefore revoked every active token for the user. The regression had two causes
 2. **Incorrect composition:** The service was always inserted into the ordinary logout path, so an
    operation users understood as "this browser only" signed out every device.
 
-`Authentication::LogoutAllSessions` separately provided substantially the same behavior, leaving
-two implementations of all-session revocation that could drift.
+`Authentication::LogoutAllSessions` separately provided substantially the same behavior, leaving two
+implementations of all-session revocation that could drift.
 
 Earlier sign-up and sign-in incidents also resulted from implementing one mechanism in multiple
 places. The established response is to centralize each mechanism in one concern or service and have
@@ -73,9 +73,9 @@ revoke_all_sessions(actor) =
 
 ### 4. Ordinary Logout Calls Only the Primitive
 
-`Authentication::Logoutable#logout_current_session!` only calls `LogoutCurrentSession` once,
-records the logout audit event, and clears cookies and session state in `ensure`. It has no hook such
-as `perform_single_logout` that can fan out to every device.
+`Authentication::Logoutable#logout_current_session!` only calls `LogoutCurrentSession` once, records
+the logout audit event, and clears cookies and session state in `ensure`. It has no hook such as
+`perform_single_logout` that can fan out to every device.
 
 An endpoint that intentionally signs out every device must explicitly call
 `logout_all_sessions_for!(resource:, reason:)`.
@@ -105,8 +105,8 @@ At least three RP entrypoints must ultimately reach these operations:
 1. **RP-Initiated Logout:** The user signs out within the RP. The RP invokes its primitive and may
    then redirect to the IdP `/oidc/logout` endpoint.
 2. **Back-channel Logout:** The IdP posts a `logout_token` to the RP endpoint. The RP identifies
-   sessions by `sid` or `sub`, then calls the primitive for one matching `sid` or the composition for
-   all sessions matching `sub`.
+   sessions by `sid` or `sub`, then calls the primitive for one matching `sid` or the composition
+   for all sessions matching `sub`.
 3. **Front-channel Logout:** The IdP loads the RP front-channel endpoint in an iframe, which reaches
    the same primitive or composition.
 
@@ -145,8 +145,8 @@ layer after `Authentication::LogoutAllSessions`, for example in
 - Additional all-device flows change only composition, not the primitive.
 - The absence and no-fan-out guards catch attempts to reintroduce cross-device ordinary logout.
 - The `Oidc::` namespace remains available for the real SLO protocol without a naming collision.
-- A future RP implementation must reproduce the same primitive/composition separation for its
-  local sessions.
+- A future RP implementation must reproduce the same primitive/composition separation for its local
+  sessions.
 
 ## Related
 

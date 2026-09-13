@@ -20,6 +20,8 @@ class Base::App::OrganizationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/organizations/index", inertia_component
     assert_equal "Organizations", inertia_props.fetch("title")
     assert_equal "organizations", inertia_props.fetch("body")
+    assert_equal I18n.t("actions.up", locale: :ja), inertia_props.dig("up_link", "label")
+    assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "show resolves by public_id" do

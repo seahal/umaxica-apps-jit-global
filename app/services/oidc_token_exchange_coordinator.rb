@@ -232,6 +232,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
         dpop_jkt: dpop_jkt,
         last_used_at: Time.current,
       )
+      usage.public_send("#{parent_token_foreign_key_for(usage_class)}=", root_token)
 
       usage
     end
@@ -254,19 +255,21 @@ class OidcTokenExchangeCoordinator < ApplicationService
     client = client_for_resource_type(client, resource_type)
     issuer = OidcIssuer.for_resource_type(resource_type)
     subject = OidcSubject.for(resource, resource_type: resource_type)
+    access_expires_at = session_token_expiry(now, root_token)
     Result.new(
       success: true,
       token_response: {
         access_token: encode_exchanged_access_token(
           authorization_code: authorization_code, resource: resource, client: client, root_token: root_token,
-          usage: usage, dpop_jkt: dpop_jkt, now: now, resource_type: resource_type, issuer: issuer, subject: subject,
+          usage: usage, dpop_jkt: dpop_jkt, access_expires_at: access_expires_at,
+          resource_type: resource_type, issuer: issuer, subject: subject,
         ),
         token_type: dpop_jkt.present? ? "DPoP" : "Bearer",
-        expires_in: Integer(AuthenticationBase::ACCESS_TOKEN_TTL.to_s, 10),
+        expires_in: [(access_expires_at - now).to_i, 0].max,
         refresh_token: refresh_plain,
         id_token: encode_exchanged_id_token(
           authorization_code: authorization_code, resource: resource, client: client, usage: usage,
-          now: now, resource_type: resource_type, issuer: issuer, subject: subject,
+          now: now, root_token: root_token, resource_type: resource_type, issuer: issuer, subject: subject,
         ),
       },
       error: nil,
@@ -274,8 +277,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     )
   end
 
-  def encode_exchanged_access_token(authorization_code:, resource:, client:, root_token:, usage:, dpop_jkt:, now:,
-                                    resource_type:, issuer:, subject:)
+  def encode_exchanged_access_token(authorization_code:, resource:, client:, root_token:, usage:, dpop_jkt:,
+                                    access_expires_at:, resource_type:, issuer:, subject:)
     AuthenticationTokenService.encode(
       resource,
       host: OidcIssuer.host_for_resource_type(resource_type),
@@ -283,7 +286,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       oidc_sid: usage.public_id,
       oidc_jti: token_usage_oidc_jti(usage),
       resource_type: resource_type,
-      expires_at: now + AuthenticationBase::ACCESS_TOKEN_TTL,
+      expires_at: access_expires_at,
       scopes: authorization_code.scope.to_s.split,
       acr: authorization_code.acr,
       amr: Array(authorization_code.auth_method),
@@ -297,13 +300,17 @@ class OidcTokenExchangeCoordinator < ApplicationService
     )
   end
 
-  def encode_exchanged_id_token(authorization_code:, resource:, client:, usage:, now:, resource_type:, issuer:,
-                                subject:)
+  def encode_exchanged_id_token(authorization_code:, resource:, client:, usage:, now:, root_token:, resource_type:,
+                                issuer:, subject:)
     OidcIdTokenIssuer.call(
       resource: resource,
       client: client,
       nonce: authorization_code.nonce,
       issued_at: now,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: now + OidcIdTokenIssuer::TOKEN_TTL,
+        absolute_expiry: root_token.discarded_at,
+      ),
       acr: authorization_code.acr,
       amr: Array(authorization_code.auth_method),
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(resource_type),
@@ -362,7 +369,17 @@ class OidcTokenExchangeCoordinator < ApplicationService
       when VisitorToken then SecurityTokenLifetimes::VISITOR_REFRESH_TOKEN_TTL
       else SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
       end
-    ttl.from_now
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: ttl.from_now,
+      absolute_expiry: root_token.discarded_at,
+    )
+  end
+
+  def session_token_expiry(now, root_token)
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: now + AuthenticationBase::ACCESS_TOKEN_TTL,
+      absolute_expiry: root_token.discarded_at,
+    )
   end
 
   def connection_class_for(authorization_code)

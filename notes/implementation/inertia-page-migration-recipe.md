@@ -16,8 +16,8 @@ Do not touch:
 - Mailer views and mailer layouts (`app/views/email/**`, `app/views/layouts/{mailer,email}/**`)
 - `info`, `docs`, `news`, `help` (their landings stay ERB; content HTML belongs to the frontend
   repository)
-- Non-HTML responses: `render json`, `render plain`, `head`, redirects, OAuth/OIDC callbacks,
-  health probes, `robots.txt`, sitemaps, CSP violation reports, PWA engine routes
+- Non-HTML responses: `render json`, `render plain`, `head`, redirects, OAuth/OIDC callbacks, health
+  probes, `robots.txt`, sitemaps, CSP violation reports, PWA engine routes
 - Authentication and authorization behaviour of any kind
 
 ## Server side
@@ -45,8 +45,8 @@ Do not touch:
    computed with a helper is computed here:
    - **Translation** stays server-side: send finished strings, never i18n keys.
    - **URLs** stay server-side: send `*_path` / `*_url` output, never path fragments React joins.
-   - **Authorization** stays server-side: omit a link or an action the actor may not use rather
-     than sending it with a flag for React to hide.
+   - **Authorization** stays server-side: omit a link or an action the actor may not use rather than
+     sending it with a flag for React to hide.
    - Serialize explicitly. Never pass an ActiveRecord object, a token, a session value or a secret.
      Map to a plain Hash of `public_id`, strings, booleans, ISO timestamps.
    - Include a `title:` prop. The layout renders the document title from it server-side.
@@ -97,8 +97,8 @@ Do not touch:
     ```
 
     Convert `assert_select` and `response.body` assertions one for one into props assertions. Never
-    delete an assertion to make the migration pass, and never add a skip.
-    Authentication, authorization and redirect assertions stay exactly as they are.
+    delete an assertion to make the migration pass, and never add a skip. Authentication,
+    authorization and redirect assertions stay exactly as they are.
 
 12. Vitest covers the markup and interaction that left Ruby, in `spec/pages/...` or
     `spec/features/...`. Coverage thresholds are 98%, so a new component needs a spec.

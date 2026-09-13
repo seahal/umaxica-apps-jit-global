@@ -100,12 +100,14 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/^©.*#{Regexp.escape(expected_brand)}$/, inertia_props.fetch("chrome").fetch("copyright"))
   end
 
-  test "page contains navigation and registration heading" do
+  test "page renders the registration heading and no sign-in/up chrome navigation" do
     get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
         headers: { "Host" => host }
 
     assert_response :success
-    assert_not_empty inertia_props.fetch("chrome").fetch("primary_navigation")
+    # The auth surface is itself the sign-in/sign-up entry point, so its shared header carries no
+    # navigation back to those flows.
+    assert_not inertia_props.fetch("chrome").key?("primary_navigation")
     assert_equal I18n.t("sign.app.registration.new.page_title"), inertia_props.fetch("title")
   end
 

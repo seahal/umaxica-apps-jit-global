@@ -7,6 +7,7 @@ module Auth
       module In
         class EmailsController < ::Auth::App::ApplicationController
           include ::SurfaceInertiaPage
+          include ::AuthenticationModeSwitchGuard
 
           include ::TurnstilePageProps
 
@@ -233,16 +234,6 @@ module Auth
 
           def form_error_messages(record)
             record&.errors&.map(&:full_message) || []
-          end
-
-          def handle_guest_only_with_status_checks(options)
-            if options[:no_redirect]
-              status = options[:status] || :forbidden
-              message = options[:message] || I18n.t("errors.messages.already_authenticated")
-              return render plain: message, status: status
-            end
-
-            super
           end
 
           def load_user_email

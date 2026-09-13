@@ -30,15 +30,15 @@ get:
       in: query
       schema:
         type: string
-    - $ref: "../components.yml#/parameters/Limit"
-    - $ref: "../components.yml#/parameters/Cursor"
+    - $ref: "../components.yml#/parameters/Page"
     - $ref: "../components.yml#/parameters/IfNoneMatch"
     - $ref: "../components.yml#/parameters/IfModifiedSince"
   responses:
     "200":
       description: >-
         One page of published entries. The collection is always bounded: a request that omits
-        `limit` still receives at most the default page size.
+        `page` still receives at most the server-defined page size (20). Pagination is Pagy
+        offset pagination; callers send `page`, never a SQL OFFSET.
       headers:
         Cache-Control:
           schema:

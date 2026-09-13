@@ -26,6 +26,14 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
+  test "unauthenticated html selector request stays on the authentication entry" do
+    get base_app_selector_url(host: @host, ri: "jp"), headers: host_headers(@host)
+
+    assert_response :redirect
+    assert_not_equal base_app_switcher_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_not_equal base_app_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
+  end
+
   test "authenticated identity without selected actor context can access selector" do
     get base_app_selector_url(host: @host), headers: as_user_headers(@user, host: @host), as: :json
 
@@ -48,13 +56,63 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, ClientIdentity.where(source_record_id: @user.id).count
   end
 
-  test "html selector request redirects after preparing a single selected context" do
-    bootstrap_and_select!(@user, @token)
+  test "html selector request auto-selects a single unselected context toward dashboard" do
     get base_app_selector_url(host: @host, ri: "jp"),
         headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
 
     assert_redirected_to base_app_dashboard_path(ri: "jp")
     assert_predicate @token.reload, :selected_actor_context?
+  end
+
+  test "html selector request for an already selected session redirects to switcher" do
+    bootstrap_and_select!(@user, @token)
+    get base_app_selector_url(host: @host, ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+
+    assert_redirected_to base_app_switcher_path(ri: "jp")
+    assert_not_equal base_app_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_predicate @token.reload, :selected_actor_context?
+  end
+
+  test "html selector request in selector-pending sign-in does not divert to switcher" do
+    bootstrap_and_select!(@user, @token)
+    nonce = "selector-pending-nonce"
+    cycle = ClientSignInFlow.create!(
+      principal_id: @user.id,
+      status_id: ClientSignInFlow.status_id_for("SELECTOR_PENDING"),
+      step: "selector",
+      return_to: "/dashboard",
+      nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+      issued_at: Time.current,
+      expires_at: 15.minutes.from_now,
+    )
+
+    auth_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+    get base_app_switcher_url(host: @host, ri: "jp"), headers: auth_headers
+
+    assert_response :success
+    session[:app_sign_in_flow_locator] = { "public_id" => cycle.public_id, "nonce" => nonce }
+
+    follow_headers = host_headers(@host).merge(
+      "X-TEST-CURRENT-USER" => @user.id.to_s,
+      "X-TEST-SESSION-PUBLIC-ID" => @token.public_id,
+    )
+    get base_app_selector_url(host: @host, ri: "jp"), headers: follow_headers
+
+    location = response.redirect? ? URI.parse(response.location).request_uri : nil
+
+    assert_not_equal base_app_switcher_path(ri: "jp"), location
+  end
+
+  test "json selector request stays json when a context is already selected" do
+    bootstrap_and_select!(@user, @token)
+    get base_app_selector_url(host: @host, ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id),
+        as: :json
+
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+    assert_nil response.location
   end
 
   test "selector update persists valid selected actor context" do

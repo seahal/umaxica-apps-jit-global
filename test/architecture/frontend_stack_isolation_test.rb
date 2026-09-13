@@ -73,7 +73,7 @@ class FrontendStackIsolationTest < ActiveSupport::TestCase
     assert_operator package.fetch("engines").fetch("bun"), :start_with?, ">="
     assert_predicate ROOT.join("bun.lock"), :file?
     assert_includes containerfile, "ARG BUN_VERSION"
-    assert_includes containerfile, "FROM oven/bun:${BUN_VERSION} AS bun-toolchain"
+    assert_includes containerfile, "FROM docker.io/oven/bun:${BUN_VERSION} AS bun-toolchain"
     assert_includes containerfile, "bun install --frozen-lockfile"
     assert_includes workflow, "oven-sh/setup-bun@v2"
     assert_includes workflow, "bun install --frozen-lockfile"

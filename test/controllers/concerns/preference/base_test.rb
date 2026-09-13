@@ -344,9 +344,10 @@ module Preference
       end
     end
 
-    test "leeway_seconds returns value from ENV" do
-      with_env("PREFERENCE_JWT_LEEWAY_SECONDS" => "45") do
-        assert_equal 45, PreferenceJwtConfiguration.leeway_seconds
+    test "leeway_seconds ignores the environment and returns the fixed profile leeway" do
+      with_env("PREFERENCE_JWT_LEEWAY_SECONDS" => "3600") do
+        assert_equal SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS,
+                     PreferenceJwtConfiguration.leeway_seconds
       end
     end
 
@@ -710,18 +711,20 @@ module Preference
       end
     end
 
-    test "host_matches? handles direct and subdomain matches" do
-      # Since host_matches? is in PreferenceToken (which is a class)
-      # Wait, I see host_matches? in PreferenceToken class << self
-      assert PreferenceToken.send(:host_matches?, "example.com", "example.com")
-      assert PreferenceToken.send(:host_matches?, "example.com", "sub.example.com")
-      assert_not PreferenceToken.send(:host_matches?, "example.com", "other.com")
-      assert_not PreferenceToken.send(:host_matches?, nil, "example.com")
+    test "host_matches? requires the exact host scope and the same registrable domain" do
+      PreferenceJwtConfiguration.stub(:host_scope_for, "example.com") do
+        assert PreferenceToken.send(:host_matches?, "example.com", "example.com")
+        assert PreferenceToken.send(:host_matches?, "example.com", "sub.example.com")
+        assert_not PreferenceToken.send(:host_matches?, "example.com", "other.com")
+        assert_not PreferenceToken.send(:host_matches?, "sub.example.com", "sub.example.com")
+        assert_not PreferenceToken.send(:host_matches?, nil, "example.com")
+        assert_not PreferenceToken.send(:host_matches?, 42, "example.com")
+      end
     end
 
-    test "audience_matches? handles multiple audiences" do
+    test "audience_matches? requires exact membership of the host scope" do
       assert PreferenceToken.send(:audience_matches?, ["a.com", "b.com"], "a.com")
-      assert PreferenceToken.send(:audience_matches?, ["a.com", "b.com"], "sub.b.com")
+      assert_not PreferenceToken.send(:audience_matches?, ["a.com", "b.com"], "sub.b.com")
       assert_not PreferenceToken.send(:audience_matches?, ["a.com", "b.com"], "c.com")
     end
 
@@ -1123,6 +1126,15 @@ module Preference
       assert_equal "dr", @controller.instance_variable_get(:@color_theme)
     end
 
+    test "set color theme writes default sy from the preference value not a missing-preference branch" do
+      Actor.install_context!(preferences: Actor::Preference.new)
+
+      @controller.send(:set_color_theme)
+
+      assert_equal "sy", @controller.instance_variable_get(:@color_theme)
+      assert_equal "sy", @controller.send(:cookies)[PreferenceBase::THEME_COOKIE_KEY]
+    end
+
     test "set color theme writes public option cookies from actor preferences" do
       Actor.install_context!(
         preferences: Actor::Preference.new(
@@ -1450,10 +1462,14 @@ module Preference
     test "create_audit_log skips creating an audit event row when no event id is given" do
       preference = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discarded_at: 1.day.from_now)
       @controller.instance_variable_set(:@preferences, preference)
+      @controller.request = ActionDispatch::TestRequest.create
       event_lookup_calls = 0
       audit_event_class =
         Class.new do
           define_singleton_method(:find_or_create_by!) do |*_args|
+            event_lookup_calls += 1
+          end
+          define_singleton_method(:ensure_defaults!) do
             event_lookup_calls += 1
           end
         end
@@ -1469,6 +1485,32 @@ module Preference
 
       assert_equal 0, event_lookup_calls
       assert_nil created_attributes[:event_id]
+    end
+
+    test "create_audit_log does not N+1 when several regional bundle events are recorded" do
+      preference = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discarded_at: 1.day.from_now)
+      @controller.instance_variable_set(:@preferences, preference)
+      @controller.request = ActionDispatch::TestRequest.create
+      AppPreferenceChronicleEvent.ensure_defaults!
+      AppPreferenceChronicleLevel.ensure_defaults!
+
+      events = %w(
+        UPDATE_PREFERENCE_REGION
+        UPDATE_PREFERENCE_LANGUAGE
+        UPDATE_PREFERENCE_DATE_FORMAT
+        UPDATE_PREFERENCE_TIME_FORMAT
+        UPDATE_PREFERENCE_CURRENCY
+      )
+
+      assert_nothing_raised do
+        Prosopite.scan do
+          events.each do |event_id|
+            @controller.send(:create_audit_log, event_id: event_id, context: { field: event_id })
+          end
+        end
+      end
+
+      assert_equal events.size, AppPreferenceChronicle.where(subject_id: preference.id.to_s).count
     end
 
     test "find_preference_by_presented_token returns nil without a presented digest" do

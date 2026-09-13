@@ -15,6 +15,7 @@ module Auth
         get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
         assert_response :success
+        assert_includes response.headers["Cache-Control"], "no-store"
 
         query = {}
 
@@ -179,14 +180,13 @@ module Auth
 
         get auth_app_sign_in_url(ri: "jp"), headers: as_user_headers(user, host: @host)
 
-        assert_response :redirect
-        assert_redirected_to base_app_dashboard_url(
-          ri: "jp",
-          host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", Rails.configuration.x.boot_config.fetch(:hosts).base_service.host),
-        )
+        assert_response :conflict
+        assert_equal "text/plain; charset=utf-8", response.headers["Content-Type"]
+        assert_equal "Sign-in is unavailable while authenticated.", response.body
+        assert_includes response.headers["Cache-Control"], "no-store"
       end
 
-      test "logged in entry with login challenge resumes acme authorization" do
+      test "logged in entry with login challenge does not resume authorization" do
         user = clients(:one)
         issuance =
           OidcAuthorizationTransactionCoordinator.issue!(
@@ -199,20 +199,15 @@ module Auth
         get auth_app_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
             headers: headers
 
-        assert_response :redirect
-
-        redirect_uri = URI.parse(response.location)
-        redirect_query = Rack::Utils.parse_nested_query(redirect_uri.query.to_s)
+        assert_response :conflict
+        assert_equal "Sign-in is unavailable while authenticated.", response.body
+        assert_includes response.headers["Cache-Control"], "no-store"
         transaction = issuance.transaction.reload
 
-        assert_equal Rails.configuration.x.boot_config.fetch(:hosts).base_service.host, redirect_uri.host
-        assert_equal "/oauth/authorize", redirect_uri.path
-        assert_equal issuance.transaction.login_challenge, redirect_query["login_challenge"]
-        assert_predicate transaction, :authenticated?
-        assert_equal user.public_id, transaction.actor_ref
-        assert_equal headers.fetch("X-TEST-SESSION-PUBLIC-ID"), transaction.session_ref
+        assert_equal "pending", transaction.status
+        assert_nil transaction.actor_ref
+        assert_nil transaction.session_ref
         assert_nil session[:oidc_authorization_login_challenge]
-        assert_nil flash[:alert]
       end
 
       private

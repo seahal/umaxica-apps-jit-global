@@ -48,7 +48,7 @@ module Base
         end
 
         def oidc_logout_completed_path(ri:, _sot: nil)
-          base_app_sign_out_completion_path(ri: ri)
+          base_app_lobby_path(ri: ri)
         end
 
         # The ERB template this action rendered was a two-line wrapper around the shared sign-out

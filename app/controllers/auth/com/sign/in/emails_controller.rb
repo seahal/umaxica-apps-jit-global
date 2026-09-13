@@ -17,6 +17,7 @@ module Auth
           include SessionLimitGate
           include ::SurfaceInertiaPage
           include ::TurnstilePageProps
+          include ::AuthenticationModeSwitchGuard
 
           AUTHENTICATION_MODE = :guest
 

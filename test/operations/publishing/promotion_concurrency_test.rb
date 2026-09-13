@@ -65,7 +65,11 @@ module Publishing
         end
 
       assert_empty results.grep(StandardError), "both operations must succeed"
-      path = Docs::App::EntryVersion.find_by!(entry_revision_id: revision.id).single_taxonomy_assignments.sole.term_path_snapshot
+      path = Docs::App::EntryVersion
+        .find_by!(entry_revision_id: revision.id)
+        .single_taxonomy_assignments
+        .sole
+        .term_path_snapshot
       slugs = path.map { |step| step.fetch("slug") }
 
       # Either the pre-move path or the post-move path, never a half-applied mix.

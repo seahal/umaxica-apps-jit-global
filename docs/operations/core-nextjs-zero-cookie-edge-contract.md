@@ -24,18 +24,18 @@ for what Rails answers on the Core host. Every path Rails does not route falls t
 
 For `jp.umaxica.app`:
 
-| Path                       | Origin           | Cookie forwarding             |
-| -------------------------- | ---------------- | ----------------------------- |
-| `/api/v0/*`                | Rails Core       | keep `Cookie`                 |
-| `/oidc/*`                  | Rails Core       | keep `Cookie`                 |
-| `/sign/out`                | Rails Core       | keep `Cookie`                 |
-| `/sign/out/complete`       | Rails Core       | keep `Cookie`                 |
-| `/.well-known/jwks.json`   | Rails Core       | keep `Cookie`                 |
-| `/csp-violation-report`    | Rails Core       | keep `Cookie`                 |
-| `/health`                  | blocked publicly | no public origin              |
-| `/health/*`                | blocked publicly | no public origin              |
-| `/_next/*`                 | Next.js Core     | remove entire `Cookie` header |
-| `/` and all other paths    | Next.js Core     | remove entire `Cookie` header |
+| Path                     | Origin           | Cookie forwarding             |
+| ------------------------ | ---------------- | ----------------------------- |
+| `/api/v0/*`              | Rails Core       | keep `Cookie`                 |
+| `/oidc/*`                | Rails Core       | keep `Cookie`                 |
+| `/sign/out`              | Rails Core       | keep `Cookie`                 |
+| `/sign/out/complete`     | Rails Core       | keep `Cookie`                 |
+| `/.well-known/jwks.json` | Rails Core       | keep `Cookie`                 |
+| `/csp-violation-report`  | Rails Core       | keep `Cookie`                 |
+| `/health`                | blocked publicly | no public origin              |
+| `/health/*`              | blocked publicly | no public origin              |
+| `/_next/*`               | Next.js Core     | remove entire `Cookie` header |
+| `/` and all other paths  | Next.js Core     | remove entire `Cookie` header |
 
 `/oidc/*` covers `/oidc/authorization`, `/oidc/callback`, and `/oidc/backchannel/logout`.
 `/oidc/callback` and `/sign/out*` are the paths that set and clear the credential cookies, so
@@ -49,12 +49,10 @@ Rails. None of those exist as Rails paths:
 
 - `auth` is a host family (`auth.umaxica.*`), drawn in `config/routes/auth.rb` under
   `constraints host:`. It is not a path prefix on the Core host.
-- `/sso/*` has no route on any surface.
-  `test/integration/routes/core_route_contract_test.rb` asserts `/sso/authorize` and `/sso/logout`
-  are unroutable on Core.
-- `/settings` and `/settings/*` are defined on the Auth and Side surfaces
-  (`config/routes/auth.rb`, `config/routes/side.rb`), not Base. Base owns `/identity/*`,
-  `/accounts`, and `/preference/*`.
+- `/sso/*` has no route on any surface. `test/integration/routes/core_route_contract_test.rb`
+  asserts `/sso/authorize` and `/sso/logout` are unroutable on Core.
+- `/settings` and `/settings/*` are defined on the Auth and Side surfaces (`config/routes/auth.rb`,
+  `config/routes/side.rb`), not Base. Base owns `/identity/*`, `/accounts`, and `/preference/*`.
 
 The rows were removed rather than left as edge routes pointing at origins that would 404, which also
 silently placed the real cookie-bearing Core paths in the Cookie-stripped fallback row.
@@ -100,9 +98,9 @@ Before setting `CORE_BROWSER_JWT_COOKIE_ENABLED=1` in production, record evidenc
 
 ## Cloudflare Access Interaction
 
-Development published `jp.umaxica.{app,com,org}` through Cloudflare Tunnel behind a Cloudflare Access
-application on 2026-08-10. Rails Core answers every path on those hostnames today; the Next.js origin
-does not exist yet, so the split above is not in force. Evidence:
+Development published `jp.umaxica.{app,com,org}` through Cloudflare Tunnel behind a Cloudflare
+Access application on 2026-08-10. Rails Core answers every path on those hostnames today; the
+Next.js origin does not exist yet, so the split above is not in force. Evidence:
 `notes/implementation/2026-08-10-development-tunnel-access-verification.md`.
 
 Two consequences for the work that implements this contract.
@@ -113,16 +111,17 @@ rows above, not exempt from them. Verification items 1 and 2 must be run with an
 active, not only with a synthetic `Cookie` header, or they will pass while the real cookie still
 reaches Next.js.
 
-The `core-jp` application sets `http_only_cookie_attribute` to `false`, which makes `CF_Authorization`
-readable by JavaScript on the Core origin, and spans `app`, `com`, and `org` in one application with
-one policy and a shared session, so one authenticated session admits a principal to all three realms.
+The `core-jp` application sets `http_only_cookie_attribute` to `false`, which makes
+`CF_Authorization` readable by JavaScript on the Core origin, and spans `app`, `com`, and `org` in
+one application with one policy and a shared session, so one authenticated session admits a
+principal to all three realms.
 
 Both are accepted for development and are not defects there. Both block treating `jp.umaxica.org` as
-production-ready: the cookie attribute collides with this boundary's invariant that JavaScript cannot
-read credential material, and the shared application prevents governing or revoking staff access
-independently of the end-user and corporate realms, which `AGENTS.md` requires to stay separate. Set
-`http_only_cookie_attribute` to `true` and give `jp.umaxica.org` its own application with its own
-policy before the staff realm carries production traffic. Open, not actioned.
+production-ready: the cookie attribute collides with this boundary's invariant that JavaScript
+cannot read credential material, and the shared application prevents governing or revoking staff
+access independently of the end-user and corporate realms, which `AGENTS.md` requires to stay
+separate. Set `http_only_cookie_attribute` to `true` and give `jp.umaxica.org` its own application
+with its own policy before the staff realm carries production traffic. Open, not actioned.
 
 ## Production Blocker
 

@@ -16,9 +16,9 @@ Everything here is mechanical. No design decisions are outstanding.
 
 > **All three edits have since been applied and Part 1 is closed.** 1.2 and 1.3 landed with the
 > fakecloud consolidation (`64f66841b`, 2026-08-31). 1.1 was resolved differently: the script it
-> asked to edit was deleted outright, along with the Podman Secret machinery it registered, so
-> there is nothing left to patch. The steps are kept below as the record of what the migration
-> required; do not apply them.
+> asked to edit was deleted outright, along with the Podman Secret machinery it registered, so there
+> is nothing left to patch. The steps are kept below as the record of what the migration required;
+> do not apply them.
 
 ### 1.1 `bin/setup-dev-secrets` — resolved by deleting the script
 
@@ -28,8 +28,9 @@ script was therefore orphaned; it was removed rather than corrected. Development
 are fixed literals in `compose.yaml` (`docs/operations/development-credential-provisioning.md`).
 
 The one file it created that something still reads is `.secrets/codex_authorized_keys`, whose bind
-mount in `compose.remote-access.yaml` needs a file to exist. `docs/operations/remote-codex-over-tailscale.md`
-already documents creating it by hand as step 1 of enrolment.
+mount in `compose.remote-access.yaml` needs a file to exist.
+`docs/operations/remote-codex-over-tailscale.md` already documents creating it by hand as step 1 of
+enrolment.
 
 Stale local state from the RustFS era is inert but worth clearing once per developer machine:
 
@@ -111,12 +112,13 @@ Run on a machine that can rebuild. Record failures here rather than deleting the
 
 ### Compose
 
-- [ ] `podman compose -f compose.yaml config` succeeds (with
-      `PODMAN_COMPOSE_PROVIDER` set as `docs/operations/container-engine-podman-notes.md` requires)
+- [ ] `podman compose -f compose.yaml config` succeeds (with `PODMAN_COMPOSE_PROVIDER` set as
+      `docs/operations/container-engine-podman-notes.md` requires)
 - [ ] `docker compose config` succeeds — syntax compatibility only, Docker is not a supported engine
 - [ ] `podman compose config` still lists all five observability services (they are no longer
       profile-gated)
-- [ ] plain `podman compose up -d` starts `core`, `primary`, `replica`, `valkey-cache`, `valkey-rate-limit`, `fakecloud`
+- [ ] plain `podman compose up -d` starts `core`, `primary`, `replica`, `valkey-cache`,
+      `valkey-rate-limit`, `fakecloud`
 - [ ] stop, restart, `down`, `up` again all succeed
 
 ### Existing infrastructure (regression)

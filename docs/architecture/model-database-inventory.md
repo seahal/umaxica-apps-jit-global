@@ -1,5 +1,15 @@
 # Model Database Inventory
 
+> **Global / Regional ownership settled (2026-09-08):** per
+> `adr/global-regional-database-ownership.md`, every currently-populated database in this inventory
+> — `*_zenith`, `*_ticket`, `*_setting`, `*_signal`, `avatar`, `publishing`, `chronicle`,
+> `occurrence` — is **Global**. `chronicle`, `occurrence`, `primary`, and `queue` additionally
+> exist as independent (never shared) databases in the future Regional repository. `search` and
+> `storage` (zero migrations) and `db/audit_schema.rb` (orphan stub) are deletion candidates for the
+> split. The "target authority" and "future regional-ready" columns below predate that decision and
+> must be read against it: `zenith` is Global authority, and there is no `*_principal`
+> regional-ready database.
+
 ## Purpose
 
 This document is a current-state inventory of model and database placement in Project Umaxica. It
@@ -129,7 +139,7 @@ and target placement are separate facts.
 | `db/app_principal_reserved_migrate` | `app_principal`       |               0 | n/a                                                                        | n/a                                                             | reserved       | Empty retained path for future regional-ready storage.              |
 | `db/app_settings_migrate`           | `app_setting`         |               7 | `20260612000001_convert_timestamps_to_timestamptz`                         | `20260518030000_load_initial_app_setting_schema`                | setting        | App settings.                                                       |
 | `db/app_signals_migrate`            | `app_signal`          |               3 | `20260507000000_create_app_signal_tables`                                  | `20260520143001_rename_app_signal_tables_to_model_conventions`  | signal         | App signal tables.                                                  |
-| `db/app_tickets_migrate`            | `app_ticket`          |              57 | `20260905000000_create_security_one_time_reveals`                           | `20260507010001_add_dpop_jkt_and_session_id_to_user_tokens`     | ticket         | Session / token / ceremony storage.                                 |
+| `db/app_tickets_migrate`            | `app_ticket`          |              57 | `20260905000000_create_security_one_time_reveals`                          | `20260507010001_add_dpop_jkt_and_session_id_to_user_tokens`     | ticket         | Session / token / ceremony storage.                                 |
 | `db/app_zenith_migrate`             | `app_zenith`          |              23 | `20260627000001_create_persona_assignments`                                | `20260511223446_create_user_resident_statuses`                  | zenith         | App-side authority / projection store.                              |
 | `db/avatars_migrate`                | `avatar`              |              30 | `20260627000003_add_avatar_social_graph_invariants`                        | `20251225200010_create_avatar_identity_core_tables`             | avatar         | Avatar authority boundary.                                          |
 | `db/chronicle_migrate`              | `chronicle`           |              18 | `20260616150020_remove_redundant_chronicle_indexes`                        | `20260501000000_load_initial_chronicle_schema`                  | chronicle      | Audit / chronicle store.                                            |

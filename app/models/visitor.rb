@@ -84,6 +84,7 @@ class Visitor < ComPrincipalRecord
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.visitor.recovery_identity_required")
 
   attribute :status_id, default: VisitorStatus::NOTHING
+  validates :status_id, numericality: { only_integer: true }
   mfa_level_reference VisitorMfaLevel
   mfa_status_reference VisitorMfaStatus
 

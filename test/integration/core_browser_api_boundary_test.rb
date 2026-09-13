@@ -243,7 +243,10 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   test "refresh rotates opaque cookie and never returns credentials in body" do
     get "/api/v0/session", headers: json_headers
     csrf_token = response.parsed_body.fetch("csrf_token")
-    refresh = client_tokens(:one).rotate_refresh_token!
+    absolute_expiry = 2.minutes.from_now.change(usec: 0)
+    token = client_tokens(:one)
+    token.update!(discarded_at: absolute_expiry)
+    refresh = token.rotate_refresh_token!
     cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = refresh
 
     post "/api/v0/token/refresh", headers: json_headers.merge("X-CSRF-Token" => csrf_token)
@@ -266,6 +269,17 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_includes refresh_cookie.downcase, "samesite=strict"
     assert_includes refresh_cookie, "path=/"
     assert_no_match(/domain=/i, refresh_cookie)
+
+    access_token = access_cookie.split(";", 2).first.split("=", 2).last
+    access_claims = CoreBrowserCredentialContract.decode_access_token(
+      token: access_token,
+      host: HOST,
+      resource_type: "client",
+    )
+    assert_operator Time.at(access_claims.fetch("exp")).utc, :<=, absolute_expiry
+
+    refresh_cookie_expiry = Time.httpdate(refresh_cookie[/expires=([^;]+)/i, 1])
+    assert_operator refresh_cookie_expiry, :<=, absolute_expiry
   end
 
   private
@@ -290,7 +304,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
       session_id: token_record.public_id,
       expires_at: 10.minutes.from_now,
       scopes: %w(openid profile:read self:read),
-      issuer: AuthenticationJwtConfiguration.issuer("client"),
+      issuer: AuthenticationJwtConfiguration.issuer,
       audiences: audiences,
       jwt_issuer_id: CoreBrowserCredentialContract.core_jwt_issuer_id("client"),
     )

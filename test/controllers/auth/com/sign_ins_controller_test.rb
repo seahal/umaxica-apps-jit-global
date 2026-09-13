@@ -15,6 +15,7 @@ module Auth
         get auth_com_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
         assert_response :success
+        assert_includes response.headers["Cache-Control"], "no-store"
         assert_nil session[:oidc_authorization_login_challenge]
         assert_equal "auth/com/sign_ins/new", inertia_component
 
@@ -77,8 +78,10 @@ module Auth
 
         get auth_com_sign_in_url(ri: "jp"), headers: as_visitor_headers(visitor, host: @host)
 
-        assert_response :forbidden
-        assert_equal I18n.t("errors.messages.already_authenticated"), response.body
+        assert_response :conflict
+        assert_equal "text/plain; charset=utf-8", response.headers["Content-Type"]
+        assert_equal "Sign-in is unavailable while authenticated.", response.body
+        assert_includes response.headers["Cache-Control"], "no-store"
       end
 
       private

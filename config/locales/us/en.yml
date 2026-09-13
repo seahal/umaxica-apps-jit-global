@@ -133,7 +133,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
           cancel: Cancel
@@ -159,7 +159,7 @@ en:
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
           timezone_section: Timezone Settings
-          title: Region & Language Settings
+          title: Region Settings
           update_settings: Update Settings
         reset_settings: Reset Settings
         submitting: Submitting...
@@ -306,7 +306,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
           cancel: Cancel
@@ -332,7 +332,7 @@ en:
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
           timezone_section: Timezone Settings
-          title: Region & Language Settings
+          title: Region Settings
           update_settings: Update Settings
         reset_settings: Reset Settings
         submitting: Submitting...
@@ -488,7 +488,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
           cancel: Cancel
@@ -514,7 +514,7 @@ en:
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
           timezone_section: Timezone Settings
-          title: Region & Language Settings
+          title: Region Settings
           update_settings: Update Settings
         reset_settings: Reset Settings
         submitting: Submitting...
@@ -905,6 +905,9 @@ en:
               page_title: Sign in
     session_expired: Your session has expired. Please sign in again.
     step_up:
+      emergency_unavailable:
+        This session was established through Emergency Access and cannot perform step-up
+        verification. Sign out and sign in normally to continue.
       invalid_request: Invalid verification request.
       method_unavailable: Selected verification method is unavailable.
       register_methods_required: No step-up methods available. Please register passkey/email/totp.
@@ -920,14 +923,17 @@ en:
     app:
       identity:
         credential_warning:
-          body: Adding another sign-in method helps you access your account if Apple sign-in is unavailable.
+          body:
+            Adding another sign-in method helps you access your account if Apple sign-in is
+            unavailable.
           google: Link Google
           heading: Add another sign-in method
           passkey: Add a passkey
         emails:
           registrations:
             edit:
-              delivery_help: The code expires after a short time. Request a new one if it does not arrive.
+              delivery_help:
+                The code expires after a short time. Request a new one if it does not arrive.
               description: Enter the verification code that was sent to the address you added.
           show:
             page_title: Email address
@@ -963,7 +969,8 @@ en:
             page_title: Telephone removed
           registrations:
             edit:
-              delivery_help: The code expires after a short time. Request a new one if it does not arrive.
+              delivery_help:
+                The code expires after a short time. Request a new one if it does not arrive.
           show:
             page_title: Telephone
           update:
@@ -1002,7 +1009,7 @@ en:
         language_settings: Language Settings
         motion_settings: Motion Settings
         pagination_settings: Page Size
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
         reset_settings: Reset Settings
@@ -1030,9 +1037,15 @@ en:
           erasures:
             new:
               paragraphs:
-                privacy_request: This is a privacy request for personal data deletion or restriction. It is separate from normal withdrawal.
-                records: Messages, posts, audit logs, billing records, and similar records may follow separate retention policies.
-                retention: After processing, recovery may no longer be available. Some data may be retained for legal, safety, audit, billing, or dispute handling reasons.
+                privacy_request:
+                  This is a privacy request for personal data deletion or restriction. It is
+                  separate from normal withdrawal.
+                records:
+                  Messages, posts, audit logs, billing records, and similar records may follow
+                  separate retention policies.
+                retention:
+                  After processing, recovery may no longer be available. Some data may be retained
+                  for legal, safety, audit, billing, or dispute handling reasons.
         recoveries:
           show:
             description: Complete verification to restore access.
@@ -1087,7 +1100,7 @@ en:
         language_settings: Language Settings
         motion_settings: Motion Settings
         pagination_settings: Page Size
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
         reset_settings: Reset Settings
@@ -1165,7 +1178,7 @@ en:
         language_settings: Language Settings
         motion_settings: Motion Settings
         pagination_settings: Page Size
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           back_link: Back
         reset_settings: Reset Settings
@@ -1180,6 +1193,100 @@ en:
       roots:
         message: Thin landing endpoint.
     shared:
+      lobby:
+        title: Lobby
+        heading: Lobby
+        description: Sign in to continue.
+        sign_in: Sign in
+      dashboard:
+        title: Dashboard
+        description: Signed in
+        sections:
+          primary_links: Primary links
+          protocol_links: Protocol links
+          publishing: Publishing
+        links:
+          account: Account
+          authorize_sign_in: Authorize (sign in)
+          authorize_sign_up: Authorize (sign up)
+          avatar: Avatar
+          dashboard: Dashboard
+          identity: Identity
+          jwks: JWKS
+          logout: Logout
+          oidc_discovery: OIDC discovery
+          organization: Organization
+          root: Root
+          selector: Selector
+          switcher: Switcher
+          userinfo: UserInfo
+      identity:
+        up_link: Back to top
+        activities:
+          title: Activity history
+          description: Recent security-related activity for your account.
+          empty: No activities to show.
+          unknown_device: Unknown device
+          unknown_location: Location unavailable
+          columns:
+            occurred_at: Occurred at
+            activity: Activity
+            device: Device
+            source: Source
+            risk: Risk
+          events:
+            sign_in: Signed in
+            google_sign_in: Signed in with Google
+            apple_sign_in: Signed in with Apple
+            google_account_created: Account created with Google
+            apple_account_created: Account created with Apple
+            email_account_created: Account created with email
+            telephone_account_created: Account created with phone number
+            sign_out: Signed out
+            sign_in_failed: Sign-in failed
+            step_up_completed: Step-up authentication completed
+            step_up_failed: Step-up authentication failed
+            session_revoked: Session ended
+            security_change: Security settings changed
+            session_security_alert: Session ended for security reasons
+          risks:
+            none: None
+            low: Low
+            medium: Medium
+            high: High
+            critical: Critical
+        sessions:
+          title: Sessions
+          empty: No active sessions.
+          unknown_device: Unknown device
+          expires_at_description: This session ends at this time. This limit cannot be extended.
+          current_session: Current session
+          active: Active
+          normal: Normal
+          emergency: Emergency
+          unknown_mode: Unknown
+          revoke: Revoke
+          columns:
+            device: Device
+            last_activity: Last activity
+            created: Created
+            expires_at: Expires at
+            status: Status
+            mode: Mode
+            action: Action
+        sections:
+          account: Account
+          profile: Profile
+          security: Security
+        links:
+          activities: Activity
+          birthdate: Birthdate
+          emails: Email
+          secrets: Secrets
+          sessions: Sessions
+          standing: Account standing
+          telephones: Telephone
+          withdrawal: Withdrawal
       preference_emails:
         token_invalid: That link is no longer valid. Request a new one to continue.
         turnstile_error: Turnstile verification failed. Please refresh and try again.
@@ -1297,7 +1404,7 @@ en:
             link: Time Format
           timezone:
             link: Timezone Settings
-        region_settings: Region & Language Settings
+        region_settings: Region Settings
         regions:
           region_section: Region Settings
           select_region: Select Region
@@ -1307,7 +1414,7 @@ en:
             JP: Japan - 日本
             US: United States - USA
             USA: United States - USA
-          title: Region & Language Settings
+          title: Region Settings
         submitting: Submitting...
         update_settings: Update Settings
         update_success: Preferences updated successfully
@@ -2058,6 +2165,8 @@ en:
         Origin '%{origin}' is not trusted. Configure TRUSTED_ORIGINS environment variable.
       pii_required: Please enter your email address or telephone number
       sign_count_mismatch: Passkey security verification failed
+      sign_in_transaction_required:
+        Your sign-in session has expired or was not started with Microsoft. Please start over.
       verification_failed: Passkey verification failed
       verification_required: Passkey registration must be completed through WebAuthn verification.
   hello: Hello world 2
@@ -2246,6 +2355,10 @@ en:
           light: Light
           system: Follow system setting
         title: Theme settings
+      restricted_mode:
+        description: Step-up verification and the operations that require it are unavailable.
+        label: Restricted Mode - Emergency Access
+        sign_out: Sign out and sign in normally
   mail:
     common:
       cta: Learn more
@@ -2970,12 +3083,6 @@ en:
           cannot_revoke_current: The current session cannot be revoked.
           session_revoked: Session revoked.
           sessions_revoked: Sessions revoked.
-      layout:
-        nav:
-          log_in: Log In
-          logout: Log Out
-          settings: Settings
-          sign_up: Sign Up
       outs:
         destroy:
           success: You have been signed out.
@@ -3434,12 +3541,6 @@ en:
         checkpoints:
           show:
             title: Sign-in check
-      layout:
-        nav:
-          log_in: Log In
-          logout: Log Out
-          settings: Settings
-          sign_up: Sign Up
       preference:
         cookie:
           edit:
@@ -3605,6 +3706,18 @@ en:
     default_user_name: User
     org:
       authentication:
+        emergency:
+          passkey:
+            new:
+              description:
+                Sign in with the staff ID and your existing passkey. Microsoft sign-in is not used.
+              identifier_label: ID
+              identifier_placeholder: Enter the staff ID
+              page_title: Emergency Access
+              restricted_mode_notice:
+                This sign-in produces a restricted session. Step-up verification and the operations that
+                require it are unavailable until you sign out and sign in normally.
+              submit: Sign in with passkey
         entra:
           errors:
             authentication_method_locked:
@@ -3642,12 +3755,17 @@ en:
               administrator.
             page_title: Sign in with Microsoft
             submit: Sign in with Microsoft
+        mode_switch:
+          sign_out_required:
+            You are already signed in. Changing the sign-in mode requires signing out first
+            (%{sign_out_url}).
         new:
           back: Back
           description: Select the method you prefer to access the staff console.
           links:
             apple: Apple
             email: Email
+            emergency: Emergency Access (Restricted Mode)
             entra: Sign in with Microsoft
             google: Google
             passkey: Passkey
@@ -3662,6 +3780,7 @@ en:
             identifier_label: ID
             identifier_placeholder: Enter the staff ID
             page_title: Sign in with passkey
+            secret_credential: Lost your passkey? Use your secret instead
             submit: Sign in with passkey
         secret_credential:
           create:
@@ -3712,12 +3831,6 @@ en:
           promoted: Session promoted.
           session_revoked: Session revoked.
           sessions_revoked: Sessions revoked.
-      layout:
-        nav:
-          log_in: Log In
-          logout: Log Out
-          settings: Settings
-          sign_up: Sign Up
       outs:
         destroy:
           success: You have been signed out.
@@ -3783,7 +3896,7 @@ en:
             JST: Japan Standard Time (Asia/Tokyo)
             UTC: Coordinated Universal Time (UTC)
           timezone_section: Timezone Settings
-          title: Region & Language Settings
+          title: Region Settings
           update_settings: Update Settings
         title: Preferences
       registration:

@@ -1,0 +1,10 @@
+/* Stylesheet owned by the independent guid/net trust boundary. */
+@import "tailwindcss" source(none);
+@import "../theme.css";
+@import "../base.css";
+
+@source "../../../app/views/guid/net";
+
+:root {
+  --ui-tint: var(--color-blue-500);
+}

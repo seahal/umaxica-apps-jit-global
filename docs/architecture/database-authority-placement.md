@@ -1,5 +1,14 @@
 # Database Authority Placement
 
+> **Global / Regional ownership settled (2026-09-08):** `adr/global-regional-database-ownership.md`
+> is the normative decision. `app_zenith` / `org_zenith` / `com_zenith` are **Global-only**
+> databases and their Account / Identity / Organization / principal graph is Global canonical
+> authority (this resolves the Phase 1.5 `M1` question). The "regional-ready `principal`" role
+> described below is **retired**: regional-ready application data belongs in the Regional
+> repository's own new application database, not in a `*_principal` connection key here. The
+> sections below are retained as the current-state placement model; read them with the ownership
+> decision as the authority.
+
 ## Purpose
 
 This document separates current storage naming from target authority placement.

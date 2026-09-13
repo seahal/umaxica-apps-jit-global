@@ -18,6 +18,9 @@
   "overrideCommand": false,
   "postCreateCommand": "bundle install && bun install --frozen-lockfile && bin/rails db:prepare",
   "remoteEnv": {
+    // The image sets the same value; this repeats it so a container built
+    // before that change still gets bash instead of the /bin/sh fallback.
+    "SHELL": "/bin/bash",
     "EDITOR": "code --wait --reuse-window",
     "DEBUGGER_DISABLE": "1",
     "TERM": "xterm-256color",

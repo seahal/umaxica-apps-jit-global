@@ -11,8 +11,8 @@ description:
 # Source-Driven Development
 
 Training data goes stale: APIs get deprecated and recommended patterns change, so a remembered
-signature can look correct and still be wrong for the installed version. Verify against the
-official docs, then cite the source so the user can check it.
+signature can look correct and still be wrong for the installed version. Verify against the official
+docs, then cite the source so the user can check it.
 
 **When NOT to use:** correctness that does not depend on a version (renames, typos, file moves),
 pure logic that behaves the same across versions, or when the user has asked for speed over

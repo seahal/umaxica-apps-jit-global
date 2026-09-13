@@ -125,6 +125,26 @@ class OidcTokenUsageTest < ActiveSupport::TestCase
       assert usage.authenticate_refresh_token(raw_refresh_token.split(".", 2).last)
       assert_not usage.authenticate_refresh_token("wrong-verifier")
     end
+
+    test "#{usage_case[:name]} usage refresh expiry cannot exceed its root session" do
+      root = usage_case[:root_builder].call
+      absolute_expiry = 1.hour.from_now
+      root.update!(discarded_at: absolute_expiry)
+      usage = usage_case[:model].create!(
+        usage_case[:parent_label] => root,
+        :oidc_client_id => "core-next-rp",
+        :oidc_scope => "openid profile",
+        :refresh_token_expires_at => absolute_expiry + 1.day,
+      )
+
+      usage.issue_refresh_token!(expires_at: absolute_expiry + 2.days)
+      assert_operator usage.reload.refresh_token_expires_at, :<=, absolute_expiry
+      assert_equal absolute_expiry.to_i, usage.refresh_token_expires_at.to_i
+
+      usage.rotate_refresh_token!(expires_at: absolute_expiry + 3.days)
+      assert_operator usage.reload.refresh_token_expires_at, :<=, absolute_expiry
+      assert_equal absolute_expiry.to_i, usage.refresh_token_expires_at.to_i
+    end
     test "#{usage_case[:name]} usage detects a replay of the digest superseded by rotation" do
       root = usage_case[:root_builder].call
       usage = usage_case[:model].create!(

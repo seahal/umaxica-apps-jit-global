@@ -58,11 +58,4 @@ class SurfaceSeamPathsThirdTest < ActiveSupport::TestCase
     assert_includes path, "pub-9"
   end
 
-  test "the staff activity index page is built for the staff surface" do
-    harness = harness_for(Base::Org::Identity::ActivitiesController)
-    harness.instance_variable_set(:@activities, [])
-    harness.instance_variable_set(:@presenter, nil)
-
-    assert_predicate harness.invoke(:index_page_props), :present?
-  end
 end

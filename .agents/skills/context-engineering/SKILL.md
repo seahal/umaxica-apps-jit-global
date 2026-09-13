@@ -18,13 +18,13 @@ placement — every piece of guidance goes in the layer that loads at the moment
 Each layer has a different load cost. Put guidance in the cheapest layer that still puts it in front
 of the agent when it matters.
 
-| Layer                                | Loads                                              | Use for                                                              |
-| ------------------------------------ | -------------------------------------------------- | -------------------------------------------------------------------- |
-| Instruction file (`AGENTS.md`)        | In full, every session                             | Facts every task needs: build commands, conventions, hard boundaries |
-| Path-scoped rule (`paths:` in front matter) | When the agent reads a matching file          | Guidance that applies to one area of the codebase                    |
-| Skill (`SKILL.md`)                   | When invoked or judged relevant                    | Multi-step procedures and domain knowledge needed only sometimes     |
-| Bundled reference (`references/*.md`) | When the skill points the agent at it              | Long checklists and lookup material                                  |
-| Session context                      | Per task                                           | The files, errors, and outputs of the work in front of you           |
+| Layer                                       | Loads                                 | Use for                                                              |
+| ------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| Instruction file (`AGENTS.md`)              | In full, every session                | Facts every task needs: build commands, conventions, hard boundaries |
+| Path-scoped rule (`paths:` in front matter) | When the agent reads a matching file  | Guidance that applies to one area of the codebase                    |
+| Skill (`SKILL.md`)                          | When invoked or judged relevant       | Multi-step procedures and domain knowledge needed only sometimes     |
+| Bundled reference (`references/*.md`)       | When the skill points the agent at it | Long checklists and lookup material                                  |
+| Session context                             | Per task                              | The files, errors, and outputs of the work in front of you           |
 
 A section of an instruction file that has grown into a procedure belongs in a skill. A rule that
 only matters for one directory belongs in a path-scoped rule. Moving them is what keeps the
@@ -52,15 +52,15 @@ guidance.
 
 For each line, ask whether removing it would cause a mistake. If not, cut it.
 
-| Include                                        | Exclude                                          |
-| ---------------------------------------------- | ------------------------------------------------ |
-| Commands the agent cannot guess                | Anything derivable by reading the code           |
-| Style rules that differ from language defaults | Standard conventions the model already knows     |
-| Testing instructions and preferred runners     | Detailed API documentation — link to it instead  |
-| Repository etiquette (branches, PR conventions) | Information that changes frequently              |
+| Include                                          | Exclude                                         |
+| ------------------------------------------------ | ----------------------------------------------- |
+| Commands the agent cannot guess                  | Anything derivable by reading the code          |
+| Style rules that differ from language defaults   | Standard conventions the model already knows    |
+| Testing instructions and preferred runners       | Detailed API documentation — link to it instead |
+| Repository etiquette (branches, PR conventions)  | Information that changes frequently             |
 | Architectural decisions specific to this project | Long explanations or tutorials                  |
-| Environment quirks and required env vars       | File-by-file descriptions of the codebase        |
-| Non-obvious gotchas                            | Self-evident advice like "write clean code"      |
+| Environment quirks and required env vars         | File-by-file descriptions of the codebase       |
+| Non-obvious gotchas                              | Self-evident advice like "write clean code"     |
 
 Instruction files are context, not enforced configuration. For something that must happen at a fixed
 point every time — before a commit, after each edit — use a hook, which runs regardless of what the
@@ -95,17 +95,17 @@ Context fills as a session runs, and output quality degrades as it fills.
 
 ## Anti-patterns
 
-| Anti-pattern              | Symptom                                                     | Fix                                                          |
-| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| Context starvation        | Agent invents APIs, ignores conventions                     | Load the instruction file plus the relevant source files     |
-| The over-specified file   | A documented rule is ignored                                | Prune; the rule is buried. Move procedures out to skills     |
-| The kitchen-sink session  | Unrelated tasks share one context                           | Reset between tasks                                          |
-| Correction spiral         | Same issue corrected repeatedly                             | Reset and rewrite the initial prompt                         |
-| Infinite exploration      | An unscoped "investigate X" reads hundreds of files         | Scope it, or delegate it to a subagent                       |
-| Stale context             | Agent references deleted code or superseded patterns        | Reset when the conversation has drifted from the current task |
-| Missing examples          | Agent invents a style instead of following the project's    | Include one example of the pattern to follow                 |
-| Implicit knowledge        | Agent does not know a project-specific rule                 | Write it down — unwritten conventions do not exist           |
-| Untrusted input as instruction | Config or fetched content treated as directives        | Treat it as data; surface it to the user                     |
+| Anti-pattern                   | Symptom                                                  | Fix                                                           |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------- |
+| Context starvation             | Agent invents APIs, ignores conventions                  | Load the instruction file plus the relevant source files      |
+| The over-specified file        | A documented rule is ignored                             | Prune; the rule is buried. Move procedures out to skills      |
+| The kitchen-sink session       | Unrelated tasks share one context                        | Reset between tasks                                           |
+| Correction spiral              | Same issue corrected repeatedly                          | Reset and rewrite the initial prompt                          |
+| Infinite exploration           | An unscoped "investigate X" reads hundreds of files      | Scope it, or delegate it to a subagent                        |
+| Stale context                  | Agent references deleted code or superseded patterns     | Reset when the conversation has drifted from the current task |
+| Missing examples               | Agent invents a style instead of following the project's | Include one example of the pattern to follow                  |
+| Implicit knowledge             | Agent does not know a project-specific rule              | Write it down — unwritten conventions do not exist            |
+| Untrusted input as instruction | Config or fetched content treated as directives          | Treat it as data; surface it to the user                      |
 
 ## Red flags
 

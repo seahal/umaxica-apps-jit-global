@@ -106,17 +106,40 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       )
 
       pref.reload
+      prefix = domain[:name].camelize
 
       assert_equal 1, pref.try("#{domain[:name]}_preference_region").option_id
-      assert_equal PreferenceClassRegistry.option_class(domain[:name].camelize, :language)::EN,
+      # The US regional bundle: English, US month/day/year dates, 12-hour clock, USD.
+      assert_equal PreferenceClassRegistry.option_class(prefix, :language)::EN,
                    pref.try("#{domain[:name]}_preference_language").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :date_format)::US,
+                   pref.try("#{domain[:name]}_preference_date_format").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :time_format)::HOUR_12,
+                   pref.try("#{domain[:name]}_preference_time_format").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
+                   pref.try("#{domain[:name]}_preference_currency").option_id
+      assert_equal "usd", cookies[PreferenceIoKeys::Cookies::CURRENCY]
+      # Each regional default is recorded as an explicit choice so later ?ri seeding cannot
+      # silently revert it.
+      assert_equal %w(currency date_format language region time_format).sort,
+                   pref.reload.explicit_field_names.sort
     end
 
     test "#{domain[:name]} domain keeps request region context when saved region changes to Japan" do
       host!(domain[:host])
       pref, = assert_preference_created(domain, ri: "us")
+      prefix = domain[:name].camelize
 
       state = { ri: "us" }
+
+      # Bootstrap with ?ri=us does not write currency; pin USD first so the JP
+      # bundle reset has an explicit non-JPY value to overwrite.
+      get public_send("edit_base_#{domain[:name]}_preference_currency_url", state)
+      patch public_send("base_#{domain[:name]}_preference_currency_url", state),
+            params: { preference_currency: { option_id: PreferenceClassRegistry.option_class(
+              prefix,
+              :currency,
+            )::USD.to_s } }
 
       get public_send("edit_base_#{domain[:name]}_preference_region_url", state)
 
@@ -134,11 +157,105 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       assert_not query.key?("lx")
 
       pref.reload
+      prefix = domain[:name].camelize
 
-      assert_equal PreferenceClassRegistry.option_class(domain[:name].camelize, :region)::JP,
+      assert_equal PreferenceClassRegistry.option_class(prefix, :region)::JP,
                    pref.try("#{domain[:name]}_preference_region").option_id
-      assert_equal PreferenceClassRegistry.option_class(domain[:name].camelize, :language)::JA,
+      # The JP regional bundle: Japanese, ISO year-month-day dates, 24-hour clock, JPY.
+      assert_equal PreferenceClassRegistry.option_class(prefix, :language)::JA,
                    pref.try("#{domain[:name]}_preference_language").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :date_format)::ISO,
+                   pref.try("#{domain[:name]}_preference_date_format").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :time_format)::HOUR_24,
+                   pref.try("#{domain[:name]}_preference_time_format").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::JPY,
+                   pref.try("#{domain[:name]}_preference_currency").option_id
+      assert_equal "jpy", cookies[PreferenceIoKeys::Cookies::CURRENCY]
+    end
+
+    test "#{domain[:name]} domain region change updates the regional bundle atomically" do
+      host!(domain[:host])
+      pref, = assert_preference_created(domain, ri: "us")
+      prefix = domain[:name].camelize
+
+      # A prior explicit 24-hour clock choice and a prior explicit JPY choice: a US
+      # region change is a bundle reset, so both move to the US defaults with the rest.
+      get public_send("edit_base_#{domain[:name]}_preference_clock_url", ri: "us")
+      patch public_send("base_#{domain[:name]}_preference_clock_url", ri: "us"),
+            params: { preference_time_format: { option_id: PreferenceClassRegistry.option_class(
+              prefix,
+              :time_format,
+            )::HOUR_24.to_s } }
+      get public_send("edit_base_#{domain[:name]}_preference_currency_url", ri: "us")
+      patch public_send("base_#{domain[:name]}_preference_currency_url", ri: "us"),
+            params: { preference_currency: { option_id: PreferenceClassRegistry.option_class(
+              prefix,
+              :currency,
+            )::JPY.to_s } }
+
+      get public_send("edit_base_#{domain[:name]}_preference_region_url", ri: "us")
+      patch public_send("base_#{domain[:name]}_preference_region_url", ri: "us"),
+            params: { preference_region: { option_id: "US" } }
+
+      assert_response :redirect
+
+      pref.reload
+
+      assert_equal PreferenceClassRegistry.option_class(prefix, :language)::EN,
+                   pref.try("#{domain[:name]}_preference_language").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :date_format)::US,
+                   pref.try("#{domain[:name]}_preference_date_format").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :time_format)::HOUR_12,
+                   pref.try("#{domain[:name]}_preference_time_format").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
+                   pref.try("#{domain[:name]}_preference_currency").option_id
+    end
+
+    test "#{domain[:name]} domain region write puts the region currency on the JWT and currency screen" do
+      host!(domain[:host])
+      pref, = assert_preference_created(domain)
+      prefix = domain[:name].camelize
+
+      get public_send("edit_base_#{domain[:name]}_preference_region_url", ri: "us")
+      patch public_send("base_#{domain[:name]}_preference_region_url", ri: "us"),
+            params: { preference_region: { option_id: "US" } }
+
+      assert_response :redirect
+
+      pref.reload
+
+      assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
+                   pref.public_send("#{domain[:name]}_preference_currency").option_id
+      assert_equal "usd", cookies[PreferenceIoKeys::Cookies::CURRENCY]
+
+      access_token = cookies[preference_access_cookie_name(domain)]
+      payload = PreferenceToken.decode(access_token, host: domain[:host])
+
+      assert_equal "usd", payload.dig("preferences", "cu")
+
+      get public_send("edit_base_#{domain[:name]}_preference_currency_url", ri: "us")
+
+      assert_response :success
+      assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::USD,
+                   inertia_props.dig("form", "value")
+    end
+
+    test "#{domain[:name]} domain rejected region write leaves currency unchanged" do
+      host!(domain[:host])
+      pref, = assert_preference_created(domain)
+      prefix = domain[:name].camelize
+      original_currency_id = pref.public_send("#{domain[:name]}_preference_currency").option_id
+
+      get public_send("edit_base_#{domain[:name]}_preference_region_url", ri: "jp")
+      patch public_send("base_#{domain[:name]}_preference_region_url", ri: "jp"),
+            params: { preference_region: { option_id: "0" } }
+
+      pref.reload
+
+      assert_equal original_currency_id,
+                   pref.public_send("#{domain[:name]}_preference_currency").option_id
+      assert_equal PreferenceClassRegistry.option_class(prefix, :currency)::JPY,
+                   pref.public_send("#{domain[:name]}_preference_currency").option_id
     end
 
     test "#{domain[:name]} domain region edit and update do not change preference count" do
@@ -644,6 +761,9 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
 
       assert_includes hrefs, public_send("edit_base_#{domain[:name]}_preference_timezone_path", state)
       assert_includes hrefs, public_send("edit_base_#{domain[:name]}_preference_language_path", state)
+      assert_includes hrefs, public_send("edit_base_#{domain[:name]}_preference_currency_path", state)
+      assert_includes hrefs, public_send("edit_base_#{domain[:name]}_preference_calendar_path", state)
+      assert_includes hrefs, public_send("edit_base_#{domain[:name]}_preference_clock_path", state)
     end
 
     if domain[:name] == "app"

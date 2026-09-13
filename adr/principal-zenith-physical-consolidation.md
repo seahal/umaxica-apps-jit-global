@@ -4,6 +4,15 @@
 
 Accepted on 2026-06-30.
 
+> **Partially superseded (2026-09-08) by `adr/global-regional-database-ownership.md`:** the
+> consolidation of `*_principal` migration history into `*_zenith` and the semantic
+> `*PrincipalRecord` base classes stand. The claim that the reserved empty `*_principal` databases
+> "are available for a future regional-ready application-data role" is retired: `*_zenith` is Global
+> canonical authority, and regional-ready application data belongs in the future Regional
+> repository's own application database, not in a `*_principal` connection key in this repository.
+> The Phase 1.5 investigation also found the `db/{app,com,org}_principal_reserved_migrate`
+> directories and `*_principal` connection keys named below were never actually created.
+
 ## Context
 
 The repository historically separated each surface into `*_principal` and `*_zenith` physical

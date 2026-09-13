@@ -408,6 +408,49 @@ class Auth::Org::Omniauth::OmniauthCallbacksControllerTest < ActionDispatch::Int
     assert_equal "pkce_verifier_missing", JSON.parse(event).fetch("data").fetch("message")
   end
 
+  test "the failure endpoint serves requests below its limit and 429s above it" do
+    with_rate_limit_counters do
+      20.times do |attempt|
+        get "/social/entra/failure", params: { message: "connection_not_found" }
+
+        assert_response :unprocessable_content, "request #{attempt + 1} should still be inside the budget"
+      end
+
+      get "/social/entra/failure", params: { message: "connection_not_found" }
+
+      assert_response :too_many_requests
+      assert_equal "60", response.headers["Retry-After"]
+    end
+  end
+
+  # The two limits must not share a counter: failure traffic must not consume the
+  # callback budget, or an attacker could lock a staff member out of a legitimate
+  # callback by hammering the public, unauthenticated failure endpoint.
+  #
+  # Asserted on the counter keys rather than by driving the callback: the
+  # OmniAuth middleware answers /social/entra/callback for an unverified request
+  # and the controller's callback limiter is never reached, so a request-level
+  # test would pass whether or not the buckets are shared.
+  test "the failure limit and the callback limit use separate counters" do
+    store = ActiveSupport::Cache::MemoryStore.new
+
+    with_rate_limit_counters(store) do
+      get "/social/entra/failure", params: { message: "connection_not_found" }
+    end
+
+    keys = memory_store_keys(store)
+
+    assert_includes keys, "rate-limit:auth_org_sign_in_entra_failure:omniauth_failure_ip_burst:127.0.0.1"
+    assert_not(
+      keys.any? { |key| key.include?("omniauth_callback_ip_burst") },
+      "the failure endpoint must not increment the callback counter, got #{keys.inspect}",
+    )
+    assert_not(
+      keys.any? { |key| key.include?(":auth_org_sign_in_entra:") },
+      "the failure endpoint must not share the callback scope, got #{keys.inspect}",
+    )
+  end
+
   private
 
   # Both Rails.logger and ActionController::Base.logger are swapped: the
@@ -439,6 +482,12 @@ class Auth::Org::Omniauth::OmniauthCallbacksControllerTest < ActionDispatch::Int
 
   def failure_message_from(location)
     Rack::Utils.parse_nested_query(URI.parse(location).query).fetch("message", nil)
+  end
+
+  # MemoryStore has no public key enumeration; the rate-limit assertions above
+  # need the counter names the request actually wrote.
+  def memory_store_keys(store)
+    store.instance_variable_get(:@data).keys.map(&:to_s)
   end
 
   # Fails the token exchange without contacting Microsoft. The unstubbed path

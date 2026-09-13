@@ -13,18 +13,18 @@
 Ordering follows the OWASP Top 10 (2021 edition). The prevention patterns for each live in
 `SKILL.md`; this table is for looking up which category a finding belongs to.
 
-| ID  | Category                                   | Prevention in one line                                            |
-| --- | ------------------------------------------ | ----------------------------------------------------------------- |
-| A01 | Broken Access Control                      | Check ownership on every resource, not just authentication        |
-| A02 | Cryptographic Failures                     | HTTPS everywhere, argon2/bcrypt/scrypt for passwords, no plaintext |
-| A03 | Injection                                  | Parameterize queries, escape output, never concatenate input      |
-| A04 | Insecure Design                            | Threat model before building; write abuse cases beside use cases  |
-| A05 | Security Misconfiguration                  | Security headers, restrictive CORS, no stack traces to users      |
-| A06 | Vulnerable and Outdated Components         | Audit dependencies, commit the lockfile, review new packages      |
-| A07 | Identification and Authentication Failures | Rate-limit auth, expire reset tokens, httpOnly/secure/sameSite    |
+| ID  | Category                                   | Prevention in one line                                              |
+| --- | ------------------------------------------ | ------------------------------------------------------------------- |
+| A01 | Broken Access Control                      | Check ownership on every resource, not just authentication          |
+| A02 | Cryptographic Failures                     | HTTPS everywhere, argon2/bcrypt/scrypt for passwords, no plaintext  |
+| A03 | Injection                                  | Parameterize queries, escape output, never concatenate input        |
+| A04 | Insecure Design                            | Threat model before building; write abuse cases beside use cases    |
+| A05 | Security Misconfiguration                  | Security headers, restrictive CORS, no stack traces to users        |
+| A06 | Vulnerable and Outdated Components         | Audit dependencies, commit the lockfile, review new packages        |
+| A07 | Identification and Authentication Failures | Rate-limit auth, expire reset tokens, httpOnly/secure/sameSite      |
 | A08 | Software and Data Integrity Failures       | Verify signatures, pin versions, distrust untrusted deserialization |
-| A09 | Security Logging and Monitoring Failures   | Log security events as data; alert on auth anomalies              |
-| A10 | Server-Side Request Forgery                | Allowlist host and scheme, reject private IPs, forbid redirects   |
+| A09 | Security Logging and Monitoring Failures   | Log security events as data; alert on auth anomalies                |
+| A10 | Server-Side Request Forgery                | Allowlist host and scheme, reject private IPs, forbid redirects     |
 
 ## Pre-commit verification
 
@@ -86,8 +86,8 @@ too. Read each hit before deciding.
 
 ### AI and LLM features
 
-- [ ] Model output treated as untrusted — never passed to eval, SQL, a shell, `innerHTML`, or a
-      file path without validation
+- [ ] Model output treated as untrusted — never passed to eval, SQL, a shell, `innerHTML`, or a file
+      path without validation
 - [ ] Secrets and other users' data kept out of prompts
 - [ ] Tool and agent permissions scoped; destructive actions require confirmation
 - [ ] Token, request-rate, and recursion-depth caps in place

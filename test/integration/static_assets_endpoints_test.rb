@@ -52,15 +52,15 @@ class StaticAssetsEndpointsTest < ActionDispatch::IntegrationTest
       controller: "palm/app/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost"),
+      host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"),
       controller: "side/app/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "side.com.localhost"),
+      host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"),
       controller: "side/com/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "side.org.localhost"),
+      host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"),
       controller: "side/org/sitemaps",
     },
   ].freeze

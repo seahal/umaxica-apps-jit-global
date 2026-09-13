@@ -90,7 +90,12 @@ added there, not in Rails config:
    families to browser-facing names in development (`#auth_key`, `#base_key`, `#side_key` fall back
    to `PUBLIC_AUTH_*`/`PUBLIC_BASE_*`/`PUBLIC_SIDE_*_URL`), which is what the other consumers need
    anyway: route constraints, the CSP form-action allowlist, and the OIDC authority all read
-   `PUBLIC_*`.
+`PUBLIC_*`.
+
+The Edit staff Publishing surface is one such pair: `edit.umaxica.org` is the browser hostname and
+the remotely managed Tunnel routes it to `http://edit.org.localhost:3000`. It remains subject to
+Cloudflare Access at the perimeter and Rails operator authentication and Action Policy at the
+application boundary.
 
 `test/config/host_authorization_contract_test.rb` guards the result in both directions: the
 published site names are accepted, and an Umaxica-owned hostname that no `PUBLIC_*_URL` names is
@@ -119,11 +124,11 @@ Rails accept it.
 
 ## Trust Domains
 
-| Domain            | Purpose                                                | Never used for                                                                                                    |
-| ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Cloudflare Tunnel | Selected externally reachable Rails ingress            | Service-to-service (Workers / Edge) traffic                                                                       |
-| Workers VPC       | Cloudflare Worker / Edge -> Rails, service-to-service  | Public browser traffic, operator access                                                                           |
-| Cloudflare Access | Perimeter for explicitly protected hostnames           | Rails' primary identity system — Rails authentication and authorization remain authoritative regardless of Access |
+| Domain            | Purpose                                               | Never used for                                                                                                    |
+| ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Cloudflare Tunnel | Selected externally reachable Rails ingress           | Service-to-service (Workers / Edge) traffic                                                                       |
+| Workers VPC       | Cloudflare Worker / Edge -> Rails, service-to-service | Public browser traffic, operator access                                                                           |
+| Cloudflare Access | Perimeter for explicitly protected hostnames          | Rails' primary identity system — Rails authentication and authorization remain authoritative regardless of Access |
 
 ## Request Paths
 
@@ -136,10 +141,10 @@ Browser --(HTTPS)--> Cloudflare edge --(QUIC tunnel)--> cloudflared (compose: cl
 
 - `cloudflared` is the unprofiled `cloudflare-tunnel` service in `compose.yaml` (image
   `cloudflare/cloudflared:2026.8.2`,
-  `tunnel --no-autoupdate --protocol auto --metrics 0.0.0.0:2000 run`, and `TUNNEL_TOKEN` resolved from the
-  gitignored repository `.env`). A plain Compose `up` and the Dev Container lifecycle both start
-  it. The alternative connector stays behind `--profile tunnel-edge`. It is the
-  only component on the `frontend` network besides `core` itself.
+  `tunnel --no-autoupdate --protocol auto --metrics 0.0.0.0:2000 run`, and `TUNNEL_TOKEN` resolved
+  from the gitignored repository `.env`). A plain Compose `up` and the Dev Container lifecycle both
+  start it. The alternative connector stays behind `--profile tunnel-edge`. It is the only component
+  on the `frontend` network besides `core` itself.
 - The connector is attached only to Global's private `frontend` network. Edge and Global do not
   share a Podman network. An Edge Worker reaches Rails through its Cloudflare Workers VPC Service
   binding and this tunnel, including `remote: true` binding behavior during local Worker
@@ -186,14 +191,14 @@ Browser --(HTTPS, Access cookie/JWT)--> Cloudflare edge --(Access policy check)-
   validation point — it runs before the request reaches Rails at all.
 - **The development tunnel hostnames are Access-protected, and that protection lives in the
   Cloudflare account, not in this repository.** This remotely managed connector authenticates with
-  the tunnel-scoped token described in `docs/operations/cloudflare-private-origin.md`, so its ingress
-  rules and `originRequest.access` blocks are configured in the Cloudflare dashboard; no file here
-  can assert they are present. Treat "the Access application exists and the published development
-  route enables Access validation" as an external check, in the sense of the "External Checks"
-  section of `docs/operations/cloudflare-private-origin.md` — the repository-side controls (network
-  isolation, Host Authorization, Rails authentication) do not depend on it, but the confidentiality
-  of the development surface does. Record the hostname, `audTag`, and `teamName` here once they are
-  settled.
+  the tunnel-scoped token described in `docs/operations/cloudflare-private-origin.md`, so its
+  ingress rules and `originRequest.access` blocks are configured in the Cloudflare dashboard; no
+  file here can assert they are present. Treat "the Access application exists and the published
+  development route enables Access validation" as an external check, in the sense of the "External
+  Checks" section of `docs/operations/cloudflare-private-origin.md` — the repository-side controls
+  (network isolation, Host Authorization, Rails authentication) do not depend on it, but the
+  confidentiality of the development surface does. Record the hostname, `audTag`, and `teamName`
+  here once they are settled.
 - Rails does not validate `Cf-Access-Jwt-Assertion` itself and should not, unless a specific feature
   needs to consume Access identity/claims directly — none does today. Adding Rails-side validation
   merely for "defense in depth" duplicates the connector-side check without a concrete requirement
@@ -207,9 +212,9 @@ Cloudflare Worker (fetch()) --(Workers VPC binding)--> VPC Service (bound to a T
 ```
 
 - Workers VPC binds to a VPC Service on the dedicated `umaxica-dev-workers-vpc` tunnel. The local
-  connector is `cloudflare-tunnel-workers-vpc`; it is distinct from the browser-facing `Auth`
-  tunnel and has no ingress rules, public hostname, or Access application. Workers VPC requires
-  cloudflared `2025.7.0` or newer; `compose.yaml` pins the supported `2026.8.2` release and uses
+  connector is `cloudflare-tunnel-workers-vpc`; it is distinct from the browser-facing `Auth` tunnel
+  and has no ingress rules, public hostname, or Access application. Workers VPC requires cloudflared
+  `2025.7.0` or newer; `compose.yaml` pins the supported `2026.8.2` release and uses
   `--protocol auto` so QUIC remains available.
 - The VPC Service connects to `core-workers-vpc.internal:3000`. This is a Compose DNS alias on the
   private `frontend` network, so it survives container and network recreation without pinning a

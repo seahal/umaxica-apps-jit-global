@@ -25,7 +25,7 @@ class Base::App::IdentityAuthoritySlice1ATest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
 
     assert_equal @host, location.host
-    assert_equal base_app_sign_out_completion_path(ri: "jp"), location.request_uri
+    assert_equal base_app_lobby_path(ri: "jp"), location.request_uri
     assert_nil Rack::Utils.parse_nested_query(location.query.to_s)["logout_token"]
   end
 

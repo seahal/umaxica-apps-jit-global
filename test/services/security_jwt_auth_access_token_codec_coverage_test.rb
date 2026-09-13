@@ -11,7 +11,7 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
     assert_nil SecurityJwtAuthAccessTokenCodec.encode(nil, host: "app.example.test")
     assert_nil SecurityJwtAuthAccessTokenCodec.encode(Client.new, host: "")
 
-    payload = { "sub" => "123", "act" => "client" }
+    payload = { "sub" => "123", "scope" => "domain:client" }
 
     AuthorizationTokenClaims.stub(:build, payload) do
       JitSecurityJwtKeyring.stub(:encode, "encoded.jwt") do
@@ -33,13 +33,13 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
     assert_nil SecurityJwtAuthAccessTokenCodec.decode_allow_expired("token", host: nil)
 
     header = { "kid" => "kid-1" }
-    payload = { "sub" => "123", "act" => "client" }
+    payload = { "sub" => "123", "scope" => "domain:client" }
 
     JitSecurityJwtKeyring.stub(:parse_header, header) do
       JitSecurityJwtKeyring.stub(:public_key_for, "public-key") do
         JWT.stub(:decode, [payload, header]) do
           SecurityJwtAuthAccessTokenCodec.stub(:valid_header?, true) do
-            SecurityJwtAuthAccessTokenCodec.stub(:valid_payload_type?, true) do
+            SecurityJwtRfc9068AccessTokenProfile.stub(:claims_structurally_valid?, true) do
               result =
                 SecurityJwtAuthAccessTokenCodec.decode_allow_expired(
                   "token",
@@ -77,7 +77,7 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
 
   test "decode reports a payload actor mismatch" do
     header = { "kid" => "kid-1" }
-    payload = { "sub" => "123", "act" => "operator" }
+    payload = { "sub" => "123", "scope" => "domain:operator" }
 
     JitSecurityJwtKeyring.stub(:parse_header, header) do
       JitSecurityJwtKeyring.stub(:public_key_for, "public-key") do
@@ -92,42 +92,37 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
     end
   end
 
-  test "validate_actor_claim! accepts valid actors and rejects invalid ones" do
-    assert_not SecurityJwtAuthAccessTokenCodec.validate_actor_claim!(nil, "client")
-    assert_not SecurityJwtAuthAccessTokenCodec.validate_actor_claim!({}, "client")
-    assert_not SecurityJwtAuthAccessTokenCodec.validate_actor_claim!({ "act" => "invalid" }, "client")
-    assert SecurityJwtAuthAccessTokenCodec.validate_actor_claim!({ "act" => "client" }, "client")
+  test "resource_type_scope_matches? accepts valid actors and rejects invalid ones" do
+    assert_not SecurityJwtAuthAccessTokenCodec.resource_type_scope_matches?(nil, "client")
+    assert_not SecurityJwtAuthAccessTokenCodec.resource_type_scope_matches?({}, "client")
+    assert_not SecurityJwtAuthAccessTokenCodec.resource_type_scope_matches?({ "scope" => "domain:invalid" }, "client")
+    assert SecurityJwtAuthAccessTokenCodec.resource_type_scope_matches?({ "scope" => "domain:client" }, "client")
   end
 
   test "claim extraction helpers delegate to authorization claims" do
     payload = {
       "sub" => "subject-1",
-      "act" => "client",
+      "scope" => "domain:client openid profile",
       "sid" => "session-1",
       "jti" => "token-1",
-      "scp" => %w(openid profile),
     }
 
     assert_equal "subject-1", SecurityJwtAuthAccessTokenCodec.extract_subject(payload)
-    assert_equal "client", SecurityJwtAuthAccessTokenCodec.extract_type(payload)
+    assert_equal "client", SecurityJwtAuthAccessTokenCodec.extract_resource_type(payload)
     assert_equal "session-1", SecurityJwtAuthAccessTokenCodec.extract_session_id(payload)
     assert_equal "token-1", SecurityJwtAuthAccessTokenCodec.extract_jti(payload)
-    assert_equal %w(openid profile), SecurityJwtAuthAccessTokenCodec.extract_scopes(payload)
+    assert_equal %w(domain:client openid profile), SecurityJwtAuthAccessTokenCodec.extract_scopes(payload)
     assert SecurityJwtAuthAccessTokenCodec.has_scope?(payload, :profile)
     assert_not SecurityJwtAuthAccessTokenCodec.has_scope?(payload, :email)
   end
 
-  test "issuer inference distinguishes service and surface hosts" do
-    infer =
-      ->(host, type = "client") {
-        SecurityJwtAuthAccessTokenCodec.send(
-          :inferred_surface_jwt_issuer_id, host: host, resource_type: type,
-        )
-      }
+  test "keyring is never inferred from the request host" do
+    resolve = ->(id) { SecurityJwtAuthAccessTokenCodec.send(:resolve_jwt_issuer_id, id) }
 
-    assert_equal "surface:ACME_ORG", infer.call("acme.umaxica.org")
-    assert_equal "surface:CORE_COM", infer.call("core.umaxica.com")
-    assert_equal "surface:ACME_APP", infer.call("acme.app.localhost")
+    assert_equal "auth", resolve.call(nil)
+    assert_equal "auth", resolve.call("")
+    assert_equal "surface:ACME_ORG", resolve.call("surface:ACME_ORG")
+    assert_not SecurityJwtAuthAccessTokenCodec.respond_to?(:inferred_surface_jwt_issuer_id, true)
   end
 
   test "decode options require and verify nbf" do
@@ -160,16 +155,16 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
     payload = {
       "iss" => "issuer",
       "aud" => "audience",
-      "typ" => "access-token+jwt",
       "exp" => 2.minutes.from_now.to_i,
       "nbf" => Time.current.to_i,
       "sub" => "subject",
       "sid" => "session",
-      "act" => "client",
+      "client_id" => "umaxica-web-client",
       "jti" => "jti",
       "acr" => "aal1",
+      "scope" => "authenticated domain:client",
     }
-    token = JWT.encode(payload, private_key, "ES384", { "typ" => "access-token+jwt", "kid" => "kid" })
+    token = JWT.encode(payload, private_key, "ES384", { "typ" => "at+jwt", "kid" => "kid" })
 
     JitSecurityJwtKeyring.stub(:public_key_for, private_key.public_key) do
       assert_nil SecurityJwtAuthAccessTokenCodec.decode(
@@ -185,16 +180,14 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
   test "rejects a case-variant algorithm before JWT verification" do
     assert_not SecurityJwtAuthAccessTokenCodec.send(
       :valid_header?,
-      { "alg" => "eS384", "typ" => "access-token+jwt", "kid" => "kid" },
-      "client",
+      { "alg" => "eS384", "typ" => "at+jwt", "kid" => "kid" },
     )
   end
 
   test "rejects an unsigned algorithm before JWT verification" do
     assert_not SecurityJwtAuthAccessTokenCodec.send(
       :valid_header?,
-      { "alg" => "none", "typ" => "access-token+jwt", "kid" => "kid" },
-      "client",
+      { "alg" => "none", "typ" => "at+jwt", "kid" => "kid" },
     )
   end
 end

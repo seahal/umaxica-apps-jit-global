@@ -56,6 +56,8 @@ repository root. Load only the entries matching the task.
   `generic/repository-language.mdc`
 - Logging, audit records, telemetry, or analytics: `adr/application-logging-boundary.md`,
   `docs/security/observability-boundary.md`
+- Concerns, method visibility, or `included do` hooks: `generic/rails-concerns.mdc`,
+  `docs/architecture/method-visibility-and-concerns.md`
 - Non-trivial decisions, plan deviations, or handoff context: `generic/implementation-notes.mdc`,
   `project/repository-knowledge-tree.mdc`
 
@@ -81,6 +83,8 @@ Do not:
 - store request state in class variables, globals, or `Thread.current`; pass it explicitly
 - introduce test-only behavior into application code; change the test instead
 - use silent configuration, workflow, or migration fallbacks; fail loudly and name what is missing
+- add `included do` / `prepended do` hooks, or leave a method's visibility to Ruby's implicit public
+  default
 - publish a container port to the host without an explicit loopback bind address, or publish a
   datastore port (PostgreSQL, Valkey) to the host at all
 - perform destructive database operations without explicit approval of the risk and migration plan

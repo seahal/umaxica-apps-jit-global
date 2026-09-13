@@ -26,6 +26,7 @@ class SurfaceDefaultWebRateLimitTest < ActionDispatch::IntegrationTest
     "base app" => ["PUBLIC_BASE_SERVICE_URL", :base_app_dashboard_path],
     "base com" => ["PUBLIC_BASE_CORPORATE_URL", :base_com_dashboard_path],
     "base org" => ["PUBLIC_BASE_STAFF_URL", :base_org_dashboard_path],
+    "edit org" => ["PUBLIC_EDIT_STAFF_URL", :edit_org_dashboard_path],
     "base developer" => [nil, :base_developer_root_path],
     "auth app" => ["PUBLIC_AUTH_SERVICE_URL", :auth_app_dashboard_path],
     "auth com" => ["PUBLIC_AUTH_CORPORATE_URL", :auth_com_dashboard_path],

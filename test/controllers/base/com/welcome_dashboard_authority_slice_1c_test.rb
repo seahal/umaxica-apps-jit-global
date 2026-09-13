@@ -32,7 +32,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_response :success
     assert_equal "base/com/dashboards/show", inertia_component
-    assert_equal "Dashboard", inertia_props.fetch("title")
+    assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
     assert_no_match(/id\.umaxica/, response.body)
 
     links = inertia_props.fetch("sections").flat_map { |section| section.fetch("items") }
@@ -41,16 +41,60 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_includes hrefs, base_com_root_path(ri: "jp")
     assert_includes hrefs, base_com_dashboard_path(ri: "jp")
-    assert_equal base_com_accounts_path(ri: "jp"), labelled.fetch("Account")
-    assert_equal base_com_organizations_path(ri: "jp"), labelled.fetch("Organization")
+    assert_equal base_com_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
+    assert_equal base_com_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
     assert_includes hrefs, base_com_selector_path(ri: "jp")
     assert_includes hrefs, new_base_com_sign_out_path(ri: "jp")
     assert_includes hrefs, base_com_oidc_authorization_path(ri: "jp", screen_hint: "signin")
     assert_includes hrefs, base_com_oidc_authorization_path(ri: "jp", screen_hint: "signup")
-    assert_includes labelled.keys, "OIDC discovery"
-    assert_includes labelled.keys, "JWKS"
-    assert_includes labelled.keys, "UserInfo"
+    assert_includes labelled.keys, dashboard_label(:oidc_discovery)
+    assert_includes labelled.keys, dashboard_label(:jwks)
+    assert_includes labelled.keys, dashboard_label(:userinfo)
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
+  end
+
+  test "identity_show_links_up_to_the_dashboard" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+
+    get base_com_identity_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/com/identities/show", inertia_component
+    assert_equal I18n.t("base.shared.identity.up_link", locale: :ja), inertia_props.dig("up_link", "label")
+    assert_equal base_com_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
+  end
+
+  test "identity_show_links_to_identity_pages" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+
+    get base_com_identity_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    labelled =
+      inertia_props.fetch("sections")
+        .flat_map { |section| section.fetch("items") }
+        .to_h { |link| [link.fetch("label"), link.fetch("href")] }
+
+    assert_equal base_com_identity_emails_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.emails", locale: :ja))
+    assert_equal base_com_identity_telephones_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.telephones", locale: :ja))
+    assert_equal base_com_identity_birthdate_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
+    assert_equal base_com_identity_secrets_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
+    assert_equal base_com_identity_sessions_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
+    assert_equal base_com_identity_activities_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
+    assert_equal base_com_identity_standing_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.standing", locale: :ja))
+    assert_equal new_base_com_identity_withdrawal_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.withdrawal", locale: :ja))
+    assert_equal new_base_com_sign_out_path(ri: "jp"),
+                 labelled.fetch(I18n.t("sign.app.settings.show.logout", locale: :ja))
   end
 
   test "welcome_route_exists" do
@@ -63,6 +107,11 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   private
+
+  # Requests use ri=jp, so the dashboard renders its Japanese copy.
+  def dashboard_label(key)
+    I18n.t(key, scope: "base.shared.dashboard.links", locale: :ja)
+  end
 
   def select_token!(surface:, principal:, token:)
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)

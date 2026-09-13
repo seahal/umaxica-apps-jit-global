@@ -131,8 +131,9 @@ gem "store_attribute"
 gem "store_model"
 # Stripe API client.
 gem "stripe", require: false
-# dependency
-gem "ruby-vips"
+# Loaded explicitly only by image-processing paths. Host-native test runs do not
+# require libvips merely to boot Rails.
+gem "ruby-vips", require: false
 # log
 gem "lograge"
 # json

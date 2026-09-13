@@ -124,8 +124,8 @@ its only effect was a boot-time ping. Two test sites that referenced it were cle
 left dangling: the `defined?(REDIS_CLIENT)` branch in `test/integration/health_endpoints_test.rb`,
 which is dead once the constant is gone and is replaced by a comment recording that liveness now has
 no Redis-shaped dependency to stub; and a block of stale speculative comments in
-`test/services/sign/risk/engine_test.rb` claiming the risk engine reads from `REDIS_CLIENT`, which it
-does not. The stale `REDIS_SMOKE_TEST` key was dropped from
+`test/services/sign/risk/engine_test.rb` claiming the risk engine reads from `REDIS_CLIENT`, which
+it does not. The stale `REDIS_SMOKE_TEST` key was dropped from
 `test/config/host_authorization_contract_test.rb`. No generic Redis abstraction was introduced to
 replace them.
 
@@ -381,8 +381,8 @@ bundle exec rubocop <56 changed .rb files>
 ## Not verified in this session
 
 **Final post-edit Podman rerun.** After the PostgreSQL replay/reveal correction and Dev Container
-Valkey override fix, Podman could not reach Compose configuration because the host runtime failed
-at `chmod /run/user/1000/libpod: read-only file system`. Per the Podman-only execution boundary, no
+Valkey override fix, Podman could not reach Compose configuration because the host runtime failed at
+`chmod /run/user/1000/libpod: read-only file system`. Per the Podman-only execution boundary, no
 host Ruby/Rails fallback was used. The earlier container results above remain evidence for the
 preceding worktree state; the final focused tests, migration application, merged Compose validation,
 and Dev Container recreation must be rerun once rootless Podman is writable.

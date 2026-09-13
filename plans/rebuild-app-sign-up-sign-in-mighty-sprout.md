@@ -374,7 +374,8 @@ Apply the same restorations to:
 
 - `docs/security/ceremony-grant-result.md`: Add a note that the ceremony grant/result pattern for
   settings passkey/TOTP/secret*credential registration is currently using the direct commit path
-  (`commit_settings*\*`), not the full grant→result→finalcommitter chain. The doc describes the intended future state (per `adr/acme-sign-core-base-port-boundary.md`).
+  (`commit_settings*\*`), not the full grant→result→finalcommitter chain. The doc describes the
+  intended future state (per `adr/acme-sign-core-base-port-boundary.md`).
 - No other docs need changes — the route design in `docs/security/sign-up-sequence.md` and
   `docs/security/sign-in-sequence.md` is already aligned with the restored behavior.
 

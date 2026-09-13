@@ -15,40 +15,37 @@ class SignAppLayoutTest < ActionDispatch::IntegrationTest
     default_headers.merge("X-TEST-CURRENT-USER" => user.id.to_s)
   end
 
-  test "layout links when not logged in" do
+  test "the shared auth header exposes no sign-in or sign-up navigation" do
     get new_auth_app_sign_up_email_url(ri: "jp"), headers: default_headers
 
     assert_response :success
 
-    # The navigation is no longer markup in the layout: the React layout renders the shared
-    # `chrome` prop, so what the visitor is offered is decided here, on the server.
-    navigation = inertia_props.fetch("chrome").fetch("primary_navigation")
+    chrome = inertia_props.fetch("chrome")
 
-    assert_equal(
-      [
-        { "label" => I18n.t("sign.app.layout.nav.sign_up"), "href" => auth_app_sign_up_path(ri: "jp") },
-        { "label" => I18n.t("sign.app.layout.nav.log_in"), "href" => auth_app_sign_in_path(ri: "jp") },
-      ],
-      navigation,
-    )
+    # Auth pages are themselves the sign-in / sign-up surface. A header link back to those flows
+    # forces the shared template to detect login state just to choose between "Sign in" and "Sign
+    # up", which this surface should not have to do. Links a specific ceremony genuinely needs
+    # belong in that page's own body, not the shared chrome.
+    assert_not chrome.key?("primary_navigation"), "the auth chrome must not carry primary navigation"
 
-    hrefs = navigation.map { |link| link.fetch("href") }
+    footer_hrefs = Array(chrome["footer_navigation"]).map { |link| link.fetch("href") }
 
-    assert_empty hrefs.grep(%r{/configuration})
-    assert_empty hrefs.grep(%r{/authentication})
+    assert_empty footer_hrefs.grep(%r{/sign/in\b}), "auth footer must not link the sign-in flow"
+    assert_empty footer_hrefs.grep(%r{/sign/up\b}), "auth footer must not link the sign-up flow"
   end
 
-  # test "layout links when logged in" do
-  #   user = users(:one)
-  #   get new_sign_app_sign_up_telephone_url, headers: login_headers(user)
+  test "cookie banner settings url is the base cookie preference edit" do
+    get new_auth_app_sign_up_email_url(ri: "jp"), headers: default_headers
 
-  #   assert_response :success
+    assert_response :success
 
-  #   assert_select "nav" do
-  #     assert_select "a[href=?]", auth_app_sign_up_path
-  #     assert_select "a[href=?]", auth_app_sign_in_path
-  #     assert_select "a[href*=?]", "/configuration", count: 0
-  #     assert_select "a[href*=?][data-turbo-method='delete']", "/authentication", count: 0
-  #   end
-  # end
+    settings_url = inertia_props.dig("chrome", "cookie_controls", "settings_url")
+    uri = URI.parse(settings_url)
+    query_keys = uri.query.to_s.split("&").map { |pair| pair.split("=", 2).first }
+
+    assert_equal "/preference/cookie/edit", uri.path
+    assert_equal "jp", Rack::Utils.parse_query(uri.query).fetch("ri")
+    assert_equal query_keys.uniq, query_keys
+    assert_not_equal URI.parse("http://#{default_headers.fetch("Host")}").host, uri.host
+  end
 end

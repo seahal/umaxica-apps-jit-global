@@ -55,7 +55,7 @@ class SurfaceSeamPathsTest < ActiveSupport::TestCase
     test "the #{surface} logout completion path stays on the #{surface} surface" do
       path = harness_for(controller_class).invoke(:oidc_logout_completed_path, ri: "jp")
 
-      assert_includes path, "/sign/out", controller_class.name
+      assert_includes path, "/lobby", controller_class.name
     end
   end
 

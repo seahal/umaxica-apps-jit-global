@@ -30,9 +30,9 @@ because counters are disposable.
 
 ## Decision
 
-**Solid Cache is removed.** The gem, `config/cache.yml`, `db/caches_migrate/`, `db/cache_structure.sql`,
-and the `cache` / `cache_replica` database connections are deleted in every environment. No
-cache-only PostgreSQL database remains.
+**Solid Cache is removed.** The gem, `config/cache.yml`, `db/caches_migrate/`,
+`db/cache_structure.sql`, and the `cache` / `cache_replica` database connections are deleted in
+every environment. No cache-only PostgreSQL database remains.
 
 **Solid Queue stays**, unchanged, on its own PostgreSQL databases. The two decisions are independent
 and are deliberately not taken together.
@@ -44,8 +44,8 @@ and are deliberately not taken together.
 | `CACHE_REDIS_URL`      | `Rails.cache`               | reconstructible application cache | refetch from source   |
 | `RATE_LIMIT_REDIS_URL` | `config.x.rate_limit.store` | rate-limit counters               | current windows reset |
 
-Both are namespaced by environment (`cache:<env>`, `rate_limit:<env>`), with an optional configurable
-suffix. Both use one-argument `ENV.fetch`, so a missing URL stops the boot.
+Both are namespaced by environment (`cache:<env>`, `rate_limit:<env>`), with an optional
+configurable suffix. Both use one-argument `ENV.fetch`, so a missing URL stops the boot.
 
 The isolation boundary is the **service**, not a Redis logical database index. Development runs
 `valkey-cache` and `valkey-rate-limit` as separate Compose services, so flushing the cache to
@@ -58,25 +58,25 @@ responsibility, not the backend.
 **Every application cache entry declares an explicit TTL.** TTL follows the semantics of the data,
 not a blanket preference for short values:
 
-| Entry                  | TTL        | Why                                                            |
-| ---------------------- | ---------- | -------------------------------------------------------------- |
-| JWKS (Google, Entra, Apple, Jump RT) | 1 hour / 5 min | bounded staleness against provider key rotation      |
-| Jump RT stale JWKS fallback          | 1 hour     | deliberately outlives the fresh entry; it exists to survive a temporary IdP outage |
-| unknown-`kid` negative cache         | 30 seconds | suppresses refetch storms without outliving a real rotation |
-| one-time reveal payload              | 15 minutes | matches the reveal token's own lifetime                    |
+| Entry                                | TTL            | Why                                                                                |
+| ------------------------------------ | -------------- | ---------------------------------------------------------------------------------- |
+| JWKS (Google, Entra, Apple, Jump RT) | 1 hour / 5 min | bounded staleness against provider key rotation                                    |
+| Jump RT stale JWKS fallback          | 1 hour         | deliberately outlives the fresh entry; it exists to survive a temporary IdP outage |
+| unknown-`kid` negative cache         | 30 seconds     | suppresses refetch storms without outliving a real rotation                        |
+| one-time reveal payload              | 15 minutes     | matches the reveal token's own lifetime                                            |
 
 `test/security/invariants/cache_boundary_invariant_test.rb` enforces the TTL rule statically.
 
 **Replay-prevention state moves to PostgreSQL.** `OidcClientAssertionJwt` records consumed JTIs in
 `security_consumed_jtis` under the `oidc_client_assertion` purpose, alongside the OIDC logout and
-Jump RT return guards. The unique index on `(purpose, issuer, jti_digest)` provides the atomicity the
-cache's `unless_exist:` provided, and the record cannot be evicted. It fails closed: a database error
-rejects the assertion.
+Jump RT return guards. The unique index on `(purpose, issuer, jti_digest)` provides the atomicity
+the cache's `unless_exist:` provided, and the record cannot be evicted. It fails closed: a database
+error rejects the assertion.
 
 **Tests persist neither store by default.** `Rails.cache` and the rate-limit store are both
-`NullStore` in the test environment. A test that passes only because an earlier test warmed the cache
-does not describe the behaviour it claims to, and rate-limit counters are keyed by request IP —
-identical for every test — so a shared counting store makes unrelated tests 429 depending on suite
+`NullStore` in the test environment. A test that passes only because an earlier test warmed the
+cache does not describe the behaviour it claims to, and rate-limit counters are keyed by request IP
+— identical for every test — so a shared counting store makes unrelated tests 429 depending on suite
 order. Tests whose subject is caching or rate limiting opt into a deterministic `MemoryStore`.
 
 ## Consequences
@@ -103,5 +103,6 @@ once, and development would not exercise the shape production is meant to have.
 necessary. On Valkey the guard would be correct only until the first eviction, and the failure would
 be silent and indistinguishable from normal operation.
 
-**Keeping Solid Cache "just for the durable cases."** The durable cases are the bug. A cache that can
-be relied on for durability will be, and there is no way to tell at the call site which is intended.
+**Keeping Solid Cache "just for the durable cases."** The durable cases are the bug. A cache that
+can be relied on for durability will be, and there is no way to tell at the call site which is
+intended.

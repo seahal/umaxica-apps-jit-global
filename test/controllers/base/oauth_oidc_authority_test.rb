@@ -258,8 +258,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     test "base #{surface} userinfo serialises the authenticated principal for its own type" do
       host = ENV.fetch(host_env)
       resource = Struct.new(:id, :public_id, :name, :email).new(1, "principal-1", "Sample Name", "sample@example.com")
-      payload = { "act" => resource_type,
-                  "scp" => %w(openid profile email),
+      payload = { "scope" => "openid profile email domain:#{resource_type}",
                   "acr" => "aal1",
                   "auth_time" => 1_756_000_000, }
       result = AuthResult.new(success: true, resource: resource, payload: payload)

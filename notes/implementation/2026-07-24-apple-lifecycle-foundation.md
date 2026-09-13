@@ -22,8 +22,8 @@
     account changes must not depend on synchronous provider availability.
   - Follow-up needed: complete controlled Apple production verification before the endpoint is
     registered in production.
-- Decision: use `ClientAppleCredentialRevocation` as the durable, encrypted boundary for both
-  unlink and withdrawal.
+- Decision: use `ClientAppleCredentialRevocation` as the durable, encrypted boundary for both unlink
+  and withdrawal.
   - Why: local identity removal must not depend on Apple availability, but a remote revocation
     attempt must survive the request that started it. The record is committed before its job is
     enqueued, and the job erases the token after success, already-invalid success, or bounded
@@ -34,8 +34,8 @@
   - Follow-up needed: confirm the operational alert destination and production retry monitoring.
 - Decision: represent a missing legacy refresh token as an immediately terminal
   `credential_unavailable` revocation record.
-  - Why: not all existing Apple identities can prove a durable refresh credential is available.
-    The local unlink or withdrawal still succeeds, but the missing remote action remains visible as
+  - Why: not all existing Apple identities can prove a durable refresh credential is available. The
+    local unlink or withdrawal still succeeds, but the missing remote action remains visible as
     non-PII operational metadata rather than becoming an unrecorded fallback.
   - Alternatives considered: reject local unlink/withdrawal or silently skip remote revocation.
     Rejected because the approved policy keeps local security action available during provider or
@@ -84,8 +84,8 @@
 
 ## Implementation Update
 
-- Implemented: Apple notification ingress (`POST /apple/notifications`) has a bounded JSON body,
-  IP rate limit, strict JWS verification, no browser session dependency, and no raw payload
+- Implemented: Apple notification ingress (`POST /apple/notifications`) has a bounded JSON body, IP
+  rate limit, strict JWS verification, no browser session dependency, and no raw payload
   persistence.
 - Implemented: verified notification events are processed asynchronously with bounded exponential
   retries (ten attempts or 24 hours), a dead-letter state, and a non-sensitive error report.

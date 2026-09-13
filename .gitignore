@@ -190,3 +190,6 @@ node_modules
 # beside the file they back up, and three `.orig` backups reached a commit that way.
 *.orig
 *.rej
+
+# Vitest Browser Mode / local attachments cache
+.vitest/

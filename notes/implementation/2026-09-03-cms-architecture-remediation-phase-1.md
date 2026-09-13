@@ -11,8 +11,8 @@
 
 - Decision: Entra OmniAuth registration is skipped in local environments when the client secret is
   absent; production still raises `KeyError`.
-  - Why: publishing tests must boot without an unused IdP credential; production validation must
-    not weaken.
+  - Why: publishing tests must boot without an unused IdP credential; production validation must not
+    weaken.
   - Alternatives considered: fake production secrets (forbidden); always-register with blank secret
     (would hide a broken entra provider).
   - Follow-up needed: none for Phase 1.
@@ -33,9 +33,8 @@
   umaxica-apps-edge@6cd77c4422ed85c51e6014de550d628e2e4764b2.
   - Why: VPC binding and service ids already live in `tools/workers-manifest.json`. Per-cell
     `PRIVATE_RAILS_ORIGIN` values are the Host-header dispatch contract. Extracting
-    `rails-client.ts` into a shared package would change twelve Worker bundles. Astro is
-    juxtaposed and not deployed; a shared-module refactor now would collide with that
-    migration.
+    `rails-client.ts` into a shared package would change twelve Worker bundles. Astro is juxtaposed
+    and not deployed; a shared-module refactor now would collide with that migration.
   - Follow-up needed: after Astro cutover or an explicit shared-client ADR.
 
 ## Deviations From Plan

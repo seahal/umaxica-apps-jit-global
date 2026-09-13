@@ -42,7 +42,8 @@ The gates are intentionally independent:
 4. **Podman DNS aliases**: `podman compose config` must show the private aliases on `core`'s
    `frontend` network and no new host port publication. The connector never needs an inbound host
    port and must not be given one; the only publications in the stack are `core`'s loopback-bound
-   `3000`/`3036`. See `docs/operations/development-host-port-exposure.md`.
+   host `3001` to container `3000`, plus `3036` for Vite. See
+   `docs/operations/development-host-port-exposure.md`.
 5. **Workers VPC connector prerequisites**: `cloudflare-tunnel-workers-vpc` is pinned at the
    supported `2026.8.2` release, runs with QUIC, authenticates with its own tunnel token from the
    gitignored repository `.env`, and requires outbound UDP port 7844. Its `/ready` must report four
@@ -65,6 +66,12 @@ accepts both families and nothing else. See the "Development Is Tunnel-Exposed B
 section of `docs/architecture/cloudflare-request-paths.md` for how each family reaches
 `config.hosts`, and for the `FORCE_SECURE_COOKIES` trade-off between the tunnel path and the
 plain-`http` local path.
+
+`edit.umaxica.org` follows the same private-origin contract: its remotely managed Tunnel ingress
+uses `http://edit.org.localhost:3000` on `frontend`. The `core` aliases in
+`.devcontainer/compose.yaml` are the repository source of that origin name. The Cloudflare account
+owns the matching public-hostname, ingress, DNS, and Access records; update that remote
+configuration by merging with its current ingress rather than replacing it.
 
 Access is the control that keeps the development surface non-public, and it lives in the Cloudflare
 account rather than in this repository — see "External Checks" below.

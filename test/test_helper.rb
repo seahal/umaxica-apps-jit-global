@@ -51,6 +51,8 @@ unless ViteRuby.commands.build
 end
 
 require "rails/test_help"
+Minitest.load(:test_prof)
+require "test_prof/recipes/minitest/sample"
 require_relative "support/parallel_test_database_cloner"
 require_relative "support/external_identity_test_helper"
 require_relative "support/publishing_content_helper"
@@ -60,6 +62,7 @@ require_relative "support/turnstile_verifier_stub"
 require_relative "support/outbound_http_stub"
 require_relative "support/login_cooldown_helper"
 require_relative "support/inertia_page_object"
+require_relative "support/org_entra_first_stage_helper"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
@@ -142,6 +145,11 @@ module AuthenticationHarness
       host: host_value,
       session_public_id: token_record.public_id,
       resource_type: resource_type,
+      # Mirrors production: the session row is the authority for the
+      # authentication context and the access token re-derives it on every
+      # issue. A test that marks a token as an Emergency session therefore gets
+      # an Emergency access token without asserting the claim by hand.
+      authentication_context: token_record.authentication_context_value.to_s,
     )
 
     host_headers(host)
@@ -221,7 +229,7 @@ module AuthenticationHarness
   end
 
   def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
+                           dpop_jkt: nil, authentication_context: nil)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
     resource_type ||=
       case resource
@@ -238,6 +246,7 @@ module AuthenticationHarness
       resource_type: resource_type,
       dpop_jkt: dpop_jkt,
       jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
+      authentication_context: authentication_context,
     )
   end
 

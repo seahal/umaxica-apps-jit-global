@@ -13,10 +13,10 @@ get:
   description: >-
     Internal probe for orchestrators and monitoring, not a user-facing availability contract.
     Aggregates the startup, liveness, and readiness verdicts into the `pass` / `warn` / `fail`
-    vocabulary. A readiness outage never changes the liveness verdict: liveness is
-    dependency-free. `fail` is served as HTTP 503; `pass` and `warn` as HTTP 200. The body
-    identifies the controller namespace selected by routing and carries no dependency name,
-    exception, path, or environment value.
+    vocabulary. A readiness outage never changes the liveness verdict: liveness is dependency-free.
+    `fail` is served as HTTP 503; `pass` and `warn` as HTTP 200. The body identifies the controller
+    namespace selected by routing and carries no dependency name, exception, path, or environment
+    value.
   security: []
   operationId: getApiV0Health
   tags: [Health]

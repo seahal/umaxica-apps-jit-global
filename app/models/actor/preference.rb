@@ -13,7 +13,7 @@ class Actor
   #   Actor.preferences.timezone   # => "Asia/Tokyo"
   #   Actor.preferences.theme      # => "sy"
   #   Actor.preferences.cookie.consented?  # => false
-  #   Actor.preferences.null?      # => true (for guests)
+  #   Actor.preferences.null?      # => true only when no request context is bound
   class Preference
     attr_reader :language, :region, :timezone, :theme,
                 :currency, :date_format, :time_format, :motion, :density, :page_size

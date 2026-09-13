@@ -6,6 +6,7 @@ module Auth
     module Sign
       class InsController < ::Auth::Com::ApplicationController
         include ::SurfaceInertiaPage
+        include ::AuthenticationModeSwitchGuard
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest, no_redirect: true
@@ -36,7 +37,7 @@ module Auth
         private
 
         def reject_logged_in_direct_entry!
-          render plain: I18n.t("errors.messages.already_authenticated"), status: :forbidden
+          render_sign_in_unavailable_while_authenticated
         end
 
         # Direct entry without an authorization transaction renders this surface's entry page instead

@@ -369,7 +369,7 @@ The following evidence is required for SIer-implemented capability to be accepte
 | `docs/vendor/identity/09_acceptance-criteria.md`         | Detailed acceptance criteria. Section above summarizes.                         |
 | `docs/vendor/identity/11_decision-register.md`           | Internal vendor decision register (pre-Round 4). Update pending.                |
 | `docs/vendor/identity/12_gap-risk-register.md`           | Internal gap register (pre-Round 4). Update pending.                            |
-| `plans/umaxica-immutable-pinwheel.md`                    | Audit ledger. DEC-001~013 and NR-001~004 originate here.                        |
+| `plans/umaxica-immutable-pinwheel.md`                    | Audit ledger. DEC-001~~013 and NR-001~~004 originate here.                      |
 
 ---
 

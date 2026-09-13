@@ -5,12 +5,12 @@
 Superseded (2026-08-01) by `adr/publishing-db-content-authority.md` and
 `adr/publishing-taxonomy-architecture.md`.
 
-News content is stored in the central `publishing` database as entries within the
-`news` surface, not in a `Timeline` model family. The premise recorded below --
-that Timeline models and their categories and tags already store news content --
-was a design assumption rather than a schema fact; no such tables existed in the
-live schema, as `memos/2026-06-16-claude-content-discussion-profile-feed-boundary.md`
-first noted. Category and tag now exist as publishing vocabularies.
+News content is stored in the central `publishing` database as entries within the `news` surface,
+not in a `Timeline` model family. The premise recorded below -- that Timeline models and their
+categories and tags already store news content -- was a design assumption rather than a schema fact;
+no such tables existed in the live schema, as
+`memos/2026-06-16-claude-content-discussion-profile-feed-boundary.md` first noted. Category and tag
+now exist as publishing vocabularies.
 
 Retained as the historical record of the 2026-04-13 decision.
 

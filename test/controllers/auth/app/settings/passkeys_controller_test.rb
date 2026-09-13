@@ -523,6 +523,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       unverified_user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     headers = as_user_headers(
       unverified_user,
@@ -549,6 +550,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       unverified_user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     headers = as_user_headers(
       unverified_user,
@@ -705,6 +707,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
       resource_type: "client",
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     @headers.merge(

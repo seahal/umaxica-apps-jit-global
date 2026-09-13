@@ -5,8 +5,11 @@ useDefault = true
 
 [allowlist]
 description = "Allow test fixtures"
-paths = ['''test/fixtures/user_identity_one_time_passwords.yml''',  '''.*\.lock$''',
+paths = [
+  '''test/fixtures/user_identity_one_time_passwords.yml''',
+  '''.*\.lock$''',
   '''(go|pnpm|package|yarn)-lock\.(json|yaml|toml)$''',
   '''node_modules/.*''',
   '''(.*/)?test(s)?/.*fixture.*''',
-  '''\.env\.example$''',]
+  '''\.env\.example$''',
+]

@@ -13,10 +13,14 @@
 
 ## Tests added
 
-Added `test/models/model_only_line_coverage_test.rb` with 31 focused tests and 297 assertions. The tests cover model behavior that had previously been reached only by controller, service, policy, or integration tests, including:
+Added `test/models/model_only_line_coverage_test.rb` with 31 focused tests and 297 assertions. The
+tests cover model behavior that had previously been reached only by controller, service, policy, or
+integration tests, including:
 
-- step-up transaction creation, scopes, claims, cancellation, consumption, validation, connection owners, purgeability, and result-JTI collisions
-- withdrawal ceremony issuance, authentication, defaults, expiration, token comparison, state changes, and occurrence recording
+- step-up transaction creation, scopes, claims, cancellation, consumption, validation, connection
+  owners, purgeability, and result-JTI collisions
+- withdrawal ceremony issuance, authentication, defaults, expiration, token comparison, state
+  changes, and occurrence recording
 - identity ceremony candidate lookup, expiration, consumption, and social assertion shape validation
 - privacy request, retention hold, and processor notification defaults and transitions
 - OIDC usage rotation and authorization resume URLs
@@ -40,11 +44,17 @@ No application or database implementation was changed. No dead code was removed.
   - Generated report aggregate for `app/models/**`: 9,978 / 9,978 lines, 100%
   - No `app/models/**` file remains below 100% line coverage
 
-The coverage command exits with status 2 because the repository's global SimpleCov thresholds evaluate all application files: running only model tests reports 57.87% overall line coverage and 14.33% overall branch coverage. This does not indicate a test failure and does not change the separately verified 100% `app/models/**` line aggregate.
+The coverage command exits with status 2 because the repository's global SimpleCov thresholds
+evaluate all application files: running only model tests reports 57.87% overall line coverage and
+14.33% overall branch coverage. This does not indicate a test failure and does not change the
+separately verified 100% `app/models/**` line aggregate.
 
 ## Boundaries and follow-up
 
 - Controller tests and controller implementation were not changed in this cycle.
-- Authentication, OIDC, credential, logout, and withdrawal application implementations were not changed; only their existing model APIs were exercised.
-- VP, Vitest, full Rails coverage, RuboCop, external services, installed gems, configuration, routes, fixtures, factories, and system paths were not changed or inspected.
-- Future model work should preserve the 100% model-only line baseline and focus on branch coverage only if explicitly requested.
+- Authentication, OIDC, credential, logout, and withdrawal application implementations were not
+  changed; only their existing model APIs were exercised.
+- VP, Vitest, full Rails coverage, RuboCop, external services, installed gems, configuration,
+  routes, fixtures, factories, and system paths were not changed or inspected.
+- Future model work should preserve the 100% model-only line baseline and focus on branch coverage
+  only if explicitly requested.

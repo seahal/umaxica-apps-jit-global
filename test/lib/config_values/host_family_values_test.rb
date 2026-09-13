@@ -22,13 +22,13 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://jpx.umaxica.com", values.core_corporate.to_s
     assert_equal "https://jpx.umaxica.org", values.core_staff.to_s
 
-    assert_equal "https://www-jp.umaxica.app", values.base_service.to_s
-    assert_equal "https://www-jp.umaxica.com", values.base_corporate.to_s
-    assert_equal "https://www-jp.umaxica.org", values.base_staff.to_s
+    assert_equal "https://www.umaxica.app", values.base_service.to_s
+    assert_equal "https://www.umaxica.com", values.base_corporate.to_s
+    assert_equal "https://www.umaxica.org", values.base_staff.to_s
 
-    assert_equal "https://side-jp.umaxica.app", values.side_service.to_s
-    assert_equal "https://side-jp.umaxica.com", values.side_corporate.to_s
-    assert_equal "https://side-jp.umaxica.org", values.side_staff.to_s
+    assert_equal "https://www-jp.umaxica.app", values.side_service.to_s
+    assert_equal "https://www-jp.umaxica.com", values.side_corporate.to_s
+    assert_equal "https://www-jp.umaxica.org", values.side_staff.to_s
 
     assert_equal "https://palm-jp.umaxica.app", values.palm_service.to_s
     assert_equal "https://palm-jp.umaxica.com", values.palm_corporate.to_s
@@ -41,6 +41,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://info.app.localhost", values.info_service.to_s
     assert_equal "https://info.com.localhost", values.info_corporate.to_s
     assert_equal "https://info.org.localhost", values.info_staff.to_s
+    assert_equal "https://guid.net.localhost", values.guid_service.to_s
   end
 
   test "origins helpers group each family into its three surfaces" do
@@ -96,6 +97,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "INFO_SERVICE_URL" => "info.example.test",
       "INFO_CORPORATE_URL" => "info-com.example.test",
       "INFO_STAFF_URL" => "info-org.example.test",
+      "GUID_SERVICE_URL" => "guid.example.test",
     }
     values = ConfigValues::HostFamilyValues.build(env: env, production: true)
 
@@ -104,6 +106,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://side.example.test", values.side_service.to_s
     assert_equal "https://palm-com.example.test", values.palm_corporate.to_s
     assert_equal "https://info-org.example.test", values.info_staff.to_s
+    assert_equal "https://guid.example.test", values.guid_service.to_s
     assert_not values.acme_origins.any?(&:nil?)
   end
 
@@ -258,6 +261,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "INFO_SERVICE_URL" => "info.example.test",
       "INFO_CORPORATE_URL" => "info-com.example.test",
       "INFO_STAFF_URL" => "info-org.example.test",
+      "GUID_SERVICE_URL" => "guid.example.test",
     }
     values = ConfigValues::HostFamilyValues.build(env: env, production: true)
 
@@ -265,5 +269,6 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://sign.example.test", values.sign_service.to_s
     assert_equal "https://help.example.test", values.help_service.to_s
     assert_equal "https://info.example.test", values.info_service.to_s
+    assert_equal "https://guid.example.test", values.guid_service.to_s
   end
 end

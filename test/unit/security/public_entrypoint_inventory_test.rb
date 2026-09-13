@@ -8,11 +8,11 @@ module Security
     self.fixture_table_names = []
 
     APP_CONTROLLER_PREFIXES = %w(
-      auth base core side docs help info news palm
+      auth base core side docs guid help info news palm
     ).freeze
 
     APPLICATION_CLASS_PREFIXES = %w(
-      Auth:: Base:: Core:: Side:: Docs:: Help:: Info:: News:: Palm::
+      Auth:: Base:: Core:: Side:: Docs:: Guid:: Help:: Info:: News:: Palm::
     ).freeze
 
     PUBLIC_MODES = %i(bare open guest).freeze
@@ -21,6 +21,7 @@ module Security
     DOCUMENT_PATH = Rails.root.join("docs/security/public-entrypoints.md")
     DOCUMENTED_CATEGORY_IDS = %w(
       PUBLIC_ROOTS
+      PUBLIC_LOBBY
       PUBLIC_HEALTH
       PUBLIC_REVISION
       PUBLIC_CSP_REPORTS
@@ -44,6 +45,7 @@ module Security
       PUBLIC_SIDE_SETTINGS
       PUBLIC_APPLE_NOTIFICATIONS
       PUBLIC_MCP
+      PUBLIC_GUID_RESOLUTION
     ).freeze
 
     RouteEntry = Struct.new(:verb, :path, :controller_path, :action, :controller_class, :mode, keyword_init: true)
@@ -170,6 +172,7 @@ module Security
 
     def documented_public_content?(entry)
       public_root?(entry) ||
+        public_lobby?(entry) ||
         public_health?(entry) ||
         public_revision?(entry) ||
         public_csp_report?(entry) ||
@@ -197,7 +200,8 @@ module Security
         public_auth_org_redirect?(entry) ||
         public_side_settings?(entry) ||
         public_apple_notification?(entry) ||
-        public_mcp?(entry)
+        public_mcp?(entry) ||
+        public_guid_resolution?(entry)
     end
 
     # Base and Side only. Auth and the content surfaces do not serve MCP, so an MCP route appearing
@@ -207,7 +211,17 @@ module Security
         entry.controller_path.match?(%r{\A(base|side)/(app|com|org)/mcps\z})
     end
 
+    def public_guid_resolution?(entry)
+      get?(entry) && entry.controller_path == "guid/net/api/v0/resources" &&
+        entry.path.start_with?("/api/v0/resources/")
+    end
+
     def public_root?(entry) = get?(entry) && entry.path == "/"
+
+    def public_lobby?(entry)
+      get?(entry) && entry.path == "/lobby" &&
+        entry.controller_path.match?(%r{\Abase/(app|com|org)/lobbies\z})
+    end
 
     def public_health?(entry)
       get?(entry) && (entry.path.start_with?("/health") || entry.path == "/api/v0/health.json")

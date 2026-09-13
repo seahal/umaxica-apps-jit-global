@@ -16,11 +16,13 @@
 
 - Added focused tests for `CommonRedirect` resolver success and failure outcomes.
 - Covered invalid navigation and external targets through observable render results.
-- Covered malformed return URLs, non-default ports, invalid host normalization, encoded redirect paths, fallback behavior, context parameters, and explicit surface resolution.
+- Covered malformed return URLs, non-default ports, invalid host normalization, encoded redirect
+  paths, fallback behavior, context parameters, and explicit surface resolution.
 - Application and database implementation changes: none.
 - Dead-code changes: none.
 
-`app/controllers/concerns/common_redirect.rb` improved from 133 / 159 to 155 / 159 covered lines (83.6478% to 97.4843%). Its remaining uncovered lines are 147, 166, 172, and 173.
+`app/controllers/concerns/common_redirect.rb` improved from 133 / 159 to 155 / 159 covered lines
+(83.6478% to 97.4843%). Its remaining uncovered lines are 147, 166, 172, and 173.
 
 ## Verification
 
@@ -38,6 +40,10 @@
 
 ## Risk boundaries and next candidates
 
-- No authentication, authorization, credential, token, OIDC, logout, payment, destructive, external-service, browser, or Redis implementation was changed.
-- No configuration, routes, fixtures, factories, migrations, dependencies, or external paths were changed or inspected.
-- The next batch can finish the four remaining `CommonRedirect` lines, then continue with deterministic preference helpers, redirect value objects, serializers, and read-only audits before considering higher-risk workflow controllers.
+- No authentication, authorization, credential, token, OIDC, logout, payment, destructive,
+  external-service, browser, or Redis implementation was changed.
+- No configuration, routes, fixtures, factories, migrations, dependencies, or external paths were
+  changed or inspected.
+- The next batch can finish the four remaining `CommonRedirect` lines, then continue with
+  deterministic preference helpers, redirect value objects, serializers, and read-only audits before
+  considering higher-risk workflow controllers.

@@ -36,6 +36,34 @@ export default function SurfaceLayout({ children }: { children: ReactNode }) {
         so an engine without `backdrop-filter` loses the effect and nothing else.
       */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur">
+        {/*
+          Restricted Mode sits above everything else in the header and outside the page, so it is
+          visible for the whole life of an Emergency session and no single screen can drop it. It
+          is a shared prop, not page state: a page has no way to render this or to suppress it.
+
+          There is deliberately no "leave Restricted Mode" control. The only way back to a normal
+          session is to end this one and sign in again, which is what the link does.
+        */}
+        {chrome.restricted_mode ? (
+          <section
+            aria-label={chrome.restricted_mode.label}
+            className="border-b border-line bg-danger text-danger-fg"
+          >
+            <div
+              className={`${SHELL} flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5 text-sm`}
+            >
+              <p className="font-semibold">{chrome.restricted_mode.label}</p>
+              <p>{chrome.restricted_mode.description}</p>
+              <a
+                href={chrome.restricted_mode.sign_out.href}
+                className="underline underline-offset-4"
+              >
+                {chrome.restricted_mode.sign_out.label}
+              </a>
+            </div>
+          </section>
+        ) : null}
+
         {chrome.banner ? (
           <section
             aria-label="banner"
@@ -65,25 +93,6 @@ export default function SurfaceLayout({ children }: { children: ReactNode }) {
             ) : null}
             <span className="text-sm font-normal text-fg-muted">({chrome.surface})</span>
           </p>
-
-          {chrome.primary_navigation ? (
-            <nav aria-label="Primary">
-              <ul className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                {chrome.primary_navigation.map((link) => (
-                  <li key={link.href}>
-                    {/* Cross-host and full-page destinations, so a document visit rather than
-                        an Inertia visit. */}
-                    <a
-                      href={link.href}
-                      className={NAV_LINK}
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          ) : null}
         </div>
       </header>
 

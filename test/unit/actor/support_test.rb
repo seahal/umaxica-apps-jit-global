@@ -388,7 +388,7 @@ class ActorSupportTest < ActiveSupport::TestCase
 
     preference = @host.resolved_current_preference(user)
 
-    assert_predicate preference, :null?
+    assert_not preference.null?
     assert_equal "ja", preference.language
     assert_equal "jp", preference.region
     assert_equal "Asia/Tokyo", preference.timezone
@@ -417,8 +417,8 @@ class ActorSupportTest < ActiveSupport::TestCase
     preference = @host.resolved_current_preference(nil)
 
     # prf is dead transport: with no Preference JWT payload, hydration falls back
-    # to the NULL preference defaults rather than reading the prf claim.
-    assert_predicate preference, :null?
+    # to the default preference values rather than reading the prf claim.
+    assert_not preference.null?
     assert_equal "ja", preference.language
     assert_equal "jp", preference.region
     assert_equal "Asia/Tokyo", preference.timezone
@@ -455,10 +455,10 @@ class ActorSupportTest < ActiveSupport::TestCase
     assert_equal "dr", preference.theme
   end
 
-  test "resolved_current_preference falls back to null preference" do
+  test "resolved_current_preference falls back to default preference values" do
     preference = @host.resolved_current_preference(nil)
 
-    assert_predicate preference, :null?
+    assert_not preference.null?
     assert_equal "ja", preference.language
     assert_equal "jp", preference.region
     assert_equal "Asia/Tokyo", preference.timezone

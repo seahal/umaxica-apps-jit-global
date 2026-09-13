@@ -24,33 +24,5 @@ module Base
       assert_includes before_filters, :transparent_refresh_access_token,
                       "Base::Org should have transparent_refresh_access_token callback"
     end
-
-    test "base/app has oidc_sign_host method" do
-      controller = Base::App::ApplicationController.new
-
-      assert_respond_to controller, :oidc_sign_host,
-                        "Base::App should have oidc_sign_host method"
-    end
-
-    test "base/app has oidc_base_host method" do
-      controller = Base::App::ApplicationController.new
-
-      assert_respond_to controller, :oidc_base_host,
-                        "Base::App should have oidc_base_host method"
-    end
-
-    test "base/com has oidc_sign_host method" do
-      controller = Base::Com::ApplicationController.new
-
-      assert_respond_to controller, :oidc_sign_host,
-                        "Base::Com should have oidc_sign_host method"
-    end
-
-    test "base/com has oidc_base_host method" do
-      controller = Base::Com::ApplicationController.new
-
-      assert_respond_to controller, :oidc_base_host,
-                        "Base::Com should have oidc_base_host method"
-    end
   end
 end

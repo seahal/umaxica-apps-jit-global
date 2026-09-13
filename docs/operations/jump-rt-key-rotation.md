@@ -27,10 +27,15 @@ At boot, `Jit::Security::Jwt::Registry` builds immutable issuer/key records:
 The JWKS endpoint must only render the prebuilt public JWKS. It must not read private keys,
 credentials, files, KMS, or the network while serving a request.
 
-JumpRT token-family behavior is implemented through `Security::Jwt::JumpRtTokenCodec` while
-`JumpRt::Issuer` and `JumpRt::ReturnVerifier` remain the service entry points. URL normalization,
+JumpRT token-family behavior is implemented through `SecurityJwtJumpRtTokenCodec` while
+`JumpRtIssuer` and `JumpRtReturnVerifier` remain the service entry points. URL normalization,
 return-policy checks, JWKS fetch/cache behavior, and one-time replay caching stay in JumpRT
 services.
+
+Inbound Jump-gateway return tokens are verified only with the Jump public JWKS derived as
+`{PUBLIC_JUMP_GATEWAY_URL}/.well-known/jwks.json`. The lifetime cap is 30 seconds. Clock leeway is
+5 seconds. A JWKS fetch failure fails closed; Rails does not keep a stale JWKS fallback and does
+not store the Jump gateway private key.
 
 ## Key States
 

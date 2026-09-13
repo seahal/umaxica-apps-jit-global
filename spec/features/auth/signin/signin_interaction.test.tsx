@@ -969,4 +969,16 @@ describe("email one-time code edit interaction", () => {
     expect(setData).toHaveBeenCalled();
     expect(patch).toHaveBeenCalledWith("/sign/in/email");
   });
+
+  it("clears the typed code when the server confirms a resend", async () => {
+    stubFetch(200, { resendable: true });
+    mount(<SignInEmailEdit {...props} />);
+    await flush();
+
+    click("button[type=button]");
+    await flush();
+
+    expect(setData).toHaveBeenCalledWith("user_email", { pass_code: "" });
+    vi.unstubAllGlobals();
+  });
 });

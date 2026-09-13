@@ -1,6 +1,6 @@
 # ADR: Org Entra ID Sign-In Boundary
 
-**Status:** Accepted (2026-06-30), partially superseded (2026-08-11)
+**Status:** Accepted (2026-06-30), partially superseded (2026-08-11, 2026-09-09)
 
 **Partially superseded by:** `adr/org-entra-single-tenant-credential-configuration.md`, which
 replaces certificate-based `private_key_jwt` with a client secret held in Rails credentials, and
@@ -120,6 +120,22 @@ store. The redirect URI is still never derived from request host, forwarded host
 the deny-by-default identity resolution, discard of raw tokens, and `ENTRA_SOCIAL_CEREMONY_ENABLED`
 gate are all unchanged in substance; see the new ADR for exactly how each is implemented now.
 
+### Entra is the first stage of normal sign-in, not the whole of it (2026-09-09)
+
+A successful Entra callback no longer establishes a session. It identifies the Operator and records
+that identification in a short-lived, purpose-bound, one-shot pending transaction
+(`OrgNormalSignInTransaction`), then hands the browser to the passkey stage; the ceremony completes
+there, or at the existing Secret/SecretKey stage when the passkey is lost. Entra authentication
+alone is therefore no longer sufficient to complete the normal org sign-in ceremony.
+
+The second stage reads the Operator only from that transaction, never from a request parameter, so
+an Entra result for Operator A cannot be completed with Operator B's credential. The identity-key
+decisions, the no-JIT-provisioning guarantee, the claim exclusions, and the callback boundary
+discipline below are unchanged.
+
+The org surface also gained a second, Entra-free sign-in ceremony, Emergency Access, which produces
+a restricted session. See `docs/security/org-emergency-access.md`.
+
 ### MFA bypass policy: `entra_id` is not bypassed
 
 Entra ID sign-in does not bypass local MFA. `AuthenticationBase#mfa_bypassed_for_auth_method?`
@@ -127,12 +143,10 @@ Entra ID sign-in does not bypass local MFA. `AuthenticationBase#mfa_bypassed_for
 `"entra_id"` falls through to `false`, matching `"secret_credential"`. An external IdP assertion is
 not treated as equivalent to local strong evidence of presence. An operator who signs in via Entra
 ID and has TOTP enrolled is still required to complete the TOTP step-up before the session is
-established. `Auth::Org::Omniauth::OmniauthCallbacksController#omniauth`
-(`app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb`) calls
-`establish_signed_in_session!` with `auth_method: "entra_id"`, which writes `"entra_id"` into the
-access token `amr` array and routes through the same session-establishment and MFA-required path as
-passkey and secret-credential sign-in. This keeps Entra ID at AAL1 unless and until an explicit
-trust policy is introduced for it.
+established. Since 2026-09-09 the callback establishes no session at all, so the question is settled
+a stage earlier: the session is established by the passkey or secret stage that follows, through the
+same `establish_signed_in_session!` path, with the same MFA gate. This keeps Entra ID at AAL1 unless and
+until an explicit trust policy is introduced for it.
 
 ### Scope of this ADR
 
@@ -146,6 +160,8 @@ no-provisioning guarantee, and the MFA bypass policy above.
 - All records default to `:inactive`; sign-in is impossible until explicit activation.
 - The callback resolver must be deny-by-default: raise on any miss, never create.
 - App Google/Apple social login is unaffected.
+- Since 2026-09-09 the callback issues a pending transaction and redirects to the passkey stage
+  instead of establishing a session; `handle_sign_in_result` no longer exists on this controller.
 - `OmniAuthNonAppSocialGuard` is replaced by `OmniAuthSocialProviderHostMatrix`; see
   `adr/org-entra-omniauth-strategy-migration.md`.
 - `omniauth_openid_connect` is now the production Entra path, subclassed by a Umaxica-specific

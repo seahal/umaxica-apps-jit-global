@@ -40,21 +40,25 @@ trusted — every claim was re-derived from current code.
 
 ### Controllers (auth-relevant)
 
-| Surface            | Endpoint                                   | Controller                                                                     |
-| ------------------ | ------------------------------------------ | ------------------------------------------------------------------------------ | -------------------------- |
-| acme/{app,org,com} | `/oauth/authorize`                         | `Acme::{App,Org,Com}::Oauth::AuthorizationsController`                         |
-| acme/{app,org,com} | `/oauth/token`                             | `Acme::{...}::Oauth::TokensController`                                         |
-| acme/{app,org,com} | `/oauth/jwks`                              | `Acme::{...}::Oauth::JwksController`                                           |
-| acme/{app,org,com} | `/oauth/userinfo`                          | `Acme::{...}::Oauth::UserinfosController`                                      |
-| acme/{app,org,com} | `/oauth/revoke`                            | `Acme::{...}::Oauth::RevocationsController`                                    |
-| acme/{app,org,com} | `/.well-known/jwks.json`                   | `Acme::{...}::WellKnown::JwksController`                                       |
-| acme/{app,org,com} | `/oidc/logout`, `/auth/logout`             | `Acme::{...}::Oidc::LogoutsController`, `Acme::{...}::Auth::LogoutsController` |
-| acme/{app,org,com} | `/edge/v0/token/{check,dbsc,refresh}`      | edge token controllers                                                         |
-| sign/{app,org,com} | `/sign/up/email                            | telephone/_`, `/sign/up/check/{apple,google}/_`                                | `Sign::{...}::Sign::Up::*` |
-| sign/{app,org,com} | `/sign/in/passkey/{options,verifications}` | `Sign::{...}::Sign::In::Passkey::*`                                            |
-| sign/{app,org,com} | `/web/v0/in/{email,telephone}/otp`         | `Sign::{...}::Web::V0::In::*::OtpsController`                                  |
-| sign/{app,org,com} | `/oidc/backchannel/logout`                 | `Sign::{...}::Oidc::Backchannel::LogoutsController`                            |
-| sign/{app,org,com} | `/sign/out`                                | `Sign::{...}::Sign::OutsController`                                            |
+| Surface | Endpoint | Controller | | ------------------ |
+------------------------------------------ |
+------------------------------------------------------------------------------ |
+-------------------------- | | acme/{app,org,com} | `/oauth/authorize` |
+`Acme::{App,Org,Com}::Oauth::AuthorizationsController` | | acme/{app,org,com} | `/oauth/token` |
+`Acme::{...}::Oauth::TokensController` | | acme/{app,org,com} | `/oauth/jwks` |
+`Acme::{...}::Oauth::JwksController` | | acme/{app,org,com} | `/oauth/userinfo` |
+`Acme::{...}::Oauth::UserinfosController` | | acme/{app,org,com} | `/oauth/revoke` |
+`Acme::{...}::Oauth::RevocationsController` | | acme/{app,org,com} | `/.well-known/jwks.json` |
+`Acme::{...}::WellKnown::JwksController` | | acme/{app,org,com} | `/oidc/logout`, `/auth/logout` |
+`Acme::{...}::Oidc::LogoutsController`, `Acme::{...}::Auth::LogoutsController` | |
+acme/{app,org,com} | `/edge/v0/token/{check,dbsc,refresh}` | edge token controllers | |
+sign/{app,org,com} | `/sign/up/email                            | telephone/_`,
+`/sign/up/check/{apple,google}/_` | `Sign::{...}::Sign::Up::*` | | sign/{app,org,com} |
+`/sign/in/passkey/{options,verifications}` | `Sign::{...}::Sign::In::Passkey::*` | |
+sign/{app,org,com} | `/web/v0/in/{email,telephone}/otp` |
+`Sign::{...}::Web::V0::In::*::OtpsController` | | sign/{app,org,com} | `/oidc/backchannel/logout` |
+`Sign::{...}::Oidc::Backchannel::LogoutsController` | | sign/{app,org,com} | `/sign/out` |
+`Sign::{...}::Sign::OutsController` |
 
 ### Models (auth/credential)
 
@@ -102,8 +106,10 @@ Chronicle: `chronicle_application_service.rb`, `chronicle_fallback_recorder.rb`,
 bulletin_gate, client, cookie*_, credential*inventory_reader, current_resource_resolver,
 device_binding, jwks_rendering, jwt_configuration, jwt_tokens, logout_all_sessions,
 logout_current_session, logoutable, operator, redirects, sequence_gate, session_revoker, token,
-token_service, visitor, withdrawal_gate),
-`authorization*_`(base, audit, client, operator, token_claims, visitor),`oidc_callback.rb`, `oidc_rp_identity_provisioning.rb`, `oidc_rp_logout.rb`, `oidc_rp_logout_receiver.rb`, `sign_passkey_sign_in_endpoint.rb`, `sign_social_authentication_endpoint.rb`, `sign_webauthn.rb`, `sign_oidc_logout.rb`.
+token_service, visitor, withdrawal_gate), `authorization*_`(base, audit, client, operator,
+token_claims, visitor),`oidc_callback.rb`, `oidc_rp_identity_provisioning.rb`, `oidc_rp_logout.rb`,
+`oidc_rp_logout_receiver.rb`, `sign_passkey_sign_in_endpoint.rb`,
+`sign_social_authentication_endpoint.rb`, `sign_webauthn.rb`, `sign_oidc_logout.rb`.
 
 ### Initializers / config
 

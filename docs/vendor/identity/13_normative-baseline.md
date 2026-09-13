@@ -44,15 +44,15 @@ architecture owner will be rejected during technical review.
 
 # 1. Document Status
 
-| Field                | Value                                                                    |
-| -------------------- | ------------------------------------------------------------------------ |
-| Status               | rfi-draft — shareable in RFI with conditions (see §14)                   |
-| Owner                | internal-architecture-owner                                              |
-| Audience             | SIer, security-vendor, internal-architecture, implementation-team        |
-| Confidentiality      | internal-vendor-shareable                                                |
-| Source of truth      | current repository evidence, cross-referenced with audit ledger          |
-| Last reviewed        | 2026-06-24 (Round 4 audit)                                               |
-| Related audit ledger | `plans/umaxica-immutable-pinwheel.md` (DECISION DEC-001~013, NR-001~004) |
+| Field                | Value                                                                      |
+| -------------------- | -------------------------------------------------------------------------- |
+| Status               | rfi-draft — shareable in RFI with conditions (see §14)                     |
+| Owner                | internal-architecture-owner                                                |
+| Audience             | SIer, security-vendor, internal-architecture, implementation-team          |
+| Confidentiality      | internal-vendor-shareable                                                  |
+| Source of truth      | current repository evidence, cross-referenced with audit ledger            |
+| Last reviewed        | 2026-06-24 (Round 4 audit)                                                 |
+| Related audit ledger | `plans/umaxica-immutable-pinwheel.md` (DECISION DEC-001~~013, NR-001~~004) |
 
 ---
 
@@ -721,4 +721,4 @@ Before using this document in an RFP:
 | `adr/acme-sign-core-base-port-boundary.md`                 | ADR confirming Acme as sole AS.                                       |
 | `adr/security-audit-findings-2026-06-13.md`                | Security findings FINDING-01~04.                                      |
 | `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` | Refresh replay = compromise decision.                                 |
-| `plans/umaxica-immutable-pinwheel.md`                      | Full audit ledger. DEC-001~013 and NR-001~004 originate here.         |
+| `plans/umaxica-immutable-pinwheel.md`                      | Full audit ledger. DEC-001~~013 and NR-001~~004 originate here.       |

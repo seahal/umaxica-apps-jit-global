@@ -330,15 +330,13 @@ criteria を定める文書になる。
 
 ### Relation to 14_account-recovery-procedure.md
 
-14* Section 8 の 20 audit events が、15* の "critical event class" の中に含まれる。14*
-は "何を記録すべきか" を定義し、15*
-は "その記録が改ざんされていないことを保証する mechanism" を定義する。両文書は補完関係。
+14* Section 8 の 20 audit events が、15* の "critical event
+class" の中に含まれる。14* は "何を記録すべきか" を定義し、15* は "その記録が改ざんされていないことを保証する mechanism" を定義する。両文書は補完関係。
 
 ### Relation to 08_threat-model.md
 
-08* の Threat T-26（"Log leakage / Log tampering"）が 15* の threat basis になる。08*
-が DRAFT のため、15* は NR-004 と 13* を直接参照すること（08*
-への normative 参照は approved 後まで保留）。
+08* の Threat T-26（"Log leakage / Log tampering"）が 15* の threat
+basis になる。08* が DRAFT のため、15* は NR-004 と 13* を直接参照すること（08* への normative 参照は approved 後まで保留）。
 
 ---
 

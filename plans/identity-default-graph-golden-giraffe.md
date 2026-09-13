@@ -148,9 +148,8 @@ stays at `:finalize`, and the user is redirected to the sign-in page on the next
 
 `AcmeSelectorBootstrapAuthority#with_writing_connections` nests multiple
 `connected_to(role: :writing)` blocks (principal DB, rp*account/identity DB, token DB, avatar DB).
-Each
-`ensure*\*`call is a separate statement. There is no`ActiveRecord::Base.transaction`or per-DB`transaction`
-call wrapping the sequence.
+Each `ensure*\*`call is a separate statement. There is no`ActiveRecord::Base.transaction`or
+per-DB`transaction` call wrapping the sequence.
 
 The `ensure_*` methods individually use `find_or_create_by!` with a `RecordNotUnique` rescue
 (`create_unique` helper at line 166), which is correct for race safety but does not guarantee

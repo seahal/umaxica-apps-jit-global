@@ -188,6 +188,40 @@ describe("document theme across visits", () => {
     await vi.waitFor(() => expect(document.documentElement.dataset["theme"]).toBe("light"));
 
     errorSpy.mockRestore();
+    nonceMeta.remove();
+  });
+
+  test("omits the nonce when the layout published an empty one", async () => {
+    document.body.innerHTML = "";
+    for (const meta of document.querySelectorAll('meta[property="csp-nonce"]')) {
+      meta.remove();
+    }
+    const nonceMeta = document.createElement("meta");
+    nonceMeta.setAttribute("property", "csp-nonce");
+    Object.defineProperty(nonceMeta, "nonce", { configurable: true, get: () => "" });
+    document.head.append(nonceMeta);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await bootSurfaceInertiaApp({}, "base/app");
+
+    expect(createInertiaApp).toHaveBeenCalled();
+    expect(vi.mocked(createInertiaApp).mock.calls.at(-1)?.[0]).not.toHaveProperty("nonce");
+    errorSpy.mockRestore();
+    nonceMeta.remove();
+  });
+
+  test("omits the nonce when the layout published none", async () => {
+    document.body.innerHTML = "";
+    for (const meta of document.querySelectorAll('meta[property="csp-nonce"]')) {
+      meta.remove();
+    }
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await bootSurfaceInertiaApp({}, "base/app");
+
+    expect(createInertiaApp).toHaveBeenCalled();
+    expect(vi.mocked(createInertiaApp).mock.calls.at(-1)?.[0]).not.toHaveProperty("nonce");
+    errorSpy.mockRestore();
   });
 });
 

@@ -14,9 +14,8 @@ This document describes the current responsibility split for `docs`, `help`, and
 ## Frontend Ownership
 
 Edge owns the public frontend for `docs`, `help`, `news`, `info`, and `core`. Current Edge runtime
-is TanStack Start on Cloudflare Workers. An Astro migration for the twelve content units is
-accepted in Edge `adr/015` but is not deployed. Historical Rails ADRs that name Next.js remain
-history.
+is TanStack Start on Cloudflare Workers. An Astro migration for the twelve content units is accepted
+in Edge `adr/015` but is not deployed. Historical Rails ADRs that name Next.js remain history.
 
 The twelve audience × surface cells are listed in `docs/architecture/content-surface-matrix.md`.
 
@@ -72,7 +71,7 @@ GET /health/startup
 GET /api/v0/health.json   # application/json machine health
 GET /api/v0/revision.json
 GET /api/v0/entries
-GET /api/v0/entries/:slug
+GET /api/v0/entries/:public_id
 ```
 
 The same route shape applies independently under each docs, help, and news app/com/org host.
@@ -145,9 +144,9 @@ namespace  surface  slug  locale  title  summary  body  published_at  taxonomy
 audience (`app`/`com`/`org`). `body` is always the complete JSON object.
 
 Taxonomy is decided in `adr/publishing-taxonomy-architecture.md`. Each entry exposes
-`taxonomy.category` (one object with its breadcrumb `path`, or `null`) and `taxonomy.tag` (an ordered
-array), rendered from the published version's frozen snapshots rather than from the current draft or
-from current term names. The index accepts `?category=<slug>` and `?tag=<slug>`.
+`taxonomy.category` (one object with its breadcrumb `path`, or `null`) and `taxonomy.tag` (an
+ordered array), rendered from the published version's frozen snapshots rather than from the current
+draft or from current term names. The index accepts `?category=<slug>` and `?tag=<slug>`.
 
 Authoring UI, approval workflow, and any write endpoint remain out of scope for these surfaces.
 

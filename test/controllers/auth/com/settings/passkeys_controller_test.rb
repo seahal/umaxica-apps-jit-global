@@ -422,6 +422,7 @@ class Auth::Com::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       host: @host,
       session_public_id: token.public_id,
       resource_type: "visitor",
+      jwt_issuer_id: jwt_issuer_id_for_test_host(@host, "visitor"),
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     @headers.merge(

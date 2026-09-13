@@ -6,9 +6,10 @@ module Auth
     module Sign
       class InsController < ::Auth::App::ApplicationController
         include ::SurfaceInertiaPage
+        include ::AuthenticationModeSwitchGuard
 
-        AUTHENTICATION_MODE = :open
-        declare_authentication_mode! :open
+        AUTHENTICATION_MODE = :guest
+        declare_authentication_mode! :guest
 
         def show
           return redirect_logged_in_direct_entry! if logged_in? && params[:login_challenge].blank?

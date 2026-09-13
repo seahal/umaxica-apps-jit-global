@@ -45,7 +45,7 @@ module ActorSupport
       authn: Actor::Authentication::NULL,
       authz: Actor::Authz::NULL,
       configuration: Actor::Configuration::NULL,
-      preferences: Actor::Preference::NULL,
+      preferences: Actor::Preference.new,
       selection: Actor::SelectedContext::NULL,
       step_up: Actor::StepUp::NULL,
       trace_id: nil,
@@ -256,7 +256,9 @@ module ActorSupport
   # access tokens.
   #
   # Bearer/OIDC requests and the endpoints that skip set_preferences_cookie carry
-  # no Preference JWT cookie, so they fall back to NULL+overlay.
+  # no Preference JWT cookie, so they fall back to the default preference values
+  # (theme sy) plus the request overlay. Actor::Preference::NULL is reserved for
+  # an unbound context, not for "visitor has not chosen a theme yet".
   def resolved_current_preference(resource)
     cookie = resolved_current_cookie(resource, preference_record: nil)
 
@@ -267,7 +269,7 @@ module ActorSupport
       )
     end
 
-    preference_with_request_overlay(Actor::Preference::NULL.with_cookie(cookie))
+    preference_with_request_overlay(Actor::Preference.new(cookie: cookie))
   end
 
   # The decoded Preference JWT `preferences` hash, or nil when absent or when the
@@ -275,6 +277,7 @@ module ActorSupport
   def current_preference_payload_preferences
     return unless respond_to?(:preference_payload_preferences, true)
 
+    load_access_token_payload if respond_to?(:load_access_token_payload, true)
     preferences = preference_payload_preferences
     preferences if preferences.is_a?(Hash) && preferences.present?
   end

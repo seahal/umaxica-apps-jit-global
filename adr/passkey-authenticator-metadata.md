@@ -6,8 +6,8 @@ Accepted (2026-07-19)
 
 ## Context
 
-The only passkey display name was the user-provided `description`, whose default was "Passkey".
-This did not reveal which provider or product issued a credential. webauthn-ruby 3.4.3 exposes the
+The only passkey display name was the user-provided `description`, whose default was "Passkey". This
+did not reveal which provider or product issued a credential. webauthn-ruby 3.4.3 exposes the
 AAGUID, transports, backup flags, and authenticator attachment from a registration response.
 `Webauthn::AuthenticationContext` already calculated these values but did not persist them.
 

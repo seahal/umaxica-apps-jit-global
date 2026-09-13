@@ -50,6 +50,31 @@ class SideRouteContractTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
+  # The Side chrome renders theme and cookie-consent controls, so Side must own the web preference
+  # authority those controls POST to -- otherwise the request 404s and the choice is never
+  # persisted (it only changes the current page).
+  test "side owns a web preference authority for its chrome theme and cookie controls" do
+    with_boot_config(
+      side_service_host: "side-jp.example.test",
+      side_corporate_host: "side-com.example.test",
+      side_staff_host: "side-org.example.test",
+    ) do
+      {
+        "http://side-jp.example.test/web/v0/theme" => "side/app/web/v0/themes",
+        "http://side-jp.example.test/web/v0/cookie" => "side/app/web/v0/cookies",
+        "http://side-com.example.test/web/v0/theme" => "side/com/web/v0/themes",
+        "http://side-org.example.test/web/v0/theme" => "side/org/web/v0/themes",
+      }.each do |url, controller|
+        recognized = Rails.application.routes.recognize_path(url, method: :patch)
+
+        assert_equal controller, recognized[:controller], url
+        assert_equal "update", recognized[:action], url
+      end
+    end
+  ensure
+    Rails.application.reload_routes!
+  end
+
   private
 
   class BootConfig

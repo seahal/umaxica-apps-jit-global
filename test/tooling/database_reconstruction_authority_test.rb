@@ -13,6 +13,7 @@ class DatabaseReconstructionAuthorityTest < ActiveSupport::TestCase
 
   test "committed structure dumps contain no CREATE TABLE statements" do
     dumps = Rails.root.glob("db/*_structure.sql")
+    dumps << Rails.root.join("db/structure.sql") if Rails.root.join("db/structure.sql").exist?
 
     assert_predicate dumps, :any?
 
@@ -32,6 +33,7 @@ class DatabaseReconstructionAuthorityTest < ActiveSupport::TestCase
 
   test "structure dumps are header stubs rather than reconstructable schemas" do
     dumps = Rails.root.glob("db/*_structure.sql")
+    dumps << Rails.root.join("db/structure.sql") if Rails.root.join("db/structure.sql").exist?
 
     dumps.each do |path|
       content = path.read
@@ -66,5 +68,11 @@ class DatabaseReconstructionAuthorityTest < ActiveSupport::TestCase
   test "schema_format remains sql but dump_schema_after_migration is disabled" do
     assert_equal :sql, Rails.application.config.active_record.schema_format
     assert_not Rails.application.config.active_record.dump_schema_after_migration
+  end
+
+  test "primary uses the conventional db/structure.sql dump path" do
+    assert_predicate Rails.root.join("db/structure.sql"), :exist?
+    assert_not Rails.root.join("db/platform_structure.sql").exist?
+    assert_includes Rails.root.join("db/structure.sql").read, STUB_MARKER
   end
 end

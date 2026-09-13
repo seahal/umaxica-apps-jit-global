@@ -2,18 +2,18 @@
 
 ## Context
 
-A `/doctor` health check found the install clean and the always-loaded guidance
-(`AGENTS.md`, ~1,855 est. tokens) lean — nothing to trim. Two categories of finding were
-surfaced to the user:
+A `/doctor` health check found the install clean and the always-loaded guidance (`AGENTS.md`, ~1,855
+est. tokens) lean — nothing to trim. Two categories of finding were surfaced to the user:
 
 1. **4 unused extensions** enabled but never used in the 50-session / ~4.6-day scan window.
-2. **Default permission mode** — user scope is `plan`; the repo's checked-in `auto` is ignored
-   as repo-controllable, so the effective default is `plan`.
+2. **Default permission mode** — user scope is `plan`; the repo's checked-in `auto` is ignored as
+   repo-controllable, so the effective default is `plan`.
 
 User decisions at the confirmation gate:
+
 - **Clean up everything** — disable the 2 unused MCP servers and 2 unused plugins.
-- **Keep plan mode** — do NOT change the default permission mode. (No edit to `~/.claude/settings.json`
-  `permissions.defaultMode`.)
+- **Keep plan mode** — do NOT change the default permission mode. (No edit to
+  `~/.claude/settings.json` `permissions.defaultMode`.)
 
 All actions below are reversible.
 
@@ -23,6 +23,7 @@ All actions below are reversible.
 
 Both are enabled in `~/.claude/settings.json` under `enabledPlugins`, both with 0 lifetime uses and
 0 transcript hits:
+
 - `claude-code-setup@claude-plugins-official`
 - `frontend-design@claude-plugins-official`
 
@@ -51,14 +52,17 @@ repeat in any other project where they should be off):
 /mcp disable seahal-blog
 ```
 
-Do NOT use `claude mcp remove` (permanently deletes config + wipes OAuth tokens). Undo: `/mcp enable <name>`.
+Do NOT use `claude mcp remove` (permanently deletes config + wipes OAuth tokens). Undo:
+`/mcp enable <name>`.
 
 ### 3. No permission-mode change
 
-User declined auto mode. Leave `~/.claude/settings.json` `permissions.defaultMode` untouched
-(stays effectively `plan`).
+User declined auto mode. Leave `~/.claude/settings.json` `permissions.defaultMode` untouched (stays
+effectively `plan`).
 
 ## Verification
 
 - After the plugin edit: `jq '.enabledPlugins' ~/.claude/settings.json` shows both keys `false`.
-- After `/mcp disable`: `/mcp` list shows both servers disabled; `jq '.projects["/home/mslo/Projects/ghq/github.com/seahal/umaxica-apps-global"].disabledMcpServers' ~/.claude.json` includes both names.
+- After `/mcp disable`: `/mcp` list shows both servers disabled;
+  `jq '.projects["/home/mslo/Projects/ghq/github.com/seahal/umaxica-apps-global"].disabledMcpServers' ~/.claude.json`
+  includes both names.

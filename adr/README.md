@@ -27,10 +27,10 @@ Current identity authority decision:
 - `adr/core-browser-credential-transport.md` — superseded predecessor retained for traceability.
 - `adr/core-canonical-public-host.md` — chooses `jp.umaxica.{app,com,org}` as the canonical Core
   public host, sends the Workers VPC `Host` from the `PUBLIC_*` family with no `X-Forwarded-Host`,
-  and makes `config/routes/core.rb` the source of truth for edge path ownership. `jpx.umaxica.*`
-  and `core-jp.umaxica.*` remain accepted until the `jpx.*` column defaults are migrated. No
-  external identity provider re-registration is involved; the social callbacks live on the Auth and
-  Base surfaces, not on Core.
+  and makes `config/routes/core.rb` the source of truth for edge path ownership. `jpx.umaxica.*` and
+  `core-jp.umaxica.*` remain accepted until the `jpx.*` column defaults are migrated. No external
+  identity provider re-registration is involved; the social callbacks live on the Auth and Base
+  surfaces, not on Core.
 - `adr/acme-sign-core-base-port-boundary.md` — current source of truth for the target component
   model: Acme is the only IdP / Authorization Server, Sign is a special RP, Core is the Next.js web
   RP/BFF, Base is the Rails foundation/control-plane subdomain, and Palm is the native bearer-token
@@ -80,21 +80,31 @@ Current API design decisions:
 
 - `adr/api-error-format-problem-details.md` — accepted adoption of RFC 9457 Problem Details
   (`application/problem+json`) for all non-protocol JSON API errors, the `urn:umaxica:problem:`
-  identifier namespace, the two permitted extension members, and the protocol exemption list
-  (OAuth / OIDC / WebAuthn / DBSC / MCP JSON-RPC / health / `.well-known`).
-- `adr/api-collection-contract.md` — accepted `{data, page}` envelope and cursor pagination for
-  collection endpoints. Target contract only; the entries API migration is externally breaking and
-  deferred to separately reviewed work.
+  identifier namespace, the two permitted extension members, and the protocol exemption list (OAuth
+  / OIDC / WebAuthn / DBSC / MCP JSON-RPC / health / `.well-known`).
+- `adr/api-collection-offset-pagination.md` — current pagination for public publishing collections:
+  Pagy offset pages (`?page=`), server-controlled page size, `{ data, page: { current, previous,
+  next, last } }`. Supersedes the signed-cursor mechanism in `adr/api-collection-contract.md`.
+- `adr/api-collection-contract.md` — historical `{data, page}` envelope and the 2026-08-22 signed
+  cursor implementation. Envelope and unwrapped single-resource object remain; cursor pagination
+  does not.
 - `adr/api-versioning-and-client-conventions.md` — accepted path-based major versioning,
   `Idempotency-Key` (an expired IETF draft adopted as Stripe de facto), `RateLimit` /
-  `RateLimit-Policy` field names (an unpublished draft, adopted with no client dependency permitted),
-  and OpenAPI 3.2.x. Records the areas where no standard exists, keeping
+  `RateLimit-Policy` field names (an unpublished draft, adopted with no client dependency
+  permitted), and OpenAPI 3.2.x. Records the areas where no standard exists, keeping
   `docs/reference/api-design-standards.md` limited to specification-backed rules.
-- `adr/api-route-vocabulary-consolidation.md` — accepted naming direction consolidating `/web/v0` and
-  `/edge/v0` under `/api/v0`. Direction only; no route was changed.
+- `adr/api-route-vocabulary-consolidation.md` — accepted naming direction consolidating `/web/v0`
+  and `/edge/v0` under `/api/v0`. Direction only; no route was changed.
 
 Current database naming decisions:
 
+- `adr/global-regional-database-ownership.md` — accepted Global / Regional database ownership map:
+  `*_zenith`, `*_ticket`, `*_setting`, `*_signal`, `avatar`, and `publishing` are Global-only;
+  `chronicle`, `occurrence`, `primary`, and `queue` exist as independent (never shared) databases
+  in both repositories; Regional gets one new application database. Resolves the `M1` question in
+  `evidence/2026-09-08-global-regional-database-split-assessment.md` — `*_zenith` is Global
+  canonical Account / Identity / Organization authority. Retires the reserved-`*_principal`
+  "regional-ready storage" role.
 - `adr/umaxica-v1-core-resource-architecture.md` — accepted v1 core resource architecture: Identity
   / Account / Organization / Unit are core-side resources, Identity is not Account-owned, Avatar /
   Group stay in Avatar DB, and relationships use authority/lifecycle tables rather than direct
@@ -112,8 +122,10 @@ Current database naming decisions:
 - `adr/actor-db-naming-policy.md`
 - `adr/surface-database-connection-naming.md`
 - `adr/principal-zenith-physical-consolidation.md` — accepted decision to apply each surface's
-  principal migration history through the matching zenith database, keep semantic principal base
-  classes, and reserve empty `*_principal` databases for future regional-ready application data.
+  principal migration history through the matching zenith database and keep semantic principal base
+  classes. Its reserved-empty `*_principal` "future regional-ready application data" role is
+  superseded by `adr/global-regional-database-ownership.md`: `*_zenith` is Global authority and
+  regional-ready data lives in the Regional repository's own application database.
 - `adr/member-client-membership-organization-decomposition-before-placement.md`
 - `adr/read-only-content-surfaces-in-rails.md` — current decision for v1 read-only docs/news/help
   content delivery in this Rails repository, including temporary placement in the existing surface
@@ -218,6 +230,9 @@ Sign configuration decisions:
 
 Session and token decisions:
 
+- `adr/base-lobby-unauthenticated-entry.md` — Base anonymous entry is `GET /lobby`, authenticated
+  entry remains `GET /dashboard`, and Base local sign-out is PRG (`303`) onto `/lobby` with the
+  existing `SignOutNotice` marker. Amends `adr/logout-ceremony-boundary.md` for Base only.
 - `adr/acme-session-and-token-authority.md`
 - `adr/social-login-cooldown-and-one-shot-completion.md` — accepted decision that repeated social
   login completion inside the 30-second login cooldown is a valid Acme-side cooldown rejection, and
@@ -264,10 +279,10 @@ Current outbound delivery decisions:
 
 Current CSRF decision:
 
-- `adr/csrf-protection-disabled-in-test-environment.md` — settled decision that
-  `bin/rails test` keeps `allow_forgery_protection` off while development and production must
-  keep it on. Read this before proposing to enable CSRF suite-wide; it records why that change
-  buys appearance rather than coverage, and the one condition that would reopen it.
+- `adr/csrf-protection-disabled-in-test-environment.md` — settled decision that `bin/rails test`
+  keeps `allow_forgery_protection` off while development and production must keep it on. Read this
+  before proposing to enable CSRF suite-wide; it records why that change buys appearance rather than
+  coverage, and the one condition that would reopen it.
 
 Current retention / deletion decisions:
 
@@ -276,8 +291,10 @@ Current retention / deletion decisions:
 
 Repository / application boundary decisions:
 
-- `adr/split-into-regional-and-global-repos.md` — superseded where it treats `sign/id` as IdP and
-  `acme/www` as RP.
+- `adr/split-into-regional-and-global-repos.md` — the two-repository structure (Global vs Regional)
+  remains in force; superseded where it treats `sign/id` as IdP and `acme/www` as RP. Database
+  ownership between the two repositories is now fixed by
+  `adr/global-regional-database-ownership.md`.
 - `adr/acme-rp-boundary-naming.md` — superseded where it treats `acme/www` as an RP boundary instead
   of the identity authority boundary.
 

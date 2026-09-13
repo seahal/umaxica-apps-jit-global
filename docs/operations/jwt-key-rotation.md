@@ -66,11 +66,16 @@ AUTH_JWT_ISSUER
 AUTH_JWT_CLIENT_AUDIENCES
 AUTH_JWT_VISITOR_AUDIENCES
 AUTH_JWT_OPERATOR_AUDIENCES
+AUTH_JWT_CLIENT_CLIENT_ID
+AUTH_JWT_VISITOR_CLIENT_ID
+AUTH_JWT_OPERATOR_CLIENT_ID
 ```
 
 All three auth audience variables are required and must contain non-empty, comma-separated values.
 Audience values must not overlap across client, visitor, and operator resource types; missing,
-blank, or overlapping configuration fails closed.
+blank, or overlapping configuration fails closed. In production, issuers and audiences containing
+a development/test marker, a loopback host, or the `.test` TLD are rejected at boot. The clock-skew
+leeway is fixed at 30 seconds; there is no leeway environment variable.
 
 Preference:
 
@@ -80,10 +85,12 @@ PREFERENCE_JWT_PRIVATE_KEYSET
 PREFERENCE_JWT_PUBLIC_KEYSET
 PREFERENCE_JWT_REVOKED_KIDS
 PREFERENCE_JWT_ISSUER
-PREFERENCE_JWT_AUDIENCES
+PREFERENCE_JWT_CLIENT_ID
 ```
 
-`PREFERENCE_JWT_AUDIENCES` is required for non-empty Preference issuer records.
+Preference audiences are the boot base hosts (`base_service`, `base_corporate`, `base_staff`);
+there is no audience environment variable and no fallback list. A Preference issuer record with
+keys but no configured base hosts fails validation at boot.
 
 Issuer-surface JWKS:
 

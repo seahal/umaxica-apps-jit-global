@@ -44,7 +44,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
 
   # Infrastructure editions: health probes, CSP sinks and root stubs only. They serve no regional
   # HTML and are not reachable by ordinary users.
-  RI_EXEMPT_INFRASTRUCTURE_TARGETS = %w(base/dev base/net core/dev core/net).freeze
+  RI_EXEMPT_INFRASTRUCTURE_TARGETS = %w(base/dev base/net core/dev core/net guid/net).freeze
 
   # Publishing content surfaces. Their language comes from the published document
   # (PublishingContentRendering), not from request context, so they do not carry `ri`.

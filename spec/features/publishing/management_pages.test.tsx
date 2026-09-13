@@ -285,6 +285,12 @@ describe("ManagementEdit", () => {
     expect(alerts).toContain("entry has no current revision");
   });
 
+  it("names a summary failure under the summary field", () => {
+    renderEdit({ errors: { summary: "is too long" } });
+
+    expect(screen.getAllByRole("alert").map((node) => node.textContent)).toContain("is too long");
+  });
+
   it("renders no alert when there is nothing wrong with the submission", () => {
     renderEdit();
 
@@ -412,6 +418,22 @@ describe("ManagementNew", () => {
     // With an error rendered inside the label, the field's accessible name carries the message
     // too, so the value is what identifies it here.
     expect(screen.getByDisplayValue("taken")).toBeTruthy();
+  });
+
+  it("names locale, body, and base failures on the create form", () => {
+    renderNew({
+      errors: {
+        locale: "is not available in this cell",
+        body: "must be valid JSON",
+        base: "the cell cannot accept another entry",
+      },
+    });
+
+    const alerts = screen.getAllByRole("alert").map((node) => node.textContent);
+
+    expect(alerts).toContain("is not available in this cell");
+    expect(alerts).toContain("must be valid JSON");
+    expect(alerts).toContain("the cell cannot accept another entry");
   });
 });
 
@@ -566,5 +588,36 @@ describe("ManagementShow lifecycle controls", () => {
     const alerts = screen.getAllByRole("alert").map((node) => node.textContent);
 
     expect(alerts).toContain("a published entry cannot be archived; end its publication first");
+  });
+
+  it("names a refused effective_from and a refused unpublish reason", () => {
+    const { unmount } = renderShow({ errors: { effective_from: "must be in the future" } });
+
+    expect(screen.getAllByRole("alert").map((node) => node.textContent)).toContain(
+      "must be in the future",
+    );
+    unmount();
+
+    renderShow({
+      entry: { ...entry, publication_state: "published", version_count: 1 },
+      publication: {
+        public_id: "pubpubidabcdefghijklm",
+        effective_from: "2026-09-05T00:00:00Z",
+        version_public_id: "veridabcdefghijklmnop",
+        end_href:
+          "/publishing/docs/app/entries/pubidabcdefghijklmnop/publications/pubpubidabcdefghijklm",
+      },
+      errors: { reason: "can't be blank" },
+    });
+
+    expect(screen.getAllByRole("alert").map((node) => node.textContent)).toContain(
+      "can't be blank",
+    );
+  });
+
+  it("renders an archived entry without a reason as an empty archived label", () => {
+    renderShow({ entry: { ...entry, archive_state: "archived", archive_reason: null } });
+
+    expect(screen.getByText("archived:")).toBeTruthy();
   });
 });

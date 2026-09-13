@@ -162,9 +162,13 @@ Each row is one call site. Classification labels come from the rubric in the tas
 - **Recommendation:** `move_to_PostgreSQL_or_Chronicle` / `replace_with_existing_domain_model`
 - **Reasoning:** Already a clear "transaction with expires*at" — the cache store is a leaky
   implementation choice. The sibling `IdentitySocialCeremonyReplayStore` and the rest of the
-  `Identity*CeremonyTransaction`models are DB-backed; this candidate store should follow the same pattern (e.g. an`identity_social_ceremony_candidates`table keyed by`ref`, with `expires_at`, `consumed_at`, encrypted payload). See sibling DB-backed pattern in `client_totp_ceremony_transaction.rb`. Default store fallback at `default_store()`swaps in`ActiveSupport::Cache::MemoryStore.new`whenever`Rails.cache`is a`NullStore`
-  — that hack itself signals the storage choice is wrong. \_Do not refactor in this task; flagged as
-  the highest priority for follow-up.\*
+  `Identity*CeremonyTransaction`models are DB-backed; this candidate store should follow the same
+  pattern (e.g. an`identity_social_ceremony_candidates`table keyed by`ref`, with `expires_at`,
+  `consumed_at`, encrypted payload). See sibling DB-backed pattern in
+  `client_totp_ceremony_transaction.rb`. Default store fallback at `default_store()`swaps
+  in`ActiveSupport::Cache::MemoryStore.new`whenever`Rails.cache`is a`NullStore` — that hack itself
+  signals the storage choice is wrong. \_Do not refactor in this task; flagged as the highest
+  priority for follow-up.\*
 
 ### 1.8 `app/services/identity_totp_ceremony_candidate_store.rb`
 

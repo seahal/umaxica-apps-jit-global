@@ -23,7 +23,7 @@ class ContentSurfaceBoundaryTest < ActionDispatch::IntegrationTest
       # adr/api-collection-contract.md: every collection carries the same envelope, and an empty
       # page still reports its pagination state rather than omitting it.
       assert_equal(
-        { "data" => [], "page" => { "next_cursor" => nil, "has_more" => false } },
+        { "data" => [], "page" => { "current" => 1, "previous" => nil, "next" => nil, "last" => 1 } },
         response.parsed_body,
       )
       assert_empty response_set_cookie_lines
