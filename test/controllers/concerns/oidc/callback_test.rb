@@ -53,7 +53,8 @@ class OidcCallbackTestController < ApplicationController
   end
 
   def oidc_token_url
-    "http://id.app.localhost/oauth/token"
+    host = Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
+    "http://#{host}:3000/oauth/token"
   end
 
   def oidc_callback_url
@@ -176,6 +177,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_redirected_to "/settings?ri=jp"
     assert_equal "older-verifier", token_call.fetch(:code_verifier)
+    assert_not token_call.fetch(:require_https)
   end
 
   test "show rejects expired pending state before token exchange and preserves other pending flows" do

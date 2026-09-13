@@ -14,7 +14,7 @@ module Base
       def index
         authorize!(current_visitor, to: :show?)
         @organizations = switcher.available_organizations
-        render inertia: true, props: { title: "Organizations", body: "organizations" }
+        render inertia: true, props: { title: "Organizations", body: "organizations", up_link: dashboard_up_link }
       end
 
       def show

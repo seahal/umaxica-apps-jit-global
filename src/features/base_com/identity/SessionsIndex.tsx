@@ -28,7 +28,7 @@ export type SessionsIndexProps = {
   columns: string[];
   empty_message: string;
   current_label: string;
-  bulk_actions: { revoke_others: ConfirmedAction; revoke_all: ConfirmedAction } | null;
+  bulk_actions: { revoke_others: ConfirmedAction } | null;
   sessions: SessionRow[];
 };
 
@@ -84,7 +84,6 @@ export default function SessionsIndex({
       {bulkActions ? (
         <div className="flex flex-wrap gap-3">
           <RevokeButton action={bulkActions.revoke_others} />
-          <RevokeButton action={bulkActions.revoke_all} />
         </div>
       ) : null}
 

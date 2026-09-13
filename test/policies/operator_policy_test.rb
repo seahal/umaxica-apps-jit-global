@@ -159,36 +159,6 @@ class OperatorPolicyTest < ActiveSupport::TestCase
     assert_not policy.destroy?
   end
 
-  def test_revoke_all_allows_owner_operator
-    owner = Operator.new(id: 1)
-    policy = OperatorPolicy.new(owner, user: owner)
-
-    assert_predicate policy, :revoke_all?
-  end
-
-  def test_revoke_all_denies_different_operator
-    owner = Operator.new(id: 1)
-    other = Operator.new(id: 2)
-    policy = OperatorPolicy.new(owner, user: other)
-
-    assert_not policy.revoke_all?
-  end
-
-  def test_revoke_all_denies_nil_user
-    operator = Operator.new(id: 1)
-    policy = OperatorPolicy.new(operator, user: nil)
-
-    assert_not policy.revoke_all?
-  end
-
-  def test_revoke_all_denies_non_operator_user
-    client = Client.new(id: 1)
-    operator = Operator.new(id: client.id)
-    policy = OperatorPolicy.new(operator, user: client)
-
-    assert_not policy.revoke_all?
-  end
-
   def test_purge_sessions_allows_operator
     operator = Operator.new(id: 1)
     policy = OperatorPolicy.new(Operator.new, user: operator)

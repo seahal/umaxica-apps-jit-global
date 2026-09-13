@@ -67,6 +67,12 @@ section of `docs/architecture/cloudflare-request-paths.md` for how each family r
 `config.hosts`, and for the `FORCE_SECURE_COOKIES` trade-off between the tunnel path and the
 plain-`http` local path.
 
+`edit.umaxica.org` follows the same private-origin contract: its remotely managed Tunnel ingress
+uses `http://edit.org.localhost:3000` on `frontend`. The `core` aliases in
+`.devcontainer/compose.yaml` are the repository source of that origin name. The Cloudflare account
+owns the matching public-hostname, ingress, DNS, and Access records; update that remote
+configuration by merging with its current ingress rather than replacing it.
+
 Access is the control that keeps the development surface non-public, and it lives in the Cloudflare
 account rather than in this repository — see "External Checks" below.
 

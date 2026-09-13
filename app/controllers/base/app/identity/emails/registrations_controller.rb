@@ -95,7 +95,11 @@ module Base
           end
 
           def preference_return_url
-            "https://#{ENV.fetch("PRIVATE_BASE_SERVICE_URL")}/preference?ri=#{params[:ri]}"
+            base_app_preference_url(
+              ri: params[:ri],
+              host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+              protocol: request.protocol,
+            )
           end
 
           def authorize_email_registration! = authorize!(ClientEmail, to: :create?)

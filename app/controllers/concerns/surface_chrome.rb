@@ -30,6 +30,7 @@ module SurfaceChrome
     "core" => { family_label: "CORE", banner_domain: nil, footer_navigation: false },
     "side" => { family_label: "SIDE", banner_domain: nil, footer_navigation: false },
     "palm" => { family_label: "PALM", banner_domain: nil, footer_navigation: false },
+    "edit" => { family_label: "EDIT", banner_domain: nil, footer_navigation: false },
   }.freeze
 
   # The operational surfaces are mounted with a route prefix that does not match their controller

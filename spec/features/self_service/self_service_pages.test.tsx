@@ -85,6 +85,23 @@ describe("SelfServiceShell", () => {
     expect(html).toMatch(/<h1[^>]*>Account<\/h1>/u);
     expect(html).toContain("account");
     expect(html).toContain("Signed in");
+    expect(html).not.toContain('href="/dashboard?ri=jp"');
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Account<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
   });
 });
 
@@ -122,6 +139,24 @@ describe("EntityList", () => {
 
     expect(html).toContain("None available");
     expect(html).not.toContain("<ul>");
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Accounts<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
   });
 });
 
@@ -210,6 +245,24 @@ describe("SwitcherShow", () => {
 
     expect(html).toContain("No current context.");
     expect(html).not.toContain('role="alert"');
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <SwitcherShow
+        title="Switcher"
+        current={null}
+        candidates={[]}
+        error={null}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Switcher<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
   });
 });
 

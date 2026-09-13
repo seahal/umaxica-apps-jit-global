@@ -1220,6 +1220,21 @@ en:
           selector: Selector
           switcher: Switcher
           userinfo: UserInfo
+      identity:
+        up_link: Back to top
+        sections:
+          account: Account
+          profile: Profile
+          security: Security
+        links:
+          activities: Activity
+          birthdate: Birthdate
+          emails: Email
+          secrets: Secrets
+          sessions: Sessions
+          standing: Account standing
+          telephones: Telephone
+          withdrawal: Withdrawal
       preference_emails:
         token_invalid: That link is no longer valid. Request a new one to continue.
         turnstile_error: Turnstile verification failed. Please refresh and try again.

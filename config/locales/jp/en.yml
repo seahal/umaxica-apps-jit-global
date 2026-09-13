@@ -1438,6 +1438,21 @@ en:
           selector: Selector
           switcher: Switcher
           userinfo: UserInfo
+      identity:
+        up_link: Back to top
+        sections:
+          account: Account
+          profile: Profile
+          security: Security
+        links:
+          activities: Activity
+          birthdate: Birthdate
+          emails: Email
+          secrets: Secrets
+          sessions: Sessions
+          standing: Account standing
+          telephones: Telephone
+          withdrawal: Withdrawal
   com_document_categories:
     "%{id}": com_document_category_%{id}
     announcement: Announcement
@@ -2331,6 +2346,16 @@ en:
       recovery_identity_required:
         To register a passkey or secret_credential, please register and verify at least one email
         address or phone number first.
+  info:
+    app:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+    com:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
+    org:
+      roots:
+        message: Info API is available. Browser article pages are served outside Rails.
   news:
     app:
       preferences:

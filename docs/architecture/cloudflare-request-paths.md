@@ -90,7 +90,12 @@ added there, not in Rails config:
    families to browser-facing names in development (`#auth_key`, `#base_key`, `#side_key` fall back
    to `PUBLIC_AUTH_*`/`PUBLIC_BASE_*`/`PUBLIC_SIDE_*_URL`), which is what the other consumers need
    anyway: route constraints, the CSP form-action allowlist, and the OIDC authority all read
-   `PUBLIC_*`.
+`PUBLIC_*`.
+
+The Edit staff Publishing surface is one such pair: `edit.umaxica.org` is the browser hostname and
+the remotely managed Tunnel routes it to `http://edit.org.localhost:3000`. It remains subject to
+Cloudflare Access at the perimeter and Rails operator authentication and Action Policy at the
+application boundary.
 
 `test/config/host_authorization_contract_test.rb` guards the result in both directions: the
 published site names are accepted, and an Umaxica-owned hostname that no `PUBLIC_*_URL` names is

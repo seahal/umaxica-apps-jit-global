@@ -160,6 +160,38 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     assert_kind_of Array, inertia_props.fetch("activities")
   end
 
+  test "app birthdate page sends a client without a step-up method to the auth setup host" do
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! base_host
+    client = Client.create!
+    token = ClientToken.create!(
+      user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
+    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    access_token = AuthenticationToken.encode(
+      client, host: base_host, session_public_id: token.public_id,
+              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+
+    get base_app_identity_birthdate_url(ri: "jp", host: base_host),
+        headers: {
+          "Authorization" => "Bearer #{access_token}",
+          "Client-Agent" => "Mozilla/5.0",
+          "Host" => base_host,
+          "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+        }
+
+    assert_response :redirect
+    uri = URI.parse(response.location)
+
+    assert_equal auth_host, uri.host
+    assert_equal "/verification/setup/new", uri.path
+  end
+
   test "com birthdate page sends a visitor without a fresh step-up through the verification setup" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
@@ -185,7 +217,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
         }
 
     assert_response :redirect
-    assert_match %r{/verification/setup/new}, response.location
+    uri = URI.parse(response.location)
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), uri.host
+    assert_equal "/verification/setup/new", uri.path
   end
 
   test "app standing page rejects an unauthenticated request" do

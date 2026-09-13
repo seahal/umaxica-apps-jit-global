@@ -19,6 +19,7 @@ stacks:
     - side/app/application
     - side/com/application
     - side/org/application
+    - edit/org/application
   vite:
     - auth/app/inertia
     - auth/com/inertia
@@ -34,6 +35,8 @@ stacks:
     - side/app/inertia
     - side/com/inertia
     - side/org/inertia
+    - edit/org/inertia
+    - edit/org/root
     # Public content keeps its Vite-owned surface styles and has no Importmap entry.
     - docs/app/root
     - docs/com/root

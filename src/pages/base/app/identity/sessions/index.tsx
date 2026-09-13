@@ -22,9 +22,6 @@ type BulkRevocation = {
   others_label: string;
   others_confirm: string;
   others_url: string;
-  all_label: string;
-  all_confirm: string;
-  all_url: string;
 };
 
 type Props = {
@@ -72,36 +69,20 @@ export default function SessionsIndex({
         ? {}
         : {
             actions: (
-              <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onPress={() =>
-                    revoke(
-                      bulkRevocation.others_url,
-                      bulkRevocation.others_confirm,
-                      bulkRevocation.others_label,
-                    )
-                  }
-                >
-                  {bulkRevocation.others_label}
-                </Button>
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  onPress={() =>
-                    revoke(
-                      bulkRevocation.all_url,
-                      bulkRevocation.all_confirm,
-                      bulkRevocation.all_label,
-                    )
-                  }
-                >
-                  {bulkRevocation.all_label}
-                </Button>
-              </>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onPress={() =>
+                  revoke(
+                    bulkRevocation.others_url,
+                    bulkRevocation.others_confirm,
+                    bulkRevocation.others_label,
+                  )
+                }
+              >
+                {bulkRevocation.others_label}
+              </Button>
             ),
           })}
     >

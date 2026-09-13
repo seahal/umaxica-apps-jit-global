@@ -23,6 +23,7 @@ module Base
           body: "organizations",
           empty: "None available",
           entries: organizations.map { |organization| serialize_organization(organization) },
+          up_link: dashboard_up_link,
         }
       end
 

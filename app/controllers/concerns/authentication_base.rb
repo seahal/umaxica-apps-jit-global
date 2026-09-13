@@ -1258,6 +1258,18 @@ module AuthenticationBase
         reason: "reuse",
         device_source: refresh_binding_source(token_record),
       )
+      Rails.logger.warn(
+        # This is an internal diagnostic, not user-facing copy.
+        # rubocop:disable I18n/RailsI18n/DecorateString
+        "Refresh token reuse detected; clearing access and refresh cookies so the user can sign in again.",
+        # rubocop:enable I18n/RailsI18n/DecorateString
+      )
+      begin
+        destroy_refresh_token_from_cookie
+      ensure
+        clear_auth_cookies!
+        reset_session if respond_to?(:reset_session)
+      end
     end
 
     Rails.logger.info(
@@ -1940,6 +1952,7 @@ module AuthenticationBase
 
   def enforce_authentication_open!(_options = {})
     return true unless authentication_credentials_invalid?
+    return true if detach_stale_open_session_credentials!
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -1951,6 +1964,31 @@ module AuthenticationBase
     )
     render plain: I18n.t("auth.session_expired"), status: :unauthorized
     false
+  end
+
+  # Leftover access/refresh cookies after family revoke (refresh reuse) or expiry still look like
+  # "invalid credentials" on :open HTML endpoints such as /oauth/authorize. Detach them so the
+  # request continues as anonymous and the user can sign in again, instead of a 401 that cannot
+  # start the ceremony. JSON and binding failures stay on the failure path.
+  def detach_stale_open_session_credentials!
+    return false unless request.format.html?
+    return false unless %i(token_session_not_found token_decode_failed).include?(
+      @current_authentication_failure_reason,
+    )
+
+    Rails.logger.warn(
+      "Stale session credentials presented after refresh token reuse or expiry; " \
+      "clearing auth cookies so sign-in can proceed.",
+    )
+    begin
+      destroy_refresh_token_from_cookie if respond_to?(:destroy_refresh_token_from_cookie, true)
+    ensure
+      clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
+      reset_session if respond_to?(:reset_session)
+      @current_authentication_credentials_present = false
+      @current_authentication_failure_reason = nil
+    end
+    true
   end
 
   def enforce_authentication_deny_all!(_options = {})

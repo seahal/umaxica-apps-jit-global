@@ -2,7 +2,7 @@ import { Link } from "@inertiajs/react";
 
 // A self-service index listing. The server decides which entries exist and where each one links,
 // so the component only renders what the props already resolved.
-import Page from "@/components/ui/Page";
+import Page, { type PageUpLink } from "@/components/ui/Page";
 
 export type EntityListEntry = {
   public_id: string;
@@ -15,14 +15,23 @@ export type EntityListProps = {
   body: string;
   empty: string;
   entries: EntityListEntry[];
+  up_link?: PageUpLink | null;
 };
 
-export default function EntityList({ title, body, empty, entries }: EntityListProps) {
+export default function EntityList({
+  title,
+  body,
+  empty,
+  entries,
+  up_link: upLink = null,
+}: EntityListProps) {
   // The surface Inertia layout owns the <main> landmark, so the page renders a section only.
   return (
     <Page
       title={title}
       description={body}
+      up={upLink}
+      upVisit="inertia"
     >
       {entries.length === 0 ? (
         <p className="text-sm text-fg-muted">{empty}</p>

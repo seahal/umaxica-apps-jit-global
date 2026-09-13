@@ -1,0 +1,22 @@
+/*
+ * Stylesheet for the edit/org FQDN.
+ *
+ * One trust boundary links exactly one of these files and nothing else, so a rule written for
+ * another surface cannot reach this one. `source(none)` turns off Tailwind's automatic source
+ * detection, which scans the whole Vite root and would otherwise generate every surface's
+ * utilities into every surface's stylesheet; the `@source` lines below name the only markup this
+ * surface renders.
+ */
+@import "tailwindcss" source(none);
+@import "../theme.css";
+@import "../base.css";
+
+@plugin "@tailwindcss/typography";
+@plugin "@tailwindcss/forms";
+@plugin "tailwindcss-react-aria-components";
+
+@source "../../pages/edit/org";
+@source "../../layouts";
+@source "../../components";
+@source "../../features";
+@source "../../../app/views/edit/org";

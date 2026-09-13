@@ -2050,6 +2050,78 @@ class AuthenticationBaseCoverageTest < ActionDispatch::IntegrationTest
     assert_equal "reuse", occurrence.context["reason"]
   end
 
+  test "handle_invalid_refresh_token_reason clears auth cookies after refresh reuse" do
+    @controller.define_singleton_method(:resource_type) { "client" }
+    @controller.define_singleton_method(:request_ip_address) { "127.0.0.1" }
+    @controller.define_singleton_method(:cookie_deletion_options) { {} }
+    @controller.define_singleton_method(:clear_dbsc_cookie!) { nil }
+    cookie_store =
+      Class.new(Hash) do
+        def delete(key, _options = nil)
+          super(key)
+        end
+      end
+    @controller.define_singleton_method(:cookies) { @cookies ||= cookie_store.new }
+    @controller.define_singleton_method(:token_class) { ClientToken }
+    @controller.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = "access"
+    @controller.cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = "refresh"
+    token = ClientToken.create!(
+      user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB, discarded_at: 1.day.from_now,
+    )
+    log_output = StringIO.new
+    previous_logger = Rails.logger
+    Rails.logger = Logger.new(log_output)
+
+    SignRiskEmitter.stub(:emit, nil) do
+      @controller.send(
+        :handle_invalid_refresh_token_reason, "refresh_token_reuse_detected",
+        token.public_id, token,
+      )
+    end
+  ensure
+    Rails.logger = previous_logger if previous_logger
+
+    assert_nil @controller.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil @controller.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    assert_includes log_output.string, "Refresh token reuse detected"
+  end
+
+  test "open HTML requests with a discarded session clear cookies and continue as anonymous" do
+    @controller.define_singleton_method(:cookie_deletion_options) { {} }
+    @controller.define_singleton_method(:clear_dbsc_cookie!) { nil }
+    cookie_store =
+      Class.new(Hash) do
+        def delete(key, _options = nil)
+          super(key)
+        end
+      end
+    @controller.define_singleton_method(:cookies) { @cookies ||= cookie_store.new }
+    @controller.define_singleton_method(:token_class) { ClientToken }
+    @controller.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = "stale-access"
+    @controller.cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = "stale-refresh"
+    @controller.request.set_header("HTTP_ACCEPT", "text/html")
+    @controller.instance_variable_set(:@current_authentication_credentials_present, true)
+    @controller.instance_variable_set(:@current_authentication_failure_reason, :token_session_not_found)
+    rendered = []
+    @controller.define_singleton_method(:render) { |**kwargs| rendered << kwargs }
+
+    assert @controller.enforce_authentication_open!
+    assert_empty rendered
+    assert_nil @controller.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil @controller.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
+  test "open JSON requests with invalid credentials still reject" do
+    @controller.request.set_header("HTTP_ACCEPT", "application/json")
+    @controller.instance_variable_set(:@current_authentication_credentials_present, true)
+    @controller.instance_variable_set(:@current_authentication_failure_reason, :token_session_not_found)
+    rendered = []
+    @controller.define_singleton_method(:render) { |**kwargs| rendered << kwargs }
+
+    assert_not @controller.enforce_authentication_open!
+    assert_equal :unauthorized, rendered.last[:status]
+  end
+
   test "handle_refresh_binding_denied records a dpop denial reason" do
     @controller.define_singleton_method(:resource_type) { "client" }
     @controller.define_singleton_method(:request_ip_address) { "127.0.0.1" }

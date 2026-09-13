@@ -187,7 +187,6 @@ describe("SessionsIndex", () => {
     current_label: "current",
     bulk_actions: {
       revoke_others: { label: "Revoke others", url: "/identity/other_sessions", confirm: "Sure?" },
-      revoke_all: { label: "Revoke all", url: "/identity/sessions", confirm: "Sure?" },
     },
     sessions: [
       {
@@ -206,7 +205,7 @@ describe("SessionsIndex", () => {
 
   it("revokes the selected session with DELETE", () => {
     mount(<SessionsIndex {...props} />);
-    submitForm(2);
+    submitForm(1);
     acceptConfirmation();
 
     expect(destroy).toHaveBeenCalledWith("/identity/sessions/sess-2", expect.objectContaining({}));

@@ -252,7 +252,6 @@ describe("session inventory", () => {
         columns={columns}
         bulk_revocations={{
           others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
-          all: { label: "Revoke all", href: "/identity/sessions", confirm: "Sure?" },
         }}
         sessions={[
           currentRow,

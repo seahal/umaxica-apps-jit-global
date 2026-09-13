@@ -660,15 +660,13 @@ describe("identity session screens", () => {
           others_label: "Sign out other sessions",
           others_confirm: "Sure?",
           others_url: "/identity/other_sessions",
-          all_label: "Sign out everywhere",
-          all_confirm: "Sure?",
-          all_url: "/identity/sessions",
         }}
         sessions={[sessionRow, { ...sessionRow, public_id: "tok_2", current: true }]}
       />,
     );
 
-    expect(html).toContain("Sign out everywhere");
+    expect(html).toContain("Sign out other sessions");
+    expect(html).not.toContain("Sign out everywhere");
     expect(html).toContain("tok_2");
     expect(html).toContain("current");
   });

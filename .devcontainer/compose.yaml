@@ -176,6 +176,7 @@ services:
           - info.com.localhost
           - info.org.localhost
           - guid.net.localhost
+          - edit.org.localhost
           # Browser-facing site names (PUBLIC_*_URL). Development is published through
           # Cloudflare Tunnel behind Cloudflare Access, and a Tunnel ingress rule resolves
           # its `service:` address on this network, so the published names have to resolve
@@ -187,6 +188,7 @@ services:
           - www.umaxica.app
           - www.umaxica.com
           - www.umaxica.org
+          - edit.umaxica.org
           - www.umaxica.dev
           - www-jp.umaxica.app
           - www-jp.umaxica.com

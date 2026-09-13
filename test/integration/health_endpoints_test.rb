@@ -67,6 +67,15 @@ class HealthEndpointsTest < ActionDispatch::IntegrationTest
       profile: Health::Profiles::Org,
     },
     {
+      host: ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost"),
+      controller: "edit/org/healths",
+      liveness_controller: "edit/org/health/livenesses",
+      readiness_controller: "edit/org/health/readinesses",
+      startup_controller: "edit/org/health/startups",
+      json_controller: "edit/org/api/v0/healths",
+      profile: Health::Profiles::Org,
+    },
+    {
       host: ENV.fetch("PRIVATE_BASE_NETWORK_URL", "base.net.localhost"),
       controller: "base/net/healths",
       liveness_controller: "base/net/health/livenesses",

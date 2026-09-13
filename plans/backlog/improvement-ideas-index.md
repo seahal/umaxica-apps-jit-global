@@ -13,3 +13,5 @@ working tree — most originally-listed items have already been implemented. The
 
 - [Audit visibility boundary in `Common::Redirect` after `private` restoration](../archive/security-private-keyword-restoration.md)
 - [Restore `locked_at` timestamp when OTP attempts reach threshold](security-otp-attempts-atomic-increment.md)
+- [Refresh token reuse overlap window and stale cookie recovery](refresh-token-reuse-overlap-and-stale-cookie-recovery.md)
+- [Refresh token race incident report and improvement plan seed](2026-09-12-refresh-token-race-incident-and-improvement-plan.md)

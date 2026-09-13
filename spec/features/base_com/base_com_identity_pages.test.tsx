@@ -551,11 +551,6 @@ describe("SessionsIndex", () => {
             url: "/identity/other_sessions",
             confirm: "Sure?",
           },
-          revoke_all: {
-            label: "Revoke all sessions",
-            url: "/identity/sessions",
-            confirm: "Sure?",
-          },
         }}
         sessions={[
           row,
@@ -570,7 +565,7 @@ describe("SessionsIndex", () => {
     );
 
     expect(html).toContain("Revoke other sessions");
-    expect(html).toContain("Revoke all sessions");
+    expect(html).not.toContain("Revoke all sessions");
     expect(html).toContain("sess-2");
   });
 

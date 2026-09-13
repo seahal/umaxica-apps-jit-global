@@ -6,6 +6,7 @@ module Base
     module Identity
       class SessionsController < BaseController
         include ::SurfaceInertiaPage
+        include ::SessionTimestampHelper
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
@@ -48,7 +49,13 @@ module Base
 
         def set_session = @session = visible_sessions.find_by!(public_id: params.expect(:id))
 
-        def current_session_record?(session) = session&.public_id == current_session_public_id
+        def current_session_record?(session)
+          return false unless session
+
+          session.id == current_session&.id ||
+            session.public_id == current_session_public_id ||
+            (session.device_session_id.present? && session.device_session_id == current_session&.device_session_id)
+        end
 
         def sessions_index_props(sessions)
           serialized = sessions.map { |session| serialize_session(session) }
@@ -81,9 +88,6 @@ module Base
             others_label: t("sign.app.settings.sessions.revoke.others_button"),
             others_confirm: t("sign.app.settings.sessions.revoke.others_confirm"),
             others_url: base_app_identity_other_sessions_path(ri: params[:ri]),
-            all_label: t("sign.app.settings.sessions.revoke.all_button"),
-            all_confirm: t("sign.app.settings.sessions.revoke.all_confirm"),
-            all_url: base_app_identity_session_set_path(ri: params[:ri]),
           }
         end
 
@@ -93,9 +97,9 @@ module Base
             status: session.user_token_status_id.to_s,
             kind: session.user_token_kind_id.to_s,
             binding: session.dbsc_enabled? ? "DBSC" : "NORMAL",
-            last_activity: I18n.l(session.last_used_at || session.created_at, format: :short),
-            created: I18n.l(session.created_at, format: :short),
-            refresh_expires: I18n.l(session.discarded_at, format: :short),
+            last_activity: localized_session_timestamp(session.last_used_at || session.created_at),
+            created: localized_session_timestamp(session.created_at),
+            refresh_expires: localized_session_timestamp(session.discarded_at),
             current: current_session_record?(session),
             revoke_url: base_app_identity_session_path(session.public_id, ri: params[:ri]),
           }

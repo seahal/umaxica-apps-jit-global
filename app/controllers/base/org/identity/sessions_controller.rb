@@ -6,6 +6,7 @@ module Base
     module Identity
       class SessionsController < ::Base::Org::ApplicationController
         include ::SurfaceInertiaPage
+        include ::SessionTimestampHelper
 
         AUTHENTICATION_MODE = :private
 
@@ -67,11 +68,6 @@ module Base
               href: base_org_identity_other_sessions_path(ri: params[:ri]),
               confirm: t("sign.org.settings.sessions.revoke.others_confirm"),
             },
-            all: {
-              label: t("sign.org.settings.sessions.revoke.all_button"),
-              href: base_org_identity_session_set_path(ri: params[:ri]),
-              confirm: t("sign.org.settings.sessions.revoke.all_confirm"),
-            },
           }
         end
 
@@ -85,9 +81,9 @@ module Base
             status: session.staff_token_status_id,
             kind: session.staff_token_kind_id,
             binding: session.dbsc_enabled? ? "DBSC" : "NORMAL",
-            last_activity: l(session.last_used_at || session.created_at, format: :short),
-            created: l(session.created_at, format: :short),
-            refresh_expires: l(session.discarded_at, format: :short),
+            last_activity: localized_session_timestamp(session.last_used_at || session.created_at),
+            created: localized_session_timestamp(session.created_at),
+            refresh_expires: localized_session_timestamp(session.discarded_at),
             # The current session cannot revoke itself here, so no revoke action is sent for it.
             revoke: current ? nil : session_revocation(session),
           }
@@ -110,7 +106,11 @@ module Base
         end
 
         def current_session_record?(session)
-          session&.public_id == current_session_public_id
+          return false unless session
+
+          session.id == current_session&.id ||
+            session.public_id == current_session_public_id ||
+            (session.device_session_id.present? && session.device_session_id == current_session&.device_session_id)
         end
 
         def revoke_selected_session!(session)

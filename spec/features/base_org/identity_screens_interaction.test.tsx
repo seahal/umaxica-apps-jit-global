@@ -102,7 +102,6 @@ describe("destructive identity forms", () => {
         }}
         bulk_revocations={{
           others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
-          all: { label: "Revoke all", href: "/identity/sessions", confirm: "Sure?" },
         }}
         sessions={[]}
       />,

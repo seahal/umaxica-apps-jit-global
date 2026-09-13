@@ -23,6 +23,7 @@ class RevisionEndpointTest < ActionDispatch::IntegrationTest
     { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), realm: "base", surface: "app" },
     { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), realm: "base", surface: "com" },
     { host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), realm: "base", surface: "org" },
+    { host: ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost"), realm: "edit", surface: "org" },
     { host: ENV.fetch("PRIVATE_BASE_NETWORK_URL", "base.net.localhost"), realm: "base", surface: "net" },
     { host: ENV.fetch("PRIVATE_BASE_DEVELOPER_URL", "base.dev.localhost"), realm: "base", surface: "dev" },
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"), realm: "core", surface: "app" },

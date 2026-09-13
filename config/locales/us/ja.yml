@@ -1212,6 +1212,21 @@ ja:
           selector: セレクター
           switcher: スイッチャー
           userinfo: UserInfo
+      identity:
+        up_link: うえへ
+        sections:
+          account: アカウント
+          profile: プロフィール
+          security: セキュリティ
+        links:
+          activities: アクティビティ
+          birthdate: 生年月日
+          emails: メール
+          secrets: シークレット
+          sessions: セッション
+          standing: アカウント状態
+          telephones: 電話番号
+          withdrawal: 退会
   billings:
     signed_in_required: サインインが必要です。
   com_document_categories:

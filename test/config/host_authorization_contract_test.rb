@@ -38,6 +38,7 @@ class HostAuthorizationContractTest < Minitest::Test
     www.umaxica.app
     www.umaxica.com
     www.umaxica.org
+    edit.umaxica.org
     jp.umaxica.app
     jp.umaxica.com
     jp.umaxica.org
@@ -284,6 +285,7 @@ class HostAuthorizationContractTest < Minitest::Test
       "PUBLIC_BASE_SERVICE_URL" => "https://www.umaxica.app",
       "PUBLIC_BASE_CORPORATE_URL" => "https://www.umaxica.com",
       "PUBLIC_BASE_STAFF_URL" => "https://www.umaxica.org",
+      "PUBLIC_EDIT_STAFF_URL" => "https://edit.umaxica.org",
       "PUBLIC_CORE_SERVICE_URL" => "https://jp.umaxica.app",
       "PUBLIC_CORE_STAFF_URL" => "https://jp.umaxica.org",
       "PUBLIC_CORE_CORPORATE_URL" => "https://jp.umaxica.com",

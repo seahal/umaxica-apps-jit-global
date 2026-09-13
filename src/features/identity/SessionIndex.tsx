@@ -40,7 +40,7 @@ export type SessionIndexProps = {
     created: string;
     refresh_expires: string;
   };
-  bulk_revocations: { others: SessionAction; all: SessionAction } | null;
+  bulk_revocations: { others: SessionAction } | null;
   sessions: SessionRow[];
 };
 
@@ -106,7 +106,6 @@ export default function SessionIndex({
       {bulkRevocations ? (
         <div className="flex flex-wrap gap-2">
           <RevokeButton action={bulkRevocations.others} />
-          <RevokeButton action={bulkRevocations.all} />
         </div>
       ) : null}
 

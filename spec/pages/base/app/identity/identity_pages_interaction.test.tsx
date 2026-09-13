@@ -643,9 +643,6 @@ describe("session revocation interaction", () => {
           others_label: "Sign out other sessions",
           others_confirm: "Sure?",
           others_url: "/identity/other_sessions",
-          all_label: "Sign out everywhere",
-          all_confirm: "Sure?",
-          all_url: "/identity/sessions",
         }}
         sessions={[
           {
@@ -675,9 +672,7 @@ describe("session revocation interaction", () => {
     answerConfirmation(true);
     expect(destroy).toHaveBeenCalledWith("/identity/other_sessions");
 
-    clickButton("Sign out everywhere");
-    answerConfirmation(true);
-    expect(destroy).toHaveBeenCalledWith("/identity/sessions");
+    expect(container.textContent).not.toContain("Sign out everywhere");
   });
 });
 

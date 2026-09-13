@@ -23,6 +23,7 @@ module Base
           body: "account",
           empty: "None available",
           entries: accounts.map { |account| serialize_account(account) },
+          up_link: dashboard_up_link,
         }
       end
 

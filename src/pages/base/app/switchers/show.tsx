@@ -1,7 +1,7 @@
 import Card from "@/components/ui/Card";
 import DescriptionList from "@/components/ui/DescriptionList";
 import ErrorList from "@/components/ui/ErrorList";
-import Page from "@/components/ui/Page";
+import Page, { type PageUpLink } from "@/components/ui/Page";
 
 type SwitcherSelection = {
   account_public_id: string | null;
@@ -22,13 +22,22 @@ type Props = {
   candidates: SwitcherCandidate[];
   // Present only when a switch attempt was rejected.
   error: string | null;
+  up_link?: PageUpLink | null;
 };
 
-export default function SwitcherShow({ title, current, candidates, error }: Props) {
+export default function SwitcherShow({
+  title,
+  current,
+  candidates,
+  error,
+  up_link: upLink = null,
+}: Props) {
   return (
     <Page
       title={title}
       description="Signed in"
+      up={upLink}
+      upVisit="inertia"
     >
       <ErrorList errors={error === null ? [] : [error]} />
 

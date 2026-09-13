@@ -1560,6 +1560,21 @@ ja:
           selector: セレクター
           switcher: スイッチャー
           userinfo: UserInfo
+      identity:
+        up_link: うえへ
+        sections:
+          account: アカウント
+          profile: プロフィール
+          security: セキュリティ
+        links:
+          activities: アクティビティ
+          birthdate: 生年月日
+          emails: メール
+          secrets: シークレット
+          sessions: セッション
+          standing: アカウント状態
+          telephones: 電話番号
+          withdrawal: 退会
   com_document_categories:
     "%{id}": com_document_category_%{id}
     announcement: お知らせ
@@ -2472,6 +2487,16 @@ ja:
       recovery_identity_required: パスキー/シークレットを登録するには、先にメールアドレスまたは電話番号を1つ以上登録（確認）してください。
     visitor:
       recovery_identity_required: パスキー/シークレットを登録するには、先にメールアドレスまたは電話番号を1つ以上登録（確認）してください。
+  info:
+    app:
+      roots:
+        message: 情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。
+    com:
+      roots:
+        message: 情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。
+    org:
+      roots:
+        message: 情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。
   news:
     app:
       preferences:

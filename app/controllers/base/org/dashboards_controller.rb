@@ -22,7 +22,6 @@ module Base
           description: t("base.shared.dashboard.description"),
           sections: [
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
-            publishing_section,
             { heading: t("base.shared.dashboard.sections.protocol_links"), items: protocol_links },
           ],
         }
@@ -40,46 +39,6 @@ module Base
           { label: t("base.shared.dashboard.links.selector"), href: base_org_selector_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.logout"), href: new_base_org_sign_out_path(ri: params[:ri]) },
         ]
-      end
-
-      def publishing_section
-        {
-          heading: t("base.shared.dashboard.sections.publishing"),
-          groups: [
-            {
-              heading: "info",
-              items: [
-                { label: "app", href: base_org_publishing_info_app_entries_path(ri: params[:ri]) },
-                { label: "com", href: base_org_publishing_info_com_entries_path(ri: params[:ri]) },
-                { label: "org", href: base_org_publishing_info_org_entries_path(ri: params[:ri]) },
-              ],
-            },
-            {
-              heading: "docs",
-              items: [
-                { label: "app", href: base_org_publishing_docs_app_entries_path(ri: params[:ri]) },
-                { label: "com", href: base_org_publishing_docs_com_entries_path(ri: params[:ri]) },
-                { label: "org", href: base_org_publishing_docs_org_entries_path(ri: params[:ri]) },
-              ],
-            },
-            {
-              heading: "news",
-              items: [
-                { label: "app", href: base_org_publishing_news_app_entries_path(ri: params[:ri]) },
-                { label: "com", href: base_org_publishing_news_com_entries_path(ri: params[:ri]) },
-                { label: "org", href: base_org_publishing_news_org_entries_path(ri: params[:ri]) },
-              ],
-            },
-            {
-              heading: "help",
-              items: [
-                { label: "app", href: base_org_publishing_help_app_entries_path(ri: params[:ri]) },
-                { label: "com", href: base_org_publishing_help_com_entries_path(ri: params[:ri]) },
-                { label: "org", href: base_org_publishing_help_org_entries_path(ri: params[:ri]) },
-              ],
-            },
-          ],
-        }
       end
 
       def protocol_links

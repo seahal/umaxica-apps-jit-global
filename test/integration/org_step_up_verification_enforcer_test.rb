@@ -38,6 +38,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
     uri = URI.parse(response.location)
     query = Rack::Utils.parse_query(uri.query)
 
+    assert_equal ENV.fetch("PUBLIC_AUTH_STAFF_URL"), uri.host
     assert_equal "/verification/setup/new", uri.path
     assert_predicate query["pt"], :present?
   end

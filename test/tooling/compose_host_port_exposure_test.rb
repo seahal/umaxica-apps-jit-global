@@ -46,7 +46,7 @@ class ComposeHostPortExposureTest < Minitest::Test
     core = load_compose(".devcontainer/compose.yaml").fetch("services").fetch("core")
 
     assert_includes core.fetch("ports"), "127.0.0.1:3001:3000"
-    refute_includes core.fetch("ports"), "127.0.0.1:3000:3000"
+    assert_not_includes core.fetch("ports"), "127.0.0.1:3000:3000"
   end
 
   def test_datastore_publications_are_loopback_only

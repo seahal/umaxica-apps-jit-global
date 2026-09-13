@@ -35,4 +35,8 @@ Each public and management controller declares `PUBLISHING_AUDIENCE`, `PUBLISHIN
 `ENTRY_CLASS` explicitly.
 
 Public URLs: `GET /api/v0/entries`, `GET /api/v0/entries/:public_id`. Management URLs:
-`/publishing/{info,docs,news,help}/{app,com,org}/entries`.
+`/publishing/{info,docs,news,help}/{app,com,org}/entries` on `edit.umaxica.org`.
+
+The edit host is the staff Publishing management boundary. The Publishing database remains in this
+Rails application while the identity/operator contract is stabilized; this host move deliberately
+does not extract Publishing persistence or introduce cross-database associations.

@@ -54,9 +54,8 @@ module PublishingManagementCell
     # including drafts that were never published and the bodies of archived
     # entries, so there is no action here that an anonymous request may reach.
     #
-    # The surface web rate limit comes from Base::Org::ApplicationController;
-    # these controllers no longer declare one of their own, which they had to
-    # while they inherited BareController and its empty quota.
+    # The surface web rate limit comes from the staff ApplicationController
+    # these controllers inherit (Edit::Org::ApplicationController).
     before_action :authenticate_operator!
   end
 
@@ -72,6 +71,12 @@ module PublishingManagementCell
 
   def publishing_entry_class
     self.class.publishing_entry_class
+  end
+
+  # Staff CMS Inertia/controller prefix. Declared by the surface application
+  # controller so cells never infer it from class names, params, or host.
+  def publishing_management_namespace
+    raise(NotImplementedError, "#{self.class.name} must implement #publishing_management_namespace")
   end
 
   # Every CMS action asks the same question of the same policy. The record
@@ -103,11 +108,11 @@ module PublishingManagementCell
   # Absolute controller paths, so a nested controller addresses the entries
   # pages of its own cell rather than its own.
   def entries_controller_path
-    "/base/org/publishing/#{publishing_surface}/#{publishing_audience}/entries"
+    "/#{publishing_management_namespace}/#{publishing_surface}/#{publishing_audience}/entries"
   end
 
   def entries_component(name)
-    "base/org/publishing/#{publishing_surface}/#{publishing_audience}/entries/#{name}"
+    "#{publishing_management_namespace}/#{publishing_surface}/#{publishing_audience}/entries/#{name}"
   end
 
   def entry_path(entry, action:)

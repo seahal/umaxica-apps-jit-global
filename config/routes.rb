@@ -32,6 +32,9 @@ Rails.application.routes.draw do
   # News owns the public news content surface.
   draw :news
 
+  # Edit owns the staff Publishing management surface.
+  draw :edit
+
   # Any host that reached the app without matching a surface above is unknown;
   # answer it here rather than leaking a routing error.
   get "/", to: "unknown_hosts#show"
