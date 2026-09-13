@@ -112,6 +112,8 @@ class AcmeRefreshTokenIssuer
       )
     end
 
+    RefreshTokenReuseActivityRecorder.call(token: token, result: "token_family_revoked")
+
     Rails.logger.warn(
       # This is an internal diagnostic, not user-facing copy.
       # rubocop:disable I18n/RailsI18n/DecorateString

@@ -202,7 +202,7 @@ module RefreshTokenable
       self.refresh_token_digest = digest_refresh_token(verifier)
       self.discarded_at =
         if discarded_at
-          discarded_at
+          SessionAbsoluteExpiryValue.cap(proposed_expiry: discarded_at, absolute_expiry: self.discarded_at)
         elsif self.discarded_at.respond_to?(:infinite?) && self.discarded_at.infinite?
           default_lapses_at
         else

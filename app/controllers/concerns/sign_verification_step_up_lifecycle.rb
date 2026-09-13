@@ -87,7 +87,23 @@ module SignVerificationStepUpLifecycle
         step_up_session.save!
       end
     end
-    StepUpCooldownStamp.call(current_verification_actor, method) if current_verification_actor.present?
+    actor = current_verification_actor
+    StepUpCooldownStamp.call(actor, method) if actor.present?
+    record_failed_step_up_activity!(actor) if actor.present?
+  end
+
+  def record_failed_step_up_activity!(actor)
+    audit_class, event_id =
+      case actor_token
+      when ClientToken, VisitorToken
+        [ClientChronicle, ClientChronicleEvent::STEP_UP_FAILED]
+      when OperatorToken
+        [OperatorChronicle, OperatorChronicleEvent::STEP_UP_FAILED]
+      else
+        raise NotImplementedError, "unsupported step-up audit token: #{actor_token.class.name}"
+      end
+
+    AuthenticationAuditWriter.write(audit_class, event_id, resource: actor, actor: actor)
   end
 
   def verification_model

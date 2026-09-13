@@ -437,6 +437,17 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
     assert_includes back.fetch("href"), "scope=settings_email"
     assert_includes back.fetch("href"), "pt="
     assert_predicate inertia_form.fetch("pt"), :present?
+
+    failed_step_up = ChronicleRecord.connected_to(role: :writing) do
+      ClientChronicle.where(
+        event_id: ClientChronicleEvent::STEP_UP_FAILED,
+        subject_id: @user.id.to_s,
+        subject_type: "Client",
+      ).order(occurred_at: :desc).first
+    end
+    assert_predicate failed_step_up, :present?
+    assert_empty failed_step_up.context
+    refute_includes failed_step_up.context.to_s, "000000"
   end
 
   test "resend sends a new otp and returns to edit page" do

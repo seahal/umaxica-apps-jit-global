@@ -1214,6 +1214,58 @@ ja:
           userinfo: UserInfo
       identity:
         up_link: うえへ
+        activities:
+          title: アクティビティ履歴
+          description: アカウントに関する最近のセキュリティ関連アクティビティです。
+          empty: 表示できるアクティビティはありません。
+          unknown_device: 不明なデバイス
+          unknown_location: 場所を確認できません
+          columns:
+            occurred_at: 発生日時
+            activity: アクティビティ
+            device: デバイス
+            source: 場所
+            risk: リスク
+          events:
+            sign_in: サインイン
+            google_sign_in: Googleでサインイン
+            apple_sign_in: Appleでサインイン
+            google_account_created: Googleでアカウントを作成
+            apple_account_created: Appleでアカウントを作成
+            email_account_created: メールアドレスでアカウントを作成
+            telephone_account_created: 電話番号でアカウントを作成
+            sign_out: サインアウト
+            sign_in_failed: サインインに失敗
+            step_up_completed: 追加認証を完了
+            step_up_failed: 追加認証に失敗
+            session_revoked: セッションを終了
+            security_change: セキュリティ設定を変更
+            session_security_alert: セキュリティ上の理由でセッションを終了
+          risks:
+            none: なし
+            low: 低
+            medium: 中
+            high: 高
+            critical: 重大
+        sessions:
+          title: セッション
+          empty: 有効なセッションはありません。
+          unknown_device: 不明なデバイス
+          expires_at_description: このセッションはこの時刻に終了します。この期限は延長されません。
+          current_session: 現在のセッション
+          active: 有効
+          normal: 通常
+          emergency: 緊急アクセス
+          unknown_mode: 不明
+          revoke: 終了
+          columns:
+            device: デバイス
+            last_activity: 最終アクティビティ
+            created: 作成日時
+            expires_at: 有効期限
+            status: 状態
+            mode: モード
+            action: 操作
         sections:
           account: アカウント
           profile: プロフィール

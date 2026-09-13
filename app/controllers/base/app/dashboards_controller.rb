@@ -19,7 +19,6 @@ module Base
       def show_page_props
         {
           title: t("base.shared.dashboard.title"),
-          description: t("base.shared.dashboard.description"),
           sections: [
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
             { heading: t("base.shared.dashboard.sections.protocol_links"), items: protocol_links },

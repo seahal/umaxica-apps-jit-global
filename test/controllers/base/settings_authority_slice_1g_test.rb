@@ -24,6 +24,8 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     other_user = clients(:two)
     ChronicleRecord.connected_to(role: :writing) { ClientChronicle.delete_all }
     create_user_audit(user: user, tag: "my-login-event")
+    create_user_audit(user: user, tag: "own-failed-event", event_id: ClientChronicleEvent::LOGIN_FAILED)
+    create_user_audit(user: user, tag: "refresh-internal", event_id: ClientChronicleEvent::TOKEN_REFRESHED)
     create_user_audit(user: other_user, tag: "other-login-event")
 
     token = create_user_token!(user)
@@ -32,8 +34,14 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     get base_app_identity_activities_url(ri: "jp", host: host), headers: app_session_headers(host, token, user)
 
     assert_response :success
-    assert_no_match(/id\.umaxica/, response.body)
-    assert_includes response.body, "my-login-event"
+    rows = inertia_props.fetch("activities")
+    assert_equal 2, rows.size
+    assert_equal ["サインインに失敗", "サインイン"], rows.map { |row| row.fetch("activity") }
+    assert_equal ["中", "低"], rows.map { |row| row.fetch("risk") }
+    assert_equal %w(occurred_at activity device source risk risk_rank), rows.first.keys
+    assert_not_includes response.body, "my-login-event"
+    assert_not_includes response.body, "own-failed-event"
+    assert_not_includes response.body, "refresh-internal"
     assert_not_includes response.body, "other-login-event"
   end
 
@@ -219,12 +227,12 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     "surface:#{service}_#{surface}"
   end
 
-  def create_user_audit(user:, tag:)
+  def create_user_audit(user:, tag:, event_id: ClientChronicleEvent::LOGGED_IN)
     ChronicleRecord.connected_to(role: :writing) do
       ClientChronicle.create!(
         subject_id: user.id,
         subject_type: "Client",
-        event_id: ClientChronicleEvent::LOGGED_IN,
+        event_id: event_id,
         context: { tag: tag },
         occurred_at: Time.current,
       )

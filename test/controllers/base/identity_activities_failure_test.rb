@@ -19,9 +19,11 @@ class BaseIdentityActivitiesFailureTest < ActiveSupport::TestCase
 
       def activity_log
         log = Object.new
-        log.define_singleton_method(:activities) { raise ActiveRecord::ConnectionNotEstablished, "reader down" }
+        log.define_singleton_method(:activities) { |_scope| raise ActiveRecord::ConnectionNotEstablished, "reader down" }
         log
       end
+
+      def activity_scope = ClientChronicle.none
 
       def render(*args, **kwargs)
         self.rendered = [args, kwargs]
@@ -34,7 +36,7 @@ class BaseIdentityActivitiesFailureTest < ActiveSupport::TestCase
     end
   end
 
-  [Base::Com::Identity::ActivitiesController, Base::Org::Identity::ActivitiesController].each do |klass|
+  [Base::App::Identity::ActivitiesController, Base::Com::Identity::ActivitiesController, Base::Org::Identity::ActivitiesController].each do |klass|
     test "#{klass.name} still renders the page with an empty list when the store is unavailable" do
       harness = harness_for(klass)
 

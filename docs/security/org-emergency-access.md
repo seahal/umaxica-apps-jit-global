@@ -150,6 +150,10 @@ This is deliberately **not** the existing restricted-session state. `Actor::Auth
 marks a session awaiting session-limit remediation; a session can be Normal and session-limit
 restricted at the same time. The two axes never collapse into one flag.
 
+Authentication context and DBSC binding are independent session properties. Session inventory may
+label a session Emergency only from the persisted authentication context. `dbsc_enabled?`, binding
+method, and device-bound credential state must never be used to infer Normal or Emergency mode.
+
 Reading the claim is lenient in one direction only: a blank claim is Normal, and any unrecognised
 value resolves to a capability-less context that denies everything. Issuing a session under an
 unknown context raises.

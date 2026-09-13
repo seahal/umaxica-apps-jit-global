@@ -71,3 +71,9 @@ email_registered:
   id: 31
 telephone_registered:
   id: 32
+credential_security_transition:
+  id: 33
+step_up_failed:
+  id: 34
+refresh_token_reuse_detected:
+  id: 35

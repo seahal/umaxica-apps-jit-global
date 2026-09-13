@@ -46,6 +46,10 @@ module OidcTokenUsage
   end
 
   def issue_refresh_token!(expires_at: refresh_token_expires_at || default_refresh_token_expires_at)
+    expires_at = SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: expires_at,
+      absolute_expiry: parent_token&.discarded_at,
+    )
     raw_refresh_token, verifier = generate_refresh_token(public_id: public_id)
     update!(
       refresh_token_digest: encoded_refresh_token_digest(verifier),
@@ -60,6 +64,11 @@ module OidcTokenUsage
   def rotate_refresh_token!(expires_at: refresh_token_expires_at || default_refresh_token_expires_at)
     with_lock do
       raise ActiveRecord::RecordInvalid.new(self) unless active?
+
+      expires_at = SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: expires_at,
+        absolute_expiry: parent_token&.discarded_at,
+      )
 
       previous_digest = refresh_token_digest
       raw_refresh_token, verifier = generate_refresh_token(public_id: public_id)
@@ -122,7 +131,10 @@ module OidcTokenUsage
   end
 
   def default_refresh_token_expires_at
-    Time.current + RefreshTokenable::REFRESH_TTL
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: Time.current + RefreshTokenable::REFRESH_TTL,
+      absolute_expiry: parent_token&.discarded_at,
+    )
   end
 
   def encoded_refresh_token_digest(verifier)

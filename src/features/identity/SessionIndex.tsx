@@ -1,8 +1,3 @@
-// The session inventory of an identity surface.
-//
-// Which sessions may be revoked is a server decision: the current session arrives without a
-// `revoke` action, and the bulk revocations are absent when there is no other session to revoke.
-
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
@@ -16,15 +11,12 @@ export type SessionAction = {
 };
 
 export type SessionRow = {
-  public_id: string;
-  current: boolean;
-  current_label: string | null;
-  status: string;
-  kind: string;
-  binding: string;
+  device: string;
   last_activity: string;
   created: string;
-  refresh_expires: string;
+  expires_at: string;
+  status: string;
+  mode?: string;
   revoke: SessionAction | null;
 };
 
@@ -32,28 +24,29 @@ export type SessionIndexProps = {
   title: string;
   back_link: { label: string; href: string };
   empty_message: string;
+  expires_at_description: string;
   columns: {
-    session: string;
-    kind: string;
-    binding: string;
+    device: string;
     last_activity: string;
     created: string;
-    refresh_expires: string;
+    expires_at: string;
+    status: string;
+    mode?: string;
+    action: string;
   };
   bulk_revocations: { others: SessionAction } | null;
   sessions: SessionRow[];
 };
 
-// Revocation stays a DELETE submitted as a document, exactly as `button_to` did: it ends session
-// state the current page depends on, so the server's redirect drives the next screen.
 function RevokeButton({ action }: { action: SessionAction }) {
   const { confirm, dialog } = useConfirm();
-
-  // The confirmation is asynchronous now, so the submission is held back and replayed with
-  // `submit()`, which sends the same document POST without running this handler again.
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
+    const tokenField = form.elements.namedItem("authenticity_token");
+    if (tokenField instanceof HTMLInputElement) {
+      tokenField.value = csrfToken();
+    }
     confirm({ message: action.confirm, confirmLabel: action.label }, () => form.submit());
   };
 
@@ -73,7 +66,7 @@ function RevokeButton({ action }: { action: SessionAction }) {
         <input
           type="hidden"
           name="authenticity_token"
-          value={csrfToken()}
+          value=""
         />
         <Button
           type="submit"
@@ -92,6 +85,7 @@ export default function SessionIndex({
   title,
   back_link: backLink,
   empty_message: emptyMessage,
+  expires_at_description: expiresAtDescription,
   columns,
   bulk_revocations: bulkRevocations,
   sessions,
@@ -103,8 +97,10 @@ export default function SessionIndex({
       upVisit="inertia"
       width="wide"
     >
+      <p className="mb-4 text-sm text-fg-muted">{expiresAtDescription}</p>
+
       {bulkRevocations ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           <RevokeButton action={bulkRevocations.others} />
         </div>
       ) : null}
@@ -113,41 +109,24 @@ export default function SessionIndex({
         <Table>
           <thead>
             <tr>
-              <th scope="col">{columns.session}</th>
-              <th scope="col">{columns.kind}</th>
-              <th scope="col">{columns.binding}</th>
+              <th scope="col">{columns.device}</th>
+              {columns.mode ? <th scope="col">{columns.mode}</th> : null}
               <th scope="col">{columns.last_activity}</th>
               <th scope="col">{columns.created}</th>
-              <th scope="col">{columns.refresh_expires}</th>
-              <th scope="col" />
+              <th scope="col">{columns.expires_at}</th>
+              <th scope="col">{columns.status}</th>
+              <th scope="col">{columns.action}</th>
             </tr>
           </thead>
           <tbody>
-            {sessions.map((session) => (
-              <tr
-                key={session.public_id}
-                className={
-                  session.current
-                    ? "border-t border-line bg-surface-muted font-semibold"
-                    : "border-t border-line bg-surface"
-                }
-              >
-                <td>
-                  <div className="flex flex-col gap-0.5">
-                    <span>{session.public_id}</span>
-                    {session.current_label ? (
-                      <span className="text-xs font-normal text-fg-muted">
-                        {session.current_label}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-xs font-normal text-fg-muted">{session.status}</p>
-                </td>
-                <td>{session.kind}</td>
-                <td>{session.binding}</td>
+            {sessions.map((session, index) => (
+              <tr key={`${session.created}-${index}`}>
+                <td>{session.device}</td>
+                {columns.mode ? <td>{session.mode}</td> : null}
                 <td>{session.last_activity}</td>
                 <td>{session.created}</td>
-                <td>{session.refresh_expires}</td>
+                <td>{session.expires_at}</td>
+                <td>{session.status}</td>
                 <td>{session.revoke ? <RevokeButton action={session.revoke} /> : null}</td>
               </tr>
             ))}

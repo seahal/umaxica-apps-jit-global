@@ -1222,6 +1222,58 @@ en:
           userinfo: UserInfo
       identity:
         up_link: Back to top
+        activities:
+          title: Activity history
+          description: Recent security-related activity for your account.
+          empty: No activities to show.
+          unknown_device: Unknown device
+          unknown_location: Location unavailable
+          columns:
+            occurred_at: Occurred at
+            activity: Activity
+            device: Device
+            source: Source
+            risk: Risk
+          events:
+            sign_in: Signed in
+            google_sign_in: Signed in with Google
+            apple_sign_in: Signed in with Apple
+            google_account_created: Account created with Google
+            apple_account_created: Account created with Apple
+            email_account_created: Account created with email
+            telephone_account_created: Account created with phone number
+            sign_out: Signed out
+            sign_in_failed: Sign-in failed
+            step_up_completed: Step-up authentication completed
+            step_up_failed: Step-up authentication failed
+            session_revoked: Session ended
+            security_change: Security settings changed
+            session_security_alert: Session ended for security reasons
+          risks:
+            none: None
+            low: Low
+            medium: Medium
+            high: High
+            critical: Critical
+        sessions:
+          title: Sessions
+          empty: No active sessions.
+          unknown_device: Unknown device
+          expires_at_description: This session ends at this time. This limit cannot be extended.
+          current_session: Current session
+          active: Active
+          normal: Normal
+          emergency: Emergency
+          unknown_mode: Unknown
+          revoke: Revoke
+          columns:
+            device: Device
+            last_activity: Last activity
+            created: Created
+            expires_at: Expires at
+            status: Status
+            mode: Mode
+            action: Action
         sections:
           account: Account
           profile: Profile

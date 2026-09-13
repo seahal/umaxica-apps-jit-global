@@ -13,7 +13,10 @@ module AuthenticationJwtTokens
       oidc_jti: token_record_oidc_jti(token_record),
       resource_type: resource_type,
       dpop_jkt: dpop_jkt,
-      expires_at: access_expires_at,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: access_expires_at,
+        absolute_expiry: token_record_expiry_at(token_record),
+      ),
       acr: "aal1",
       amr: normalize_amr(token_kind_id, token_record: token_record),
       jwt_issuer_id: auth_jwt_issuer_id,
@@ -32,7 +35,10 @@ module AuthenticationJwtTokens
       oidc_jti: token_record_oidc_jti(token_record),
       resource_type: resource_type,
       dpop_jkt: token_record_attribute(token_record, :dpop_jkt),
-      expires_at: access_expires_at,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: access_expires_at,
+        absolute_expiry: token_record_expiry_at(token_record),
+      ),
       acr: "aal1",
       amr: nil,
       jwt_issuer_id: auth_jwt_issuer_id,
@@ -127,7 +133,10 @@ module AuthenticationJwtTokens
   end
 
   def access_token_expires_at_for(token_record, now: Time.current)
-    [now + AuthenticationBase::ACCESS_TOKEN_TTL, token_record_expiry_at(token_record)].compact.min
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: now + AuthenticationBase::ACCESS_TOKEN_TTL,
+      absolute_expiry: token_record_expiry_at(token_record),
+    )
   end
 
   def auth_jwt_issuer_id

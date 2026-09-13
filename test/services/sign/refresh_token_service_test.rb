@@ -93,6 +93,16 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     assert_equal :refresh_token_reuse_detected, reuse_result.reason
     assert_includes log_output.string, "Refresh token reuse detected"
 
+    reuse_audit = ChronicleRecord.connected_to(role: :writing) do
+      ClientChronicle.where(
+        event_id: ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        subject_id: user.id.to_s,
+        subject_type: "Client",
+      ).order(occurred_at: :desc).first
+    end
+    assert_predicate reuse_audit, :present?
+    assert_equal "token_family_revoked", reuse_audit.context.deep_stringify_keys.fetch("result")
+
     token.reload
 
     assert_operator token.discarded_at, :<=, Time.current, "Original token should be revoked"

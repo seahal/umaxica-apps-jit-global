@@ -33,7 +33,9 @@ services:
     # keep-id-mapped workload UID.
     userns_mode: keep-id
     security_opt:
-      - label=level:s0:c101,c202
+      - no-new-privileges:true
+      - seccomp=unconfined
+      - "unmask=/proc/*"
     tty: true
     stdin_open: true
     # core-entrypoint `exec`s the command, so without this PID 1 is `sleep infinity`, which

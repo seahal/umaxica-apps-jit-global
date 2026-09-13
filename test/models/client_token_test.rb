@@ -445,21 +445,25 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_equal :rotated, result[:status]
   end
 
-  test "rotate_refresh_token! accepts explicit discarded_at and replaces infinite discarded_at" do
+  test "rotate_refresh_token! preserves a finite absolute expiry and replaces an infinite cutoff" do
     token = ClientToken.create!(
       user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       discarded_at: 1.day.from_now,
     )
-    explicit_lapses_at = 2.days.from_now
+    absolute_expiry = token.discarded_at
+    requested_extension = absolute_expiry + 1.day
 
-    token.rotate_refresh_token!(discarded_at: explicit_lapses_at)
+    token.rotate_refresh_token!(discarded_at: requested_extension)
 
-    assert_equal explicit_lapses_at.to_i, token.discarded_at.to_i
+    assert_equal absolute_expiry.to_i, token.discarded_at.to_i
 
     token.update_columns(discarded_at: Float::INFINITY)
     token.rotate_refresh_token!
 
     assert_in_delta 30.days.from_now.to_f, Float(token.discarded_at), 2
+    absolute_expiry = token.discarded_at
+    token.rotate_refresh_token!(discarded_at: absolute_expiry + 1.day)
+    assert_equal absolute_expiry.to_i, token.discarded_at.to_i
   end
 
   test "refresh token assignment and authentication handle blank values" do

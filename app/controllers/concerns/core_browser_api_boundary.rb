@@ -91,7 +91,9 @@ module CoreBrowserApiBoundary
     end
 
     resource = result.token.public_send(core_token_resource_method)
-    access_expires_at = CoreBrowserCredentialContract::ACCESS_TTL.from_now
+    access_expires_at = CoreBrowserCredentialContract.access_token_expires_at_for(
+      token_record: result.token,
+    )
     access_token = CoreBrowserCredentialContract.encode_access_token(
       resource: resource,
       token_record: result.token,

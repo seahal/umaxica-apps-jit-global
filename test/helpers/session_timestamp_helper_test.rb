@@ -77,6 +77,17 @@ class SessionTimestampHelperTest < ActiveSupport::TestCase
     assert_equal "13/09/2026 13:08", @helper.localized_session_timestamp(timestamp)
   end
 
+  test "formats midnight and noon distinctly in the preference timezone" do
+    Actor.preferences = Actor::Preference.from_jwt(
+      { "lx" => "en", "tz" => "Etc/UTC", "df" => "iso", "tf" => "12" },
+    )
+
+    I18n.with_locale(:en) do
+      assert_equal "2026-09-13 12:00 am", @helper.localized_session_timestamp(Time.utc(2026, 9, 13, 0, 0))
+      assert_equal "2026-09-13 12:00 pm", @helper.localized_session_timestamp(Time.utc(2026, 9, 13, 12, 0))
+    end
+  end
+
   test "returns nil for a missing timestamp" do
     assert_nil @helper.localized_session_timestamp(nil)
   end

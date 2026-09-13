@@ -330,7 +330,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/app/identity/recovery/appeals_controller.rb: 1
   app/controllers/base/app/identity/recovery/completions_controller.rb: 1
   app/controllers/base/app/identity/recovery_secrets_controller.rb: 1
-  app/controllers/base/app/identity/revocations/alls_controller.rb: 1
   app/controllers/base/app/identity/revocations/others_controller.rb: 1
   app/controllers/base/app/identity/secrets/removals_controller.rb: 1
   app/controllers/base/app/identity/secrets/rotations_controller.rb: 1
@@ -390,7 +389,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/com/identity/recovery/appeals_controller.rb: 1
   app/controllers/base/com/identity/recovery/completions_controller.rb: 1
   app/controllers/base/com/identity/removals_controller.rb: 1
-  app/controllers/base/com/identity/revocations/alls_controller.rb: 1
   app/controllers/base/com/identity/revocations/others_controller.rb: 1
   app/controllers/base/com/identity/rotations_controller.rb: 1
   app/controllers/base/com/identity/secret_credentials_controller.rb: 7
@@ -465,7 +463,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/org/identity/emails/registrations_controller.rb: 4
   app/controllers/base/org/identity/emails_controller.rb: 4
   app/controllers/base/org/identity/removals_controller.rb: 1
-  app/controllers/base/org/identity/revocations/alls_controller.rb: 1
   app/controllers/base/org/identity/revocations/others_controller.rb: 1
   app/controllers/base/org/identity/rotations_controller.rb: 1
   app/controllers/base/org/identity/secret_credentials_controller.rb: 7
@@ -485,42 +482,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/org/preference/customizations_controller.rb: 2
   app/controllers/base/org/preference/emails_controller.rb: 1
   app/controllers/base/org/preferences_controller.rb: 1
-  app/controllers/base/org/publishing/docs/app/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/docs/app/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/docs/app/entries_controller.rb: 6
-  app/controllers/base/org/publishing/docs/com/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/docs/com/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/docs/com/entries_controller.rb: 6
-  app/controllers/base/org/publishing/docs/org/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/docs/org/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/docs/org/entries_controller.rb: 6
-  app/controllers/base/org/publishing/help/app/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/help/app/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/help/app/entries_controller.rb: 6
-  app/controllers/base/org/publishing/help/com/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/help/com/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/help/com/entries_controller.rb: 6
-  app/controllers/base/org/publishing/help/org/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/help/org/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/help/org/entries_controller.rb: 6
-  app/controllers/base/org/publishing/info/app/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/info/app/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/info/app/entries_controller.rb: 6
-  app/controllers/base/org/publishing/info/com/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/info/com/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/info/com/entries_controller.rb: 6
-  app/controllers/base/org/publishing/info/org/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/info/org/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/info/org/entries_controller.rb: 6
-  app/controllers/base/org/publishing/news/app/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/news/app/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/news/app/entries_controller.rb: 6
-  app/controllers/base/org/publishing/news/com/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/news/com/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/news/com/entries_controller.rb: 6
-  app/controllers/base/org/publishing/news/org/entries/archives_controller.rb: 2
-  app/controllers/base/org/publishing/news/org/entries/publications_controller.rb: 2
-  app/controllers/base/org/publishing/news/org/entries_controller.rb: 6
   app/controllers/base/org/revisions_controller.rb: 1
   app/controllers/base/org/robots_controller.rb: 1
   app/controllers/base/org/roots_controller.rb: 1
@@ -1320,7 +1281,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/client_external_identity_policy.rb: 1
   app/policies/client_oidc_connection_policy.rb: 2
   app/policies/client_passkey_policy.rb: 7
-  app/policies/client_policy.rb: 7
+  app/policies/client_policy.rb: 6
   app/policies/client_preference_policy.rb: 1
   app/policies/client_secret_credential_policy.rb: 8
   app/policies/client_telephone_policy.rb: 4
@@ -1338,7 +1299,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/operator_lifecycle_request_policy.rb: 6
   app/policies/operator_oidc_connection_policy.rb: 2
   app/policies/operator_passkey_policy.rb: 7
-  app/policies/operator_policy.rb: 8
+  app/policies/operator_policy.rb: 7
   app/policies/operator_preference_policy.rb: 1
   app/policies/operator_secret_credential_policy.rb: 7
   app/policies/operator_telephone_policy.rb: 4
@@ -1363,7 +1324,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/visitor_email_policy.rb: 4
   app/policies/visitor_oidc_connection_policy.rb: 2
   app/policies/visitor_passkey_policy.rb: 7
-  app/policies/visitor_policy.rb: 4
+  app/policies/visitor_policy.rb: 3
   app/policies/visitor_preference_policy.rb: 1
   app/policies/visitor_secret_credential_policy.rb: 8
   app/policies/visitor_telephone_policy.rb: 4
@@ -1372,8 +1333,6 @@ Umaxica/ExplicitMethodVisibility:
   app/presenters/auth/app/settings/activity_log_presenter.rb: 7
   app/presenters/auth/com/settings/activity_log_presenter.rb: 7
   app/presenters/auth/org/settings/activity_log_presenter.rb: 7
-  app/presenters/base/com/identity/activity_log_presenter.rb: 7
-  app/presenters/base/org/identity/activity_log_presenter.rb: 7
   app/queries/authentication_credential_inventory.rb: 2
   app/queries/publishing_management_entries_query.rb: 5
   app/queries/publishing_published_entries_query.rb: 3
@@ -1595,7 +1554,7 @@ Umaxica/ExplicitMethodVisibility:
   app/values/webauthn/relying_party_config.rb: 4
   app/values/webauthn/surface.rb: 5
   app/values/webauthn/uv_policy.rb: 3
-  lib/config_values_host_family_values.rb: 11
+  lib/config_values_host_family_values.rb: 13
   lib/config_values_jump_gateway_values.rb: 1
   lib/config_values_oidc_authority_values.rb: 1
   lib/external_authentication_infrastructure_omniauth_google_oidc_enforcement.rb: 4

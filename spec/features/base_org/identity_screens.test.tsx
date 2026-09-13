@@ -206,24 +206,22 @@ describe("telephone screens", () => {
 
 describe("session inventory", () => {
   const columns = {
-    session: "Session",
-    kind: "Kind",
-    binding: "Binding",
+    device: "Device",
+    mode: "Mode",
     last_activity: "Last activity",
     created: "Created",
-    refresh_expires: "Refresh expires",
+    expires_at: "Expires at",
+    status: "Status",
+    action: "Action",
   };
 
   const currentRow = {
-    public_id: "tok_current",
-    current: true,
-    current_label: "current",
-    status: "active",
-    kind: "browser_web",
-    binding: "DBSC",
+    device: "Unknown device",
+    mode: "Emergency",
+    status: "Current session",
     last_activity: "01/01",
     created: "01/01",
-    refresh_expires: "02/01",
+    expires_at: "02/01",
     revoke: null,
   };
 
@@ -233,14 +231,19 @@ describe("session inventory", () => {
         title="Sessions"
         back_link={backLink}
         empty_message="No active sessions were found."
+        expires_at_description="This session ends at its expiry and cannot be extended."
         columns={columns}
         bulk_revocations={null}
         sessions={[currentRow]}
       />,
     );
 
-    expect(markup).toContain("tok_current");
+    expect(markup).toContain("Emergency");
+    expect(markup).toContain("Current session");
+    expect(markup).toContain("Unknown device");
     expect(markup).not.toContain("Revoke");
+    expect(markup).not.toContain("DBSC");
+    expect(markup).not.toContain("tok_current");
   });
 
   it("offers the bulk and per-session revocations the server sent", () => {
@@ -249,6 +252,7 @@ describe("session inventory", () => {
         title="Sessions"
         back_link={backLink}
         empty_message="No active sessions were found."
+        expires_at_description="This session ends at its expiry and cannot be extended."
         columns={columns}
         bulk_revocations={{
           others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
@@ -257,9 +261,8 @@ describe("session inventory", () => {
           currentRow,
           {
             ...currentRow,
-            public_id: "tok_other",
-            current: false,
-            current_label: null,
+            mode: "Normal",
+            status: "Active",
             revoke: { label: "Revoke", href: "/identity/sessions/tok_other", confirm: "Sure?" },
           },
         ]}
@@ -267,7 +270,9 @@ describe("session inventory", () => {
     );
 
     expect(markup).toContain("Revoke others");
-    expect(markup).toContain("/identity/sessions/tok_other");
+    expect(markup).toContain("Emergency");
+    expect(markup).toContain("Normal");
+    expect(markup).not.toContain(">tok_other<");
   });
 
   it("reports an empty inventory", () => {
@@ -276,6 +281,7 @@ describe("session inventory", () => {
         title="Sessions"
         back_link={backLink}
         empty_message="No active sessions were found."
+        expires_at_description="This session ends at its expiry and cannot be extended."
         columns={columns}
         bulk_revocations={null}
         sessions={[]}
@@ -289,12 +295,16 @@ describe("session inventory", () => {
     const markup = renderToStaticMarkup(
       <SessionShow
         title="Session"
-        heading="Auth::Org::Setting::Sessions#show"
-        body="Find me"
+        back_link={backLink}
+        columns={columns}
+        expires_at_description="This session ends at its expiry and cannot be extended."
+        session={currentRow}
       />,
     );
 
-    expect(markup).toContain("Auth::Org::Setting::Sessions#show");
+    expect(markup).toContain("Emergency");
+    expect(markup).toContain("This session ends at its expiry and cannot be extended.");
+    expect(markup).not.toContain("DBSC");
   });
 });
 

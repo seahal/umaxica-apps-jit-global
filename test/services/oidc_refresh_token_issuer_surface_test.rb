@@ -60,6 +60,15 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     assert_predicate usage.reload, :revoked?
     assert_equal [["refresh_reuse_detected", { staff_id: operator.id, user_token_id: usage.public_id }]],
                  emitted
+    audit = ChronicleRecord.connected_to(role: :writing) do
+      OperatorChronicle.where(
+        event_id: OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        subject_id: operator.id.to_s,
+        subject_type: "Operator",
+      ).order(occurred_at: :desc).first
+    end
+    assert_predicate audit, :present?
+    assert_equal "token_usage_revoked", audit.context.deep_stringify_keys.fetch("result")
   end
 
   test "a visitor refresh token rotates and touches the visitor connection" do
@@ -107,5 +116,14 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     assert_predicate usage.reload, :revoked?
     assert_equal [["refresh_reuse_detected", { visitor_id: visitor.id, user_token_id: usage.public_id }]],
                  emitted
+    audit = ChronicleRecord.connected_to(role: :writing) do
+      ClientChronicle.where(
+        event_id: ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+        subject_id: visitor.id.to_s,
+        subject_type: "Visitor",
+      ).order(occurred_at: :desc).first
+    end
+    assert_predicate audit, :present?
+    assert_equal "token_usage_revoked", audit.context.deep_stringify_keys.fetch("result")
   end
 end

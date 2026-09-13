@@ -182,56 +182,62 @@ describe("SessionsIndex", () => {
   const props = {
     title: "Sessions",
     back_link: { label: "Back", href: "/identity" },
-    columns: ["Session", ""],
+    expires_at_description: "This session ends at its expiry and cannot be extended.",
+    columns: {
+      device: "Device",
+      last_activity: "Last activity",
+      created: "Created",
+      expires_at: "Expires at",
+      status: "Status",
+      action: "Action",
+    },
     empty_message: "No active sessions were found.",
-    current_label: "current",
-    bulk_actions: {
-      revoke_others: { label: "Revoke others", url: "/identity/other_sessions", confirm: "Sure?" },
+    bulk_revocations: {
+      others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
     },
     sessions: [
       {
-        public_id: "sess-2",
-        current: false,
-        status: "1",
-        kind: "2",
-        binding: "NORMAL",
+        device: "Firefox / Linux",
         last_activity: "2026-01-01",
         created: "2026-01-01",
-        refresh_expires: "2026-02-01",
-        revoke: { label: "Revoke", url: "/identity/sessions/sess-2", confirm: "Sure?" },
+        expires_at: "2026-02-01",
+        status: "Active",
+        revoke: { label: "Revoke", href: "/identity/sessions/sess-2", confirm: "Sure?" },
       },
     ],
   };
 
   it("revokes the selected session with DELETE", () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(<SessionsIndex {...props} />);
     submitForm(1);
     acceptConfirmation();
 
-    expect(destroy).toHaveBeenCalledWith("/identity/sessions/sess-2", expect.objectContaining({}));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("form")[1]?.getAttribute("action")).toBe(
+      "/identity/sessions/sess-2",
+    );
   });
 
   it("keeps the bulk revocations behind their confirmation", () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(<SessionsIndex {...props} />);
     submitForm(0);
     declineConfirmation();
 
-    expect(destroy).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
   });
 
-  it("disables the button while the revocation is in flight", () => {
+  it("posts the server-provided bulk revocation action", () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(<SessionsIndex {...props} />);
     submitForm(0);
     acceptConfirmation();
 
-    const [, options] = present(destroy.mock.calls[0], "the first router.delete call");
-    act(() => {
-      startVisit(options);
-    });
-    act(() => {
-      finishVisit(options);
-    });
-    expect(destroy).toHaveBeenCalledWith("/identity/other_sessions", expect.objectContaining({}));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("form")[0]?.getAttribute("action")).toBe(
+      "/identity/other_sessions",
+    );
   });
 });
 

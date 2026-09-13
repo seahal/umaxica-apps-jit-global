@@ -6,7 +6,6 @@ module Base
     module Identity
       class SessionsController < BaseController
         include ::SurfaceInertiaPage
-        include ::SessionTimestampHelper
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
@@ -23,7 +22,8 @@ module Base
         def show
           authorize!(@session)
           render inertia: true, props: {
-            title: t(".page_title"),
+            title: t("base.shared.identity.sessions.title"),
+            expires_at_description: t("base.shared.identity.sessions.expires_at_description"),
             session: serialize_session(@session),
             back_link: {
               label: t("sign.app.settings.show.back"),
@@ -58,50 +58,50 @@ module Base
         end
 
         def sessions_index_props(sessions)
-          serialized = sessions.map { |session| serialize_session(session) }
-
+          serialized = sessions.map { |session| serialize_session(session).merge(revoke: session_revoke_action(session)) }
           {
-            title: "Sessions",
-            empty_message: t("base.app.identity.sessions.index.empty_message"),
+            title: t("base.shared.identity.sessions.title"),
+            empty_message: t("base.shared.identity.sessions.empty"),
+            expires_at_description: t("base.shared.identity.sessions.expires_at_description"),
             back_link: {
               label: t("sign.app.settings.show.back"),
               href: base_app_identity_path(ri: params[:ri]),
             },
-            table_headings: {
-              session: "Session",
-              kind: "Kind",
-              binding: "Binding",
-              last_activity: "Last activity",
-              created: "Created",
-              refresh_expires: "Refresh expires",
-            },
-            current_label: "current",
-            revoke_label: "Revoke",
-            revoke_confirm: t("base.app.identity.sessions.index.revoke_confirm"),
-            bulk_revocation: (serialized.any? { |session| !session.fetch(:current) }) ? bulk_revocation_props : nil,
+            columns: session_columns,
+            bulk_revocations: serialized.any? { |session| session[:revoke] } ? bulk_revocation_props : nil,
             sessions: serialized,
+          }
+        end
+
+        def session_columns
+          %i(device last_activity created expires_at status action).index_with do |column|
+            t("base.shared.identity.sessions.columns.#{column}")
+          end
+        end
+
+        def serialize_session(session)
+          ::Base::Identity::SessionPresenter.new.present(
+            session, current: current_session_record?(session), surface: :app,
+          )
+        end
+
+        def session_revoke_action(session)
+          return if current_session_record?(session)
+
+          {
+            label: t("base.shared.identity.sessions.revoke"),
+            href: base_app_identity_session_path(session.public_id, ri: params[:ri]),
+            confirm: t("base.app.identity.sessions.index.revoke_confirm"),
           }
         end
 
         def bulk_revocation_props
           {
-            others_label: t("sign.app.settings.sessions.revoke.others_button"),
-            others_confirm: t("sign.app.settings.sessions.revoke.others_confirm"),
-            others_url: base_app_identity_other_sessions_path(ri: params[:ri]),
-          }
-        end
-
-        def serialize_session(session)
-          {
-            public_id: session.public_id,
-            status: session.user_token_status_id.to_s,
-            kind: session.user_token_kind_id.to_s,
-            binding: session.dbsc_enabled? ? "DBSC" : "NORMAL",
-            last_activity: localized_session_timestamp(session.last_used_at || session.created_at),
-            created: localized_session_timestamp(session.created_at),
-            refresh_expires: localized_session_timestamp(session.discarded_at),
-            current: current_session_record?(session),
-            revoke_url: base_app_identity_session_path(session.public_id, ri: params[:ri]),
+            others: {
+              label: t("sign.app.settings.sessions.revoke.others_button"),
+              href: base_app_identity_other_sessions_path(ri: params[:ri]),
+              confirm: t("sign.app.settings.sessions.revoke.others_confirm"),
+            },
           }
         end
 

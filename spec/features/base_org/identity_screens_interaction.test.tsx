@@ -92,13 +92,15 @@ describe("destructive identity forms", () => {
         title="Sessions"
         back_link={{ label: "Back", href: "/identity" }}
         empty_message="No active sessions were found."
+        expires_at_description="This session ends at its expiry and cannot be extended."
         columns={{
-          session: "Session",
-          kind: "Kind",
-          binding: "Binding",
+          device: "Device",
+          mode: "Mode",
           last_activity: "Last activity",
           created: "Created",
-          refresh_expires: "Refresh expires",
+          expires_at: "Expires at",
+          status: "Status",
+          action: "Action",
         }}
         bulk_revocations={{
           others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },

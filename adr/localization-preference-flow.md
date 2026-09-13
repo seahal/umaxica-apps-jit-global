@@ -39,6 +39,12 @@ The request and cookie contract keeps:
 The preference UI, redirect behavior, and persisted state use the same contract across all three
 surfaces.
 
+User-facing timestamps on identity Activities and Sessions use the hydrated `Actor.preferences`
+projection as their source of truth. Rendering applies the preference timezone first, then the
+date-format preference (`ISO`, `US`, or `UK`) and clock-format preference (`24h` or `12h`). Browser
+locale and region-only request parameters do not choose date or clock formatting. Lists always sort
+the underlying absolute timestamp before rendering; localized display strings are not sort keys.
+
 Region resolution follows request-context precedence:
 
 1. An explicit valid `ri` request parameter wins for the current request.

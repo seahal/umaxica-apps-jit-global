@@ -107,6 +107,8 @@ class OidcRefreshTokenIssuer
       )
     end
 
+    RefreshTokenReuseActivityRecorder.call(token: parent, result: "token_usage_revoked") if parent
+
     Rails.logger.info(
       JitLogEvent.format(
         "authentication.oidc_refresh.reuse_detected",

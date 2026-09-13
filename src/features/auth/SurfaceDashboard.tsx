@@ -27,7 +27,7 @@ export type DashboardSection = {
 
 export type SurfaceDashboardProps = {
   title: string;
-  description: string;
+  description?: string;
   sections: DashboardSection[];
   /** Absent unless the server decided this actor should be prompted to add a credential. */
   credential_warning?: CredentialWarningProps | null;
@@ -69,7 +69,7 @@ export default function SurfaceDashboard({
   return (
     <Page
       title={title}
-      description={description}
+      {...(description ? { description } : {})}
       up={upLink}
       upVisit="inertia"
     >

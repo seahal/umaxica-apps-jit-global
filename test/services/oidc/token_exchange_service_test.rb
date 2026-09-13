@@ -43,6 +43,44 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_kind_of Integer, result.token_response[:expires_in]
   end
 
+  test "exchanged OIDC access id and refresh tokens end by the root session expiry" do
+    travel_to Time.utc(2026, 9, 13, 9, 0) do
+      absolute_expiry = 2.minutes.from_now
+      @user_session_token.update!(discarded_at: absolute_expiry)
+      code_record = issue_code!
+
+      result = with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+      assert_predicate result, :success?
+      access_token = AuthenticationTokenService.decode(
+        result.token_response.fetch(:access_token),
+        host: OidcIssuer.host_for_client(@client),
+        resource_type: "client",
+        issuer: OidcIssuer.for_client(@client),
+        audiences: [@client.aud],
+        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@client),
+      )
+      id_token = JWT.decode(result.token_response.fetch(:id_token), nil, false).first
+      usage = ClientTokenUsage.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+
+      assert_operator Time.at(access_token.fetch("exp")), :<=, absolute_expiry
+      assert_operator Time.at(id_token.fetch("exp")), :<=, absolute_expiry
+      assert_operator result.token_response.fetch(:expires_in), :<=, (absolute_expiry - Time.current).to_i
+      assert_operator usage.refresh_token_expires_at, :<=, absolute_expiry
+    end
+  end
+
   test "exchanges valid code with private_key_jwt client assertion" do
     code_record = issue_code!
     token_url = "https://log.umaxica.app/oauth/token"

@@ -43,6 +43,8 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
     SURFACES.each do |surface|
       host = surface.fetch(:host)
       token_record = surface.fetch(:build_token).call(self)
+      absolute_expiry = 2.minutes.from_now.change(usec: 0)
+      token_record.update!(discarded_at: absolute_expiry)
       refresh_plain = token_record.rotate_refresh_token!
 
       host! host
@@ -57,6 +59,27 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert response.parsed_body["refreshed"]
+      access_claims = JWT.decode(response.cookies[AuthenticationBase::ACCESS_COOKIE_KEY], nil, false).first
+      assert_operator Time.at(access_claims.fetch("exp")).utc, :<=, absolute_expiry
+
+      audit_class, event_id = if token_record.is_a?(OperatorToken)
+                                [OperatorChronicle, OperatorChronicleEvent::TOKEN_REFRESHED]
+                              else
+                                [ClientChronicle, ClientChronicleEvent::TOKEN_REFRESHED]
+                              end
+      subject_id = if token_record.respond_to?(:user_id)
+                     token_record.user_id
+                   elsif token_record.respond_to?(:visitor_id)
+                     token_record.visitor_id
+                   else
+                     token_record.staff_id
+                   end
+      audit = ChronicleRecord.connected_to(role: :writing) do
+        audit_class.where(event_id: event_id, subject_id: subject_id.to_s).order(occurred_at: :desc).first
+      end
+      assert_predicate audit, :present?
+      assert_empty audit.context
+      refute_includes audit.context.to_s, refresh_plain
     end
   end
 
