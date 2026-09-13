@@ -34,7 +34,6 @@ services:
     userns_mode: keep-id
     security_opt:
       - no-new-privileges:true
-      - seccomp=unconfined
       - "unmask=/proc/*"
     tty: true
     stdin_open: true
