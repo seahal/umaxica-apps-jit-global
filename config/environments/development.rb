@@ -244,6 +244,12 @@ Rails.application.configure do
     blazer.core.dev.localhost:3001
     pghero.core.dev.localhost:3000
     pghero.core.dev.localhost:3001
+    performance.core.dev.localhost:3000
+    performance.core.dev.localhost:3001
+    coverband.core.dev.localhost:3000
+    coverband.core.dev.localhost:3001
+    swagger.core.dev.localhost:3000
+    swagger.core.dev.localhost:3001
   )
 
   # Both families, deliberately. Per adr/public-private-url-boundaries.md, `PUBLIC_*` names
@@ -276,6 +282,9 @@ Rails.application.configure do
     PRIVATE_FLIPPER_URL
     PRIVATE_BLAZER_URL
     PRIVATE_PGHERO_URL
+    PRIVATE_PERFORMANCE_URL
+    PRIVATE_COVERBAND_URL
+    PRIVATE_SWAGGER_URL
     PRIVATE_DOCS_SERVICE_URL
     PRIVATE_DOCS_STAFF_URL
     PRIVATE_DOCS_CORPORATE_URL
@@ -309,6 +318,9 @@ Rails.application.configure do
     PUBLIC_FLIPPER_URL
     PUBLIC_BLAZER_URL
     PUBLIC_PGHERO_URL
+    PUBLIC_PERFORMANCE_URL
+    PUBLIC_COVERBAND_URL
+    PUBLIC_SWAGGER_URL
     PUBLIC_DOCS_SERVICE_URL
     PUBLIC_DOCS_CORPORATE_URL
     PUBLIC_DOCS_STAFF_URL

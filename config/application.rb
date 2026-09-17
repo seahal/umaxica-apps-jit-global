@@ -8,7 +8,8 @@ require "rails/all"
 
 Bundler.require(*Rails.groups)
 
-# `pghero` and `blazer` are `group :development` gems with `require: false` (Gemfile), so
+# `pghero`, `blazer`, and the two `rswag` halves are `group :development` gems with
+# `require: false` (Gemfile), so
 # Bundler.require never auto-requires them and the gems are not on the load path outside
 # development. They must be required here rather than from config/initializers: an engine only
 # contributes its own config/routes.rb through the `add_routing_paths` initializer, which has
@@ -17,6 +18,8 @@ Bundler.require(*Rails.groups)
 if Rails.env.development?
   require "pghero"
   require "blazer"
+  require "rswag/api"
+  require "rswag/ui"
 end
 
 require_relative "../lib/jit_security_active_record_encryption_key_provider"

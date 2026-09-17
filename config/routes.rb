@@ -47,6 +47,10 @@ Rails.application.routes.draw do
   # PgHero owns the PostgreSQL monitoring dashboard (PgHero::Engine), staff-only, development-only.
   draw :pghero
 
+  # Swagger owns the rendered view of the bundled OpenAPI descriptions and the authenticated
+  # endpoint that serves them (Rswag::Ui and Rswag::Api engines), staff-only, development-only.
+  draw :swagger
+
   # Any host that reached the app without matching a surface above is unknown;
   # answer it here rather than leaking a routing error.
   get "/", to: "unknown_hosts#show" # FIXIME: I want to remove this, or use root!

@@ -205,10 +205,16 @@ services:
           - flipper.core.dev.localhost
           - blazer.core.dev.localhost
           - pghero.core.dev.localhost
+          - performance.core.dev.localhost
+          - coverband.core.dev.localhost
+          - swagger.core.dev.localhost
           - mission.umaxica.dev
           - flipper.umaxica.dev
           - blazer.umaxica.dev
           - pghero.umaxica.dev
+          - performance.umaxica.dev
+          - coverband.umaxica.dev
+          - swagger.umaxica.dev
       observability: {}
       outer:
         aliases:

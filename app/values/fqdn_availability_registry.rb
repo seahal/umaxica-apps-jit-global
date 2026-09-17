@@ -72,6 +72,15 @@ module FqdnAvailabilityRegistry
     pghero: lambda { |_hosts|
       [ENV["PUBLIC_PGHERO_URL"], ENV["PRIVATE_PGHERO_URL"], "pghero.core.dev.localhost"]
     },
+    performance: lambda { |_hosts|
+      [ENV["PUBLIC_PERFORMANCE_URL"], ENV["PRIVATE_PERFORMANCE_URL"], "performance.core.dev.localhost"]
+    },
+    coverband: lambda { |_hosts|
+      [ENV["PUBLIC_COVERBAND_URL"], ENV["PRIVATE_COVERBAND_URL"], "coverband.core.dev.localhost"]
+    },
+    swagger: lambda { |_hosts|
+      [ENV["PUBLIC_SWAGGER_URL"], ENV["PRIVATE_SWAGGER_URL"], "swagger.core.dev.localhost"]
+    },
     side_service: ->(hosts) { [hosts.side_service.host, "wide.app.localhost"] },
     side_corporate: ->(hosts) { [hosts.side_corporate.host, "wide.com.localhost"] },
     side_staff: ->(hosts) { [hosts.side_staff.host, "wide.org.localhost"] },
