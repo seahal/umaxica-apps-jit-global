@@ -56,6 +56,10 @@ Rails.application.routes.draw do
   # config/application.rb because it carries no host constraint.
   draw :performance
 
+  # Coverband owns the runtime code-execution report (Coverband::Reporters::Web), staff-only,
+  # development-only, and only in the process that serves requests.
+  draw :coverband
+
   # Any host that reached the app without matching a surface above is unknown;
   # answer it here rather than leaking a routing error.
   get "/", to: "unknown_hosts#show" # FIXIME: I want to remove this, or use root!
