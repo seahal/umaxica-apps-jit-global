@@ -111,4 +111,17 @@ class OutboundHttpConnectionTest < ActiveSupport::TestCase
     assert_equal :net_http, OutboundHttp::Connection.default_adapter
     assert_equal [Faraday::Error], OutboundHttp::Connection::NETWORK_ERRORS
   end
+
+  test "an unstubbed request is rejected before external transport" do
+    connection = OutboundHttp::Connection.build(
+      url: "https://provider.example/keys",
+      open_timeout: 2,
+      read_timeout: 5,
+      require_https: true,
+    )
+
+    assert_raises(TestSupport::ExternalCommunicationError) do
+      connection.get("/keys")
+    end
+  end
 end

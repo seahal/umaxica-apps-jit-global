@@ -103,6 +103,8 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     def logged_in? = current_resource.present?
 
+    def current_authentication_event_at = nil
+
     def current_session
       @current_session_value
     end

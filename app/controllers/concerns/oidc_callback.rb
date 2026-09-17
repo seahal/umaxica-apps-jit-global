@@ -111,6 +111,7 @@ module OidcCallback
       client_id: oidc_client_id,
       resource_type: oidc_resource_type,
       expected_nonce: oidc_flow_value("nonce") || session.delete(:oidc_nonce),
+      expected_max_age: oidc_flow_value("max_age") || session.delete(:oidc_max_age),
       issuer: OidcIssuer.for_resource_type(oidc_resource_type),
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(oidc_resource_type),
     )
@@ -236,6 +237,7 @@ module OidcCallback
     session.delete(:oidc_state)
     session.delete(:oidc_nonce)
     session.delete(:oidc_pt)
+    session.delete(:oidc_max_age)
     session.delete(OIDC_PENDING_FLOWS_SESSION_KEY) if pending_flows
   end
 
@@ -279,6 +281,7 @@ module OidcCallback
     session.delete(:oidc_state)
     session.delete(:oidc_nonce)
     session.delete(:oidc_pt)
+    session.delete(:oidc_max_age)
   end
 
   def bind_oidc_rp_logout_session!(payload)

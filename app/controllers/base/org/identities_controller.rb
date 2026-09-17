@@ -36,7 +36,7 @@ module Base
           {
             heading: t("base.shared.identity.sections.security"),
             items: [
-              identity_hub_link(:sessions, base_org_identity_sessions_path(ri: params[:ri])),
+              identity_hub_link(:sessions, base_org_sessions_path(ri: params[:ri])),
               identity_hub_link(:secrets, base_org_identity_secrets_path(ri: params[:ri])),
               identity_hub_link(:activities, base_org_identity_activities_path(ri: params[:ri])),
               identity_hub_link(:standing, base_org_identity_standing_path(ri: params[:ri])),

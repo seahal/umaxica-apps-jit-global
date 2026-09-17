@@ -8,6 +8,7 @@ module BaseOauthTokenEndpoint
     result = ::OidcTokenExchangeCoordinator.call(
       grant_type: params[:grant_type],
       code: params[:code],
+      refresh_token: params[:refresh_token],
       redirect_uri: params[:redirect_uri],
       client_id: params[:client_id],
       client_secret: params[:client_secret],

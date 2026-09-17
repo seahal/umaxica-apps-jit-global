@@ -87,6 +87,37 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_request", response.parsed_body.fetch("error")
   end
 
+  test "com and org authorize return login_required for prompt none without a session" do
+    [
+      {
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        route: :base_com_oauth_authorization_url,
+        realm: "visitor",
+        transaction_class: VisitorOidcAuthorizationTransaction,
+      },
+      {
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+        route: :base_org_oauth_authorization_url,
+        realm: "operator",
+        transaction_class: OperatorOidcAuthorizationTransaction,
+      },
+    ].each do |surface|
+      host!(surface.fetch(:host))
+
+      assert_no_difference -> { surface.fetch(:transaction_class).count } do
+        get public_send(
+          surface.fetch(:route),
+          host: surface.fetch(:host),
+          **authorize_params(realm: surface.fetch(:realm)).merge(prompt: "none"),
+        ),
+            headers: { "Host" => surface.fetch(:host) }
+      end
+
+      assert_response :bad_request
+      assert_equal "login_required", response.parsed_body.fetch("error")
+    end
+  end
+
   test "com authorize rejects a redirect_uri that is not registered for the corporate realm" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 
@@ -190,17 +221,21 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
   test "com authorize refuses an expired result ceremony" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    issuance = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
-      login_challenge_ttl: 1.second, now: Time.current,
-    )
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
-      surface: "com", login_challenge: issuance.transaction.login_challenge,
-      actor: visitors(:reserved_visitor), session_ref: "com-expired-session", auth_method: "passkey",
-      authentication_event_at: Time.current,
-    )
+    now = Time.current
+    issuance = result = nil
+    travel_to(now) do
+      issuance = OidcAuthorizationTransactionCoordinator.issue!(
+        surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
+        login_challenge_ttl: 1.second, now: now,
+      )
+      result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+        surface: "com", login_challenge: issuance.transaction.login_challenge,
+        actor: visitors(:reserved_visitor), session_ref: "com-expired-session", auth_method: "passkey",
+        authentication_event_at: now,
+      )
+    end
 
-    travel 2.seconds do
+    travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
       get base_com_oauth_authorization_url(host: host, result: result.code),
           headers: { "Host" => host }
     end
@@ -211,17 +246,21 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
   test "org authorize refuses an expired result ceremony" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    issuance = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
-      login_challenge_ttl: 1.second, now: Time.current,
-    )
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
-      surface: "org", login_challenge: issuance.transaction.login_challenge,
-      actor: operators(:one), session_ref: "org-expired-session", auth_method: "passkey",
-      authentication_event_at: Time.current,
-    )
+    now = Time.current
+    issuance = result = nil
+    travel_to(now) do
+      issuance = OidcAuthorizationTransactionCoordinator.issue!(
+        surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
+        login_challenge_ttl: 1.second, now: now,
+      )
+      result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+        surface: "org", login_challenge: issuance.transaction.login_challenge,
+        actor: operators(:one), session_ref: "org-expired-session", auth_method: "passkey",
+        authentication_event_at: now,
+      )
+    end
 
-    travel 2.seconds do
+    travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
       get base_org_oauth_authorization_url(host: host, result: result.code),
           headers: { "Host" => host }
     end

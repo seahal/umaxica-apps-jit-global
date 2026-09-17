@@ -342,8 +342,8 @@ module AuthenticationBase
   # or session's persistence timestamps are not equivalent to the credential
   # event and must never be promoted into OIDC auth_time.
   def current_authentication_event_at
-    raw = defined?(Actor) ? Actor.authn.access_claims&.dig("auth_time") : nil
-    return parse_authentication_event_at(raw) if raw.present?
+    event_at = defined?(Actor) ? Actor.authn.authentication_event_at : nil
+    return event_at if event_at.present?
 
     token = respond_to?(:current_session, true) ? current_session : nil
     return token.authentication_event_at if token&.respond_to?(:authentication_event_at)

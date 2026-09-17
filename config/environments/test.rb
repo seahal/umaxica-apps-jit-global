@@ -9,16 +9,10 @@ require_relative "../../test/support/swappable_cache_store"
 require_relative "../../lib/umaxica/valkey/error"
 require_relative "../../lib/umaxica/valkey/configuration_error"
 require_relative "../../lib/umaxica/valkey/responsibility_urls"
+require_relative "../../lib/umaxica/valkey/test_target"
 
 if Rails.env.test?
-  {
-    cache: ENV.fetch("CACHE_REDIS_URL"),
-    rate_limit: ENV.fetch("RATE_LIMIT_REDIS_URL"),
-    auth_state: ENV.fetch("AUTH_STATE_REDIS_URL"),
-  }.each do |responsibility, url|
-    parsed = Umaxica::Valkey::ResponsibilityUrls.parse(url, responsibility: responsibility)
-    Umaxica::Valkey::ResponsibilityUrls.assert_nonprod_db!(parsed, env: "test")
-  end
+  Umaxica::Valkey::TestTarget.parse!
 
   run_id = ENV.fetch("VALKEY_NAMESPACE_RUN_ID")
   unless run_id.match?(/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/)

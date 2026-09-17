@@ -1,10 +1,82 @@
-# UMAXICA feature re-audit — revised evidence-based plan
+# UMAXICA feature re-audit — current execution status
 
-Revision: 2026-09-15 (continuation update)
+Revision: 2026-09-15 (E0 quality-gate continuation, current checkpoint)
 Repository: seahal/umaxica-apps-jit-global
-Branch / HEAD: feature / 7bee4819ffe2a402c63a04af2a368bfcaf253c0d
-Worktree: intentionally dirty (34 tracked/untracked path entries at the latest checkpoint)
-Scope: the original V2 run was a planning-only evidence re-audit and plan reconstruction. A later user instruction continued local work; this file now records that continuation separately from the still-unapproved all-95 execution. No Git state or remote write is permitted.
+Branch / HEAD: feature / `e9fa72ce5fc0c9e62c9a5a7a8233b477ba77f8b6`
+Worktree: intentionally dirty; all pre-existing and concurrent unrelated changes are preserved.
+Scope: E0 guard completion, quality-gate repair, and the authorized remaining local implementation slices. GitHub writes, deployment, live providers, and the all-95 deployment decision remain outside this task.
+
+## Current status table
+
+| Item | Status | Evidence / next action |
+|---|---|---|
+| E0 isolated test services and cleanup | VERIFIED for this host | Explicit PostgreSQL/Valkey targets, test-only databases, run/worker cleanup and external-transport guards are active. Keep CI service provisioning separately scoped. |
+| OIDC refresh reception | IMPLEMENTED LOCALLY | Base forwards `refresh_token`; client-bound rotation and persisted claims are exercised. Cross-surface failure injection and concurrent rotation remain open. |
+| OIDC prompt/max_age slice | IMPLEMENTED LOCALLY | Base app/com/org transaction persistence, `login`/`none` handling, freshness checks and RP ID-token verification are covered by focused tests. Full public end-to-end policy coverage remains open. |
+| Rails normal suite | GREEN | Latest isolated canonical CI run: 13,058 tests, 79,090 assertions, 0 failures, 0 errors, 3 existing skips; seed 48755; 16 workers. |
+| Rails SimpleCov gate | FAILED_CHECK | Latest same-source run: line 98.38% (`57,972/58,924`), branch 87.88% (`8,669/9,864`), method 93.87% (`10,064/10,721`); exit 2. Gates remain unchanged (line 97, branch 90, method 95 plus file/group/drop rules). |
+| JS formal coverage | GREEN | `bun run test:coverage` uses Node 24.20.0 + Vitest 5.0.0/V8: 85 files, 1,057 tests; statements 100%, branches 99.63%, functions 100%, lines 100%; exit 0. |
+| Canonical local CI | GREEN | Corrected isolated `bin/ci` passed all configured stages, including Rails 13,058/79,090 and Node/V8 JS coverage. It does not make the separate Rails SimpleCov gate green. |
+| Static/security gates | GREEN | `bun run check`, RuboCop, ERB lint, Brakeman 8.0.6, bundler-audit, bun audit and OpenAPI verification passed. Advisory freshness and wrapper cache behavior remain separately recorded. |
+| Remaining feature work | IN PROGRESS | E1–E10 are not complete. Ruby coverage, public partial-failure matrices, full cross-surface auth-time provenance, physical DPoP/DBSC validation, and GUID persistence ownership remain open; no all-95 or deployment decision is made. |
+
+The current implementation state is: **E0 execution and ordinary Rails baseline are achieved; the
+Ruby coverage gate and several feature slices remain open.** This table is the active checkpoint;
+the older planning verdict and source audit below are retained as history and must not be read as a
+reason to stop the authorized local implementation work.
+
+## Latest verification checkpoint — 2026-09-15
+
+The corrected local `bin/ci` was run with explicit PostgreSQL test-target variables and Valkey
+responsibility URLs for logical databases 3, 4, and 5. It exited 0 after the test database manifest,
+JavaScript format/lint/type/dead-code/OpenAPI checks, Ruby/ERB lint, bundler-audit, bun audit,
+Brakeman, loopback Rails boot, Node/V8 JS coverage, and Rails tests. The Rails stage reported
+13,058 runs, 79,090 assertions, 0 failures, 0 errors, and 3 pre-existing skips; seed 48755, 16
+workers. The prior CI attempt with an inherited cache URL on the wrong logical database was rejected
+before database preparation and is retained only as a fail-closed guard observation.
+
+The same source state's explicit Rails coverage run completed 13,058 tests with no test failures,
+but SimpleCov exited 2: line 98.38% (57,972/58,924), branch 87.88% (8,669/9,864), and method
+93.87% (10,064/10,721). Existing line, branch, method, file, group, and maximum-drop gates were
+not changed. Formal Node/V8 coverage passed separately at statements 100%, branches 99.63%,
+functions 100%, and lines 100% for 85 files and 1,057 tests. These results do not claim all-95
+completion, physical DPoP/DBSC interoperability, GUID persistence ownership, or deployment
+approval.
+
+## Current E0 status
+
+Rails execution is available through the explicit isolated test-service wrapper. The effective
+test databases are `test_primary_db`, `test_app_ticket_db`, `test_com_ticket_db`, and
+`test_org_ticket_db` on the verified PostgreSQL test host; Valkey responsibilities use logical
+databases 3, 4, and 5 on the verified Valkey test host. The Blazer migration
+`20260915000000_create_blazer_tables` was applied only to the dedicated primary test database,
+and the OIDC refresh-claim migrations were applied only to the three ticket test databases after
+explicit target checks. No development, production, shared user database, or broad Valkey database
+was reset, dropped, recreated, or flushed.
+
+The E0 guard/transport tests, authorization-code/OTP target, OIDC refresh/freshness regressions,
+focused endpoint tests, and the latest full Rails suite pass. The latest canonical CI run
+exercised 13,058 tests and 79,090 assertions with no failures or errors and 3 existing skips.
+The corrected local `bin/ci` passed its configured stages after all three Valkey responsibility
+URLs were supplied explicitly. These are separate from the Rails SimpleCov gate, which remains
+red at the values in the status table above.
+
+No threshold, assertion, skip, or exclusion was weakened. Formal Node-backed Vitest V8 coverage
+passes with 85 files and 1,057 tests. Bundler-audit, Brakeman, static checks, and the local
+canonical CI pass; the Ruby coverage gate remains open and is not being treated as green.
+
+The current implementation slice connects `grant_type=refresh_token` at the Base OAuth token
+endpoint, persists the original OIDC `auth_time`/`acr`/`amr`/nonce on RP sessions, rotates only a
+client-bound refresh family, and fails closed when authentication-event time is absent. It also
+persists nullable `prompt`/`max_age` options on the three dedicated authorization-transaction
+stores, enforces `login`/`none` and freshness at Base, and passes the expected max-age to RP
+ID-token verification. The migration and focused tests are limited to the verified test ticket
+databases; full cross-surface/failure-injection coverage and the broader auth-time source audit
+remain open.
+
+The detailed commands, exit statuses, schema/connection checks, repairs, and remaining external
+limitations are recorded in `evidence/2026-09-15-e0-green-baseline.md`. The historical all-95
+NO_GO assessment remains below as history and is not overwritten by this limited E0 result.
 
 ## 1. Executive verdict
 
@@ -14,16 +86,29 @@ The remaining gates are: missing original requirement/review source files; a sta
 
 This plan uses the 95-row summaries from the previous draft only as provisional aliases. They do not reconstruct the unavailable P00-P17 source. REQ-095 remains unknown rather than invented.
 
+Current continuation status: E0 execution, ordinary Rails, formal Node/Vitest coverage, and local
+canonical CI are green. Ruby branch/method coverage remains below the unchanged gate, and the
+remaining E1–E10 feature slices are not complete. This status is separate from the historical
+all-95 planning verdict and does not authorize deployment.
+
 ## 2. Current worktree and evidence boundary
 
 At the initial planning snapshot, HEAD was 430ac354ba06c9d22885e1e69d027a7a1b1d5280 on feature with no staged changes. Compared with review SHA 08fc1eeb6d2f354078787ab6f3f4e6890c774def, HEAD contains 21 committed file changes (+307/-6), including an accepted Social Identity Step-Up ADR and tests, AAL documentation reconciliation, inert self-service Create actions, a Base Root Up link for those pages, sign-up email value restoration, and React behavior tests. These changes are now current repository evidence; they are not independent verification. Twelve tracked Auth/app-com email and OTP files also had user changes in the starting worktree. Four untracked files predated this run: misc.md, notes/implementation/2026-09-14-refactor-plan-before-execution.md, notes/implementation/2026-09-14-refactor-plan-history.md, and refactor.md. They are preserved; only refactor.md is updated. The auxiliary untracked notes/memo say D-ENTRY was adopted for a cycle, which conflicts with the current V2 requirement and is not an accepted ADR. Current Auth/Base source also shows an anonymous entry redirect-cycle candidate; neither the draft nor current code alone resolves the product choice.
 
 The S1 original 18-section/95-ID plan file was not found (supplied SHA-256: 2ae07102f486fd13c64fc45acfca65b990cc438db1098610dcb09415b52a92c8); S2 Sol review was not found (supplied SHA-256: 3052638bea18ef029798632f068402333638eeacd222de23bad1af05e91b8533). `umaxica_feature_plan_review.md` was not found either. The conversation contains many source request prompts, but not the byte-exact S1 REQ ledger or a verifiable mapping from its IDs to those prompts; at least one earlier source prompt is visibly truncated. The digests were not recomputed against local bytes. Do not treat the prior ledger or notes as original requirements or independent runtime evidence.
 
-At the initial planning snapshot only refactor.md was changed. The continuation has since made a small, explicitly scoped local source/test change set described in §19; no migration, route, setting, ADR, Git state, database, external service or GitHub state was changed. Pre-existing user changes remain preserved.
+At the initial planning snapshot only refactor.md was changed. The later E0 continuation is
+recorded separately at the top of this file and in the dated evidence record; it includes only
+the explicitly scoped test-environment guards, test-support changes, limited contract repairs,
+and the approved migration on `test_primary_db`. No route, GitHub state, deployment, or external
+provider state was changed. Pre-existing and concurrent unrelated changes remain preserved.
 
 
-### Current repository facts
+### Historical repository facts at the prior audit snapshot
+
+The following table is retained evidence from the earlier planning-only audit. Rows that describe
+missing refresh or freshness support are superseded by the current checkpoint above; rows that do
+not have a later evidence entry remain open. It is not a current green claim.
 
 | Area | Source fact | Reachability/validation limit |
 |---|---|---|
@@ -2223,3 +2308,15 @@ assertion after the earlier green run; its rerun stopped before assertions becau
 the unrelated pending Blazer migration `db/migrate/20260915000000_create_blazer_tables.rb`.
 No migration was applied, so the earlier 3-run/14-assertion result remains the last executed
 contract result and the added assertion is explicitly unverified.
+# Current execution status — E0 safety guard completion
+
+As of 2026-09-15, Rails execution is enabled against an explicitly verified PostgreSQL/Valkey
+test target. This continuation is implementing E0 guard completion and repairing the green
+baseline; it is not an execution of the all-95 feature plan. Full feature completion, deployment
+GO/NO-GO, and unrelated Core/PgHero work are outside this task. Existing user and concurrent
+worktree changes are preserved.
+
+The dedicated `test_primary_db` received only migration `20260915000000_create_blazer_tables`
+after a read-only identity check. The new database and Valkey guards, run/worker cleanup scope,
+and external-provider deny boundary still require the current contract and authentication tests to
+be rerun. A green baseline has not yet been claimed.

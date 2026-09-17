@@ -20,13 +20,15 @@ class OidcTokenExchangeCoordinator < ApplicationService
       def auth_method = amr
     end
 
-  def initialize(grant_type:, code:, redirect_uri:, client_id:, client_secret: nil, code_verifier:,
+  def initialize(grant_type:, code: nil, refresh_token: nil, redirect_uri: nil, client_id:, client_secret: nil,
+                 code_verifier: nil,
                  client_assertion_type: nil, client_assertion: nil,
                  dpop_proof: nil, token_endpoint_uri: nil, request_method: "POST",
                  code_store: Valkey::AuthState::AuthorizationCodeStore.new)
     super()
     @grant_type = grant_type
     @code = code
+    @refresh_token = refresh_token
     @redirect_uri = redirect_uri
     @client_id = client_id
     @client_secret = client_secret
@@ -40,10 +42,16 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def call
-    return failure("invalid_request", "grant_type must be 'authorization_code'") unless valid_grant_type?
+    return failure(
+      "invalid_request", "grant_type must be 'authorization_code' or 'refresh_token'",
+    ) unless valid_grant_type?
     return failure("invalid_client", "OIDC client authentication failed") unless authenticated_client?
 
-    exchange_authorization_code!
+    if grant_type == "refresh_token"
+      exchange_refresh_token!
+    else
+      exchange_authorization_code!
+    end
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::SerializationError, Umaxica::Valkey::OperationError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] auth-state store failure: #{e.class}: #{e.message}")
     failure("server_error", "authorization code store unavailable")
@@ -57,12 +65,12 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   private
 
-  attr_reader :grant_type, :code, :redirect_uri, :client_id, :client_secret, :client_assertion_type,
+  attr_reader :grant_type, :code, :refresh_token, :redirect_uri, :client_id, :client_secret, :client_assertion_type,
               :client_assertion, :code_verifier,
               :dpop_proof, :token_endpoint_uri, :request_method, :code_store
 
   def valid_grant_type?
-    grant_type == "authorization_code"
+    %w(authorization_code refresh_token).include?(grant_type)
   end
 
   def authenticated_client?
@@ -138,6 +146,96 @@ class OidcTokenExchangeCoordinator < ApplicationService
     else
       failure("server_error", "authorization code consume failed")
     end
+  end
+
+  def exchange_refresh_token!
+    return failure("invalid_grant", "refresh_token is required") if refresh_token.blank?
+
+    resolved = OidcRefreshTokenIssuer.resolve(refresh_token: refresh_token)
+    return failure("invalid_grant", "refresh token not found") unless resolved
+
+    usage = resolved.usage
+    return failure("invalid_grant", "refresh token is not bound to this client") unless
+      usage.oidc_client_id == client_id
+
+    resource_type = resource_type_for_usage(usage)
+    client = OidcClientRegistry.find(client_id)
+    return failure("invalid_client", "unknown OIDC client") unless client
+    return failure("invalid_grant", "refresh token resource mismatch") unless
+      OidcIssuer.resource_type_for_client(client) == resource_type
+
+    root_token = usage.parent_token
+    resource = resource_for_root_token(root_token, resource_type)
+    return failure("invalid_grant", "refresh token session is not active") unless
+      root_token&.currently_usable? && resource&.active?
+
+    auth_time = parse_time(usage.oidc_auth_time)
+    return failure("invalid_grant", "refresh token authentication time missing") unless auth_time
+
+    scopes = usage.oidc_scope.to_s.split
+    return failure("invalid_grant", "refresh token scope is invalid") unless valid_refresh_scopes?(client, scopes)
+
+    dpop_jkt = validate_refresh_dpop_proof(usage, resource_type)
+    return dpop_jkt if dpop_jkt.is_a?(Result)
+
+    rotation = OidcRefreshTokenIssuer.call(refresh_token: refresh_token, client_id: client_id)
+    return failure("invalid_grant", "refresh token could not be rotated") unless rotation.success?
+
+    usage = rotation.token
+    issue_refreshed_token_result(
+      usage: usage,
+      resource: resource,
+      client: client,
+      root_token: root_token,
+      refresh_plain: rotation.refresh_token,
+      dpop_jkt: dpop_jkt,
+      auth_time: auth_time,
+      resource_type: resource_type,
+    )
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    Rails.logger.error("[OidcTokenExchangeCoordinator] refresh rotation failed: #{e.class}")
+    failure("server_error", "refresh token rotation failed")
+  end
+
+  def resource_type_for_usage(usage)
+    case usage
+    when ClientRpSession then "client"
+    when OperatorRpSession then "operator"
+    when VisitorRpSession then "visitor"
+    else nil
+    end
+  end
+
+  def resource_for_root_token(root_token, resource_type)
+    return unless root_token
+
+    case resource_type
+    when "operator" then root_token.staff
+    when "visitor" then root_token.visitor
+    when "client" then root_token.user
+    end
+  end
+
+  def valid_refresh_scopes?(client, scopes)
+    scopes.include?("openid") && (scopes - client.allowed_scopes).empty?
+  end
+
+  def validate_refresh_dpop_proof(usage, resource_type)
+    expected_jkt = usage.dpop_jkt.to_s
+    return nil if expected_jkt.blank? && dpop_proof.blank?
+    return failure("invalid_request", "DPoP proof is required") if expected_jkt.present? && dpop_proof.blank?
+    return failure("invalid_request", "DPoP proof is not bound to the refresh token") if expected_jkt.blank?
+
+    result = DpopProofVerifier.new(
+      proof_jwt: dpop_proof,
+      request_method: request_method,
+      request_uri: token_endpoint_uri.to_s,
+      resource_type: resource_type,
+    ).call
+    return failure("invalid_request", "DPoP proof invalid: #{result.error}") unless result.valid?
+    return failure("invalid_request", "DPoP proof key mismatch") unless result.jkt == expected_jkt
+
+    result.jkt
   end
 
   def prevalidate_payload(payload)
@@ -230,6 +328,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
           client: client,
           scope: authorization_code.scope,
           dpop_jkt: dpop_jkt,
+          auth_time: authorization_code.auth_time,
+          acr: authorization_code.acr,
+          amr: authorization_code.amr,
+          nonce: authorization_code.nonce,
         )
 
         refresh_plain = issue_or_rotate_usage_refresh_token!(usage)
@@ -366,7 +468,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     end
   end
 
-  def create_or_resolve_active_usage!(root_token:, client:, scope:, dpop_jkt:)
+  def create_or_resolve_active_usage!(root_token:, client:, scope:, dpop_jkt:, auth_time:, acr:, amr:, nonce:)
     usage_class = usage_class_for_root_token(root_token)
     owner = connection_owner_for(usage_class)
     usage = nil
@@ -384,6 +486,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
         :oidc_scope => scope,
         :oidc_jti => SecureRandom.uuid,
         :dpop_jkt => dpop_jkt,
+        :oidc_auth_time => auth_time,
+        :oidc_acr => acr,
+        :oidc_amr => JSON.generate(Array(amr).map(&:to_s)),
+        :oidc_nonce => nonce,
         :last_used_at => Time.current,
         :refresh_token_expires_at => refresh_expires_at_for(root_token),
       )
@@ -392,6 +498,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
         oidc_scope: scope,
         oidc_jti: SecureRandom.uuid,
         dpop_jkt: dpop_jkt,
+        oidc_auth_time: auth_time,
+        oidc_acr: acr,
+        oidc_amr: JSON.generate(Array(amr).map(&:to_s)),
+        oidc_nonce: nonce,
         last_used_at: Time.current,
       )
       usage.public_send("#{parent_token_foreign_key_for(usage_class)}=", root_token)
@@ -444,6 +554,96 @@ class OidcTokenExchangeCoordinator < ApplicationService
       error: nil,
       error_description: nil,
     )
+  end
+
+  def issue_refreshed_token_result(usage:, resource:, client:, root_token:, refresh_plain:, dpop_jkt:,
+                                   auth_time:, resource_type:)
+    now = Time.current.utc
+    client = client_for_resource_type(client, resource_type)
+    issuer = OidcIssuer.for_resource_type(resource_type)
+    subject = OidcSubject.for(resource, resource_type: resource_type)
+    access_expires_at = session_token_expiry(now, root_token)
+    scopes = usage.oidc_scope.to_s.split
+    amr = parse_stored_amr(usage.oidc_amr)
+    access_token = refreshed_access_token(
+      usage:, resource:, root_token:, dpop_jkt:, auth_time:, resource_type:, client:, issuer:, subject:,
+      scopes:, amr:, access_expires_at:,
+    )
+    id_token =
+      refreshed_id_token(
+        usage:, resource:, root_token:, auth_time:, resource_type:, client:, issuer:, subject:, scopes:, amr:, now:,
+      )
+    raise TokenIssuanceError, "required token output is blank" if access_token.blank? || refresh_plain.blank? ||
+      (scopes.include?("openid") && id_token.blank?)
+
+    Result.new(
+      success: true,
+      token_response: {
+        access_token: access_token,
+        token_type: dpop_jkt.present? ? "DPoP" : "Bearer",
+        expires_in: [(access_expires_at - now).to_i, 0].max,
+        refresh_token: refresh_plain,
+        id_token: id_token,
+      }.compact,
+      error: nil,
+      error_description: nil,
+    )
+  end
+
+  def refreshed_access_token(usage:, resource:, root_token:, dpop_jkt:, auth_time:, resource_type:, client:, issuer:,
+                             subject:, scopes:, amr:, access_expires_at:)
+    AuthenticationTokenService.encode(
+      resource,
+      host: OidcIssuer.host_for_resource_type(resource_type),
+      session_public_id: root_token.public_id,
+      oidc_sid: usage.public_id,
+      oidc_jti: rp_session_oidc_jti(usage),
+      resource_type: resource_type,
+      expires_at: access_expires_at,
+      scopes: scopes,
+      acr: usage.oidc_acr,
+      amr: amr,
+      dpop_jkt: dpop_jkt,
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(resource_type),
+      issuer: issuer,
+      audiences: [client.aud],
+      subject: subject,
+      auth_time: auth_time,
+      client_id: client.client_id,
+    )
+  end
+
+  def refreshed_id_token(
+    usage:, resource:, root_token:, auth_time:, resource_type:, client:, issuer:, subject:, scopes:, amr:, now:
+  )
+    return unless scopes.include?("openid")
+
+    OidcIdTokenIssuer.call(
+      resource: resource,
+      client: client,
+      nonce: usage.oidc_nonce,
+      issued_at: now,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: now + OidcIdTokenIssuer::TOKEN_TTL,
+        absolute_expiry: root_token.discarded_at,
+      ),
+      acr: usage.oidc_acr,
+      amr: amr,
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(resource_type),
+      issuer: issuer,
+      subject: subject,
+      sid: usage.public_id,
+      auth_time: auth_time,
+    )
+  end
+
+  def parse_stored_amr(value)
+    return [] if value.blank?
+
+    parsed = JSON.parse(value.to_s)
+    parsed.is_a?(Array) ? parsed.map(&:to_s) : []
+  rescue JSON::ParserError
+    []
   end
 
   def encode_exchanged_access_token(authorization_code:, resource:, client:, root_token:, usage:, dpop_jkt:,

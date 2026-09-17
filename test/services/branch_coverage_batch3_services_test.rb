@@ -22,7 +22,7 @@ class BranchCoverageBatch3ServicesTest < ActiveSupport::TestCase
     inactive.define_singleton_method(:active?) { false }
     coordinator.define_singleton_method(:resolve_resource) { |_| inactive }
     coordinator.define_singleton_method(:resolve_root_token) { |_| usable_root }
-    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload)
+    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload, dpop_jkt: nil)
 
     assert_not result.success?
     assert_equal "invalid_grant", result.error
@@ -30,14 +30,14 @@ class BranchCoverageBatch3ServicesTest < ActiveSupport::TestCase
     resource = active_resource
     coordinator.define_singleton_method(:resolve_resource) { |_| resource }
     coordinator.define_singleton_method(:resolve_root_token) { |_| nil }
-    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload)
+    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload, dpop_jkt: nil)
 
     assert_equal "invalid_grant", result.error
 
     dead_root = Object.new
     dead_root.define_singleton_method(:currently_usable?) { false }
     coordinator.define_singleton_method(:resolve_root_token) { |_| dead_root }
-    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload)
+    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload, dpop_jkt: nil)
 
     assert_equal "invalid_grant", result.error
   end

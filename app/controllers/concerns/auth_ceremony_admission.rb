@@ -13,7 +13,7 @@ module AuthCeremonyAdmission
   def admit_or_render_sign_ceremony!(expected_intent:)
     apply_admission_transport_headers!
 
-    if logged_in? && params[:admission].blank? && !admitted_ceremony_present?
+    if logged_in? && params[:admission].blank? && !admitted_ceremony_present?(expected_intent: expected_intent)
       return handle_logged_in_direct_entry!
     end
 
@@ -21,18 +21,34 @@ module AuthCeremonyAdmission
       return redeem_admission_and_redirect!(expected_intent: expected_intent)
     end
 
-    if admitted_ceremony_present?
+    if ceremony_admission_present?
       stored = session[:oidc_authorization_intent].to_s
-      if stored.blank? || stored == expected_intent
+      local_intent = session[:auth_ceremony_admitted_intent].to_s
+      if (stored.blank? || stored == expected_intent) && (local_intent.blank? || local_intent == expected_intent)
         @oidc_authorization_intent = session[:oidc_authorization_intent]
         return yield
       end
+
+      return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
     end
 
     bridge_to_base_admission!
   end
 
   def redeem_admission_and_redirect!(expected_intent:)
+    begin
+      BaseAuthAdmissionCoordinator.consume_local_entry!(
+        raw_code: params[:admission].to_s,
+        surface: auth_ceremony_surface,
+        expected_intent: expected_intent,
+      )
+      rotate_auth_ceremony_session!
+      session[:auth_ceremony_admitted_intent] = expected_intent
+      return redirect_to(auth_ceremony_clean_url, status: :see_other)
+    rescue BaseAuthAdmissionCoordinator::Denied => e
+      raise unless e.message == "local admission missing"
+    end
+
     payload = BaseAuthAdmissionCoordinator.consume_handoff!(
       raw_code: params[:admission].to_s,
       surface: auth_ceremony_surface,
@@ -55,6 +71,7 @@ module AuthCeremonyAdmission
     end
 
     rotate_auth_ceremony_session!
+    session.delete(:auth_ceremony_admitted_intent)
     session[:oidc_authorization_login_challenge] = transaction.login_challenge
     session[:oidc_authorization_intent] = transaction.intent
     redirect_to(auth_ceremony_clean_url, status: :see_other)
@@ -73,9 +90,14 @@ module AuthCeremonyAdmission
     write_auth_ceremony_sid_cookie!(sid)
   end
 
-  def admitted_ceremony_present?
+  def ceremony_admission_present?
     # Ceremony cookie is continuity only and cannot start a protected flow.
-    session[:oidc_authorization_login_challenge].present?
+    session[:oidc_authorization_login_challenge].present? || session[:auth_ceremony_admitted_intent].present?
+  end
+
+  def admitted_ceremony_present?(expected_intent:)
+    session[:oidc_authorization_login_challenge].present? ||
+      session[:auth_ceremony_admitted_intent].to_s == expected_intent.to_s
   end
 
   def bridge_to_base_admission!

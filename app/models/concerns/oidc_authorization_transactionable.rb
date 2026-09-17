@@ -24,6 +24,8 @@ module OidcAuthorizationTransactionable
     validates :surface, inclusion: { in: %w(app com org) }
     validates :intent, inclusion: { in: %w(sign_in sign_up invitation reauthentication step_up) }
     validates :response_type, inclusion: { in: ["code"] }
+    validates :oidc_prompt, inclusion: { in: OidcAuthorizeRequestResolver::SUPPORTED_PROMPTS }, allow_nil: true
+    validates :oidc_max_age, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
     validates :code_challenge_method, inclusion: { in: ["S256"] }
     validates :status, inclusion: { in: STATUSES }
     validates :transaction_id, uniqueness: true
@@ -39,7 +41,7 @@ module OidcAuthorizationTransactionable
 
     def create_transaction!(surface:, intent:, client_id:, redirect_uri:, response_type:, scope:, state:, nonce:,
                             code_challenge:, code_challenge_method:, login_challenge:, login_challenge_expires_at:,
-                            expires_at:, now: Time.current)
+                            expires_at:, prompt: nil, max_age: nil, now: Time.current)
       connection_owner.connected_to(role: :writing) do
         create!(
           transaction_id: SecureRandom.uuid,
@@ -53,6 +55,8 @@ module OidcAuthorizationTransactionable
           nonce: nonce.to_s,
           code_challenge: code_challenge.to_s,
           code_challenge_method: code_challenge_method.to_s,
+          oidc_prompt: prompt.presence,
+          oidc_max_age: max_age.presence,
           login_challenge: login_challenge.to_s,
           login_challenge_expires_at: login_challenge_expires_at,
           expires_at: expires_at,
@@ -102,7 +106,9 @@ module OidcAuthorizationTransactionable
       nonce: nonce,
       code_challenge: code_challenge,
       code_challenge_method: code_challenge_method,
-    }
+      prompt: oidc_prompt,
+      max_age: oidc_max_age,
+    }.compact
   end
 
   def register_authentication!(actor_ref:, session_ref:, auth_method:, acr:, authentication_event_at: nil,

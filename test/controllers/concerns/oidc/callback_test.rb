@@ -21,14 +21,10 @@ class OidcCallbackTestController < ApplicationController
     session[:oidc_state] = params[:state] if params.key?(:state)
     session[:oidc_nonce] = params[:nonce] if params.key?(:nonce)
     session[:oidc_pt] = params[:pt] if params.key?(:pt)
+    session[:oidc_max_age] = params[:max_age].to_i if params.key?(:max_age)
     if params[:pending_state].present?
       session["oidc_pending_flows"] ||= {}
-      session["oidc_pending_flows"][params[:pending_state]] = {
-        "code_verifier" => params[:pending_code_verifier],
-        "nonce" => params[:pending_nonce],
-        "pt" => params[:pending_pt],
-        "created_at" => params.fetch(:pending_created_at, Time.current.to_i),
-      }
+      session["oidc_pending_flows"][params[:pending_state]] = pending_flow
     end
 
     head :no_content
@@ -43,6 +39,18 @@ class OidcCallbackTestController < ApplicationController
       oidc_pending_flows: session["oidc_pending_flows"],
     }
   end
+
+  def pending_flow
+    {
+      "code_verifier" => params[:pending_code_verifier],
+      "nonce" => params[:pending_nonce],
+      "pt" => params[:pending_pt],
+      "created_at" => params.fetch(:pending_created_at, Time.current.to_i),
+    }.tap do |flow|
+      flow["max_age"] = params[:pending_max_age].to_i if params[:pending_max_age].present?
+    end
+  end
+  private :pending_flow
 
   def oidc_client_id
     "base-rails-rp"
@@ -171,6 +179,33 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                  OidcCallbackTestController.last_login_kwargs.fetch(:authentication_event_at)
   end
 
+  test "passes the pending max_age to ID Token verification" do
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", max_age: "60", pt: "/after" }
+
+    result = Result.new(
+      success?: true,
+      token_response: { access_token: "access", refresh_token: "refresh", id_token: "id-token" },
+      error: nil,
+      error_description: nil,
+    )
+    id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
+      success?: true,
+      payload: { "sub" => "42", "nonce" => "nonce", "auth_time" => @authentication_event_at },
+      error: nil,
+    )
+    captured = nil
+
+    OidcRpTokenClient.stub(:call, result) do
+      OidcIdTokenVerifier.stub(:call, ->(**kwargs) { captured = kwargs; id_token_result }) do
+        get "/oidc/callback", params: { code: "abc", state: "state" }
+      end
+    end
+
+    assert_response :redirect
+    assert_equal 60, captured.fetch(:expected_max_age)
+  end
+
   test "rejects a verified ID Token without an authentication event time" do
     get "/oidc/callback/session",
         params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
@@ -208,7 +243,9 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
       error_description: nil,
     )
-    future_auth_time = Time.current.to_i + AuthenticationJwtConfiguration.leeway_seconds + 1
+    # Leave enough margin for a full request under the parallel suite; a one-second
+    # boundary can become valid again before the callback evaluates it.
+    future_auth_time = Time.current.to_i + AuthenticationJwtConfiguration.leeway_seconds + 1.minute.to_i
     id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
       success?: true,
       payload: { "sub" => "42", "nonce" => "nonce", "auth_time" => future_auth_time },

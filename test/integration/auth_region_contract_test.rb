@@ -45,23 +45,18 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # The credential gateway link the base root renders carries the region itself -- there is no
-  # separate `/dashboard` handoff endpoint any more (Base::App::RootsController#index renders the
-  # anonymous landing page directly, see welcome_dashboard_authority_slice_1c_test.rb for its full
-  # prop contract). It used to be absent, which sent the whole ceremony -- and every URL built from
-  # it inside the credential gateway -- into the default region.
-  test "the base authorization handoff carries the region into the credential gateway" do
+  test "the Base-owned local admission form carries the region" do
     %w(jp us).each do |region|
       host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
       get base_app_root_path, params: { ri: region }
 
       assert_response :success
 
-      sign_in_href = inertia_props.dig("sign_in", "href")
-      query = Rack::Utils.parse_nested_query(URI.parse(sign_in_href).query)
+      sign_in_action = inertia_props.dig("sign_in", "action")
+      query = Rack::Utils.parse_nested_query(URI.parse(sign_in_action).query)
 
       assert_equal region, query["ri"],
-                   "the authorization handoff dropped the #{region} region: #{sign_in_href}"
+                   "the local admission form dropped the #{region} region: #{sign_in_action}"
     end
   end
 

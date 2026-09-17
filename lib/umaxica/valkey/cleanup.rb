@@ -1,6 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
+require "set"
+
 module Umaxica
   module Valkey
     # Prefix-scoped cleanup for tests. Never issues FLUSHALL/FLUSHDB.
@@ -15,9 +17,12 @@ module Umaxica
 
         cursor = "0"
         deleted = 0
+        seen = Set.new
         loop do
           cursor, keys = connection.call("SCAN", cursor, "MATCH", "#{prefix}*", "COUNT", SCAN_COUNT)
           Array(keys).each do |key|
+            next unless seen.add?(key)
+
             connection.call("DEL", key)
             deleted += 1
           end

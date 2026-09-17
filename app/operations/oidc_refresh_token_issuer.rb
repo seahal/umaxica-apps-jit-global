@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class OidcRefreshTokenIssuer
+  Resolved = Data.define(:usage, :verifier)
+
   Result =
     Data.define(:success, :token, :refresh_token, :previous_token, :reason) do
       def success? = success
@@ -18,31 +20,49 @@ class OidcRefreshTokenIssuer
       end
     end
 
-  def self.call(refresh_token:)
-    new(refresh_token).call
+  def self.call(refresh_token:, client_id: nil)
+    new(refresh_token, client_id: client_id).call
   end
 
-  def initialize(refresh_token)
+  def self.resolve(refresh_token:)
+    new(refresh_token).resolve
+  end
+
+  public
+
+  def initialize(refresh_token, client_id: nil)
     @refresh_token = refresh_token
+    @client_id = client_id
+  end
+
+  def resolve
+    parsed = parse_refresh_token
+    return unless parsed
+
+    public_id, verifier = parsed
+    usage = find_usage(public_id)
+    return unless usage
+
+    Resolved.new(usage: usage, verifier: verifier)
   end
 
   def call
-    parsed = parse_refresh_token
-    return failure(:invalid_format) unless parsed
+    resolved = resolve
+    return failure(:invalid_format) unless resolved
 
-    public_id, verifier = parsed
+    usage = resolved.usage
+    verifier = resolved.verifier
 
     # The lookup must run on the writing role. On a replica, replication lag can
     # return a pre-rotation row and re-accept a refresh token that was already
     # rotated away. docs/security/refresh-token-rotation.md requires the writing
     # role for exactly this reason.
-    usage = find_usage(public_id)
-    return failure(:token_not_found) unless usage
-
     result = nil
     owner = connection_owner_for(usage.class)
     owner.connected_to(role: :writing) do
       usage.with_lock do
+        return failure(:client_mismatch, token: usage) if @client_id.present? && usage.oidc_client_id != @client_id
+
         # Check replay before activity: an attacker replaying a stolen token
         # after the legitimate client already rotated it must be detected even
         # once the usage has been revoked or has expired.
@@ -70,6 +90,8 @@ class OidcRefreshTokenIssuer
   end
 
   private
+
+  attr_reader :client_id
 
   def parse_refresh_token
     ClientToken.parse_refresh_token(@refresh_token)

@@ -16,6 +16,7 @@ module Valkey
         sign_in_handoff sign_in_result
         sign_up_handoff sign_up_result
         step_up_handoff step_up_result
+        local_sign_in local_sign_up
       ).freeze
       STATES = %w(issued consumed).freeze
       FIELDS = %w(

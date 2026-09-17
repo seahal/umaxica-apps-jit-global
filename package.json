@@ -17,7 +17,7 @@
     "fix": "bun run format && bun run lint:fix",
     "test": "bun --bun vitest run",
     "test:watch": "bun --bun vitest",
-    "test:coverage": "bun --bun vitest run --coverage",
+    "test:coverage": "node node_modules/vitest/vitest.mjs run --coverage",
     "test:e2e": "playwright test",
     "deadcode": "knip",
     "typecheck:verify": "tsc -p tsconfig.app.json --noEmit --listFiles | grep -q '/src/' || (echo 'typecheck covered no source files' >&2 && exit 1)",

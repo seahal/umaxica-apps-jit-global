@@ -11,6 +11,7 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :app, as: :app) do
       root "roots#index"
+      post "/", to: "roots#create", as: :root_authentication
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -188,6 +189,10 @@ scope(module: :base, as: :base) do
       end
 
       resource :identity, only: :show
+      # User-facing sessions have the canonical top-level resource path. The identity namespace
+      # remains as a compatibility route for existing links while callers migrate.
+      resource :other_sessions, path: "sessions/other", controller: "identity/revocations/others", only: :destroy
+      resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       resources :avatars, only: %i(index show new edit create update) do
         resource :follow, controller: "avatars/follows", only: %i(create destroy)
         resource :block, controller: "avatars/blocks", only: %i(create destroy)
@@ -257,6 +262,7 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :com, as: :com) do
       root "roots#index"
+      post "/", to: "roots#create", as: :root_authentication
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -382,6 +388,10 @@ scope(module: :base, as: :base) do
       end
 
       resource :identity, only: :show
+      # User-facing sessions have the canonical top-level resource path. The identity namespace
+      # remains as a compatibility route for existing links while callers migrate.
+      resource :other_sessions, path: "sessions/other", controller: "identity/revocations/others", only: :destroy
+      resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
         resource :standing, only: :show
         resource :recovery, only: :show do
@@ -436,6 +446,7 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :org, as: :org) do
       root "roots#index"
+      post "/", to: "roots#create", as: :root_authentication
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -596,6 +607,10 @@ scope(module: :base, as: :base) do
       end
 
       resource :identity, only: :show
+      # User-facing sessions have the canonical top-level resource path. The identity namespace
+      # remains as a compatibility route for existing links while callers migrate.
+      resource :other_sessions, path: "sessions/other", controller: "identity/revocations/others", only: :destroy
+      resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
         resource :standing, only: :show
         namespace :emails do

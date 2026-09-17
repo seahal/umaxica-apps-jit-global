@@ -62,7 +62,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     get base_app_identity_sessions_url(ri: "jp", host: @app_host), headers: @app_headers
 
     assert_response :success
-    assert_match "/identity/other_sessions", response.body
+    assert_match "/sessions/other", response.body
     assert_match @other_token.public_id, response.body
   end
 
@@ -107,7 +107,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     get base_com_identity_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
 
     assert_response :success
-    assert_match "/identity/other_sessions", response.body
+    assert_match "/sessions/other", response.body
     assert_match @other_token.public_id, response.body
   end
 

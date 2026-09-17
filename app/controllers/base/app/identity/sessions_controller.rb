@@ -27,7 +27,7 @@ module Base
             session: serialize_session(@session),
             back_link: {
               label: t("sign.app.settings.show.back"),
-              href: base_app_identity_sessions_path(ri: params[:ri]),
+              href: base_app_sessions_path(ri: params[:ri]),
             },
           }
         end
@@ -35,12 +35,12 @@ module Base
         def destroy
           authorize!(@session)
           return redirect_to(
-            base_app_identity_sessions_path(ri: params[:ri]),
+            base_app_sessions_path(ri: params[:ri]),
             status: :see_other,
           ) if current_session_record?(@session)
 
           revoke_selected_session!(@session)
-          redirect_to(base_app_identity_sessions_path(ri: params[:ri]), status: :see_other)
+          redirect_to(base_app_sessions_path(ri: params[:ri]), status: :see_other)
         end
 
         private
@@ -94,7 +94,7 @@ module Base
 
           {
             label: t("base.shared.identity.sessions.revoke"),
-            href: base_app_identity_session_path(session.public_id, ri: params[:ri]),
+            href: base_app_session_path(session.public_id, ri: params[:ri]),
             confirm: t("base.app.identity.sessions.index.revoke_confirm"),
           }
         end
@@ -103,7 +103,7 @@ module Base
           {
             others: {
               label: t("sign.app.settings.sessions.revoke.others_button"),
-              href: base_app_identity_other_sessions_path(ri: params[:ri]),
+              href: base_app_other_sessions_path(ri: params[:ri]),
               confirm: t("sign.app.settings.sessions.revoke.others_confirm"),
             },
           }

@@ -15,14 +15,19 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     )
   end
 
-  test "public_root_renders_auth_ceremony_links" do
+  test "public_root_renders Base-owned local authentication forms" do
     get base_com_root_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :success
-    assert_equal auth_com_sign_in_url(ri: "jp", host: @sign_host, protocol: "https"),
-                 inertia_props.dig("sign_in", "href")
-    assert_equal auth_com_sign_up_url(ri: "jp", host: @sign_host, protocol: "https"),
-                 inertia_props.dig("sign_up", "href")
+    %w(sign_in sign_up).each do |intent|
+      action = inertia_props.fetch(intent)
+
+      assert_equal base_com_root_authentication_path(ri: "jp"), action.fetch("action")
+      assert_equal "post", action.fetch("method")
+      assert_equal intent, action.fetch("intent")
+      assert_predicate action.fetch("authenticity_token"), :present?
+      assert_nil action["href"]
+    end
   end
 
   test "dashboard_renders_when_signed_in" do
@@ -45,8 +50,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal base_com_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
     assert_includes hrefs, base_com_selector_path(ri: "jp")
     assert_includes hrefs, new_base_com_sign_out_path(ri: "jp")
-    assert_includes hrefs, auth_com_sign_in_url(ri: "jp", host: @sign_host, protocol: "https")
-    assert_includes hrefs, auth_com_sign_up_url(ri: "jp", host: @sign_host, protocol: "https")
+    assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
     assert_includes labelled.keys, dashboard_label(:oidc_discovery)
     assert_includes labelled.keys, dashboard_label(:jwks)
     assert_includes labelled.keys, dashboard_label(:userinfo)
@@ -85,7 +89,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
     assert_equal base_com_identity_secrets_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
-    assert_equal base_com_identity_sessions_path(ri: "jp"),
+    assert_equal base_com_sessions_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
     assert_equal base_com_identity_activities_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))

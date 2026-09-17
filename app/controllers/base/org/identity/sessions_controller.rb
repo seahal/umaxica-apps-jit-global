@@ -24,7 +24,7 @@ module Base
           render inertia: true, props: {
             title: t("base.shared.identity.sessions.title"),
             back_link: { label: t("sign.org.settings.show.back"),
-                         href: base_org_identity_sessions_path(ri: params[:ri]), },
+                         href: base_org_sessions_path(ri: params[:ri]), },
             expires_at_description: t("base.shared.identity.sessions.expires_at_description"),
             session: serialize_session(@session),
             columns: session_columns,
@@ -34,7 +34,7 @@ module Base
         def destroy
           authorize!(@session)
           revoke_selected_session!(@session) unless current_session_record?(@session)
-          redirect_to(base_org_identity_sessions_path(ri: params[:ri]), status: :see_other)
+          redirect_to(base_org_sessions_path(ri: params[:ri]), status: :see_other)
         end
 
         private
@@ -66,7 +66,7 @@ module Base
           {
             others: {
               label: t("sign.org.settings.sessions.revoke.others_button"),
-              href: base_org_identity_other_sessions_path(ri: params[:ri]),
+              href: base_org_other_sessions_path(ri: params[:ri]),
               confirm: t("sign.org.settings.sessions.revoke.others_confirm"),
             },
           }
@@ -85,7 +85,7 @@ module Base
 
           {
             label: t("base.shared.identity.sessions.revoke"),
-            href: base_org_identity_session_path(session.public_id, ri: params[:ri]),
+            href: base_org_session_path(session.public_id, ri: params[:ri]),
             confirm: t("base.org.identity.sessions.index.revoke_confirm"),
           }
         end

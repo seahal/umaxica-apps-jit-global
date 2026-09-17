@@ -141,4 +141,44 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     assert_equal 1, results.count(:consumed)
     assert_equal 7, results.count(:replay)
   end
+
+  test "family linkage is idempotent for the same owner and rejects a different owner" do
+    raw = @store.issue!(
+      client_id: "core-app-rp",
+      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      subject: "sub-1",
+      code_challenge: "challenge",
+      code_challenge_method: "S256",
+      resource_type: "client",
+    )
+    @store.consume!(
+      raw_code: raw,
+      expected: {
+        client_id: "core-app-rp",
+        redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      },
+    )
+
+    first = @store.link_family!(
+      raw_code: raw,
+      rp_session_ref: "rp-session-a",
+      refresh_family_ref: "family-a",
+    )
+    same_owner = @store.link_family!(
+      raw_code: raw,
+      rp_session_ref: "rp-session-a",
+      refresh_family_ref: "family-a",
+    )
+    different_owner = @store.link_family!(
+      raw_code: raw,
+      rp_session_ref: "rp-session-b",
+      refresh_family_ref: "family-b",
+    )
+
+    assert_equal :linked, first.status
+    assert_equal :linked, same_owner.status
+    assert_equal :already_linked, different_owner.status
+    assert_equal "rp-session-a", @store.read(raw).fetch("rp_session_ref")
+    assert_equal "family-a", @store.read(raw).fetch("refresh_family_ref")
+  end
 end

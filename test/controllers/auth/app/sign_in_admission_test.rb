@@ -44,6 +44,33 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     assert_predicate cookies["auth_sid"].presence || cookies["__Host-auth_sid"].presence, :present?
   end
 
+  test "Base-owned local admission reaches the ceremony without creating an OIDC transaction" do
+    code = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").code
+
+    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+
+    assert_response :see_other
+    assert_nil session[:oidc_authorization_login_challenge]
+    assert_equal "sign_in", session[:auth_ceremony_admitted_intent]
+
+    follow_redirect!
+
+    assert_response :success
+    assert_equal "auth/app/sign_ins/new", inertia_component
+  end
+
+  test "a replayed Base-owned local admission is rejected" do
+    code = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").code
+
+    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+
+    assert_response :see_other
+
+    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+
+    assert_response :bad_request
+  end
+
   test "replayed admission is rejected" do
     _transaction, code = issue_admission!
 

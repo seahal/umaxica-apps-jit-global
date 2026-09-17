@@ -23,6 +23,32 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     )
   end
 
+  test "persists prompt and max_age across authorization transaction resume" do
+    transaction = create_transaction(
+      ClientOidcAuthorizationTransaction,
+      surface: "app",
+      prompt: "login",
+      max_age: 300,
+    )
+
+    assert_equal "login", transaction.oidc_prompt
+    assert_equal 300, transaction.oidc_max_age
+    assert_equal "login", transaction.authorize_params.fetch(:prompt)
+    assert_equal 300, transaction.authorize_params.fetch(:max_age)
+  end
+
+  test "rejects unsupported prompt values and negative max_age" do
+    transaction = ClientOidcAuthorizationTransaction.new(
+      surface: "app",
+      oidc_prompt: "consent",
+      oidc_max_age: -1,
+    )
+
+    assert_not transaction.valid?
+    assert_equal :inclusion, transaction.errors.details[:oidc_prompt].first.fetch(:error)
+    assert_equal :greater_than_or_equal_to, transaction.errors.details[:oidc_max_age].first.fetch(:error)
+  end
+
   test "register_authentication! and consume! advance the transaction state" do
     now = Time.zone.local(2026, 6, 19, 14, 0, 0)
     authentication_event_at = now - 5.minutes
@@ -94,7 +120,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
 
   private
 
-  def create_transaction(transaction_class, surface:, unique: "one")
+  def create_transaction(transaction_class, surface:, unique: "one", prompt: nil, max_age: nil)
     transaction_class.create_transaction!(
       surface: surface,
       intent: "sign_in",
@@ -109,6 +135,8 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       login_challenge: "login-#{unique}",
       login_challenge_expires_at: 5.minutes.from_now,
       expires_at: 10.minutes.from_now,
+      prompt: prompt,
+      max_age: max_age,
     )
   end
 end

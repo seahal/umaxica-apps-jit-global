@@ -31,6 +31,8 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
           nonce: params.fetch(:nonce),
           code_challenge: params.fetch(:code_challenge),
           code_challenge_method: params.fetch(:code_challenge_method),
+          prompt: OidcAuthorizeRequestResolver.normalize_prompt(params[:prompt]),
+          max_age: OidcAuthorizeRequestResolver.normalize_max_age(params[:max_age]),
           login_challenge: login_challenge,
           login_challenge_expires_at: now + login_challenge_ttl,
           expires_at: now + ttl,

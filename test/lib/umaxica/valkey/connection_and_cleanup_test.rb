@@ -46,4 +46,30 @@ class UmaxicaValkeyConnectionAndCleanupTest < ActiveSupport::TestCase
     assert_operator deleted, :>=, 1
     assert_nil @connection.call("GET", key)
   end
+
+  test "cleanup consumes every scan cursor including empty and duplicate batches" do
+    scan_results = [
+      ["17", []],
+      ["0", ["auth_state:test:one", "auth_state:test:one"]],
+    ]
+    deleted = []
+    fake_connection = Object.new
+    fake_connection.define_singleton_method(:call) do |command, *arguments|
+      case command
+      when "SCAN"
+        scan_results.shift
+      when "DEL"
+        deleted << arguments.fetch(0)
+        1
+      else
+        raise RuntimeError, "unexpected command: #{command}"
+      end
+    end
+
+    assert_equal 1, Umaxica::Valkey::Cleanup.delete_by_prefix(
+      fake_connection,
+      prefix: "auth_state:test:",
+    )
+    assert_equal ["auth_state:test:one"], deleted
+  end
 end

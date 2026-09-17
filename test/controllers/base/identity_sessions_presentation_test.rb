@@ -224,10 +224,10 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   end
 
   def sessions_path(_surface, host)
-    "https://#{host}/identity/sessions?ri=jp"
+    "https://#{host}/sessions?ri=jp"
   end
 
   def session_path(_surface, public_id, host)
-    "https://#{host}/identity/sessions/#{public_id}?ri=jp"
+    "https://#{host}/sessions/#{public_id}?ri=jp"
   end
 end

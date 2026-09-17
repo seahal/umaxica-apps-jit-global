@@ -93,6 +93,14 @@ module Jit
         assert result["success"]
       end
 
+      test "injected verifier rejects an unstubbed provider call" do
+        TurnstileVerifierStub.reset!
+
+        assert_raises(TestSupport::ExternalCommunicationError) do
+          Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
+        end
+      end
+
       test "performs http request when verifying" do
         TurnstileVerifierStub.enabled = false
 

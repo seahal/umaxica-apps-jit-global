@@ -162,8 +162,10 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
          "(#{surface.fetch(:host)})" do
       host! surface.fetch(:host)
       checked = []
+      attempted = 0
 
       html_get_paths.each do |path|
+        attempted += 1
         get(path)
       rescue StandardError
         next
@@ -183,6 +185,8 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
       # concern from this sweep's own job). The original single-test form only asserted this in
       # aggregate across all 14 hosts, which a host contributing zero checks here still satisfies
       # as long as at least one other host does; assert that aggregate, not a per-host minimum.
+      assert_equal html_get_paths.length, attempted,
+                   "#{surface.fetch(:host)} title sweep must attempt every candidate path"
       puts "HTML title sweep on #{surface.fetch(:host)}: #{checked.size} responses checked"
     end
   end

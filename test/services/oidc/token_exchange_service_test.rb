@@ -43,6 +43,239 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_kind_of Integer, result.token_response[:expires_in]
   end
 
+  test "refresh grant rotates the RP refresh token and reissues tokens with the original auth time" do
+    authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
+    @user_session_token.update!(authentication_event_at: authentication_event_at)
+    code_record = issue_code!
+
+    initial_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    assert_predicate initial_result, :success?
+
+    refreshed_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_predicate refreshed_result, :success?
+    assert_predicate refreshed_result.token_response[:access_token], :present?
+    assert_predicate refreshed_result.token_response[:refresh_token], :present?
+    assert_predicate refreshed_result.token_response[:id_token], :present?
+    assert_not_equal initial_result.token_response.fetch(:refresh_token),
+                     refreshed_result.token_response.fetch(:refresh_token)
+
+    access_payload = AuthenticationTokenService.decode(
+      refreshed_result.token_response.fetch(:access_token),
+      host: OidcIssuer.host_for_client(@client),
+      resource_type: "client",
+      issuer: OidcIssuer.for_client(@client),
+      audiences: [@client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@client),
+    )
+    id_payload = JWT.decode(refreshed_result.token_response.fetch(:id_token), nil, false).first
+
+    assert_equal authentication_event_at.to_i, access_payload.fetch("auth_time")
+    assert_equal authentication_event_at.to_i, id_payload.fetch("auth_time")
+    assert_operator access_payload.fetch("iat"), :>, authentication_event_at.to_i
+  end
+
+  test "refresh grant rejects a different registered client without rotating the usage" do
+    @user_session_token.update!(authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    code_record = issue_code!
+    initial_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+    refresh_token = initial_result.token_response.fetch(:refresh_token)
+
+    OidcClientRegistry.stub(
+      :authenticate_assertion, ->(_client_id, assertion, token_url:) { assertion.present? && token_url.present? },
+    ) do
+      result = OidcTokenExchangeCoordinator.call(
+        grant_type: "refresh_token",
+        refresh_token: refresh_token,
+        client_id: "side-app",
+        client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+        client_assertion: "different-client-assertion",
+        token_endpoint_uri: "https://wide.app.localhost/oauth/token",
+      )
+
+      assert_not result.success?
+      assert_equal "invalid_grant", result.error
+    end
+
+    follow_up =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: refresh_token,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_predicate follow_up, :success?
+  end
+
+  test "refresh grant fails closed when the RP session has no authentication event" do
+    usage = ClientRpSession.create!(
+      client_token: @user_session_token,
+      oidc_client_id: "core-next-rp",
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: "refresh_nonce",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+    refresh_token = usage.issue_refresh_token!
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: refresh_token,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert usage.reload.refresh_token_digest_matches?(ClientToken.parse_refresh_token(refresh_token).last)
+  end
+
+  test "refresh grant rejects a missing refresh token before resolving storage" do
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+  end
+
+  test "refresh grant rejects an unknown refresh token" do
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: "not-a-refresh-token",
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+  end
+
+  test "refresh grant rejects a scope that no longer contains openid" do
+    @user_session_token.update!(authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    initial_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: issue_code!.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+    usage = ClientRpSession.find_by!(client_token: @user_session_token, oidc_client_id: "core-next-rp")
+    usage.update!(oidc_scope: "profile")
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_predicate usage.reload.refresh_token_digest, :present?
+  end
+
+  test "refresh grant rejects an inactive root session" do
+    @user_session_token.update!(authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    initial_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: issue_code!.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+    @user_session_token.update!(discarded_at: Time.current)
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+  end
+
   test "exchanged OIDC access id and refresh tokens end by the root session expiry" do
     travel_to(@user_session_token.created_at + 1.second) do
       absolute_expiry = 2.minutes.from_now
@@ -839,6 +1072,45 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "Authorization code already consumed", result.error_description
   end
 
+  test "replay cleanup revokes the linked RP session once" do
+    code_record = issue_code!
+    store = authorization_code_store
+    payload = store.read(code_record.code).merge(
+      "state" => "consumed",
+      "rp_session_ref" => "rp-session-for-replay",
+    )
+    store.instance_variable_get(:@connection).call(
+      "SET",
+      store.storage_key(code_record.code),
+      JSON.generate(payload),
+      "EX",
+      60,
+    )
+    revoke_calls = 0
+
+    result =
+      ClientRpSession.stub(:find_by, Object.new) do
+        RpSessionRevoker.stub(:call, ->(**) { revoke_calls += 1 }) do
+          with_authenticated_client do
+            OidcTokenExchangeCoordinator.call(
+              grant_type: "authorization_code",
+              code: code_record.code,
+              redirect_uri: @redirect_uri,
+              client_id: "core-next-rp",
+              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+              client_assertion: "test-client-assertion",
+              token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+              code_verifier: @code_verifier,
+            )
+          end
+        end
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_equal 1, revoke_calls
+  end
+
   test "fails closed when consumed code family linkage does not succeed" do
     code_record = issue_code!
     delegate = authorization_code_store
@@ -1076,24 +1348,24 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "exchanges valid operator code for tokens with OperatorToken" do
     staff = operators(:one)
     staff_session_token = OperatorToken.create!(staff: staff)
-    org_client = OidcClientRegistry.find("core-next-rp")
+    org_client = OidcClientRegistry.find!("core-org")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     staff_secret_credential = "test_secret_credential_for_core_org"
 
     code_record = issue_code!(
-      client_id: "core-next-rp",
+      client_id: "core-org",
       redirect_uri: org_redirect_uri,
       resource: staff,
       session_token: staff_session_token,
     )
 
     result =
-      with_authenticated_org_client(staff_secret_credential) do
+      with_authenticated_org_client(staff_secret_credential, client_id: "core-org") do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: org_redirect_uri,
-          client_id: "core-next-rp",
+          client_id: "core-org",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-staff-client-assertion",
           token_endpoint_uri: "https://log.umaxica.org/oauth/token",
@@ -1105,6 +1377,56 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_predicate result.token_response[:access_token], :present?
     assert_predicate result.token_response[:refresh_token], :present?
     assert_equal "Bearer", result.token_response[:token_type]
+  end
+
+  test "refreshes an operator RP session without changing auth_time" do
+    staff = operators(:one)
+    staff_session_token = OperatorToken.create!(staff: staff, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    org_client = OidcClientRegistry.find!("core-org")
+    org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
+    code_record = issue_code!(
+      client_id: "core-org",
+      redirect_uri: org_redirect_uri,
+      resource: staff,
+      session_token: staff_session_token,
+    )
+
+    initial_result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) { client_id == "core-org" && assertion.present? && token_url.present? },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: org_redirect_uri,
+          client_id: "core-org",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-staff-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.org/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    refreshed_result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) { client_id == "core-org" && assertion.present? && token_url.present? },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: "core-org",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-staff-refresh-assertion",
+          token_endpoint_uri: "https://log.umaxica.org/oauth/token",
+        )
+      end
+
+    assert_predicate refreshed_result, :success?
+    payload = JWT.decode(refreshed_result.token_response.fetch(:id_token), nil, false).first
+
+    assert_equal staff_session_token.authentication_event_at.to_i, payload.fetch("auth_time")
   end
 
   test "creates staff token record for org client" do
@@ -1176,24 +1498,24 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "exchanges valid visitor code for tokens with VisitorToken" do
     visitor = create_visitor!
     visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find("core-next-rp")
+    com_client = OidcClientRegistry.find!("core-com")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
     visitor_secret_credential = "test_secret_credential_for_core_com"
 
     code_record = issue_code!(
-      client_id: "core-next-rp",
+      client_id: "core-com",
       redirect_uri: com_redirect_uri,
       resource: visitor,
       session_token: visitor_session_token,
     )
 
     result =
-      with_authenticated_com_client(visitor_secret_credential) do
+      with_authenticated_com_client(visitor_secret_credential, client_id: "core-com") do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: com_redirect_uri,
-          client_id: "core-next-rp",
+          client_id: "core-com",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-visitor-client-assertion",
           token_endpoint_uri: "https://log.umaxica.com/oauth/token",
@@ -1205,6 +1527,61 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_predicate result.token_response[:access_token], :present?
     assert_predicate result.token_response[:refresh_token], :present?
     assert_equal "Bearer", result.token_response[:token_type]
+  end
+
+  test "refreshes a visitor RP session without changing auth_time" do
+    visitor = visitors(:reserved_visitor)
+    visitor_session_token = VisitorToken.create!(
+      visitor: visitor,
+      authentication_event_at: Time.utc(
+        2026, 1, 2, 3, 4, 5,
+      ),
+    )
+    com_client = OidcClientRegistry.find!("core-com")
+    com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
+    code_record = issue_code!(
+      client_id: "core-com",
+      redirect_uri: com_redirect_uri,
+      resource: visitor,
+      session_token: visitor_session_token,
+    )
+
+    initial_result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) { client_id == "core-com" && assertion.present? && token_url.present? },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: com_redirect_uri,
+          client_id: "core-com",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-visitor-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.com/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    refreshed_result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(client_id, assertion, token_url:) { client_id == "core-com" && assertion.present? && token_url.present? },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: "core-com",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-visitor-refresh-assertion",
+          token_endpoint_uri: "https://log.umaxica.com/oauth/token",
+        )
+      end
+
+    assert_predicate refreshed_result, :success?
+    payload = JWT.decode(refreshed_result.token_response.fetch(:id_token), nil, false).first
+
+    assert_equal visitor_session_token.authentication_event_at.to_i, payload.fetch("auth_time")
   end
 
   test "creates visitor token record for com client" do
@@ -1438,8 +1815,15 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "preserves an authentication event time that predates authorization-code issuance" do
     auth_time = Time.utc(2026, 1, 2, 3, 4, 5)
-    issued_at = auth_time + 5.minutes
-    code_record = plant_authorization_code!(auth_time: auth_time, issued_at: issued_at)
+    issued_at = Time.current
+    code_record = plant_authorization_code!(
+      client_id: "core-next-rp",
+      redirect_uri: @redirect_uri,
+      code_challenge: @code_challenge,
+      code_challenge_method: "S256",
+      auth_time: auth_time,
+      issued_at: issued_at,
+    )
 
     result =
       with_authenticated_client do
@@ -1472,7 +1856,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "rejects an authorization code without an authentication event time before consuming it" do
-    code_record = plant_authorization_code!(auth_time: nil)
+    code_record = plant_authorization_code!(
+      client_id: "core-next-rp",
+      redirect_uri: @redirect_uri,
+      code_challenge: @code_challenge,
+      code_challenge_method: "S256",
+      auth_time: nil,
+    )
 
     result =
       with_authenticated_client do
@@ -1728,20 +2118,20 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  def with_authenticated_org_client(_secret_credential, &block)
+  def with_authenticated_org_client(_secret_credential, client_id: "core-next-rp", &block)
     OidcClientRegistry.stub(
       :authenticate_assertion, ->(cid, assertion, token_url:) {
-                                 cid == "core-next-rp" && assertion.present? && token_url.present?
+                                 cid == client_id && assertion.present? && token_url.present?
                                },
     ) do
       block.call
     end
   end
 
-  def with_authenticated_com_client(_secret_credential, &block)
+  def with_authenticated_com_client(_secret_credential, client_id: "core-next-rp", &block)
     OidcClientRegistry.stub(
       :authenticate_assertion, ->(cid, assertion, token_url:) {
-                                 cid == "core-next-rp" && assertion.present? && token_url.present?
+                                 cid == client_id && assertion.present? && token_url.present?
                                },
     ) do
       block.call

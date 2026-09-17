@@ -83,13 +83,13 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
       next unless route.defaults[:controller].to_s.start_with?("edit/org/api/v0/")
 
       path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
-      verb = route.verb.to_s
+      verb = route.verb.to_s.strip
       next if verb.empty?
 
       "#{verb} #{path}"
     }.to_set
 
-    assert_equal %w(GET /api/v0/health.json GET /api/v0/revision.json).to_set, edit_operations
+    assert_equal Set["GET /api/v0/health.json", "GET /api/v0/revision.json"], edit_operations
     assert edit_operations.subset?(described_operations("org"))
   end
 

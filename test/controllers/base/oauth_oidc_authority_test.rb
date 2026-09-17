@@ -115,6 +115,32 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "no-cache", response.headers["Pragma"]
   end
 
+  test "base token endpoint forwards an OIDC refresh grant" do
+    captured = nil
+    result = TokenResult.new(
+      success: true,
+      token_response: { access_token: "access", refresh_token: "next-refresh", token_type: "Bearer" },
+    )
+
+    OidcTokenExchangeCoordinator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+           params: {
+             grant_type: "refresh_token",
+             refresh_token: "refresh-value",
+             client_id: "core-next-rp",
+             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+             client_assertion: "assertion",
+           }
+    end
+
+    assert_response :ok
+    assert_equal "refresh_token", captured[:grant_type]
+    assert_equal "refresh-value", captured[:refresh_token]
+    assert_nil captured[:code]
+    assert_nil captured[:redirect_uri]
+    assert_nil captured[:code_verifier]
+  end
+
   test "base token endpoint rejects missing csrf metadata with oauth json error instead of csrf 422" do
     result = TokenResult.new(
       success: false,
@@ -636,6 +662,59 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "base app authorize honors prompt none for a fresh authenticated browser session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    actor = clients(:one)
+    ensure_user_token_reference_records!
+    token = ClientToken.create!(
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
+
+    host!(host)
+    get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"),
+                            headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
+
+    assert_response :redirect
+    callback = URI.parse(jump_rt_url_from_location(response.location))
+
+    assert_predicate Rack::Utils.parse_nested_query(callback.query.to_s)["code"], :present?
+  end
+
+  test "base app authorize starts a ceremony for prompt login despite an existing session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    actor = clients(:one)
+    ensure_user_token_reference_records!
+    token = ClientToken.create!(
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
+
+    host!(host)
+    get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
+                            headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
+
+    assert_response :redirect
+    uri = URI.parse(jump_rt_url_from_location(response.location))
+
+    assert_equal "/sign/in", uri.path
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
+      raw_code: query.fetch("admission"), surface: "app", expected_intent: "sign_in",
+    )
+    transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
+
+    assert_equal "login", transaction.oidc_prompt
+  end
+
   test "base oauth authorize starts sign up ceremony when screen_hint requests signup" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host!(host)
@@ -647,6 +726,18 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
     assert_equal "/sign/up", uri.path
+  end
+
+  test "base app authorize returns login_required for prompt none without a session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host!(host)
+
+    assert_no_difference "ClientOidcAuthorizationTransaction.count" do
+      get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"), headers: browser_headers
+    end
+
+    assert_response :bad_request
+    assert_equal "login_required", response.parsed_body.fetch("error")
   end
 
   test "base oauth authorize rejects requests without openid scope" do
@@ -715,7 +806,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         surface: "app",
         intent: "sign_in",
         params: oidc_authorize_params,
-        login_challenge_ttl: 1.second,
+        login_challenge_ttl: 1.minute,
         now: Time.current,
       )
     result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
@@ -727,7 +818,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       auth_method: "passkey",
     )
 
-    travel 2.seconds do
+    travel 2.minutes do
       get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
     end
 

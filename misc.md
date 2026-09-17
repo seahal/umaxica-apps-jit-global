@@ -226,7 +226,7 @@ Do not log secrets, raw bearer artifacts or personal data here. Do not write spe
 
 MISC-0008 — Current shell does not prove isolated Rails test services
 
-Status: OPEN.
+Status: MITIGATED for the verified host; CI service provisioning remains OPEN.
 
 Category: testing / operations.
 
@@ -252,9 +252,17 @@ Confirmation/falsification test or measurement: Before boot, print only sanitize
 
 Exit criterion: E0-T1/T3 isolation proof is recorded and a current Rails baseline runs only against disposable/test-scoped resources. Related: E0-T1–T3, REQ-064/066/069. Owner: current implementation run.
 
+Resolution history (2026-09-15): reachable dedicated PostgreSQL/Valkey targets were verified
+before Rails boot, all effective test databases were checked, and run/worker cleanup was exercised
+without FLUSHDB/FLUSHALL. The corrected local `bin/ci` accepted only explicit responsibility URLs
+for Valkey DBs 3/4/5 and completed its Rails/static/security stages. The original shell limitation
+is resolved for this host-authorized run; CI service provisioning on another host remains a
+separate validation item. See `evidence/2026-09-15-e0-green-baseline.md`.
+
 MISC-0009 — Canonical Bun-runtime Vitest coverage merge overflows
 
-Status: OPEN.
+Status: RESOLVED for the repository coverage entry point; the historical Bun-runtime failure is
+retained below.
 
 Category: testing / tooling.
 
@@ -262,21 +270,21 @@ Evidence level: REPRODUCED_TEST.
 
 First observed: 2026-09-14, E0, HEAD `430ac354ba06c9d22885e1e69d027a7a1b1d5280`.
 
-Concrete evidence: `bun run test` exited 0 with 85 files and 1,054 tests. The script-equivalent `bun --bun vitest run --coverage` exited 1 while merging V8 coverage, with `RangeError: Maximum call stack size exceeded` in `@bcoe/v8-coverage` 1.0.2. A diagnostic `node node_modules/vitest/vitest.mjs run --coverage` using Node 24.20.0 exited 0 on the same 85 files/1,054 tests and reported statements 100%, branches 99.7% (1,343/1,347), functions 100%, lines 100%, satisfying the configured 99% JS thresholds. Both coverage outputs were redirected to `/tmp`; no coverage configuration changed. This does not establish that the canonical package/CI coverage command passes.
+Concrete evidence: `bun run test` exited 0 with 85 files and 1,057 tests after the RootLanding admission-action tests were added. The former `bun --bun vitest run --coverage` exited 1 while merging V8 coverage, with `RangeError: Maximum call stack size exceeded` in `@bcoe/v8-coverage` 1.0.2. The tracked `test:coverage` script now invokes `node node_modules/vitest/vitest.mjs run --coverage`; on Node 24.20.0 it exited 0 with 85 files/1,057 tests and current statements 100% (2,184/2,184), branches 99.63% (1,354/1,359), functions 100% (739/739), and lines 100% (2,143/2,143). The V8 provider, projects, test population and thresholds are unchanged. The command was run with the locked dependencies and its result is the current formal JS coverage evidence. The earlier 1,055-test metrics remain historical for the pre-test-addition source.
 
 Abstract problem: The package's forced Bun runtime and the locked V8 coverage merger may disagree on coverage range data, so ordinary test success cannot substitute for the required coverage gate.
 
 Scope and necessary preconditions: `bun run test:coverage` and the JavaScript coverage step in `bin/ci`. Impact magnitude: MEDIUM for repository verification; no product-runtime effect was observed. Occurrence likelihood and confidence: HIGH for the current Bun 1.4.0/Vitest 5.0.0 environment because the failure reproduced once; behavior under other supported environments is UNKNOWN. Deployment-blocking: YES for claiming the configured JS coverage/CI gate passed, not a deployment security finding.
 
-Current containment and residual: The ordinary Vitest suite passes; a Node-run coverage diagnostic provides a measurement only. The canonical Bun-runtime coverage step remains failed/unverified. Thresholds and exclusions were not changed.
+Current containment and residual: Bun remains the package manager and ordinary test runtime; only the coverage launcher uses Node because the locked V8 provider requires a compatible Node runtime. The historical Bun merge failure is not suppressed or converted to success. Ruby coverage and canonical CI remain separate open gates.
 
-Why deferred: No test script or runtime policy was changed in this evidence/documentation step. The root cause needs a controlled minimal reproduction before selecting between a supported runner invocation and a dependency/toolchain correction.
+Resolution: The formal launcher was changed to an explicit Node/Vitest invocation after checking the locked Node/Vitest/coverage versions and confirming the same configured projects and thresholds.
 
 Next-cycle analysis question: Does the overflow occur for a minimal Bun/Vitest coverage selection or only after full two-project parallel coverage merging?
 
 Confirmation/falsification test or measurement: Compare one-node-project and one-component-project subsets, then a single-worker full suite, under the locked Bun and Node runtimes with coverage reports in `/tmp`; inspect `@bcoe/v8-coverage` inputs without modifying thresholds. Any proposed script change must preserve the same Vitest projects, test population, and coverage gates and make the `bin/ci` coverage stage green.
 
-Exit criterion: The canonical repository coverage entry point completes the same test population and enforces all configured thresholds without stack overflow, skipped tests, altered exclusions or changed thresholds. Related: E0-T2, E10-T1, REQ-069. Owner: current implementation run.
+Exit criterion met: the canonical repository coverage entry point completes the same test population and enforces all configured thresholds without stack overflow, skipped tests, altered exclusions or changed thresholds. Related: E0-T2, E10-T1, REQ-069. Ruby coverage and `bin/ci` are separate work.
 
 MISC-0010 — E0 isolated Rails service checkpoint
 
@@ -335,8 +343,196 @@ non-published test service network for CI or an equivalent approved runner, and 
 separately classify the three application failures before claiming a green authentication suite.
 Related: E0-T1–T4, REQ-064/066/069. Owner: current implementation run.
 
-Final E0 recheck: `scripts/test-environment-check` exited 0 again against PostgreSQL
-`primary.dns.podman:5432` and Valkey `valkey.dns.podman:6379` DBs 3/4/5. A scoped cleanup for a
-new run ID exited 0 and deleted zero keys. The post-addition contract test could not be rerun
-because Rails now refuses to boot with the unrelated pending `db/migrate/20260915000000_create_blazer_tables.rb`; no migration was applied. The previously executed 3/14 contract result
-remains the last green result for that test file.
+MISC-0011 — E0 guards, OIDC refresh reception, and quality gates
+
+Status: PARTIALLY_COMPLETE — normal Rails/JS suites, local static gates, and canonical CI pass;
+Ruby branch/method coverage remains below the unchanged gate.
+
+Category: testing / security / operations.
+
+Evidence level: IMPLEMENTED_AND_RUN_LOCALLY; current contract, target, full Rails, and component
+checks have been executed on one stable source tree and dedicated test resource set.
+
+First observed: 2026-09-15, E0 safety-guard continuation, HEAD `e9fa72ce5fc0c9e62c9a5a7a8233b477ba77f8b6`.
+
+Concrete change: Rails test boot validates every effective test database configuration against
+`POSTGRESQL_TEST_HOST`, `POSTGRESQL_PORT`, and a test-prefixed database before Active Record opens
+a connection. `DATABASE_URL`/unsupported `*_DATABASE_URL` overrides are rejected rather than
+silently ignored. Test Valkey responsibilities must use logical DBs 3/4/5 on the explicit
+`VALKEY_TEST_HOST`/`VALKEY_TEST_PORT`. Run identifiers are claimed locally, cleanup refuses an
+active claim unless explicit recovery is requested, and the wrapper preserves child status while
+handling normal, failed, INT, and TERM exits. SCAN cleanup consumes all cursors and deduplicates
+keys. The test Turnstile adapter and Faraday transport now fail closed unless a test supplies an
+explicit response/test adapter.
+
+Observed validation: the safe Rails configuration accepted 38 effective test configs and an
+unsafe `DATABASE_URL` was rejected before a connection. The dedicated `test_primary_db` was
+read-checked and migration `20260915000000_create_blazer_tables` was applied only after that
+check; the three ticket databases received only the OIDC refresh-claim migrations. E0
+contract/transport tests passed with 36 runs/100 assertions (one worker) and 9 runs/31 assertions
+(two workers). OIDC/refresh focused tests and the Base token endpoint regression pass. The latest
+Rails coverage run completed 13,020 tests/78,865 assertions with no test failures/errors, but
+SimpleCov exited 2 at line 98.36%, branch 87.59%, method 94.05%.
+
+Abstract problem: reachable test services are useful only when every Rails connection and provider
+transport is proven to target an isolated, explicitly named test resource. A prior successful
+preflight alone did not establish that invariant.
+
+Coverage remains open only on Ruby dimensions: formal JS coverage exits 0 through the Node/Vitest
+launcher with the configured thresholds. Ruby/Rails static checks, ERB lint, Brakeman 8.0.6
+(including the wrapper), OpenAPI lint/verify, formatting, TypeScript, and dead-code checks pass.
+Bundler-audit 0.9.3 updated its disposable advisory database and found zero results. A canonical
+`bin/ci` run using the four-database manifest passed after the explicit visibility fix; Rails
+reported 13,020 runs, 78,864 assertions, 0 failures, 0 errors, and 3 existing skips.
+
+Remaining work: raise Ruby branch/method coverage without weakening gates and continue the E1–E10
+slices. No real provider request or GitHub write was performed.
+
+Resolution history (2026-09-15, post-freshness checkpoint): the current source completed the
+normal isolated Rails suite with 13,038 runs / 78,947 assertions / 0 failures / 0 errors / 3
+existing skips (seed 47560, 16 workers). A same-source SimpleCov run completed the tests but
+exited 2 at line 98.37%, branch 87.70%, method 93.83%; the gate remains open. The isolated local
+canonical `bin/ci` passed its configured non-COVERAGE stages with a Rails stage of 13,038 / 78,924
+and the Node-backed formal JS coverage passed. These values supersede the earlier 13,020-run
+measurements for current status; the earlier measurements remain historical evidence.
+
+Final E0 recheck: `bundle exec ruby scripts/test-environment-check` exited 0 against PostgreSQL
+`primary.dns.podman:5432` and Valkey `valkey.dns.podman:6379` DBs 3/4/5. Child failure and TERM
+signal tests preserved exit status while running cleanup; no marker remained afterward. The
+dedicated database contains the applied Blazer migration and was not reset or dropped. The
+current detailed evidence is `evidence/2026-09-15-e0-green-baseline.md`.
+
+MISC-0012 — OIDC refresh grant and authentication-event claim persistence
+
+Status: IMPLEMENTED_LOCALLY; cross-surface/public failure injection remains OPEN.
+
+Evidence: `BaseOauthTokenEndpoint` now forwards `refresh_token`; `OidcTokenExchangeCoordinator`
+accepts the standard refresh grant, rotates a client-bound RP refresh usage, and reissues Access/ID
+tokens with a new `iat` and the persisted authentication event time. Three ticket migrations add
+nullable claim storage without touching development or production databases. The focused combined
+set passed with 132 runs/3,655 assertions, including 79 refresh-service runs/345 assertions, 37
+Base endpoint runs/190 assertions, and 3 architecture runs/3,078 assertions. The first endpoint
+regression was RED because `refresh_token` was not forwarded; the current production fix is GREEN.
+
+Residual: registered clients other than the exercised app path, DPoP-bound refresh, absolute-expiry
+boundaries, concurrent rotation, and provider-level HTTP requests still need public integration
+tests. Exit criterion: each registered Base surface accepts only its own rotated family, preserves
+`auth_time`/claims, rejects replay/revoke/expiry/wrong-owner cases, and passes canonical CI and
+coverage gates. Related: D-REFRESH, E3/E4, REQ-011/015/030/057/061/062.
+
+MISC-0013 — OIDC prompt/max_age freshness persistence and verification
+
+Status: IMPLEMENTED_LOCALLY; broad end-to-end policy coverage remains OPEN.
+
+Category: authentication / OIDC / data contract.
+
+Evidence level: IMPLEMENTED_AND_RUN_LOCALLY.
+
+First observed: 2026-09-15, current feature worktree, HEAD
+`e9fa72ce5fc0c9e62c9a5a7a8233b477ba77f8b6`.
+
+Concrete evidence: `OidcAuthorizeRequestResolver` now normalizes the supported `login` and `none`
+prompt values and non-negative `max_age`; the three authorization-transaction models persist
+nullable `oidc_prompt`/`oidc_max_age` fields; Base app/com/org authorization endpoints use the
+stored request to decide whether an existing authentication is fresh enough; and
+`OidcIdTokenVerifier` rejects a missing or stale `auth_time` when a max-age constraint is present.
+The RP initiator/callback carries max-age through pending flow state. Dedicated model, resolver,
+Base endpoint, SSO initiator, callback and verifier tests pass, and the full Rails suite remains
+green. The migrations were applied only to the verified dedicated ticket test databases.
+
+Abstract problem: OIDC freshness is a protocol contract spanning request parsing, transaction
+storage, Base admission, token claims and RP verification. A single endpoint branch or reader
+does not prove that the original authentication event survives the full path.
+
+Scope and necessary preconditions: all registered browser clients and app/com/org surfaces, with
+isolated test databases and stubbed providers. Impact magnitude: HIGH if stale authentication is
+accepted for a request requiring fresh authentication. Occurrence likelihood and confidence:
+MEDIUM; the implemented slice is directly tested, but the complete cross-surface event provenance
+and failure-injection matrix is not.
+
+Current containment and residual: unsupported prompt combinations remain rejected; missing/stale
+`auth_time` fails closed when max-age is required. No fallback to `created_at`, code issuance time,
+exchange time or current time was added. Deployment-blocking: UNDETERMINED pending the remaining
+cross-surface tests and review of the true Base authentication-event source.
+
+Why deferred: the remaining work crosses Base/Auth admission, all RP registrations, reauthentication
+and refresh, and must not be inferred from the new nullable fields alone.
+
+Next-cycle analysis question: Does each successful Auth ceremony and SSO/re-authentication path
+provide the same Base-accepted event timestamp to authorization-code issuance and refresh, and do
+all registered RPs enforce the requested freshness at the public callback?
+
+Confirmation/falsification test: use isolated app/com/org clients with authentication T0, code
+issuance T1 and exchange T2 separated; assert ID/Access `auth_time` remains T0, refresh changes only
+`iat`, `prompt=login` forces a new event, `prompt=none` returns the protocol error when needed, and
+`max_age` rejects a stale or missing event without creating a session or code.
+
+Exit criterion: the public cross-surface matrix and the auth-time source audit pass with no unsafe
+timestamp fallback, while the unchanged Rails and coverage gates remain truthful. Related:
+REQ-011/012/013/030/031, E3/E4.
+
+MISC-0014 — Current canonical CI and Ruby coverage gate checkpoint
+
+Status: PARTIALLY_COMPLETE — canonical non-COVERAGE CI is green; Ruby SimpleCov remains below
+the existing branch/method/file/group/drop gates.
+
+Category: testing / quality gate.
+
+Evidence level: IMPLEMENTED_AND_RUN_LOCALLY.
+
+First observed: 2026-09-15, current feature worktree, HEAD
+`e9fa72ce5fc0c9e62c9a5a7a8233b477ba77f8b6`.
+
+Concrete evidence: the corrected local `bin/ci` was run with the verified PostgreSQL test target
+and explicit Valkey URLs for cache/rate-limit/auth-state logical DBs 3/4/5. It exited 0 after
+database preparation, JS checks and coverage, Ruby/ERB lint, bundler-audit, bun audit, Brakeman,
+loopback Rails boot, and Rails tests. The Rails stage reported 13,058 runs, 79,090 assertions,
+0 failures, 0 errors, and 3 existing skips (seed 48755, 16 workers). A prior invocation with an
+inherited cache URL on logical DB 0 was rejected before preparation; no unsafe connection was
+opened.
+
+The explicit Rails coverage run on the same source completed 13,058 tests with 0 failures/errors
+but SimpleCov exited 2 at line 98.38% (57,972/58,924), branch 87.88% (8,669/9,864), and method
+93.87% (10,064/10,721). The configured floors and file/group/maximum-drop rules were unchanged.
+Formal Node/V8 coverage passed independently at statements 100%, branches 99.63%, functions
+100%, and lines 100% for 85 files and 1,057 tests after the RootLanding admission-action tests
+were added. The earlier 1,055-test CI measurement remains historical for the pre-test-addition
+source. Bundler-audit found no known gem
+vulnerabilities; no live provider was contacted.
+
+Abstract problem: a green ordinary test suite and green JS coverage do not prove the Ruby coverage
+gate or all feature contracts. Coverage deficits must be closed with behavior tests or verified
+dead-code decisions, never by lowering thresholds, expanding exclusions, or adding empty tests.
+
+Current treatment: retain the red SimpleCov result as an attributable measurement and continue
+the E1-E10 public negative/concurrency/error-path tests. The remaining Ruby coverage work is not
+a reason to discard the green ordinary suite or to claim full feature completion.
+
+Exit criterion: a same-source Rails coverage run exits 0 with the existing dimensions and drop
+rules, or each remaining exception has an evidence-backed production/dead-code decision reviewed
+without changing the gate. Related: REQ-020/066/069, E9/E10.
+
+MISC-0015 — Integration test debug output exposed authentication response cookies
+
+Status: MITIGATED — the debug output was removed and the public integration test remains green.
+
+Category: security / test observability.
+
+Evidence level: REPRODUCED_TEST.
+
+First observed: 2026-09-15 during the current-source canonical `bin/ci` run. The existing
+`test/integration/auth_booster_test.rb` test `check auth allows authenticated` emitted a warning
+containing the response body and access/refresh cookie values. The test did not need that output
+for its assertions, and the CI log therefore contained credential-shaped values even though the
+test endpoint is local.
+
+Change: removed only the debug `warn` call; authentication behavior, cookie assertions, and test
+setup are unchanged. The isolated regression run completed 10 runs and 27 assertions with zero
+failures/errors/skips. No emitted value is retained in this memo or in evidence.
+
+Residual: other test or dependency logging is not proven globally silent. A future test-support
+audit should scan output paths for cookies, authorization headers, token bodies, and raw request
+parameters without weakening the outbound-communication guard.
+
+Exit criterion: the targeted test and canonical CI pass without credential-shaped debug output,
+and the repository logging-boundary checks continue to pass.

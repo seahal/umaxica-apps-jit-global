@@ -22,6 +22,7 @@ end
 require_relative "../lib/jit_security_active_record_encryption_key_provider"
 require_relative "../lib/app_config_loader"
 require_relative "../lib/trusted_forwarded_headers"
+require_relative "../lib/umaxica/test_environment/database_safety"
 
 module Jit
   module TrustedProxiesConfig
@@ -154,6 +155,10 @@ module Jit
 
     # Multi-database async query executor (one thread pool per database)
     config.active_record.async_query_executor = :multi_thread_pool
+
+    initializer "umaxica.test_database_safety", before: "active_record.initialize_database" do
+      Umaxica::TestEnvironment::DatabaseSafety.verify!
+    end
 
     # Required belongs_to validation should confirm the associated row, not only
     # the foreign-key value. Tests that create many records should pass loaded

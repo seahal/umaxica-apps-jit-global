@@ -563,7 +563,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/app/api/v0/token/refreshes_controller.rb: 1
   app/controllers/core/app/application_controller.rb: 4
   app/controllers/core/app/csp_violation_reports_controller.rb: 1
-  app/controllers/core/app/edge/v0/cookies_controller.rb: 2
   app/controllers/core/app/health/livenesses_controller.rb: 1
   app/controllers/core/app/health/readinesses_controller.rb: 1
   app/controllers/core/app/health/startups_controller.rb: 1
@@ -581,7 +580,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/com/api/v0/token/refreshes_controller.rb: 1
   app/controllers/core/com/application_controller.rb: 4
   app/controllers/core/com/csp_violation_reports_controller.rb: 1
-  app/controllers/core/com/edge/v0/cookies_controller.rb: 2
   app/controllers/core/com/health/livenesses_controller.rb: 1
   app/controllers/core/com/health/readinesses_controller.rb: 1
   app/controllers/core/com/health/startups_controller.rb: 1
@@ -618,7 +616,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/org/application_controller.rb: 4
   app/controllers/core/org/configurations_controller.rb: 1
   app/controllers/core/org/csp_violation_reports_controller.rb: 1
-  app/controllers/core/org/edge/v0/cookies_controller.rb: 2
   app/controllers/core/org/health/livenesses_controller.rb: 1
   app/controllers/core/org/health/readinesses_controller.rb: 1
   app/controllers/core/org/health/startups_controller.rb: 1
@@ -884,7 +881,7 @@ Umaxica/ExplicitMethodVisibility:
   app/mailers/outbound_email_suspension_interceptor.rb: 1
   app/models/acme_logout_transaction.rb: 1
   app/models/actor.rb: 38
-  app/models/actor/authentication.rb: 9
+  app/models/actor/authentication.rb: 6
   app/models/actor/configuration.rb: 21
   app/models/actor/preference.rb: 15
   app/models/actor/selected_context.rb: 3

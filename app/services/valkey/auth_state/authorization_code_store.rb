@@ -75,9 +75,19 @@ module Valkey
         if payload["state"] ~= "consumed" then
           return {"invalid_state", current}
         end
-        payload["rp_session_ref"] = ARGV[1]
-        if ARGV[2] ~= "" then
-          payload["refresh_family_ref"] = ARGV[2]
+        local current_rp = tostring(payload["rp_session_ref"] or "")
+        local current_family = tostring(payload["refresh_family_ref"] or "")
+        local requested_rp = ARGV[1]
+        local requested_family = ARGV[2]
+        if current_rp ~= "" or current_family ~= "" then
+          if current_rp == requested_rp and current_family == requested_family then
+            return {"linked", current}
+          end
+          return {"already_linked", current}
+        end
+        payload["rp_session_ref"] = requested_rp
+        if requested_family ~= "" then
+          payload["refresh_family_ref"] = requested_family
         end
         local ttl = tonumber(ARGV[3])
         redis.call("SET", KEYS[1], cjson.encode(payload), "XX", "EX", ttl)
@@ -179,7 +189,7 @@ module Valkey
         )
         status = result.is_a?(Array) ? result[0].to_s : "corrupt"
         payload = parse_payload(result.is_a?(Array) ? result[1] : nil)
-        return ConsumeResult.new(status: status.to_sym, payload: payload) if %w(linked missing
+        return ConsumeResult.new(status: status.to_sym, payload: payload) if %w(linked already_linked missing
                                                                                 invalid_state).include?(status)
 
         raise Umaxica::Valkey::SerializationError, "authorization code payload is corrupt" if status == "corrupt"

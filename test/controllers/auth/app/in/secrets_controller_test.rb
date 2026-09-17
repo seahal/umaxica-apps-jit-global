@@ -130,7 +130,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       end
 
     TurnstileVerifierStub.challenge_enabled = false
-    JitSecurityTurnstileVerifier.stub(:verify, verifier) do
+    TurnstileVerifierStub.stub(:verify, verifier) do
       post(
         auth_app_sign_in_secret_url(ri: "jp"),
         params: login_params(identifier: @raw_email, secret_credential_value: "not-checked"),

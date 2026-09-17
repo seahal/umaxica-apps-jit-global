@@ -4,21 +4,15 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
-# This test verifies current base and auth route helper boundaries.
+# This test verifies current Base ownership at the local authentication boundary.
 class AcmeCrossDomainLinksTest < ActionDispatch::IntegrationTest
-  # The base app root renders its own anonymous landing page (Base::App::RootsController#index),
-  # linking across to the Auth credential gateway rather than redirecting the browser there.
-  # See test/controllers/base/app/welcome_dashboard_authority_slice_1c_test.rb for the full
-  # Inertia-prop contract this endpoint carries; this test's job is only the cross-host boundary.
-  test "base app root renders and links across to the auth credential gateway" do
+  test "base app root renders a same-origin POST admission boundary" do
     host! ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
-    sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-
     get base_app_root_url(ri: "jp")
 
     assert_response :success
-    assert_equal auth_app_sign_in_url(ri: "jp", host: sign_host, protocol: "https"),
-                 inertia_props.dig("sign_in", "href")
+    assert_equal base_app_root_authentication_path(ri: "jp"), inertia_props.dig("sign_in", "action")
+    assert_equal "post", inertia_props.dig("sign_in", "method")
   end
 
   test "cross domain url helpers are accessible from base" do

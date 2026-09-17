@@ -15,6 +15,34 @@ module Base
         render inertia: true, props: root_landing_props
       end
 
+      public
+
+      def create
+        return redirect_to(base_org_root_path(ri: params[:ri]), status: :see_other) if logged_in?
+
+        intent = params[:intent].to_s
+        return render plain: "invalid authentication intent", status: :bad_request unless %w(sign_in
+                                                                                             sign_up).include?(intent)
+
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "org", intent: intent)
+        auth_url =
+          if intent == "sign_up"
+            auth_org_sign_up_url(
+              ri: params[:ri], host: oidc_sign_host, protocol: "https",
+              admission: admission.code,
+            )
+          else
+            auth_org_sign_in_url(
+              ri: params[:ri], host: oidc_sign_host, protocol: "https",
+              admission: admission.code,
+            )
+          end
+        redirect_to_jump_url(auth_url, status: :see_other)
+      rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
+        Rails.logger.error("[Base::Org::RootsController] local admission failed: #{e.class}")
+        render plain: "authentication service unavailable", status: :service_unavailable
+      end
+
       private
 
       def render_authenticated_home
@@ -61,14 +89,6 @@ module Base
 
       def protocol_links
         [
-          {
-            label: t("base.shared.dashboard.links.authorize_sign_in"),
-            href: ceremony_sign_in_href,
-          },
-          {
-            label: t("base.shared.dashboard.links.authorize_sign_up"),
-            href: ceremony_sign_up_href,
-          },
           { label: t("base.shared.dashboard.links.oidc_discovery"),
             href: base_org_well_known_openid_configuration_path, },
           { label: t("base.shared.dashboard.links.jwks"), href: base_org_well_known_jwks_path },
@@ -81,23 +101,19 @@ module Base
           title: "Base Org",
           heading: "Base Org",
           description: t("landing.thin_endpoint"),
-          sign_in: {
-            label: "Sign in",
-            href: ceremony_sign_in_href,
-          },
-          sign_up: {
-            label: "Sign up",
-            href: ceremony_sign_up_href,
-          },
+          sign_in: local_entry_props("Sign in", "sign_in"),
+          sign_up: local_entry_props("Sign up", "sign_up"),
         }
       end
 
-      def ceremony_sign_in_href
-        auth_org_sign_in_url(ri: params[:ri], host: oidc_sign_host, protocol: "https")
-      end
-
-      def ceremony_sign_up_href
-        auth_org_sign_up_url(ri: params[:ri], host: oidc_sign_host, protocol: "https")
+      def local_entry_props(label, intent)
+        {
+          label: label,
+          action: base_org_root_authentication_path(ri: params[:ri]),
+          method: "post",
+          intent: intent,
+          authenticity_token: form_authenticity_token,
+        }
       end
     end
   end

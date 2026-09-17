@@ -28,6 +28,11 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     "reauthentication" => "step_up_result",
   }.freeze
 
+  LOCAL_ENTRY_PURPOSE = {
+    "sign_in" => "local_sign_in",
+    "sign_up" => "local_sign_up",
+  }.freeze
+
   CEREMONY_SESSION = {
     "app" => ClientAuthCeremonySession,
     "com" => VisitorAuthCeremonySession,
@@ -64,6 +69,28 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         surface: surface,
         store: store,
       )
+    end
+
+    def issue_local_entry!(surface:, intent:, store: default_store)
+      purpose = local_entry_purpose_for(intent)
+      code = store.issue!(
+        purpose: purpose,
+        actor_type: SURFACE_ACTOR.fetch(surface.to_s),
+        surface: surface,
+      )
+      Issuance.new(transaction: nil, code: code, resume_url: nil)
+    end
+
+    def consume_local_entry!(raw_code:, surface:, expected_intent:, store: default_store)
+      purpose = local_entry_purpose_for(expected_intent)
+      result = store.consume!(purpose: purpose, raw_code: raw_code)
+      raise Denied, "local admission missing" if result.missing?
+      raise Denied, "local admission replay" if result.replay?
+      raise Denied, "local admission rejected" unless result.success?
+
+      payload = result.payload
+      validate_payload!(payload, surface: surface)
+      payload
     end
 
     def issue_result!(transaction:, ceremony_session_ref: nil, store: default_store)
@@ -138,6 +165,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def result_purpose_for(intent)
       RESULT_PURPOSE.fetch(intent.to_s) { raise ArgumentError, "unsupported admission intent" }
+    end
+
+    def local_entry_purpose_for(intent)
+      LOCAL_ENTRY_PURPOSE.fetch(intent.to_s) { raise ArgumentError, "unsupported local entry intent" }
     end
 
     private

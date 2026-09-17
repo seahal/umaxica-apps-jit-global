@@ -227,7 +227,9 @@ module Auth
           def sign_up_email_input_value
             return "" unless request.post?
 
-            email_params = params.slice(:visitor_email).permit(visitor_email: %i(raw_address address))[:visitor_email]
+            email_params = params.slice(:visitor_email).permit(
+              visitor_email: %i(raw_address address confirm_policy notifiable),
+            )[:visitor_email]
             value = email_params&.[](:raw_address)
             value = email_params&.[](:address) unless value.is_a?(String)
             value if value.is_a?(String)

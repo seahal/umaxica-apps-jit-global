@@ -27,8 +27,10 @@ module Base
           else
             validate_authorization_request!
 
-            if logged_in? && current_operator.present?
+            if logged_in? && current_operator.present? && authorization_authentication_satisfied?
               issue_authorization_code!(current_operator)
+            elsif prompt_none_requested?
+              render json: { error: "login_required" }, status: :bad_request
             else
               start_authorization_ceremony!
             end
@@ -153,13 +155,25 @@ module Base
           (params[:screen_hint].to_s == "signup") ? "sign_up" : "sign_in"
         end
 
+        def authorization_authentication_satisfied?
+          OidcAuthorizeRequestResolver.authentication_satisfied?(
+            prompt: authorize_params[:prompt],
+            max_age: authorize_params[:max_age],
+            authenticated_at: current_authentication_event_at,
+          )
+        end
+
+        def prompt_none_requested?
+          OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt]) == "none"
+        end
+
         def authorize_params
           # `slice` first: this reads a fixed set of keys and ignores everything else the
           # request carries (`ri`, the Turnstile token). Permitting without narrowing would
           # report those as unpermitted, which they are not - they are simply not ours.
           keys = %i(
             response_type client_id redirect_uri state
-            code_challenge code_challenge_method scope nonce screen_hint
+            code_challenge code_challenge_method scope nonce screen_hint prompt max_age
           )
           params.slice(*keys).permit(*keys)
         end

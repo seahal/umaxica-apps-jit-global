@@ -215,7 +215,12 @@ module Auth
                 },
               },
               turnstile: turnstile_visible_props,
+              form_errors: form_error_messages(@user_email),
             }
+          end
+
+          def form_error_messages(record)
+            record&.errors&.map(&:full_message) || []
           end
 
           def load_user_email

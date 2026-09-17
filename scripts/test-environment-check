@@ -17,6 +17,8 @@ required = %w(
   CACHE_REDIS_URL
   RATE_LIMIT_REDIS_URL
   AUTH_STATE_REDIS_URL
+  VALKEY_TEST_HOST
+  VALKEY_TEST_PORT
 )
 missing = required.reject { |name| ENV[name].to_s != "" }
 abort "test environment is missing required variables: #{missing.join(", ")}" unless missing.empty?
@@ -53,15 +55,10 @@ begin
   require_relative "../lib/umaxica/valkey/error"
   require_relative "../lib/umaxica/valkey/configuration_error"
   require_relative "../lib/umaxica/valkey/responsibility_urls"
+  require_relative "../lib/umaxica/valkey/test_target"
 
-  urls = {
-    cache: ENV.fetch("CACHE_REDIS_URL"),
-    rate_limit: ENV.fetch("RATE_LIMIT_REDIS_URL"),
-    auth_state: ENV.fetch("AUTH_STATE_REDIS_URL"),
-  }
-  urls.each do |responsibility, url|
-    parsed = Umaxica::Valkey::ResponsibilityUrls.parse(url, responsibility: responsibility)
-    Umaxica::Valkey::ResponsibilityUrls.assert_nonprod_db!(parsed, env: "test")
+  parsed_urls = Umaxica::Valkey::TestTarget.parse!
+  parsed_urls.each do |responsibility, parsed|
     client = Redis.new(url: parsed.url, driver: :hiredis)
     ping = client.call("PING")
     info = client.call("INFO", "server")

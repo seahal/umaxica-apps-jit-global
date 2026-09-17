@@ -63,7 +63,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       end
 
     TurnstileVerifierStub.challenge_enabled = false
-    JitSecurityTurnstileVerifier.stub(:verify, verifier) do
+    TurnstileVerifierStub.stub(:verify, verifier) do
       post(
         auth_app_sign_up_email_url(ri: "jp"),
         params: {

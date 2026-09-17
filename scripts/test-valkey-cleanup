@@ -6,15 +6,20 @@ require "active_support/core_ext/object/blank"
 require "active_support/core_ext/object/inclusion"
 require_relative "../lib/umaxica/valkey/error"
 require_relative "../lib/umaxica/valkey/configuration_error"
+require_relative "../lib/umaxica/valkey/operation_error"
+require_relative "../lib/umaxica/valkey/unavailable"
 require_relative "../lib/umaxica/valkey/connection"
 require_relative "../lib/umaxica/valkey/cleanup"
+require_relative "../lib/umaxica/valkey/responsibility_urls"
+require_relative "../lib/umaxica/valkey/test_target"
+require_relative "../lib/umaxica/valkey/test_run_scope"
 
 run_id = ENV.fetch("VALKEY_NAMESPACE_RUN_ID")
-unless run_id.match?(/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/)
-  abort "invalid VALKEY_NAMESPACE_RUN_ID"
-end
+Umaxica::Valkey::TestRunScope.validate!(run_id)
+Umaxica::Valkey::TestRunScope.ensure_cleanup_allowed!(run_id)
 
-url = ENV.fetch("AUTH_STATE_REDIS_URL")
+parsed_urls = Umaxica::Valkey::TestTarget.parse!
+url = parsed_urls.fetch(:auth_state).url
 connection = Umaxica::Valkey::Connection.new(url: url, namespace: "e0_cleanup")
 prefixes =
   %w(authorization_code admission sign_out_notice).map do |kind|

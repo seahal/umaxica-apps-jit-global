@@ -14,14 +14,19 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     @user.update!(status_id: ClientStatus::ACTIVE)
   end
 
-  test "public_root_renders_auth_ceremony_links" do
+  test "public_root_renders Base-owned local authentication forms" do
     get base_app_root_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :success
-    assert_equal auth_app_sign_in_url(ri: "jp", host: @sign_host, protocol: "https"),
-                 inertia_props.dig("sign_in", "href")
-    assert_equal auth_app_sign_up_url(ri: "jp", host: @sign_host, protocol: "https"),
-                 inertia_props.dig("sign_up", "href")
+    %w(sign_in sign_up).each do |intent|
+      action = inertia_props.fetch(intent)
+
+      assert_equal base_app_root_authentication_path(ri: "jp"), action.fetch("action")
+      assert_equal "post", action.fetch("method")
+      assert_equal intent, action.fetch("intent")
+      assert_predicate action.fetch("authenticity_token"), :present?
+      assert_nil action["href"]
+    end
   end
 
   test "dashboard_renders_when_signed_in" do
@@ -45,15 +50,14 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal base_app_avatars_path(ri: "jp"), labelled.fetch(dashboard_label(:avatar))
     assert_equal base_app_switcher_path(ri: "jp"), labelled.fetch(dashboard_label(:switcher))
     assert_equal base_app_identity_path(ri: "jp"), labelled.fetch(dashboard_label(:identity))
-    assert_equal base_app_identity_sessions_path(ri: "jp"),
+    assert_equal base_app_sessions_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
     assert_not_includes hrefs, base_app_selector_path(ri: "jp")
     assert_not labelled.key?(dashboard_label(:selector))
     assert_includes hrefs, new_base_app_sign_out_path(ri: "jp")
     # The dashboard only links to ceremonies; it never posts a logout itself.
     assert_select "form[action^=?]", base_app_oidc_logout_path, count: 0
-    assert_includes hrefs, auth_app_sign_in_url(ri: "jp", host: @sign_host, protocol: "https")
-    assert_includes hrefs, auth_app_sign_up_url(ri: "jp", host: @sign_host, protocol: "https")
+    assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
     assert_includes labelled.keys, dashboard_label(:oidc_discovery)
     assert_includes labelled.keys, dashboard_label(:jwks)
     assert_includes labelled.keys, dashboard_label(:userinfo)
@@ -61,7 +65,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_no_match(/サインイン済み|Signed in/i, response.body)
   end
 
-  test "shared dashboard render uses the surface-local authorization entrypoint" do
+  test "shared dashboard does not expose a raw Auth selector" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
 
@@ -72,10 +76,8 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
         .flat_map { |section| section.fetch("items") }
         .to_h { |link| [link.fetch("label"), link.fetch("href")] }
 
-    assert_equal auth_app_sign_in_url(ri: "jp", host: @sign_host, protocol: "https"),
-                 labelled.fetch(dashboard_label(:authorize_sign_in))
-    assert_equal auth_app_sign_up_url(ri: "jp", host: @sign_host, protocol: "https"),
-                 labelled.fetch(dashboard_label(:authorize_sign_up))
+    assert_not labelled.key?(dashboard_label(:authorize_sign_in))
+    assert_not labelled.key?(dashboard_label(:authorize_sign_up))
   end
 
   test "identity_show_links_up_to_the_dashboard" do
@@ -110,7 +112,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
     assert_equal base_app_identity_secrets_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
-    assert_not_includes labelled.values, base_app_identity_sessions_path(ri: "jp")
+    assert_not_includes labelled.values, base_app_sessions_path(ri: "jp")
     assert_equal base_app_identity_activities_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
     assert_equal base_app_identity_standing_path(ri: "jp"),

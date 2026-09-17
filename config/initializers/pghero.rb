@@ -27,4 +27,27 @@ if Rails.env.development?
         ActiveSupport::SecurityUtils.secure_compare(password.to_s, expected_password)
     end
   end
+
+  # PgHero builds one anonymous ActiveRecord model per database with a plain
+  # `establish_connection`, which registers a pool for the writing role only. The
+  # DatabaseSelector middleware (config/initializers/multi_db.rb) wraps every GET in
+  # `connected_to(role: :reading)`, and a model without a reading pool raises
+  # ActiveRecord::ConnectionNotDefined there, the same reason Flipper's model declares
+  # both roles in config/initializers/flipper.rb.
+  #
+  # Each PgHero database resolves from a config/database.yml entry (PgHero's default
+  # config maps every ActiveRecord configuration to a `spec`), so both roles point at
+  # that same entry. PgHero only ever reads through these models, and the replica
+  # entries stay read-only at the PostgreSQL level.
+  PgHero.databases.each_value do |database|
+    spec = database.config["spec"]
+    next if spec.blank?
+
+    # `connection_model` is PgHero-private; it returns the built model without connecting.
+    model = database.send(:connection_model)
+    # connects_to is only allowed on an abstract class. These models are connection
+    # holders that PgHero never instantiates, so marking them abstract changes nothing else.
+    model.abstract_class = true
+    model.connects_to(database: { writing: spec.to_sym, reading: spec.to_sym })
+  end
 end

@@ -2,6 +2,8 @@
   # Test databases are a separate safety boundary. Reusing the development host when the
   # test host is absent can point a destructive test preparation task at the wrong server.
   test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : nil
+  # Rendered in every environment; require the test port only when test boots.
+  test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : nil
 
   # Every `development:` host is required configuration: a missing name used to
   # fall back to a shared default, which silently pointed a database at the
@@ -41,6 +43,7 @@ default: &default
 test_default: &test_default
   !!merge <<: *default
   pool: 2
+  port: <%= test_port %>
   timeout: 20000
   prepared_statements: false
   advisory_locks: true
