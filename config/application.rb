@@ -20,6 +20,21 @@ if Rails.env.development?
   require "blazer"
   require "rswag/api"
   require "rswag/ui"
+
+  require "rails_performance"
+  # The gem ships one config/routes.rb that draws the engine's own route set and then calls
+  # `Rails.application.routes.draw { mount RailsPerformance::Engine => RailsPerformance.mount_at }`
+  # with no host constraint and no flag to disable it. Left in place, the dashboard answers on
+  # every host this application serves -- every app, com, org, content, and service FQDN -- which
+  # is the leak a dedicated host exists to prevent, and a mount
+  # test/security/invariants/mounted_engine_invariant_test.rb has no way to constrain.
+  #
+  # Dropping the routing path is the only available off switch, and it has to happen here: an
+  # engine contributes its routes through the `add_routing_paths` initializer, which has already
+  # run by the time config/initializers/* load. config/routes/performance.rb draws the engine's own
+  # routes and mounts it behind the host constraint instead, and
+  # Security::Invariants::RailsPerformanceRouteInvariantTest fails if the two route lists diverge.
+  RailsPerformance::Engine.paths["config/routes.rb"] = []
 end
 
 require_relative "../lib/jit_security_active_record_encryption_key_provider"

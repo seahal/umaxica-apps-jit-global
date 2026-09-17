@@ -51,6 +51,11 @@ Rails.application.routes.draw do
   # endpoint that serves them (Rswag::Ui and Rswag::Api engines), staff-only, development-only.
   draw :swagger
 
+  # Performance owns the request performance dashboard (RailsPerformance::Engine), staff-only,
+  # development-only. Also the only place the engine is mounted: its self-mount is suppressed in
+  # config/application.rb because it carries no host constraint.
+  draw :performance
+
   # Any host that reached the app without matching a surface above is unknown;
   # answer it here rather than leaking a routing error.
   get "/", to: "unknown_hosts#show" # FIXIME: I want to remove this, or use root!
