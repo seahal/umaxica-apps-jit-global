@@ -8,10 +8,10 @@ require "rails/all"
 
 Bundler.require(*Rails.groups)
 
-# `pghero`, `blazer`, and the two `rswag` halves are `group :development` gems with
-# `require: false` (Gemfile), so
-# Bundler.require never auto-requires them and the gems are not on the load path outside
-# development. They must be required here rather than from config/initializers: an engine only
+# `pghero`, `blazer`, the two `rswag` halves, `rails_performance`, and `coverband` are
+# `group :development` gems with `require: false` (Gemfile), so Bundler.require never auto-requires
+# them and the gems are not on the load path outside development. They must be required here rather
+# than from config/initializers: an engine only
 # contributes its own config/routes.rb through the `add_routing_paths` initializer, which has
 # already run by the time config/initializers/* are loaded, so a late require leaves the engine
 # mounted with an empty route set and every request 404s past it.

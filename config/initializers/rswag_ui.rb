@@ -17,9 +17,9 @@ if Rails.env.development?
     # origin, and the browser is already on the canonical one. Adding a fourth entry pointing at
     # any other origin would make Swagger UI fetch an OpenAPI document this repository does not
     # control.
-    config.openapi_endpoint "/openapi/openapi.app.yml", "Umaxica app surface"
-    config.openapi_endpoint "/openapi/openapi.com.yml", "Umaxica com surface"
-    config.openapi_endpoint "/openapi/openapi.org.yml", "Umaxica org surface"
+    config.openapi_endpoint("/openapi/openapi.app.yml", "Umaxica app surface")
+    config.openapi_endpoint("/openapi/openapi.com.yml", "Umaxica com surface")
+    config.openapi_endpoint("/openapi/openapi.org.yml", "Umaxica org surface")
 
     # Read-only. An empty `supportedSubmitMethods` removes the "Try it out" control for every HTTP
     # method, so the page cannot be used to issue requests against the described APIs. This is the
