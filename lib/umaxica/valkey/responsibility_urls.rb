@@ -24,8 +24,8 @@ module Umaxica
         cache: 0,
         rate_limit: 1,
         auth_state: 2,
-        performance: 6,
-        coverband: 7,
+        performance: 11,
+        coverband: 12,
       }.freeze
       # The diagnostic gems are `group :development` only, so nothing connects to these two in
       # test. They are declared anyway: `assert_nonprod_db!` refuses to validate a responsibility
@@ -35,8 +35,8 @@ module Umaxica
         cache: 3,
         rate_limit: 4,
         auth_state: 5,
-        performance: 8,
-        coverband: 9,
+        performance: 13,
+        coverband: 14,
       }.freeze
 
       Parsed =

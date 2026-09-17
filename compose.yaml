@@ -226,9 +226,18 @@ services:
       retries: 30
       start_period: 10s
   # Disposable, reconstructible application cache (Rails.cache). Every entry
-  # One nonprod Valkey: logical DBs 0/1/2 (dev cache/rate/auth-state) and
-  # 3/4/5 (test). Responsibility URLs remain mandatory; logical DBs are not a
-  # security boundary (see adr/valkey-nonprod-logical-db-topology.md).
+  # One nonprod Valkey -- still one service, one volume, one port. Valkey's
+  # default `databases 16` gives indexes 0-15, allocated as:
+  #   0/1/2   dev  cache / rate-limit / auth-state
+  #   3/4/5   test cache / rate-limit / auth-state
+  #   6-10    unallocated, reserved for further application responsibilities
+  #   11/12   dev  performance / coverband (diagnostic dashboards)
+  #   13/14   test performance / coverband -- declared for validation only;
+  #           nothing connects, both gems are `group :development`
+  # The diagnostic pair sits at the top of the range deliberately, so adding an
+  # application responsibility never has to renumber a dashboard.
+  # Responsibility URLs remain mandatory; logical DBs are not a security
+  # boundary (see adr/valkey-nonprod-logical-db-topology.md).
   valkey:
     container_name: global-devcontainer-valkey
     image: docker.io/valkey/valkey:8.0-alpine3.22

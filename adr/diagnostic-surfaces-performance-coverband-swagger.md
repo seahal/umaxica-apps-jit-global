@@ -72,12 +72,12 @@ default engines are not loadable outside development.
 ### Storage
 
 Two new Valkey responsibilities in `lib/umaxica/valkey/responsibility_urls.rb`, each on its own
-logical database (development 6/7, test 8/9) rather than sharing one behind key prefixes:
+logical database (development 11/12, test 13/14) rather than sharing one behind key prefixes:
 
 | Responsibility | Variable | Dev DB | Namespace |
 | --- | --- | --- | --- |
-| `performance` | `PERFORMANCE_REDIS_URL` | 6 | `performance\|…` (gem's own key format) |
-| `coverband` | `COVERBAND_REDIS_URL` | 7 | `coverband` |
+| `performance` | `PERFORMANCE_REDIS_URL` | 11 | `performance\|…` (gem's own key format) |
+| `coverband` | `COVERBAND_REDIS_URL` | 12 | `coverband` |
 
 Separate databases, not just namespaces, because `rails_performance` reads with
 `redis.keys("performance|*")` — an O(keyspace) blocking scan. Confined to its own database, a
@@ -284,8 +284,8 @@ PRIVATE_COVERBAND_URL=coverband.core.dev.localhost
 PUBLIC_SWAGGER_URL=swagger.umaxica.dev
 PRIVATE_SWAGGER_URL=swagger.core.dev.localhost
 
-PERFORMANCE_REDIS_URL=redis://valkey:6379/6
-COVERBAND_REDIS_URL=redis://valkey:6379/7
+PERFORMANCE_REDIS_URL=redis://valkey:6379/11
+COVERBAND_REDIS_URL=redis://valkey:6379/12
 
 RAILS_PERFORMANCE_USERNAME=
 RAILS_PERFORMANCE_PASSWORD=
