@@ -23,7 +23,7 @@
     "typecheck:verify": "tsc -p tsconfig.app.json --noEmit --listFiles | grep -q '/src/' || (echo 'typecheck covered no source files' >&2 && exit 1)",
     "openapi:lint": "redocly lint",
     "openapi:bundle": "redocly bundle",
-    "openapi:verify": "bun run openapi:bundle && git diff --exit-code -- public/openapi.app.yml public/openapi.com.yml public/openapi.org.yml"
+    "openapi:verify": "bun run openapi:bundle && git diff --exit-code -- openapi/bundled/openapi.app.yml openapi/bundled/openapi.com.yml openapi/bundled/openapi.org.yml"
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
