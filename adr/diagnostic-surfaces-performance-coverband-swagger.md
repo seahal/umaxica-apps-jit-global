@@ -273,8 +273,10 @@ Unset means 401.
 
 ### Environment variables to add
 
-`.env.example` and `.env.devcontainer.example` could not be edited in the session that made this
-change — they are outside its permitted paths. They must be updated by hand:
+`.env.example` and `.env.devcontainer.example` were not edited by the session that made this change:
+a global permission rule (`Read(**/.env*)`) denies agent access to every env file, and it was
+respected rather than worked around. They must be updated by hand. `bin/setup-diagnostic-env`
+appends the block below to both, idempotently.
 
 ```
 PUBLIC_PERFORMANCE_URL=performance.umaxica.dev
@@ -293,7 +295,16 @@ COVERBAND_USERNAME=
 COVERBAND_PASSWORD=
 SWAGGER_USERNAME=
 SWAGGER_PASSWORD=
+
+# Optional. Both default to on; only the exact string "false" disables, so a typo
+# cannot silently turn observability off.
+RAILS_PERFORMANCE_ENABLED=true
+COVERBAND_ENABLED=true
 ```
+
+Sixteen variables: six hostnames, two Valkey URLs, six credentials, two toggles. The credentials are
+read through `Rails.app.creds.option`, which checks ENV first and then Rails credentials, so a
+deployment may supply them either way; left unset, the surface answers 401.
 
 Until the Valkey URLs exist, the development boot fails naming the missing variable. That is the
 intended behaviour, not a defect.
