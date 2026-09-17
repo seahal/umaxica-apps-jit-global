@@ -26,8 +26,8 @@ URLs (never a generic `REDIS_URL`):
 | `CACHE_REDIS_URL`      | 0      | 3       |
 | `RATE_LIMIT_REDIS_URL` | 1      | 4       |
 | `AUTH_STATE_REDIS_URL` | 2      | 5       |
-| `PERFORMANCE_REDIS_URL`| 11     | 13      |
-| `COVERBAND_REDIS_URL`  | 12     | 14      |
+| `PERFORMANCE_REDIS_URL`| 12     | 14      |
+| `COVERBAND_REDIS_URL`  | 13     | 15      |
 
 Amended 2026-09-17: `PERFORMANCE_REDIS_URL` and `COVERBAND_REDIS_URL` back the development-only
 diagnostic dashboards (`adr/diagnostic-surfaces-performance-coverband-swagger.md`). They get their
