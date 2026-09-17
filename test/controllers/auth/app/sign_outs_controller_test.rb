@@ -56,6 +56,8 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       query["post_logout_redirect_uri"],
     )
     assert_predicate token.reload, :revoked?
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
   test "post sign out with a coordinated challenge clears this host and returns to base completion" do

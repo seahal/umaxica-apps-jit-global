@@ -1,6 +1,49 @@
 # UMAXICA feature re-audit — current execution status
 
-Revision: 2026-09-15 (E0 quality-gate continuation, current checkpoint)
+Revision: 2026-09-17 (E10 reverse-direction closeout; not all-95 GO)
+
+## 2026-09-17 E10 checkpoint
+
+Focused isolated tests: 182 runs / 951 assertions / 0 failures twice. E1 owner-replay, fail-closed family link, concurrent consume, consumed-stays-consumed, DPoP invalid proof without consume, established DPoP no Bearer fallback: implemented-and-verified on coordinator/store/public token. E2 no-admission: implemented-and-verified. E3 T0 auth_time, prompt=login/none, max_age, com/org none: implemented-and-verified on authorization/token paths. E7c Turnstile-before-OTP, degraded-on unavailable-only, failed OTP not re-rendered: implemented-and-verified. E7b cookie deletion on Auth sign-out: implemented-and-verified. GUID 404: already-satisfied. REQ-095: source-incomplete. D-GUID persistence: blocked-by-decision. Physical DPoP: deferred-validation. Ruby SimpleCov 2026-09-17: line 98.33% (meets 97), branch 87.83% / method 93.95% (below 90/95); gates unchanged. Ordinary Rails and `bin/ci` green after ExplicitMethodVisibility on rails_performance patches. No deployment / all-95 GO.
+
+### REQ-001–095 dispositions (primary owner unchanged)
+
+| IDs | Disposition |
+|---|---|
+| REQ-001–005 | already-satisfied (plan/worktree/audit) |
+| REQ-006, 064 | already-satisfied on this host; CI service provisioning deferred-validation |
+| REQ-007–010, 032 | implemented-and-verified (admission boundary tests) |
+| REQ-011, 030 | implemented-and-verified for T0 claims, prompt/max_age, refresh auth_time; remaining RP matrix deferred-validation |
+| REQ-012–014 | already-satisfied containment; deeper AAL deferred-validation (MISC-0003) |
+| REQ-015, 028–029, 057–063 | implemented-and-verified locally for grant/refresh/owner; concurrent rotation deferred-validation |
+| REQ-016 | implemented-and-verified automated DPoP denial; physical deferred-validation (MISC-0001, REQ-018) |
+| REQ-017 | already-satisfied progressive enhancement |
+| REQ-018 | deferred-validation |
+| REQ-019 | already-satisfied as plan/misc register |
+| REQ-020 | implemented-and-verified horizontal: no weakened gates/skips; SimpleCov still red at unchanged floors |
+| REQ-021, 023, 025, 027 | already-satisfied transport 404; persistence blocked-by-decision |
+| REQ-022, 024, 026, 038 net GUID | blocked-by-decision |
+| REQ-033–044 | already-satisfied / deferred-validation per route inventory; no `/dashboard` restore |
+| REQ-045–049 | implemented-and-verified no fabricated auth_time; historical backfill deferred-validation (MISC-0005) |
+| REQ-050, 066 | deferred-validation for SimpleCov floors (evidence-backed red) |
+| REQ-051–056 | already-satisfied existing ORG paths; REQ-095 source-incomplete |
+| REQ-065 | already-satisfied |
+| REQ-067–069 | already-satisfied gates; RuboCop red only on unrelated dirty files |
+| REQ-070–072 | already-satisfied social Step-Up ADR/tests |
+| REQ-073–074 | implemented-and-verified cookie delete on Auth sign-out |
+| REQ-075 | already-satisfied distinct `/sessions`, `/sign/out`, Core `/api/v0/session` |
+| REQ-076–084 | already-satisfied / deferred-validation UI matrix |
+| REQ-085–086 | already-satisfied inert Create / Root Up |
+| REQ-087–091 | implemented-and-verified Turnstile/OTP |
+| REQ-092 | already-satisfied preload tests exist |
+| REQ-093–094 | deferred-validation mail/i18n extras |
+| REQ-095 | source-incomplete |
+
+## Previous checkpoint (2026-09-15)
+
+# UMAXICA feature re-audit — current execution status (historical header retained below)
+
+Revision: 2026-09-15 (E0 quality-gate continuation, previous checkpoint)
 Repository: seahal/umaxica-apps-jit-global
 Branch / HEAD: feature / `e9fa72ce5fc0c9e62c9a5a7a8233b477ba77f8b6`
 Worktree: intentionally dirty; all pre-existing and concurrent unrelated changes are preserved.
@@ -13,12 +56,12 @@ Scope: E0 guard completion, quality-gate repair, and the authorized remaining lo
 | E0 isolated test services and cleanup | VERIFIED for this host | Explicit PostgreSQL/Valkey targets, test-only databases, run/worker cleanup and external-transport guards are active. Keep CI service provisioning separately scoped. |
 | OIDC refresh reception | IMPLEMENTED LOCALLY | Base forwards `refresh_token`; client-bound rotation and persisted claims are exercised. Cross-surface failure injection and concurrent rotation remain open. |
 | OIDC prompt/max_age slice | IMPLEMENTED LOCALLY | Base app/com/org transaction persistence, `login`/`none` handling, freshness checks and RP ID-token verification are covered by focused tests. Full public end-to-end policy coverage remains open. |
-| Rails normal suite | GREEN | Latest isolated canonical CI run: 13,058 tests, 79,090 assertions, 0 failures, 0 errors, 3 existing skips; seed 48755; 16 workers. |
-| Rails SimpleCov gate | FAILED_CHECK | Latest same-source run: line 98.38% (`57,972/58,924`), branch 87.88% (`8,669/9,864`), method 93.87% (`10,064/10,721`); exit 2. Gates remain unchanged (line 97, branch 90, method 95 plus file/group/drop rules). |
+| Rails normal suite | GREEN | 2026-09-17 isolated `bin/ci` Rails stage: 13,086 tests, 79,258 assertions, 0 failures, 0 errors, 3 existing skips. Prior 13,058-run measurement is historical. |
+| Rails SimpleCov gate | FAILED_CHECK | 2026-09-17 `COVERAGE=true` isolated run: tests 13,086/79,320/0 failures; line 98.33% (`58,001/58,985`), branch 87.83% (`8,672/9,873`), method 93.95% (`10,082/10,731`); exit 2. Gates unchanged. Remaining branch/method gap: Coverband/diagnostic/architecture tooling (environment construction) plus production controllers not entered this suite. |
 | JS formal coverage | GREEN | `bun run test:coverage` uses Node 24.20.0 + Vitest 5.0.0/V8: 85 files, 1,057 tests; statements 100%, branches 99.63%, functions 100%, lines 100%; exit 0. |
-| Canonical local CI | GREEN | Corrected isolated `bin/ci` passed all configured stages, including Rails 13,058/79,090 and Node/V8 JS coverage. It does not make the separate Rails SimpleCov gate green. |
-| Static/security gates | GREEN | `bun run check`, RuboCop, ERB lint, Brakeman 8.0.6, bundler-audit, bun audit and OpenAPI verification passed. Advisory freshness and wrapper cache behavior remain separately recorded. |
-| Remaining feature work | IN PROGRESS | E1–E10 are not complete. Ruby coverage, public partial-failure matrices, full cross-surface auth-time provenance, physical DPoP/DBSC validation, and GUID persistence ownership remain open; no all-95 or deployment decision is made. |
+| Canonical local CI | GREEN | 2026-09-17 `bin/ci` with explicit Valkey DBs 3/4/5 exited 0 in 7m27s (database prepare, JS checks/coverage, Ruby/ERB lint, bundler-audit, bun audit, Brakeman, loopback boot, Rails 13,086/79,258). Nested `test-isolated bin/ci` is invalid (double run-id claim). Does not make SimpleCov green. |
+| Static/security gates | GREEN | `bun run check`, RuboCop (after ExplicitMethodVisibility on rails_performance patches), ERB lint, Brakeman, bundler-audit passed. |
+| Remaining feature work | IN PROGRESS | E10 reverse-direction closeout recorded. Ruby branch/method floors, physical DPoP/DBSC, GUID persistence ownership remain open; no all-95 or deployment decision is made. |
 
 The current implementation state is: **E0 execution and ordinary Rails baseline are achieved; the
 Ruby coverage gate and several feature slices remain open.** This table is the active checkpoint;

@@ -13,11 +13,6 @@
         "ghcr.io/devcontainers/features/github-cli:1"
       ]
     },
-    "ghcr.io/jsburckhardt/devcontainer-features/herdr:1": {
-      "version": "1.0.0",
-      "resolved": "ghcr.io/jsburckhardt/devcontainer-features/herdr@sha256:6cd1417ff2af435e4b320612f494288b219d3f5dd4ce5f967b510897f5c663f2",
-      "integrity": "sha256:6cd1417ff2af435e4b320612f494288b219d3f5dd4ce5f967b510897f5c663f2"
-    },
     "ghcr.io/nolanjx/devcontainer-features/codex:1": {
       "version": "1.0.0",
       "resolved": "ghcr.io/nolanjx/devcontainer-features/codex@sha256:8928ccd1d5914f1c783de85ec4cef0ea6dd7e6f193e213b245f048697e0e7c25",

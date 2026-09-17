@@ -1,9 +1,15 @@
 <%
   # Test databases are a separate safety boundary. Reusing the development host when the
   # test host is absent can point a destructive test preparation task at the wrong server.
-  test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : nil
+  # `db:prepare` in development also prepares the test database, so this file is
+  # rendered for `test` from a development process. Resolving to nil there left
+  # every test host blank and sent the connection to a local Unix socket, so read
+  # the variable in every environment; require it only when test itself boots.
+  # The boundary that matters is preserved: this never falls back to a
+  # development host.
+  test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : ENV["POSTGRESQL_TEST_HOST"]
   # Rendered in every environment; require the test port only when test boots.
-  test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : nil
+  test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : ENV["POSTGRESQL_PORT"]
 
   # Every `development:` host is required configuration: a missing name used to
   # fall back to a shared default, which silently pointed a database at the

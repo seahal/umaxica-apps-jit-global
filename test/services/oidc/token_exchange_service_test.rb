@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
+  include ActiveSupport::Testing::TimeHelpers
+
   setup do
     @user = clients(:one)
     @user_session_token = ClientToken.create!(user: @user)
@@ -1143,6 +1145,249 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
   end
 
+  test "fails closed when consumed code family linkage returns invalid_state" do
+    code_record = issue_code!
+    delegate = authorization_code_store
+    invalid_link = Struct.new(:status).new(:invalid_state)
+    code_store = Object.new
+    code_store.define_singleton_method(:read) { |raw_code| delegate.read(raw_code) }
+    code_store.define_singleton_method(:consume!) do |**arguments|
+      delegate.consume!(**arguments)
+    end
+    code_store.define_singleton_method(:link_family!) { |**| invalid_link }
+    rp_session_count = ClientRpSession.count
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          code_store: code_store,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "server_error", result.error
+    assert_nil result.token_response
+    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal "consumed", delegate.read(code_record.code).fetch("state")
+  end
+
+  test "fails closed when family linkage raises a Valkey unavailable error" do
+    code_record = issue_code!
+    delegate = authorization_code_store
+    code_store = Object.new
+    code_store.define_singleton_method(:read) { |raw_code| delegate.read(raw_code) }
+    code_store.define_singleton_method(:consume!) do |**arguments|
+      delegate.consume!(**arguments)
+    end
+    code_store.define_singleton_method(:link_family!) do |**|
+      raise Umaxica::Valkey::Unavailable, "authorization code family link unavailable"
+    end
+    rp_session_count = ClientRpSession.count
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          code_store: code_store,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "server_error", result.error
+    assert_nil result.token_response
+    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal "consumed", delegate.read(code_record.code).fetch("state")
+  end
+
+  test "a different same-realm client cannot revoke the code owner's RP session on replay" do
+    code_record = issue_code!
+    owner_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    assert_predicate owner_result, :success?
+
+    owner_session = ClientRpSession.order(:created_at).last
+    owner_session_id = owner_session.id
+    owner_public_id = owner_session.public_id
+    owner_refresh_digest = owner_session.refresh_token_digest
+    @user_session_token.reload
+    root_family_id = @user_session_token.refresh_token_family_id
+    root_discarded_at = @user_session_token.discarded_at
+    side_client = OidcClientRegistry.find("side-app")
+    side_redirect_uri = side_client.redirect_uris.first
+
+    replay_result =
+      OidcClientRegistry.stub(
+        :authenticate_assertion,
+        ->(cid, assertion, token_url:) { cid == "side-app" && assertion.present? && token_url.present? },
+      ) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: side_redirect_uri,
+          client_id: "side-app",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "side-app-client-assertion",
+          token_endpoint_uri: "https://wide.app.localhost/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    assert_not replay_result.success?
+    assert_includes %w(invalid_grant invalid_request), replay_result.error
+    assert_nil replay_result.token_response
+
+    owner_session.reload
+    @user_session_token.reload
+
+    assert_equal owner_session_id, owner_session.id
+    assert_equal owner_public_id, owner_session.public_id
+    assert_equal owner_refresh_digest, owner_session.refresh_token_digest
+    assert_nil owner_session.revoked_at
+    assert_equal root_family_id, @user_session_token.refresh_token_family_id
+    assert_equal root_discarded_at, @user_session_token.discarded_at
+    assert_predicate @user_session_token, :currently_usable?
+    assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
+  end
+
+  test "fails closed when family linkage returns an unknown completion status" do
+    code_record = issue_code!
+    delegate = authorization_code_store
+    unknown_link = Struct.new(:status).new(:timeout)
+    code_store = Object.new
+    code_store.define_singleton_method(:read) { |raw_code| delegate.read(raw_code) }
+    code_store.define_singleton_method(:consume!) do |**arguments|
+      delegate.consume!(**arguments)
+    end
+    code_store.define_singleton_method(:link_family!) { |**| unknown_link }
+    rp_session_count = ClientRpSession.count
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          code_store: code_store,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "server_error", result.error
+    assert_nil result.token_response
+    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal "consumed", delegate.read(code_record.code).fetch("state")
+  end
+
+  test "concurrent exchanges of one code produce a single token response" do
+    code_record = issue_code!
+    results = Array.new(2)
+
+    with_authenticated_client do
+      threads =
+        2.times.map do |index|
+          Thread.new do # rubocop:disable ThreadSafety/NewThread
+            results[index] =
+              OidcTokenExchangeCoordinator.call(
+                grant_type: "authorization_code",
+                code: code_record.code,
+                redirect_uri: @redirect_uri,
+                client_id: "core-next-rp",
+                client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+                client_assertion: "test-client-assertion-#{index}",
+                token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+                code_verifier: @code_verifier,
+              )
+          end
+        end
+      threads.each(&:join)
+    end
+
+    successes = results.select(&:success?)
+    denials = results.reject(&:success?)
+
+    assert_equal 1, successes.size
+    assert_equal 1, denials.size
+    assert_equal "invalid_grant", denials.first.error
+    assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
+    assert_equal 1, ClientRpSession.where(oidc_client_id: "core-next-rp", client_token_id: @user_session_token.id).count
+  end
+
+  test "same-owner replay after a lost HTTP response does not unconsume the code or mint a second family" do
+    code_record = issue_code!
+    first =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    assert_predicate first, :success?
+    usage = ClientRpSession.order(:created_at).last
+    digest = usage.refresh_token_digest
+
+    lost_response_retry =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    assert_not lost_response_retry.success?
+    assert_equal "invalid_grant", lost_response_retry.error
+    assert_nil lost_response_retry.token_response
+    assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
+    usage.reload
+
+    assert_equal digest, usage.refresh_token_digest
+    assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id, oidc_client_id: "core-next-rp").count
+  end
+
   test "fails closed and rolls back the rp session when token issuance fails after consume" do
     code_record = issue_code!
     rp_session_count = ClientRpSession.count
@@ -1758,6 +2003,90 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_code_unconsumed(code_record)
   end
 
+  test "does not fall back to Bearer after a failed established DPoP constraint on refresh" do
+    code_record = issue_code!
+    private_key, jwk = generate_dpop_jwk
+    token_endpoint = "https://log.umaxica.app/oauth/token"
+    proof = build_dpop_proof(private_key, jwk, method: "POST", uri: token_endpoint)
+
+    initial_result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          code_verifier: @code_verifier,
+          dpop_proof: proof,
+          token_endpoint_uri: token_endpoint,
+          request_method: "POST",
+        )
+      end
+
+    assert_predicate initial_result, :success?
+    assert_equal "DPoP", initial_result.token_response[:token_type]
+    usage = ClientRpSession.order(:created_at).last
+    refresh_digest = usage.refresh_token_digest
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "refresh_token",
+          refresh_token: initial_result.token_response.fetch(:refresh_token),
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: token_endpoint,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_request", result.error
+    assert_nil result.token_response
+    usage.reload
+
+    assert_equal refresh_digest, usage.refresh_token_digest
+    assert_predicate usage.dpop_jkt, :present?
+    assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
+  end
+
+  test "fails closed when family linkage times out after the code is consumed" do
+    code_record = issue_code!
+    delegate = authorization_code_store
+    code_store = Object.new
+    code_store.define_singleton_method(:read) { |raw_code| delegate.read(raw_code) }
+    code_store.define_singleton_method(:consume!) do |**arguments|
+      delegate.consume!(**arguments)
+    end
+    code_store.define_singleton_method(:link_family!) do |**|
+      raise Umaxica::Valkey::OperationError, "authorization code family link timed out"
+    end
+    rp_session_count = ClientRpSession.count
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          code_store: code_store,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "server_error", result.error
+    assert_nil result.token_response
+    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal "consumed", delegate.read(code_record.code).fetch("state")
+  end
+
   test "issues OIDC tokens with URL issuer public subject and split audiences" do
     code_record = issue_code!(scope: "openid profile")
 
@@ -1811,6 +2140,42 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_includes base_kids, access_header.fetch("kid")
     assert_includes base_kids, id_header.fetch("kid")
+  end
+
+  test "issued codes keep T0 through delayed issue T1 and exchange T2" do
+    authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
+    @user_session_token.update!(authentication_event_at: authentication_event_at)
+    code_record = issue_code!(authentication_event_at: authentication_event_at)
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+        )
+      end
+
+    assert_predicate result, :success?
+    access_token = AuthenticationTokenService.decode(
+      result.token_response.fetch(:access_token),
+      host: OidcIssuer.host_for_client(@client),
+      resource_type: "client",
+      issuer: OidcIssuer.for_client(@client),
+      audiences: [@client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@client),
+    )
+    id_token = JWT.decode(result.token_response.fetch(:id_token), nil, false).first
+
+    assert_equal authentication_event_at.to_i, access_token.fetch("auth_time")
+    assert_equal authentication_event_at.to_i, id_token.fetch("auth_time")
+    assert_operator access_token.fetch("iat"), :>, authentication_event_at.to_i
+    assert_operator id_token.fetch("iat"), :>, authentication_event_at.to_i
   end
 
   test "preserves an authentication event time that predates authorization-code issuance" do
@@ -2016,7 +2381,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   def issue_code!(client_id: "core-next-rp", redirect_uri: @redirect_uri, scope: "openid profile email",
-                  resource: nil, session_token: nil)
+                  resource: nil, session_token: nil, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
     resource ||= @user
     session_token ||= @user_session_token
     OidcAuthorizationCodeIssuer.call(
@@ -2034,7 +2399,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       },
       resource: resource,
       session_token: session_token,
-      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+      authentication_event_at: authentication_event_at,
     )
   end
 

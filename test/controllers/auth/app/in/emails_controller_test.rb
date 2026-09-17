@@ -321,6 +321,58 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal token_count_before, ClientToken.where(user_id: user.id).count
     assert_nil cookies["auth_access"]
     assert_nil cookies["auth_refresh"]
+    assert_not_includes response.body, valid_pass_code
+  end
+
+  test "degraded Turnstile on sign-in otp accepts only upstream-unavailable results" do
+    user = clients(:one)
+    email = user.client_emails.create!(address: "turnstile-degraded-#{SecureRandom.hex(4)}@example.com")
+
+    post(
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: {
+        "user_email" => { "address" => email.address },
+        "cf-turnstile-response" => "valid-create-token",
+      },
+      headers: { "Host" => @host },
+    )
+
+    assert_response :found
+    otp_private_key = ROTP::Base32.random_base32
+    otp_counter = 12_345
+    valid_pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
+    email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    attempts_before = email.reload.otp_attempts_count
+    Flipper.enable(:turnstile_degraded_mode)
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+
+    patch(
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: {
+        :user_email => { pass_code: valid_pass_code },
+        "cf-turnstile-response" => "invalid-turnstile-token",
+      },
+      headers: { "Host" => @host },
+    )
+
+    assert_response :unprocessable_content
+    assert_equal attempts_before, email.reload.otp_attempts_count
+    assert_not_includes response.body, valid_pass_code
+
+    TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
+    patch(
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: {
+        :user_email => { pass_code: valid_pass_code },
+        "cf-turnstile-response" => "provider-outage-token",
+      },
+      headers: { "Host" => @host },
+    )
+
+    assert_response :found
+    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+  ensure
+    Flipper.disable(:turnstile_degraded_mode)
   end
 
   test "post create is refused while the record-level otp cooldown is still running" do

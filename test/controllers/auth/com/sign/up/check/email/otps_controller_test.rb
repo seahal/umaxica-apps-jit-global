@@ -62,6 +62,39 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_nil cycle.completed_requirements["otp"]
   end
 
+  test "degraded Turnstile accepts only upstream-unavailable results" do
+    visitor_email = start_email_signup!("com-email-degraded@example.com")
+    attempts_before = visitor_email.reload.otp_attempts_count
+    Flipper.enable(:turnstile_degraded_mode)
+
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+    patch(
+      auth_com_sign_up_check_email_otp_url(ri: "jp"),
+      params: {
+        "visitor_email" => { "pass_code" => otp_code_for(visitor_email) },
+        "cf-turnstile-response" => "invalid-turnstile-token",
+      },
+      headers: default_headers,
+    )
+
+    assert_response :unprocessable_content
+    assert_equal attempts_before, visitor_email.reload.otp_attempts_count
+
+    TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
+    patch(
+      auth_com_sign_up_check_email_otp_url(ri: "jp"),
+      params: {
+        "visitor_email" => { "pass_code" => otp_code_for(visitor_email) },
+        "cf-turnstile-response" => "provider-outage-token",
+      },
+      headers: default_headers,
+    )
+
+    assert_response :redirect
+  ensure
+    Flipper.disable(:turnstile_degraded_mode)
+  end
+
   test "patch with a valid otp advances to the birthdate checkpoint" do
     visitor_email = start_email_signup!("com-email-valid@example.com")
     cycle = current_sign_up_cycle

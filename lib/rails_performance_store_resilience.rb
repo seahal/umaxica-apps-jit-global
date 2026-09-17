@@ -28,6 +28,8 @@ require_relative "jit_log_event"
 # class name is kept, which is what distinguishes a connection refusal from a timeout or an OOM.
 module RailsPerformanceStoreResilience
   module UtilsPatch
+    public
+
     def save_to_redis(...)
       super
     rescue Redis::BaseError => e

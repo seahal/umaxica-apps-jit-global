@@ -69,6 +69,8 @@ module RailsPerformanceRecordSanitizer
   # Valkey rather than on the way out of it. Redacting at read time would leave the secret sitting
   # in the store, where `redis.keys` and any operator with a Valkey connection would still find it.
   module RequestRecordPatch
+    public
+
     def save
       @path = RailsPerformanceRecordSanitizer.sanitize_path(@path)
       @http_referer = RailsPerformanceRecordSanitizer.sanitize_referer(@http_referer)

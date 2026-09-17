@@ -536,3 +536,19 @@ parameters without weakening the outbound-communication guard.
 
 Exit criterion: the targeted test and canonical CI pass without credential-shaped debug output,
 and the repository logging-boundary checks continue to pass.
+
+MISC-0016 — 2026-09-17 in-cycle closeout (E1–E7c tests; E10 dispositions)
+
+Status: PARTIALLY_COMPLETE for E10 reverse-direction closeout; not an all-95 GO.
+
+Category: testing / security / quality gate.
+
+Evidence level: REPRODUCED_TEST.
+
+First observed: 2026-09-17, current feature worktree.
+
+Concrete evidence: Isolated focused suites passed twice: 182 runs / 951 assertions / 0 failures. Explicit `public` was declared on the two rails_performance patch methods that failed the architecture cop. Ordinary isolated Rails then: 13,086 / 79,265 / 0 failures / 3 skips. `COVERAGE=true`: tests green, SimpleCov exit 2 at line 98.33% / branch 87.83% / method 93.95%; floors unchanged. Canonical `bin/ci` exit 0 (7m27s; Rails 13,086 / 79,258). JS coverage 85/1057, 100/99.63/100/100. Brakeman 0; bundler-audit 0. Physical DPoP/DBSC (MISC-0001), latency (MISC-0002), AAL policy (MISC-0003), extra UX (MISC-0004), historical provenance (MISC-0005), REQ-095 (MISC-0006), and real-cluster failover (MISC-0007 extra) stay next-cycle.
+
+Required E1/E2/E3/E5/E7c fixes were not moved here to mark a phase done. Residual next-cycle items remain MISC-0001–0007 as originally scoped.
+
+Related: E10, REQ-020/069/095. Evidence: `evidence/2026-09-17-e10-closeout.md`.
