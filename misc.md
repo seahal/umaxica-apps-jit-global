@@ -22,9 +22,9 @@ MISC-0001
 
 Real-client DPoP and DBSC interoperability
 
-Reported validation gap / OPEN
+OPEN — automated protocol COMPLETE; physical DEFERRED_VALIDATION
 
-E5 must still complete automated protocol/runtime checks.
+Physical client/browser matrix only. Automated DPoP denial is closed this cycle.
 
 MISC-0002
 
@@ -46,9 +46,9 @@ MISC-0004
 
 Direct-entry UX beyond the fixed Base-local contract
 
-Product refinement / OPEN
+OPEN — authority COMPLETE_VERIFIED; presentation DEFERRED_NEXT_CYCLE
 
-D-ENTRY and E2 are decided for this cycle, not blocked.
+Base-owned admission is the cycle contract. Extra UX stays next cycle.
 
 MISC-0005
 
@@ -62,21 +62,21 @@ MISC-0006
 
 Unrecoverable original ORG UI fragment
 
-Known source limitation / OPEN
+OPEN — SOURCE_INCOMPLETE_NEXT_CYCLE (REQ-095); REQ-051–054/056 COMPLETE_VERIFIED
 
-REQ-095 is explicitly deferred; REQ-051–056 remain implementable.
+Do not invent the missing ORG fragment. REQ-055 also deferred (weak source).
 
 MISC-0007
 
 Cross-store failure behavior under real failover
 
-Operational-validation gap / OPEN
+OPEN — in-process injection COMPLETE_VERIFIED; real cluster DEFERRED_NEXT_CYCLE
 
-E1 must still fix known partial-failure defects and run isolated injections.
+Isolated Lua/Ruby fault injection is closed. Process death / replica failover remain next cycle.
 
 MISC-0001 — Real-client DPoP / DBSC interoperability
 
-Category: security / interoperability. Evidence level: VALIDATION_GAP. Status: OPEN; physical validation deferred.
+Category: security / interoperability. Evidence level: VALIDATION_GAP. Status: OPEN; physical validation deferred. Automated AS/RS denial tests: MITIGATED this cycle.
 
 Evidence: Source S1 REQ-016–019 and S3 §§6, 11.G4, 16 report no representative physical/client validation. No new device test has been run while preparing this memo.
 
@@ -552,3 +552,59 @@ Concrete evidence: Isolated focused suites passed twice: 182 runs / 951 assertio
 Required E1/E2/E3/E5/E7c fixes were not moved here to mark a phase done. Residual next-cycle items remain MISC-0001–0007 as originally scoped.
 
 Related: E10, REQ-020/069/095. Evidence: `evidence/2026-09-17-e10-closeout.md`.
+
+MISC-0017 — Ruby SimpleCov branch/method floors (explicit cycle waiver)
+
+Status: OPEN; DEFERRED_WITH_EXPLICIT_CYCLE_WAIVER. Not a claim that REQ-050/066/069 coverage-green is met.
+
+Category: testing / quality gate.
+
+Evidence level: REPRODUCED_TEST.
+
+First observed: 2026-09-17, HEAD `cac794f88e473666832c78f043b87b15bb6bc38d` at cycle-close start.
+
+Evidence: final `COVERAGE=true` isolated Rails: tests 13,098 / 79,395 / 0 failures / 3 skips; SimpleCov exit 2; line 98.33% (58,004/58,985) meets 97; branch 87.85% (8,674/9,873) below 90; method 93.80% (10,066/10,731) below 95. Lowest 0% branch files included `lib/coverband_process_gate.rb`, `lib/diagnostic_surface_credentials.rb`, `lib/architecture_baseline.rb`. Gates, exclusions, `:nocov:`, skips, and assertions were not weakened.
+
+Root cause: unentered production controllers plus environment-construction libraries measured by SimpleCov but excluded from Minitest by `adr/no-test-suite-for-environment-construction.md`.
+
+Impact: quality-gate red; not a new authentication bypass.
+
+Why deferred: user waived branch/method as this cycle's blocking condition. Line floor already holds.
+
+Next analysis question: which remaining methods are dead vs untested production entry points?
+
+Falsification: a same-source `COVERAGE=true` run exiting 0 at unchanged floors.
+
+Exit criterion: SimpleCov exit 0 without threshold/exclusion changes.
+
+Related: REQ-020/050/066/069.
+
+MISC-0018 — GUID persistence and public net OpenAPI ownership
+
+Status: OPEN; BLOCKED_BY_DECISION_NEXT_CYCLE (REQ-022/024/026/038 GUID parts).
+
+Category: data / API.
+
+Evidence: public GUID route returns non-redirecting 404 (`test/integration/guid_surface_test.rb`). No authoritative DB owner.
+
+Root cause: storage owner and public net OpenAPI contract are undecided.
+
+Impact: no registered-ID 200 lookup.
+
+Why deferred: must not pick a database by convenience.
+
+Next question: which bounded context owns GUID rows and the public JSON artifact?
+
+Confirmation: owner ADR + unique eid tests + found/unknown/outage status contract.
+
+Exit: durable uniqueness and documented public contract, or explicit retirement of public lookup.
+
+MISC-0019 — Remaining `/web/v0` `/edge/v0` migration (REQ-035)
+
+Status: OPEN; DEFERRED_NEXT_CYCLE.
+
+Evidence: OpenAPI coverage still treats some `/web/v0` and `/edge/v0` as deferred. Partial `/api/v0` migration exists and must not be broken.
+
+Why deferred: independent coherent slice across callers/contracts.
+
+Exit: remaining valuable endpoints migrated with callers and OpenAPI, or evidenced dead and removed.

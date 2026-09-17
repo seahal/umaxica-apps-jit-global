@@ -66,6 +66,29 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     assert_match @other_token.public_id, response.body
   end
 
+  test "app refuses a foreign session id without mutating the owner sessions" do
+    host! @app_host
+    setup_app_actor!
+    foreign = ClientToken.create!(user: clients(:two))
+
+    delete base_app_identity_session_url(foreign.public_id, ri: "jp", host: @app_host), headers: @app_headers
+
+    assert_response :not_found
+    assert_predicate foreign.reload, :currently_usable?
+    assert_predicate @current_token.reload, :currently_usable?
+    assert_predicate @other_token.reload, :currently_usable?
+  end
+
+  test "app session destroy is not reachable with GET" do
+    host! @app_host
+    setup_app_actor!
+
+    get base_app_identity_session_url(@other_token.public_id, ri: "jp", host: @app_host), headers: @app_headers
+
+    assert_response :success
+    assert_predicate @other_token.reload, :currently_usable?
+  end
+
   test "app revoke selected session revokes only that session" do
     host! @app_host
     setup_app_actor!

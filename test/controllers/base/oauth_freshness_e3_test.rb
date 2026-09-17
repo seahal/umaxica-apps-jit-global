@@ -84,6 +84,23 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
     assert_equal "login_required", response.parsed_body.fetch("error")
   end
 
+  test "shared freshness decision treats login and stale max_age as unsatisfied" do
+    event = Time.utc(2026, 9, 13, 9, 0)
+
+    assert_not OidcAuthorizeRequestResolver.authentication_satisfied?(
+      prompt: "login", max_age: nil, authenticated_at: event, now: event + 1.second,
+    )
+    assert_not OidcAuthorizeRequestResolver.authentication_satisfied?(
+      prompt: nil, max_age: 60, authenticated_at: event, now: event + 2.minutes,
+    )
+    assert OidcAuthorizeRequestResolver.authentication_satisfied?(
+      prompt: nil, max_age: 120, authenticated_at: event, now: event + 1.minute,
+    )
+    assert_not OidcAuthorizeRequestResolver.authentication_satisfied?(
+      prompt: nil, max_age: 60, authenticated_at: nil, now: event,
+    )
+  end
+
   test "unsupported prompt is rejected as an invalid request" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
 
