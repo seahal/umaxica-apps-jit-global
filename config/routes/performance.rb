@@ -15,10 +15,12 @@ constraints host: [ENV["PUBLIC_PERFORMANCE_URL"], ENV["PRIVATE_PERFORMANCE_URL"]
     # /rails/performance answers on every host this application serves.
     #
     # config/application.rb drops the engine's `config/routes.rb` path so neither half runs, which
-    # means the engine's own routes have to be drawn here. They are a verbatim copy of the gem's
-    # list; `Security::Invariants::RailsPerformanceRouteInvariantTest` reads the gem's shipped file
-    # and fails when the two diverge, so a gem upgrade that adds or renames a route cannot leave a
-    # silently dead dashboard tab behind.
+    # means the engine's own routes have to be drawn here. They are a verbatim copy of the list in
+    # `rails_performance-1.6.0/config/routes.rb`.
+    #
+    # Copied from a gem internal, so it drifts on upgrade and nothing catches that automatically:
+    # when bumping the gem, diff its config/routes.rb against this block. A renamed route surfaces
+    # only as a dashboard tab that 404s, and a new one simply never appears.
     RailsPerformance::Engine.routes.draw do
       get "/" => "rails_performance#index", :as => :rails_performance
 

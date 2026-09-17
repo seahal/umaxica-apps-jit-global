@@ -36,6 +36,9 @@ repository root. Load only the entries matching the task.
   `docs/architecture/controller-lifecycle.md`
 - JSON API endpoints, error responses, or API versioning: `docs/reference/api-design-standards.md`
 - Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`
+- Environment, dependency, tooling, or mounted-engine setup: `project/no-environment-tests.mdc`,
+  `adr/no-test-suite-for-environment-construction.md` — setup is never covered by Minitest or
+  Vitest; run it and record the result in `evidence/`
 - Adding any class outside `app/models` and `app/controllers` — values, results, services,
   operations, resolvers, policies, queries, forms, presenters, serializers, or adapters:
   `project/value-object-boundaries.mdc`
@@ -124,6 +127,11 @@ bun run test                                  # JavaScript tests (Vitest)
 Meaningful behavior changes need risk-appropriate tests covering success, failure, authorization,
 and boundary cases. No placeholder, skipped, TODO, or behavior-mocking tests. Run the narrowest
 relevant checks first, then broaden only when the affected boundary warrants it.
+
+Environment and tooling construction is the exception, and it is absolute: never add a Minitest or
+Vitest case whose subject is dependency, configuration, container, or mounted-engine setup. Run the
+thing and record what you observed in `evidence/`. See
+`.agents/harnesses/rules/project/no-environment-tests.mdc`.
 
 Report only claims supported by results from the current session. State failed, skipped, blocked,
 and unverified checks plainly. Lead with the outcome; keep responses proportional to the task. Do

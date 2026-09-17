@@ -32,9 +32,25 @@ if Rails.env.development?
   # Dropping the routing path is the only available off switch, and it has to happen here: an
   # engine contributes its routes through the `add_routing_paths` initializer, which has already
   # run by the time config/initializers/* load. config/routes/performance.rb draws the engine's own
-  # routes and mounts it behind the host constraint instead, and
-  # Security::Invariants::RailsPerformanceRouteInvariantTest fails if the two route lists diverge.
+  # routes and mounts it behind the host constraint instead.
+  #
+  # On upgrading this gem, re-read its config/routes.rb: the copied route list in
+  # config/routes/performance.rb has to be brought across by hand, and a renamed route shows up
+  # only as a dashboard tab that 404s.
   RailsPerformance::Engine.paths["config/routes.rb"] = []
+
+  # Coverband measures which Ruby lines execute, which is only a meaningful question for the
+  # process serving requests. Requiring the gem is what starts it: its railtie hooks
+  # `before_configuration`, which fires on the `class Application < Rails::Application` line below,
+  # and calls `Coverband.configure` (loading config/coverband.rb) followed by `Coverband.start`.
+  # Not requiring it is therefore the off switch for a console, a rake task, a Solid Queue worker,
+  # or the test suite -- see lib/coverband_process_gate.rb for why that is an allowlist.
+  #
+  # This require must also come before the Application class for the collector to see the
+  # application's own eager loading; a later require would start measurement after the code under
+  # observation had already been loaded.
+  require_relative "../lib/coverband_process_gate"
+  require "coverband" if CoverbandProcessGate.measuring?
 end
 
 require_relative "../lib/jit_security_active_record_encryption_key_provider"
