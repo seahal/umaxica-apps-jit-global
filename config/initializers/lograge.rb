@@ -28,7 +28,7 @@ Rails.application.configure do
     # 24h retention (podman/loki/loki.yaml) bounds the shipped copy.
     #
     # Stdout stays in the list, so the developer's terminal is unchanged and
-    # production — which never reaches this branch — keeps its stdout-only
+    # production -- which never reaches this branch -- keeps its stdout-only
     # contract.
     access_log_path = Rails.root.join("log/development.access.jsonl")
     access_log_sinks << ActiveSupport::Logger.new(access_log_path, 3, 16.megabytes).tap do |logger|

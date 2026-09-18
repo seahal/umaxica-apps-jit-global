@@ -4,6 +4,8 @@
 # Run using bin/ci
 
 CI.run do
+  step "Setup: create test databases",
+       "scripts/test-isolated env RAILS_ENV=test bin/rails db:create"
   step "Setup: test database",
        "POSTGRESQL_TEST_PREPARE_DATABASES=" \
        "test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db " \

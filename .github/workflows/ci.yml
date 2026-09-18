@@ -85,7 +85,6 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version-file: .ruby-version
           bundler-cache: true
           cache-version: 1
       - name: Run Brakeman security scanner (SARIF + fail on issues)
@@ -132,7 +131,6 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version-file: .ruby-version
           bundler-cache: true
           cache-version: 1
       - name: Run RuboCop
@@ -165,7 +163,8 @@ jobs:
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          # Administration database for scripts/test-environment-check (POSTGRESQL_DATABASE).
+          POSTGRES_DB: db
         ports:
           - 5432:5432
         options: >-
@@ -184,15 +183,20 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version-file: .ruby-version
           bundler-cache: true
           cache-version: 1
       - name: Install native runtime dependencies
         run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libvips
+      - name: Create test databases
+        run: scripts/test-isolated env RAILS_ENV=test bin/rails db:create
       - name: Setup test databases
-        run: bin/rails db:prepare
+        # Same command as config/ci.rb: scripts/test-isolated claims the Valkey run scope and sets
+        # VALKEY_NAMESPACE_RUN_ID, which config/environments/test.rb requires at boot.
+        run: >-
+          POSTGRESQL_TEST_PREPARE_DATABASES=test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db
+          scripts/test-isolated env RAILS_ENV=test bin/rails db:test:prepare
       - name: Run Rails tests
-        run: bin/rails test
+        run: scripts/test-isolated bin/rails test
       - name: Upload test logs
         if: failure()
         uses: actions/upload-artifact@v6.0.0
@@ -226,7 +230,8 @@ jobs:
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          # Administration database for scripts/test-environment-check (POSTGRESQL_DATABASE).
+          POSTGRES_DB: db
         ports:
           - 5432:5432
         options: >-
@@ -245,15 +250,20 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version-file: .ruby-version
           bundler-cache: true
           cache-version: 1
       - name: Install native runtime dependencies
         run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libvips
+      - name: Create test databases
+        run: scripts/test-isolated env RAILS_ENV=test bin/rails db:create
       - name: Setup test databases
-        run: bin/rails db:prepare
+        # Same command as config/ci.rb: scripts/test-isolated claims the Valkey run scope and sets
+        # VALKEY_NAMESPACE_RUN_ID, which config/environments/test.rb requires at boot.
+        run: >-
+          POSTGRESQL_TEST_PREPARE_DATABASES=test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db
+          scripts/test-isolated env RAILS_ENV=test bin/rails db:test:prepare
       - name: Run Rails tests with coverage
-        run: COVERAGE=true bin/rails test test/
+        run: scripts/test-isolated env COVERAGE=true bin/rails test test/
       - name: Upload test coverage
         if: always()
         uses: actions/upload-artifact@v6.0.0
@@ -308,7 +318,6 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version-file: .ruby-version
           bundler-cache: true
           cache-version: 1
       - name: Scan Gemfile.lock for known gem vulnerabilities
