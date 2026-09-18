@@ -187,6 +187,8 @@ jobs:
           cache-version: 1
       - name: Install native runtime dependencies
         run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libvips
+      - name: Create test databases
+        run: scripts/test-isolated env RAILS_ENV=test bin/rails db:create
       - name: Setup test databases
         # Same command as config/ci.rb: scripts/test-isolated claims the Valkey run scope and sets
         # VALKEY_NAMESPACE_RUN_ID, which config/environments/test.rb requires at boot.
@@ -252,6 +254,8 @@ jobs:
           cache-version: 1
       - name: Install native runtime dependencies
         run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libvips
+      - name: Create test databases
+        run: scripts/test-isolated env RAILS_ENV=test bin/rails db:create
       - name: Setup test databases
         # Same command as config/ci.rb: scripts/test-isolated claims the Valkey run scope and sets
         # VALKEY_NAMESPACE_RUN_ID, which config/environments/test.rb requires at boot.
