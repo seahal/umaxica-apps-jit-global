@@ -15,9 +15,9 @@ primary RP) and a regional repository (region/locale-specific RP delivery). Inde
 `adr/publishing-db-content-authority.md` and `docs/architecture/docs-help-news-content-boundary.md`
 centralized `info`, `docs`, `news`, and `help` content authority in the `publishing` database inside
 this repository, with public article HTML explicitly assigned to Edge (`umaxica-apps-edge`, TanStack
-Start on Cloudflare Workers, Astro migration in progress) rather than to Rails. Rails' role for those
-four surfaces is deliberately thin: root and health endpoints plus the `GET /api/v0/entries` read
-API, with no article index/detail, sitemap, or RSS rendering.
+Start on Cloudflare Workers, Astro migration in progress) rather than to Rails. Rails' role for
+those four surfaces is deliberately thin: root and health endpoints plus the `GET /api/v0/entries`
+read API, with no article index/detail, sitemap, or RSS rendering.
 
 The codebase is converging toward three or more independent Rails repositories:
 
@@ -32,39 +32,40 @@ Inertia Rails + React for that purpose; that pairing is settled and out of scope
 
 The publish surfaces are different in kind:
 
-- `info`/`docs`/`news`/`help` root endpoints are, by the accepted content boundary above, permanently
-  thin — Edge owns the actual article screens. The current Rails views for these are single
-  placeholder pages with no interactivity.
-- `edit.*.org` (`Edit::Org::*`) is today a real Inertia + React CMS. `Edit::Org::ApplicationController`
-  itself defaults to a plain ERB layout (`edit/org/application`), but every screen a staff user
-  actually operates renders Inertia: `Edit::Org::DashboardsController#show`
-  (`app/controllers/edit/org/dashboards_controller.rb`), and — via the shared
-  `PublishingManagementEntriesActions` and `PublishingManagementCell` concerns
+- `info`/`docs`/`news`/`help` root endpoints are, by the accepted content boundary above,
+  permanently thin — Edge owns the actual article screens. The current Rails views for these are
+  single placeholder pages with no interactivity.
+- `edit.*.org` (`Edit::Org::*`) is today a real Inertia + React CMS.
+  `Edit::Org::ApplicationController` itself defaults to a plain ERB layout (`edit/org/application`),
+  but every screen a staff user actually operates renders Inertia:
+  `Edit::Org::DashboardsController#show` (`app/controllers/edit/org/dashboards_controller.rb`), and
+  — via the shared `PublishingManagementEntriesActions` and `PublishingManagementCell` concerns
   (`app/controllers/concerns/publishing_management_entries_actions.rb`,
   `app/controllers/concerns/publishing_management_cell.rb`) — the `index`/`show`/`new`/`create`/
-  `edit`/`update` actions of all twelve `Edit::Org::Publishing::{Docs,Help,Info,News}::{App,Com,Org}
-  ::EntriesController` classes (four content families × three audiences), plus their nested
-  publication/archive failure re-renders. `SurfaceInertiaPage` is the marker concern that switches a
-  controller's layout to `"#{family}/#{surface}/inertia"`; it is present on all of the above. Per
-  this decision, `edit` is intended to
-  follow `info`/`docs`/`news`/`help` into the same Edge-owns-the-screen model: Edge will eventually
-  own the editing UI as well, extending the existing 3×4 (`app`/`com`/`org` × `info`/`docs`/`news`/
-  `help`) content surface matrix (`docs/architecture/content-surface-matrix.md`) with an equivalent
-  publish-repo/Edge split for `edit`. Rails' role in `edit` converges on the same shape as the other
-  four: authority, persistence, and a read/write API, not the interactive screen.
+  `edit`/`update` actions of all twelve
+  `Edit::Org::Publishing::{Docs,Help,Info,News}::{App,Com,Org} ::EntriesController` classes (four
+  content families × three audiences), plus their nested publication/archive failure re-renders.
+  `SurfaceInertiaPage` is the marker concern that switches a controller's layout to
+  `"#{family}/#{surface}/inertia"`; it is present on all of the above. Per this decision, `edit` is
+  intended to follow `info`/`docs`/`news`/`help` into the same Edge-owns-the-screen model: Edge will
+  eventually own the editing UI as well, extending the existing 3×4 (`app`/`com`/`org` ×
+  `info`/`docs`/`news`/ `help`) content surface matrix
+  (`docs/architecture/content-surface-matrix.md`) with an equivalent publish-repo/Edge split for
+  `edit`. Rails' role in `edit` converges on the same shape as the other four: authority,
+  persistence, and a read/write API, not the interactive screen.
 
 Because none of the publish repository's surfaces are meant to own real client-side application UI
-long-term, there is no reason for it to carry a JS bundler, a Node/Bun toolchain, or a
-React/Inertia runtime. `importmap-rails` (already a dependency of this repository; see
-`config/importmap.rb`) serves Turbo/Stimulus-class JavaScript directly through Propshaft with no
-build step and no JS runtime dependency, which is a better fit for a repository whose HTML is either
-a thin placeholder or destined to be replaced by Edge-owned screens.
+long-term, there is no reason for it to carry a JS bundler, a Node/Bun toolchain, or a React/Inertia
+runtime. `importmap-rails` (already a dependency of this repository; see `config/importmap.rb`)
+serves Turbo/Stimulus-class JavaScript directly through Propshaft with no build step and no JS
+runtime dependency, which is a better fit for a repository whose HTML is either a thin placeholder
+or destined to be replaced by Edge-owned screens.
 
 ## Decision
 
 1. **The publish repository renders with Rails-standard importmap (`importmap-rails` +
-   Turbo/Stimulus + Propshaft), not `vite_rails`, not Inertia Rails, and not React.** This applies to
-   all surfaces that move into the publish repository: the `info`/`docs`/`news`/`help` thin
+   Turbo/Stimulus + Propshaft), not `vite_rails`, not Inertia Rails, and not React.** This applies
+   to all surfaces that move into the publish repository: the `info`/`docs`/`news`/`help` thin
    root+API surfaces and the `edit.*.org` publishing CMS.
 2. **No React or Inertia dependency remains in the publish repository's JavaScript.**
    `@inertiajs/*`, `react`, and `react-dom` are not carried into that repository's `package.json`.
@@ -90,14 +91,15 @@ a thin placeholder or destined to be replaced by Edge-owned screens.
 `edit`'s Inertia + React removal (point 3) landed 2026-09-14, ahead of and independent of the
 repository split itself: `Edit::Org::DashboardsController` and the `PublishingManagementCell`/
 `PublishingManagementEntriesActions`/`PublishingManagementPublicationsActions`/
-`PublishingManagementArchivesActions` concerns now render plain ERB (`app/views/edit/org/dashboards/
-show.html.erb`, `app/views/edit/org/publishing/entries/{index,show,new,edit}.html.erb` — one shared
-set of four templates for all twelve content-family × audience cells) instead of
-`render inertia: true`. `SurfaceInertiaPage`/`SurfaceChrome` are no longer included by any `edit`
-controller. The `edit/org/application` layout keeps `vite_stylesheet_tag` against
-`src/styles/surfaces/edit_org.css` for Tailwind CSS and `javascript_importmap_tags` for Turbo/
-Stimulus JS; `config/frontend_stacks.yml` reflects this as a `vite:`-CSS, non-Inertia entry. The
-retired React sources (`src/entrypoints/inertia/edit_org.tsx`, `src/pages/edit/org/**`,
+`PublishingManagementArchivesActions` concerns now render plain ERB
+(`app/views/edit/org/dashboards/ show.html.erb`,
+`app/views/edit/org/publishing/entries/{index,show,new,edit}.html.erb` — one shared set of four
+templates for all twelve content-family × audience cells) instead of `render inertia: true`.
+`SurfaceInertiaPage`/`SurfaceChrome` are no longer included by any `edit` controller. The
+`edit/org/application` layout keeps `vite_stylesheet_tag` against `src/styles/surfaces/edit_org.css`
+for Tailwind CSS and `javascript_importmap_tags` for Turbo/ Stimulus JS;
+`config/frontend_stacks.yml` reflects this as a `vite:`-CSS, non-Inertia entry. The retired React
+sources (`src/entrypoints/inertia/edit_org.tsx`, `src/pages/edit/org/**`,
 `src/features/publishing/Management{Index,Show,New,Edit}.tsx`) and the Inertia layout
 (`app/views/layouts/edit/org/inertia.html.erb`) were deleted rather than left as dead code.
 
@@ -110,9 +112,9 @@ retired React sources (`src/entrypoints/inertia/edit_org.tsx`, `src/pages/edit/o
   because none of these pages use React or Inertia today.
 - `edit`'s migration is not a rename; it requires re-implementing the entries/archives/
   publications/revisions/dashboards editing flows without Inertia and React before the surface can
-  join the publish repository on this ADR's terms. Until that reimplementation lands, `edit` stays on
-  its current Inertia + React stack in whatever repository hosts it.
-- This ADR only fixes the *frontend rendering strategy* for the future publish repository. It does
+  join the publish repository on this ADR's terms. Until that reimplementation lands, `edit` stays
+  on its current Inertia + React stack in whatever repository hosts it.
+- This ADR only fixes the _frontend rendering strategy_ for the future publish repository. It does
   not itself perform the repository split, and it does not change which database or process
   currently serves these controllers — see `adr/split-into-regional-and-global-repos.md` and
   `adr/publishing-db-content-authority.md` for those boundaries.

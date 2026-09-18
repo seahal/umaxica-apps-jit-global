@@ -51,12 +51,12 @@ kept for a compatibility period: nothing outside this repository consumed them (
 is derived from `config/routes/*.rb`, and there is no external registration against the retired
 hosts). The environment keys remain:
 
-| Name                      | Role                                      |
-| ------------------------- | ----------------------------------------- |
-| `PUBLIC_GUID_SERVICE_URL` | Browser-facing site: `guid.umaxica.net`   |
-| `PRIVATE_GUID_SERVICE_URL` | Development ingress: `guid.net.localhost` |
-| `GUID_SERVICE_URL`        | Explicit compatibility input for boot     |
-| boot host key `guid_service` | Host family member                     |
+| Name                         | Role                                      |
+| ---------------------------- | ----------------------------------------- |
+| `PUBLIC_GUID_SERVICE_URL`    | Browser-facing site: `guid.umaxica.net`   |
+| `PRIVATE_GUID_SERVICE_URL`   | Development ingress: `guid.net.localhost` |
+| `GUID_SERVICE_URL`           | Explicit compatibility input for boot     |
+| boot host key `guid_service` | Host family member                        |
 
 `config.hosts` admits `guid.umaxica.net` in production and `guid.net.localhost:3000` in development.
 A request whose `Host` is `guid.umaxica.id` or `eid.umaxica.net` is rejected.

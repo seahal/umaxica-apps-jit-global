@@ -29,11 +29,11 @@ standing development infrastructure rather than a special mode.
 > `kafka` is listed, and the MSK data plane still does not function here, for the reason given
 > below.
 
-| Surface                              | State                                                                                                                         |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Surface                              | State                                                                                                                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S3                                   | Fully usable, and **verified at runtime on 2026-09-14** for the AWS SDK path (PUT/HEAD/GET/DELETE on both boundary buckets). The AWS CLI and Terraform AWS provider paths remain unexercised. |
-| MSK control plane                    | Usable. `CreateCluster`, `DescribeCluster`, `GetBootstrapBrokers`, `DeleteCluster` all respond with real AWS response shapes. |
-| MSK data plane (a real Kafka broker) | **Not available here.** See below.                                                                                            |
+| MSK control plane                    | Usable. `CreateCluster`, `DescribeCluster`, `GetBootstrapBrokers`, `DeleteCluster` all respond with real AWS response shapes.                                                                 |
+| MSK data plane (a real Kafka broker) | **Not available here.** See below.                                                                                                                                                            |
 
 ### Why There Is No Kafka Broker
 

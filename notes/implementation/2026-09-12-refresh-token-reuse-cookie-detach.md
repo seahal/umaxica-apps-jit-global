@@ -2,8 +2,8 @@
 
 ## Context
 
-- Original plan/spec: user report that dashboard showed `auth.session_expired` and blocked
-  sign-in after identity navigation.
+- Original plan/spec: user report that dashboard showed `auth.session_expired` and blocked sign-in
+  after identity navigation.
 - Related decisions/docs/plans: `adr/two-base-authentication-mode-boundaries.md`,
   `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`,
   `plans/backlog/db-backed-token-refresh-overlap-window.md`,
@@ -21,9 +21,8 @@
 - Decision: on reuse, call `destroy_refresh_token_from_cookie` and `clear_auth_cookies!` from
   `handle_invalid_refresh_token_reason`, matching idle-timeout recovery.
   - Why: leftover access JWTs made `/oauth/authorize` 401 instead of starting the ceremony.
-  - Alternatives considered: treat all invalid credentials as anonymous on `:open` (rejected by
-    the two-base authentication mode ADR except for discarded/undecodable session artifacts on
-    HTML).
+  - Alternatives considered: treat all invalid credentials as anonymous on `:open` (rejected by the
+    two-base authentication mode ADR except for discarded/undecodable session artifacts on HTML).
 
 - Decision: `:open` HTML + `token_session_not_found` / `token_decode_failed` detaches cookies and
   continues as anonymous. JSON stays 401.

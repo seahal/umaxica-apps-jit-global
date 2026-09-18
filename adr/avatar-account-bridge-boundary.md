@@ -35,3 +35,6 @@ does not preserve the earlier bridge alternatives as current implementation guid
 - [`adr/surface-account-collective-model-naming.md`](surface-account-collective-model-naming.md)
 - [`docs/architecture/avatar-account-bridge.md`](../docs/architecture/avatar-account-bridge.md)
 - [`docs/architecture/persona-organization-authority.md`](../docs/architecture/persona-organization-authority.md)
+- [`adr/account-workspace-avatar-billing.md`](account-workspace-avatar-billing.md)
+- [`docs/architecture/sns-subject-resource-decision-record.md`](../docs/architecture/sns-subject-resource-decision-record.md)
+- GH issue #831

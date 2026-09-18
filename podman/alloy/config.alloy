@@ -9,8 +9,13 @@
 // Routing, per that ADR:
 //   Rails --OTLP--> alloy --> tempo       (traces)
 //                         --> prometheus  (metrics, via remote_write)
-// Logs are deliberately out of scope: Rails writes to stdout and
-// adr/application-logging-boundary.md owns that path.
+//   log files ----> alloy --> loki        (logs, by file tail)
+//
+// Alloy is the only ingestion gateway: Rails never writes to Tempo, Prometheus
+// or Loki directly, so every signal passes the agent-side redaction below.
+// Logs were out of scope in the original decision; the amendment to
+// adr/application-logging-boundary.md added the file-tail path and left the
+// Lograge / Rails.logger / audit-record split untouched.
 
 // ----------------------------------------------------------------------------
 // Receive
@@ -169,4 +174,111 @@ prometheus.exporter.self "alloy" {}
 prometheus.scrape "alloy" {
   targets    = prometheus.exporter.self.alloy.targets
   forward_to = [prometheus.remote_write.local.receiver]
+}
+
+// ----------------------------------------------------------------------------
+// Receive: logs from files
+// ----------------------------------------------------------------------------
+// Logs reach Loki through this agent and no other. Rails writes files; Alloy
+// tails them. The alternatives were weighed in
+// adr/application-logging-boundary.md ("Amendment: development logs reach Loki
+// by file tail"):
+//
+//   stdout piping   — host-native Rails' stdout is a terminal on the host. A
+//                     container cannot read it, so the transport that works in
+//                     the Dev Container does not work in the primary topology.
+//   journald        — host-native Rails under `bin/dev` is not a systemd unit,
+//                     and mounting the host journal into a container is a much
+//                     larger grant than a read-only directory.
+//   OTLP logs       — the Ruby OTel Logs SDK is not the stable, instrumented
+//                     path the traces SDK is; adopting it would replace a
+//                     working logger contract with an experimental one.
+//
+// `/var/log/umaxica` is the repository `./log` directory, mounted read-only.
+// The two sources stay separate because the two layers are separate: Lograge
+// owns request-completion access logs, `Rails.logger` owns application and
+// operational logs (docs/security/observability-boundary.md). They are not
+// merged into one stream, and neither carries audit or security records —
+// those remain database rows.
+//
+// `tail_from_end`: on a restart Alloy resumes from its stored position, and
+// starts at the tail for a file it has never read. Without it a fresh volume
+// replays whatever history the developer's log file happens to hold.
+// Discovery is separate from tailing on purpose. A `loki.source.file` given a
+// literal target logs "failed to create source, skipping" and never retries when
+// the file does not yet exist — which is the normal state of a fresh clone, and
+// of any machine where Rails has not been started since `podman compose up`
+// (observed 2026-09-18). `local.file_match` re-checks on its sync period, so the
+// tailer starts when Rails first writes the file.
+local.file_match "rails_application" {
+  path_targets = [
+    {
+      __path__     = "/var/log/umaxica/development.log",
+      job          = "rails-application",
+      service_name = "umaxica-apps-jit",
+      layer        = "application",
+    },
+  ]
+
+  sync_period = "15s"
+}
+
+local.file_match "rails_access" {
+  path_targets = [
+    {
+      __path__     = "/var/log/umaxica/development.access.jsonl",
+      job          = "rails-access",
+      service_name = "umaxica-apps-jit",
+      layer        = "access",
+    },
+  ]
+
+  sync_period = "15s"
+}
+
+loki.source.file "rails_application" {
+  targets       = local.file_match.rails_application.targets
+  forward_to    = [loki.write.default.receiver]
+  tail_from_end = true
+}
+
+loki.source.file "rails_access" {
+  targets       = local.file_match.rails_access.targets
+  forward_to    = [loki.process.access.receiver]
+  tail_from_end = true
+}
+
+// Lograge emits one JSON object per line. Lifting the identifiers Grafana
+// correlates on — and only those — keeps the label set bounded: a label per
+// request path or per request_id would produce a new Loki stream per request.
+// The line itself is forwarded unchanged, so nothing is added to it here.
+loki.process "access" {
+  stage.json {
+    expressions = {
+      method = "method",
+      status = "status",
+    }
+  }
+
+  stage.labels {
+    values = {
+      method = "",
+      status = "",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+// ----------------------------------------------------------------------------
+// Export: logs to Loki
+// ----------------------------------------------------------------------------
+// Retention is Loki's (podman/loki/loki.yaml, 24h). Rotation of the files on
+// disk is Rails' (config/initializers/lograge.rb sizes and rotates the access
+// log; `log/development.log` is the framework's own file). Neither side keeps
+// development logs indefinitely.
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
 }

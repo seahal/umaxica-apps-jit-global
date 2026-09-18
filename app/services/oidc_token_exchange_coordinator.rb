@@ -8,6 +8,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   class RpSessionAlreadyExists < StandardError; end
 
+  class AuthorizationCodeReplayed < StandardError; end
+
   Result =
     Data.define(:success, :token_response, :error, :error_description) do
       def success? = success
@@ -70,6 +72,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
   rescue ReplayRevocationError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] replay revocation failed: #{e.class}")
     failure("server_error", "authorization code replay revocation failed")
+  rescue AuthorizationCodeReplayed
+    failure("invalid_grant", "Authorization code already consumed")
   end
 
   private
@@ -481,6 +485,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
       refresh_family_ref: family_ref,
     )
     return result if result&.status == :linked
+    # A verified replay reached the tombstone between consume and link. Raising inside the
+    # issuing transaction rolls back the RP Session and refresh rotation, so no credentials
+    # are returned for a replayed code.
+    raise AuthorizationCodeReplayed if result&.status == :replay_detected
 
     status = result&.status || "unknown"
     raise Umaxica::Valkey::OperationError, "authorization code family link failed: #{status}"
@@ -492,6 +500,12 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def revoke_linked_family!(payload)
     return if payload.blank?
     return unless replay_owner_matches?(payload)
+
+    # Mark the replay atomically before reading the family link. If the winning exchange
+    # has not linked yet, the mark makes its link fail; if it already linked, the marked
+    # payload names the family to revoke.
+    marked = code_store.mark_replay!(raw_code: code)
+    payload = marked.payload if marked.status == :marked && marked.payload.present?
 
     rp_ref = payload["rp_session_ref"].presence
     family_ref = payload["refresh_family_ref"].presence

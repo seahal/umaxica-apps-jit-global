@@ -13,7 +13,8 @@
   - Follow-up: physical DPoP, SimpleCov branch/method floors, GUID persistence owner.
 
 - Decision: keep CODE_TTL (10s) and T0 as `Time.utc(2026, 1, 2, 3, 4, 5)` from the issuer helper.
-  - Why: wall-clock JWT decode rejects time-travelled January tokens; Lua TTL rejects hour-scale T1/T2 gaps.
+  - Why: wall-clock JWT decode rejects time-travelled January tokens; Lua TTL rejects hour-scale
+    T1/T2 gaps.
 
 ## Deviations From Plan
 
@@ -23,5 +24,6 @@
 
 ## Review Notes
 
-- Tests run: focused isolated twice (182/951); E1 public subset (94/417); JS 1057; JS coverage; bun check; Brakeman; bundler-audit.
+- Tests run: focused isolated twice (182/951); E1 public subset (94/417); JS 1057; JS coverage; bun
+  check; Brakeman; bundler-audit.
 - Tests not run: COVERAGE=true Rails, canonical `bin/ci`, physical DPoP.

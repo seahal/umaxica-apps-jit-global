@@ -19,11 +19,11 @@ touched. This ADR covers only what Rails does.
 
 Three more dashboards, each following the existing pattern rather than introducing a new one.
 
-| Surface | Canonical origin | Development alias | Purpose |
-| --- | --- | --- | --- |
+| Surface           | Canonical origin                  | Development alias                | Purpose                                                                                  |
+| ----------------- | --------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
 | rails_performance | `https://performance.umaxica.dev` | `performance.core.dev.localhost` | request latency, per-controller/action breakdown, percentiles, throughput, DB/view split |
-| Coverband | `https://coverband.umaxica.dev` | `coverband.core.dev.localhost` | which Ruby lines executed |
-| Swagger UI | `https://swagger.umaxica.dev` | `swagger.core.dev.localhost` | renders the bundled OpenAPI descriptions |
+| Coverband         | `https://coverband.umaxica.dev`   | `coverband.core.dev.localhost`   | which Ruby lines executed                                                                |
+| Swagger UI        | `https://swagger.umaxica.dev`     | `swagger.core.dev.localhost`     | renders the bundled OpenAPI descriptions                                                 |
 
 The original request named `performace.umaxica.dev`. That was confirmed as a typo and corrected to
 `performance.umaxica.dev`; the Cloudflare DNS record must be created with the corrected spelling.
@@ -33,7 +33,8 @@ The original request named `performace.umaxica.dev`. That was confirmed as a typ
 Established by `config/routes/pghero.rb` and `config/initializers/pghero.rb`:
 
 1. `config/routes/<tool>.rb` — `constraints host:` over exact hostname strings, never a pattern,
-   never a wildcard: `[ENV["PUBLIC_<TOOL>_URL"], ENV["PRIVATE_<TOOL>_URL"], "<tool>.core.dev.localhost"].compact`.
+   never a wildcard:
+   `[ENV["PUBLIC_<TOOL>_URL"], ENV["PRIVATE_<TOOL>_URL"], "<tool>.core.dev.localhost"].compact`.
 2. A `defined?` guard, so the route is not drawn where the gem is absent.
 3. Fail-closed `Rack::Auth::Basic` with `ActiveSupport::SecurityUtils.secure_compare` and a
    non-short-circuiting `&`, credentials read through `Rails.app.creds.option`. Unset credentials
@@ -62,8 +63,8 @@ rewriting working, tested authorization code is not part of adding new surfaces.
 All three gems are `group :development`, matching `pghero`, `blazer`, and `rails_db`.
 
 For Swagger UI and the performance dashboard this is a straightforward scope decision. For Coverband
-it is a real departure from the tool's purpose: Coverband exists to tell you which code runs *in
-production*, and confined to development it reports which code runs while developers work. That is a
+it is a real departure from the tool's purpose: Coverband exists to tell you which code runs _in
+production_, and confined to development it reports which code runs while developers work. That is a
 much weaker signal, and it is recorded here rather than glossed. Promoting it to
 `group :development, :production` is a separate decision that must also revisit
 `test/security/invariants/mounted_engine_invariant_test.rb`, which asserts that unauthenticated-by-
@@ -74,10 +75,10 @@ default engines are not loadable outside development.
 Two new Valkey responsibilities in `lib/umaxica/valkey/responsibility_urls.rb`, each on its own
 logical database (development 12/13, test 14/15) rather than sharing one behind key prefixes:
 
-| Responsibility | Variable | Dev DB | Namespace |
-| --- | --- | --- | --- |
-| `performance` | `PERFORMANCE_REDIS_URL` | 12 | `performance\|…` (gem's own key format) |
-| `coverband` | `COVERBAND_REDIS_URL` | 13 | `coverband` |
+| Responsibility | Variable                | Dev DB | Namespace                               |
+| -------------- | ----------------------- | ------ | --------------------------------------- |
+| `performance`  | `PERFORMANCE_REDIS_URL` | 12     | `performance\|…` (gem's own key format) |
+| `coverband`    | `COVERBAND_REDIS_URL`   | 13     | `coverband`                             |
 
 Separate databases, not just namespaces, because `rails_performance` reads with
 `redis.keys("performance|*")` — an O(keyspace) blocking scan. Confined to its own database, a
@@ -118,7 +119,7 @@ fields `RequestRecord#save` persists it covers one, partially:
 - **`exception`** — `[class, message]` joined. Exception messages quote the values that caused them.
 
 `RailsPerformanceRecordSanitizer` is prepended to `RequestRecord` and handles each explicitly, on
-the way *into* Valkey. Redacting at read time would leave the secret sitting in the store, where
+the way _into_ Valkey. Redacting at read time would leave the secret sitting in the store, where
 `redis.keys` and any operator connection still find it.
 
 - `path` — query string and fragment removed entirely, not filtered. The dashboard aggregates by
@@ -137,7 +138,7 @@ user's email address out of the request env.
 
 ### Observability failure must not become application failure
 
-`rails_performance` records a request *after* the application has produced its response, and
+`rails_performance` records a request _after_ the application has produced its response, and
 `Utils.save_to_redis` calls `redis.set` bare — so a Valkey outage turned a correctly answered
 request into a 500. `RailsPerformanceStoreResilience` prepends the singleton method, which is the
 single write chokepoint for every record type the gem persists.
@@ -193,7 +194,8 @@ can carry credentials. `mcp_enabled = false`: Coverband 6.2 ships an MCP server 
 coverage queries over its own protocol, outside this application's host constraints and Basic Auth
 entirely.
 
-**No mechanism that deletes code Coverband reports as unexecuted is built here, and none should be.**
+**No mechanism that deletes code Coverband reports as unexecuted is built here, and none should
+be.**
 
 ### Coverband and SimpleCov do different jobs
 
@@ -210,8 +212,7 @@ The descriptions are the existing ones. `openapi/` remains the source tree, Redo
 the bundle is what Committee validates against and what Swagger UI renders. No Swagger-specific copy
 exists. The per-surface split (app / com / org) is preserved.
 
-The bundle moved from `public/` to `openapi/bundled/` — see
-`adr/openapi-bundle-outside-public.md`.
+The bundle moved from `public/` to `openapi/bundled/` — see `adr/openapi-bundle-outside-public.md`.
 
 Two mounts on separate paths, in this order, because `Rswag::Ui::Middleware` is a `Rack::Static`
 built with `urls: ['']` and at `/` would answer before the document endpoint ran:
@@ -227,12 +228,12 @@ whether or not the UI reading it is protected.
 
 Read-only, each restriction stated rather than left to a default:
 
-| Setting | Value | Why |
-| --- | --- | --- |
-| `supportedSubmitMethods` | `[]` | no "Try it out" for any method, so the page cannot drive requests into the app/org/com surfaces |
-| `persistAuthorization` | `false` | no credentials in browser storage |
-| `queryConfigEnabled` | `false` | `?url=…` cannot make the page load an arbitrary remote OpenAPI document |
-| `validatorUrl` | `nil` | no POST of the description to `validator.swagger.io` on every page view |
+| Setting                  | Value   | Why                                                                                             |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------- |
+| `supportedSubmitMethods` | `[]`    | no "Try it out" for any method, so the page cannot drive requests into the app/org/com surfaces |
+| `persistAuthorization`   | `false` | no credentials in browser storage                                                               |
+| `queryConfigEnabled`     | `false` | `?url=…` cannot make the page load an arbitrary remote OpenAPI document                         |
+| `validatorUrl`           | `nil`   | no POST of the description to `validator.swagger.io` on every page view                         |
 
 The three endpoint URLs are relative paths under the same host, so they resolve through the
 authenticated `/openapi` mount and nowhere else.
@@ -251,22 +252,22 @@ behind Basic Auth. Suppressing it means vendoring an override template at
 
 Each surface is independently switchable.
 
-| Surface | Off switch | Effect |
-| --- | --- | --- |
-| rails_performance | `RAILS_PERFORMANCE_ENABLED=false` | no recording, no Valkey connection; route stays drawn with no data |
-| Coverband | `COVERBAND_ENABLED=false` | gem never required: no collector, no reporting thread, no Valkey connection, route not drawn |
-| Swagger | unset `PUBLIC_SWAGGER_URL` / `PRIVATE_SWAGGER_URL` | host drops out of the route constraint and `config.hosts` |
+| Surface           | Off switch                                         | Effect                                                                                       |
+| ----------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| rails_performance | `RAILS_PERFORMANCE_ENABLED=false`                  | no recording, no Valkey connection; route stays drawn with no data                           |
+| Coverband         | `COVERBAND_ENABLED=false`                          | gem never required: no collector, no reporting thread, no Valkey connection, route not drawn |
+| Swagger           | unset `PUBLIC_SWAGGER_URL` / `PRIVATE_SWAGGER_URL` | host drops out of the route constraint and `config.hosts`                                    |
 
 Only the exact string `"false"` disables Coverband, so a typo cannot silently turn observability
-off. Unsetting a host's `PUBLIC_`/`PRIVATE_` pair degrades toward *less* exposure, never more.
+off. Unsetting a host's `PUBLIC_`/`PRIVATE_` pair degrades toward _less_ exposure, never more.
 
 ### Credentials
 
-| Surface | User | Password |
-| --- | --- | --- |
+| Surface           | User                         | Password                     |
+| ----------------- | ---------------------------- | ---------------------------- |
 | rails_performance | `RAILS_PERFORMANCE_USERNAME` | `RAILS_PERFORMANCE_PASSWORD` |
-| Coverband | `COVERBAND_USERNAME` | `COVERBAND_PASSWORD` |
-| Swagger | `SWAGGER_USERNAME` | `SWAGGER_PASSWORD` |
+| Coverband         | `COVERBAND_USERNAME`         | `COVERBAND_PASSWORD`         |
+| Swagger           | `SWAGGER_USERNAME`           | `SWAGGER_PASSWORD`           |
 
 Read through `Rails.app.creds.option`, the ENV-then-credentials lookup the other dashboards use.
 Unset means 401.
@@ -322,8 +323,8 @@ That suppresses the engine's own routes too, so `config/routes/performance.rb` c
 copy of the gem's thirteen routes behind the host constraint.
 
 That copy is a gem internal and **will drift on upgrade with nothing to flag it**. When bumping
-`rails_performance`, diff its `config/routes.rb` against that block: a renamed route surfaces only as
-a dashboard tab that 404s, and a new one simply never appears.
+`rails_performance`, diff its `config/routes.rb` against that block: a renamed route surfaces only
+as a dashboard tab that 404s, and a new one simply never appears.
 
 ## Consequences
 

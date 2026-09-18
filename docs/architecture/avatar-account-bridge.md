@@ -36,3 +36,5 @@ Avatar functionality.
 - [`adr/avatar-account-bridge-boundary.md`](../../adr/avatar-account-bridge-boundary.md)
 - [`adr/surface-account-collective-model-naming.md`](../../adr/surface-account-collective-model-naming.md)
 - [`docs/architecture/persona-organization-authority.md`](persona-organization-authority.md)
+- [`docs/architecture/sns-subject-resource-decision-record.md`](sns-subject-resource-decision-record.md)
+- GH issue #831

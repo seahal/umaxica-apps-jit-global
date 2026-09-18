@@ -106,8 +106,9 @@ step-up even when the actor will still have one or more AAL1 credentials afterwa
 
 Adding Google or Apple to an already-established `app` account is a post-enrollment `1 -> N`
 credential transition and requires fresh Step-Up. The provider ceremony alone does not authorize
-binding that identity to the current UMAXICA account. Initial provider enrollment remains governed by
-the sign-up transaction, and social-identity removal retains its Step-Up and no-lockout guards. See
+binding that identity to the current UMAXICA account. Initial provider enrollment remains governed
+by the sign-up transaction, and social-identity removal retains its Step-Up and no-lockout guards.
+See
 [`adr/social-identity-linking-requires-step-up.md`](../../adr/social-identity-linking-requires-step-up.md).
 
 Social-login unlink has a narrower no-lockout rule than the general AAL1 inventory. For `app`,

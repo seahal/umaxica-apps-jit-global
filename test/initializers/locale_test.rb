@@ -48,7 +48,7 @@ class LocaleInitializerTest < ActiveSupport::TestCase
       assert_equal "Theme Settings", I18n.t("base.app.preferences.theme_settings")
       assert_equal "Reset Settings", I18n.t("base.app.preferences.reset_settings")
       assert_equal "Back to settings", I18n.t("base.app.preferences.back_to_settings")
-      assert_equal "Back to top", I18n.t("base.app.preferences.up_link")
+      assert_equal "Back", I18n.t("base.app.preferences.up_link")
       assert_equal "Back", I18n.t("base.app.preferences.regions.back_link")
       assert_equal "Back", I18n.t("base.com.preferences.regions.back_link")
       assert_equal "Back", I18n.t("base.org.preferences.regions.back_link")

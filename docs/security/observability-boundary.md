@@ -41,7 +41,9 @@ The current access log pipeline is:
 - `config/initializers/lograge.rb`
 - `config.lograge.enabled = !Rails.env.test?`
 - `config.lograge.formatter = Lograge::Formatters::Json.new`
-- `config.lograge.logger` writes one JSON object per line to stdout
+- `config.lograge.logger` writes one JSON object per line to stdout, and in development also to
+  `log/development.access.jsonl` so Alloy can ship it to Loki
+  (`adr/application-logging-boundary.md`). The line is identical; only the destinations differ.
 
 Access logs should contain request-level fields such as method, path, status, duration,
 `request_id`, and host. When a valid current OpenTelemetry span exists, the same JSON access-log
@@ -136,6 +138,36 @@ constrained explicitly:
 The CSP report payload is allowlisted and scrubbed before emission. Raw CSP report bodies,
 `script-sample`, cookies, authorization values, query strings, fragments, and unknown report keys
 must not be emitted.
+
+## Where Each Layer Is Stored In Development
+
+Storage does not merge the layers; it only makes them queryable in one place.
+
+```text
+Lograge access logs      -> log/development.access.jsonl -> Alloy -> Loki    (24h)
+Rails.logger application -> log/development.log          -> Alloy -> Loki    (24h)
+OpenTelemetry traces     -> OTLP 127.0.0.1:4318          -> Alloy -> Tempo   (24h)
+metrics                  -> Alloy self-metrics           -> Alloy -> Prometheus (24h)
+audit / security records -> database tables                                  (authoritative)
+```
+
+Grafana reads all three backends and is published on `127.0.0.1:13000` for this machine's browser
+only — never through Cloudflare Tunnel, Tailscale, or the LAN.
+
+Two rules follow from this and are not negotiable:
+
+- **Audit and security records never move to Loki.** Loki is a bounded 24h development copy of
+  diagnostic output. It is not a record of fact, it is not retained, and it is not access-controlled
+  the way the audit tables are. A durable record belongs in the database whether or not the same
+  event also produces a log line.
+- **Shipping logs adds no data.** The lines Alloy tails are the lines Rails already wrote, forwarded
+  unmodified. Nothing about a log reaching Loki makes a cookie, authorization value, token, or
+  request body loggable that was not loggable before — `JitLogEvent`, `ObservabilityRedactor`, and
+  the allowlists described above remain the only gates on what enters a log line.
+
+Telemetry redaction stays two-stage and independent of this: `ObservabilitySpanScrubber` in the
+Rails process, then `otelcol.processor.attributes` in Alloy
+(`adr/traces-and-metrics-routing-via-alloy.md`).
 
 ## Observability Layers
 

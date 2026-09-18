@@ -1,8 +1,8 @@
 # 2026-09-14 FakeCloud advertised service inventory
 
 `GET http://fakecloud:4566/_fakecloud/health` on FakeCloud **0.44.10**, run by the user from the
-`core` container. The response advertises roughly 105 emulated services — far more than the two
-(S3 and the MSK control plane) that `docs/operations/local-aws-fakecloud.md` had recorded.
+`core` container. The response advertises roughly 105 emulated services — far more than the two (S3
+and the MSK control plane) that `docs/operations/local-aws-fakecloud.md` had recorded.
 
 This corrects a claim the assistant made repeatedly during the 2026-09-14 session: that FakeCloud
 offered no RDS, ElastiCache, SES, SNS, CloudWatch, or deployment surfaces. It offers all of them.
@@ -38,9 +38,9 @@ sibling Kafka container, but only when handed a Docker or Podman socket, and thi
 no container socket anywhere. `GetBootstrapBrokers` returns well-formed addresses with nothing
 listening on them.
 
-Every service whose value lies in *executing* something — databases, caches, build and deploy
+Every service whose value lies in _executing_ something — databases, caches, build and deploy
 pipelines, container runtimes — plausibly carries the same limitation. Services whose value lies in
-*recording and returning state* (S3, SQS, SNS, Secrets Manager, KMS) are the ones an API emulator
+_recording and returning state_ (S3, SQS, SNS, Secrets Manager, KMS) are the ones an API emulator
 can serve fully.
 
 Only S3 has been verified at runtime in this repository — see
@@ -71,9 +71,9 @@ Reopened:
   exist.** Deployment tooling remains undecided; these are execution services, so the socket
   constraint most likely applies, but that is now a testable question rather than a closed one.
 - **`ses`, `sns`, `sqs`, `kms`, `secretsmanager`, `es` exist.**
-  `notes/implementation/fakecloud-aws-development-baseline.md` marks them "out of scope by
-  decision" without saying whether that was a capability limit or a scope limit. This settles it:
-  it was a scope limit.
+  `notes/implementation/fakecloud-aws-development-baseline.md` marks them "out of scope by decision"
+  without saying whether that was a capability limit or a scope limit. This settles it: it was a
+  scope limit.
 
 ## Cheapest next checks
 

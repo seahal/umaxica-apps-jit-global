@@ -5,12 +5,12 @@ Continuation of an interrupted session. The four items were audited against the 
 
 ## State found
 
-| Item | State at audit |
-| --- | --- |
+| Item                                              | State at audit                                                          |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
 | 1. Boot fail-fast for the three Entra credentials | partial — only `OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET` was required at boot |
-| 2. `client_secret_post` at the token endpoint | missing — `client_auth_method: :basic` |
-| 3. Fail-closed provider x host matrix | missing — unknown hosts fell back to `:app` |
-| 4. Rate limit on `/social/entra/failure` | missing — only `:omniauth` was limited |
+| 2. `client_secret_post` at the token endpoint     | missing — `client_auth_method: :basic`                                  |
+| 3. Fail-closed provider x host matrix             | missing — unknown hosts fell back to `:app`                             |
+| 4. Rate limit on `/social/entra/failure`          | missing — only `:omniauth` was limited                                  |
 
 The two-stage Normal sign-in (Entra -> pending transaction -> passkey/secret -> session) was already
 present and was not modified.
@@ -34,14 +34,14 @@ reaches the `else` that merges `client_id`/`client_secret` into the POST body an
 
 All runs inside the `global-devcontainer-core` container.
 
-| Command | Result |
-| --- | --- |
-| `bin/rails test test/lib/entra_omniauth_boot_credentials_test.rb` | 11 runs, 61 assertions, 0 failures, 0 errors, 0 skips |
-| `bin/rails test test/contracts/omniauth_entra_token_request_contract_test.rb` | 4 runs, 18 assertions, 0 failures, 0 errors, 0 skips |
-| `bin/rails test test/initializers/omniauth_social_provider_host_matrix_test.rb` | 9 runs, 113 assertions, 0 failures, 0 errors, 0 skips |
-| `bin/rails test test/controllers/auth/org/omniauth/omniauth_callbacks_controller_test.rb` | 21 runs, 68 assertions, 0 failures, 0 errors, 0 skips |
-| `bin/rails test test/tooling/primary_database_ownership_test.rb` | 4 runs, 22 assertions, 0 failures, 0 errors, 0 skips |
-| Entra/external-auth focused set (11 paths) | 232 runs, 1988 assertions, 0 failures, 0 errors, 0 skips |
+| Command                                                                                   | Result                                                   |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `bin/rails test test/lib/entra_omniauth_boot_credentials_test.rb`                         | 11 runs, 61 assertions, 0 failures, 0 errors, 0 skips    |
+| `bin/rails test test/contracts/omniauth_entra_token_request_contract_test.rb`             | 4 runs, 18 assertions, 0 failures, 0 errors, 0 skips     |
+| `bin/rails test test/initializers/omniauth_social_provider_host_matrix_test.rb`           | 9 runs, 113 assertions, 0 failures, 0 errors, 0 skips    |
+| `bin/rails test test/controllers/auth/org/omniauth/omniauth_callbacks_controller_test.rb` | 21 runs, 68 assertions, 0 failures, 0 errors, 0 skips    |
+| `bin/rails test test/tooling/primary_database_ownership_test.rb`                          | 4 runs, 22 assertions, 0 failures, 0 errors, 0 skips     |
+| Entra/external-auth focused set (11 paths)                                                | 232 runs, 1988 assertions, 0 failures, 0 errors, 0 skips |
 
 `RAILS_ENV=test bin/rails db:prepare` created `test_primary_db` and applied
 `20260807000000 CreateFlipperTables` from `db/migrate`. `bin/rails db:prepare` (development,
@@ -51,8 +51,8 @@ All runs inside the `global-devcontainer-core` container.
 
 Two failures were found and fixed during the run, both caused by work in this session:
 
-- `PrimaryDatabaseOwnershipTest` asserted the literal `test_primary_db`, which fails under
-  parallel workers (`test_primary_db_4`). Relaxed to the base name plus optional worker suffix.
+- `PrimaryDatabaseOwnershipTest` asserted the literal `test_primary_db`, which fails under parallel
+  workers (`test_primary_db_4`). Relaxed to the base name plus optional worker suffix.
 - `OmniauthCallbacksTest#test_should_sign_in_with_existing_Google_user` broke under the first
   fail-closed host matrix: `config/routes/base.rb` mounts `/social/authentication/completion` and
   the app-surface provider callbacks on the **base** service host, not only the auth host. The app
@@ -60,10 +60,10 @@ Two failures were found and fixed during the run, both caused by work in this se
 
 ## No network in the suite
 
-The token-request contract test drives the real `Rack::OAuth2::Client` with `Rack::OAuth2.http_client`
-stubbed to raise after capturing the request, so no request reaches `login.microsoftonline.com`.
-Boot-time credential validation is presence and shape only; a test stubs `Net::HTTP.start` to fail
-the run if boot validation performs network I/O.
+The token-request contract test drives the real `Rack::OAuth2::Client` with
+`Rack::OAuth2.http_client` stubbed to raise after capturing the request, so no request reaches
+`login.microsoftonline.com`. Boot-time credential validation is presence and shape only; a test
+stubs `Net::HTTP.start` to fail the run if boot validation performs network I/O.
 
 ## Full suite
 

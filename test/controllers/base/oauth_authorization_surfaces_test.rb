@@ -8,6 +8,8 @@ require "test_helper"
 # surface is covered by BaseOauthOidcAuthorityTest; these pin the spec-defined
 # error responses of the corporate and staff surfaces.
 class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
+  include OidcAuthorizationResponseHelper
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -113,8 +115,10 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
             headers: { "Host" => surface.fetch(:host) }
       end
 
-      assert_response :bad_request
-      assert_equal "login_required", response.parsed_body.fetch("error")
+      assert_oidc_error_redirect(
+        error: "login_required",
+        redirect_uri: authorize_params(realm: surface.fetch(:realm)).fetch(:redirect_uri),
+      )
     end
   end
 

@@ -9,7 +9,17 @@ import RubyPlugin from "vite-plugin-ruby";
 const srcRoot = fileURLToPath(new URL("./src", import.meta.url));
 
 export default defineConfig({
-  plugins: [RubyPlugin(), tailwindcss(), inertia(), react()],
+  plugins: [
+    RubyPlugin(),
+    tailwindcss(),
+    inertia(),
+    // Native React Compiler via oxc-transform-react (experimental). Babel is not used.
+    react({
+      compiler: {
+        logDiagnostics: true,
+      },
+    }),
+  ],
   server: {
     // Development is also reached through the public app/com/org hostnames. Keep Vite's
     // DNS-rebinding protection enabled while allowing only domains owned by this deployment.

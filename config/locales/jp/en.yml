@@ -167,7 +167,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
       settings:
         description: Review and adjust your service settings.
@@ -346,7 +346,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
       settings:
         description: Review and adjust your service settings.
@@ -546,7 +546,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
       settings:
         description: Review and adjust your organization settings.
@@ -564,7 +564,7 @@ en:
     disconnect: Disconnect
     edit: Edit
     save: Save
-    up: Up
+    up: Back
   activemodel:
     errors:
       models:
@@ -1100,7 +1100,7 @@ en:
         theme_settings: Theme Settings
         timezone_settings: Timezone Settings
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
@@ -1247,7 +1247,7 @@ en:
         theme_settings: Theme Settings
         timezone_settings: Timezone Settings
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
@@ -1419,7 +1419,7 @@ en:
         theme_settings: Theme Settings
         timezone_settings: Timezone Settings
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
@@ -1457,7 +1457,7 @@ en:
           switcher: Switcher
           userinfo: UserInfo
       identity:
-        up_link: Back to top
+        up_link: Back
         activities:
           title: Activity history
           description: Recent security-related activity for your account.
@@ -1697,7 +1697,7 @@ en:
               dark: Dark — dimmed colors for low-light comfort
               light: Light — bright backgrounds for well-lit spaces
               system: System default — follow your device settings
-        up_link: up to
+        up_link: Back
       preferences:
         footer:
           privacy: Privacy
@@ -2767,7 +2767,7 @@ en:
           invalid: Invalid timezone selected
           updated: Timezone updated to %{timezone}
         title: Preferences
-        up_link: Back to top
+        up_link: Back
     com:
       com:
         preference:
@@ -2879,7 +2879,7 @@ en:
           invalid: Invalid timezone selected
           updated: Timezone updated to %{timezone}
         title: Preferences
-        up_link: Back to top
+        up_link: Back
       registration:
         email:
           new:
@@ -4247,7 +4247,7 @@ en:
             title: Accept operator invitation
       ups:
         new:
-          back_to_root: Up
+          back_to_root: Back
           description: Create an account to start the administrative operations reserved for you.
           heading: Create an account
           links:

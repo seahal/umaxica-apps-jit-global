@@ -27,12 +27,12 @@ Sequence:
 1. The signed-in user opened `/identity?ri=jp`. The access cookie was absent, so HTML transparent
    refresh succeeded (`auth.transparent_refresh.success`) and rotated the refresh token.
 2. A second `/identity` HTML GET arrived about 200ms later with the previous refresh verifier.
-3. The issuer classified that as reuse (`authentication.refresh.reuse_detected`), set
-   `discarded_at` on the whole refresh family, and failed transparent refresh
-   (`client.token.refresh.failed` / `reason: refresh_token_reuse_detected`).
+3. The issuer classified that as reuse (`authentication.refresh.reuse_detected`), set `discarded_at`
+   on the whole refresh family, and failed transparent refresh (`client.token.refresh.failed` /
+   `reason: refresh_token_reuse_detected`).
 4. `/identity` then treated the user as unauthenticated and redirected to `/oauth/authorize`.
-5. `/oauth/authorize` is `AUTHENTICATION_MODE :open`. Leftover session credentials still looked
-   like invalid credentials (`auth.open.invalid_credentials` / `reason: token_session_not_found`).
+5. `/oauth/authorize` is `AUTHENTICATION_MODE :open`. Leftover session credentials still looked like
+   invalid credentials (`auth.open.invalid_credentials` / `reason: token_session_not_found`).
 6. The endpoint returned HTTP 401 with `auth.session_expired`:
 
    > セッションの有効期限が切れました。もう一度サインインしてください。
@@ -45,8 +45,8 @@ the same refresh cookie, and the leftover cookies after family revoke blocked th
 
 ## 2. Race definition
 
-Refresh tokens are one-time. Generation N is consumed when it rotates to N+1. Presenting N again
-is `refresh_token_reuse_detected` and revokes the family.
+Refresh tokens are one-time. Generation N is consumed when it rotates to N+1. Presenting N again is
+`refresh_token_reuse_detected` and revokes the family.
 
 The race:
 
@@ -65,30 +65,30 @@ Typical triggers:
 - retry or lost response
 - identity hub then dashboard while the first refresh has not yet replaced the cookie
 
-Legitimate concurrency is indistinguishable from theft under the current rule, because the rule
-has no overlap window.
+Legitimate concurrency is indistinguishable from theft under the current rule, because the rule has
+no overlap window.
 
 ## 3. Problems when the race fires
 
-1. **False compromise.** A same-browser retry is scored as token theft. The whole family is
-   revoked, including the successor A just issued.
+1. **False compromise.** A same-browser retry is scored as token theft. The whole family is revoked,
+   including the successor A just issued.
 2. **Session death.** The user is signed out without choosing to sign out.
-3. **Stale cookies.** Access, refresh, or device-session identifiers can remain after the family
-   is dead, especially if A’s `Set-Cookie` arrives after B’s cookie delete.
-4. **Sign-in lockout (the fatal symptom).** `:open` HTML (`/oauth/authorize`) treats those
-   leftovers as invalid credentials and 401s instead of “no credentials, start the ceremony”.
-   Sign-out can 401 the same way. The account is not deleted; the browser cannot enter the
-   ceremony.
-5. **Misleading copy.** `auth.session_expired` talks about expiry. Operators looking for TTL
-   miss reuse. Before 2026-09-12 the structured event existed but was easy to miss.
+3. **Stale cookies.** Access, refresh, or device-session identifiers can remain after the family is
+   dead, especially if A’s `Set-Cookie` arrives after B’s cookie delete.
+4. **Sign-in lockout (the fatal symptom).** `:open` HTML (`/oauth/authorize`) treats those leftovers
+   as invalid credentials and 401s instead of “no credentials, start the ceremony”. Sign-out can 401
+   the same way. The account is not deleted; the browser cannot enter the ceremony.
+5. **Misleading copy.** `auth.session_expired` talks about expiry. Operators looking for TTL miss
+   reuse. Before 2026-09-12 the structured event existed but was easy to miss.
 
 Security that must stay: reuse from another device, generation N-2, or a revoked successor remains
 compromise and must still revoke.
 
 ## 4. What shipped on 2026-09-12 (recovery, not the race)
 
-- English warning: `Refresh token reuse detected; the refresh token family was revoked so the
-  user can sign in again.` Grep `Refresh token reuse detected` in development logs.
+- English warning:
+  `Refresh token reuse detected; the refresh token family was revoked so the user can sign in again.`
+  Grep `Refresh token reuse detected` in development logs.
 - On reuse, `destroy_refresh_token_from_cookie` and `clear_auth_cookies!` run (same idea as idle
   timeout).
 - `:open` HTML with `token_session_not_found` or `token_decode_failed` detaches cookies and

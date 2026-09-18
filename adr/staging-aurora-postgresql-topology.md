@@ -4,10 +4,10 @@ Accepted: 2026-09-14
 
 ## Context
 
-`adr/fakecloud-podman-staging-environment.md` fixes staging as a Podman-hosted FakeCloud
-environment provisioned with Terraform. FakeCloud emulates the AWS services this application uses
-for object storage and streaming, but the relational database is not among them: staging needs a
-real PostgreSQL, and the intended target is Amazon Aurora PostgreSQL.
+`adr/fakecloud-podman-staging-environment.md` fixes staging as a Podman-hosted FakeCloud environment
+provisioned with Terraform. FakeCloud emulates the AWS services this application uses for object
+storage and streaming, but the relational database is not among them: staging needs a real
+PostgreSQL, and the intended target is Amazon Aurora PostgreSQL.
 
 The application already separates writes from reads. This is not a change being designed; it is the
 shape of the current code:
@@ -19,8 +19,8 @@ shape of the current code:
   carrying `replica: true`, for 40 connection definitions.
 - Each domain's abstract record class binds them, e.g.
   `connects_to database: { writing: :app_zenith, reading: :app_zenith_replica }`.
-- `config/initializers/multi_db.rb` sets
-  `database_selector = { delay: 10.seconds }` with `Resolver::Session`.
+- `config/initializers/multi_db.rb` sets `database_selector = { delay: 10.seconds }` with
+  `Resolver::Session`.
 
 All 20 writers resolve to a single host and all 20 readers to a single host. Today those are
 `NEON_PGHOST` and `NEON_REPLICA_PGHOST`. The structure therefore already matches what an Aurora

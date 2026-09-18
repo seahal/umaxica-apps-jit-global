@@ -28,12 +28,12 @@ context, bind mount, or `COPY` pointing at it.
 The four surviving references are all exclusion rules — they keep `docker/` out of something rather
 than depend on it:
 
-| Location             | Line    | Purpose                          |
-| -------------------- | ------- | -------------------------------- |
-| `.containerignore`   | 129     | Excluded from the build context  |
-| `.dockerignore`      | 143     | Excluded from the build context  |
-| `.rubocop.yml`       | 1403    | `docker/**/*` lint exclusion     |
-| `.gitignore`         | 118-120 | `core/preferences` ignore rules  |
+| Location           | Line    | Purpose                         |
+| ------------------ | ------- | ------------------------------- |
+| `.containerignore` | 129     | Excluded from the build context |
+| `.dockerignore`    | 143     | Excluded from the build context |
+| `.rubocop.yml`     | 1403    | `docker/**/*` lint exclusion    |
+| `.gitignore`       | 118-120 | `core/preferences` ignore rules |
 
 `git ls-files docker/` reports 23 tracked files.
 

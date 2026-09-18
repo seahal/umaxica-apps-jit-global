@@ -34,7 +34,7 @@ class OidcAccessTokenAuthenticator < ApplicationService
     return failure("invalid_token") unless dpop_valid?(payload)
 
     token = find_token(payload)
-    return failure("invalid_token") unless token&.active?
+    return failure("invalid_token") unless token && root_token_for(token).active?
     return failure("invalid_token") unless token_belongs_to_audience?(token, payload)
     return failure("invalid_token") unless token_jti_matches?(token, payload)
     return failure("insufficient_scope") unless token_scope_allows_userinfo?(payload)
@@ -79,14 +79,27 @@ class OidcAccessTokenAuthenticator < ApplicationService
   end
 
   # Normal Access JWT authentication is cryptographic (RFC 9068) plus Base Browser
-  # Session binding. It must not query the RP Session row for revocation; child
-  # revoke stops refresh/new issuance only and does not invalidate an already-issued JWT.
+  # Session binding. Exchanged and refreshed JWTs carry the RP Session public ID as
+  # `sid`, so the RP Session is resolved only to reach its parent Browser Session and
+  # its client/jti binding. Its own revocation state is deliberately not checked:
+  # child revoke stops refresh/new issuance only and does not invalidate an
+  # already-issued JWT. `call` checks that the parent Browser Session is active.
   def find_token(payload)
     sid = payload["sid"].to_s
     return if sid.blank?
 
     token_context.connected_to(role: :reading) do
-      token_class_for_resource_type.find_by(oidc_sid: sid) || token_class_for_resource_type.find_by(public_id: sid)
+      rp_session_class_for_resource_type.find_by(public_id: sid) ||
+        token_class_for_resource_type.find_by(oidc_sid: sid) ||
+        token_class_for_resource_type.find_by(public_id: sid)
+    end
+  end
+
+  def rp_session_class_for_resource_type
+    case resource_type
+    when "operator" then OperatorRpSession
+    when "visitor" then VisitorRpSession
+    else ClientRpSession
     end
   end
 

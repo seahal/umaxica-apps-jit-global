@@ -161,11 +161,11 @@ booted healthy and failed at the first staff sign-in instead.
 `EntraOmniauthBootCredentials.resolve_for_boot` now validates all three in
 `config/initializers/omniauth.rb`:
 
-| Credential | Required | Shape |
-| --- | --- | --- |
-| `OMNI_AUTH_ENTRA_ORG_TENANT_ID` | yes | non-blank, UUID |
-| `OMNI_AUTH_ENTRA_ORG_CLIENT_ID` | yes | non-blank, UUID |
-| `OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET` | yes | non-blank |
+| Credential                          | Required | Shape           |
+| ----------------------------------- | -------- | --------------- |
+| `OMNI_AUTH_ENTRA_ORG_TENANT_ID`     | yes      | non-blank, UUID |
+| `OMNI_AUTH_ENTRA_ORG_CLIENT_ID`     | yes      | non-blank, UUID |
+| `OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET` | yes      | non-blank       |
 
 The UUID rule also rejects `common`, `organizations` and `consumers` as tenant ids, which this ADR
 already forbids, so the single-tenant constraint is now enforced at boot rather than only by

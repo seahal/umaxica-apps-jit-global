@@ -21,22 +21,22 @@ plan's one-service / six-logical-DB layout.
 **Development and test share one Valkey service and one volume.** Responsibilities stay named in
 URLs (never a generic `REDIS_URL`):
 
-| Responsibility         | Dev DB | Test DB |
-| ---------------------- | ------ | ------- |
-| `CACHE_REDIS_URL`      | 0      | 3       |
-| `RATE_LIMIT_REDIS_URL` | 1      | 4       |
-| `AUTH_STATE_REDIS_URL` | 2      | 5       |
-| `PERFORMANCE_REDIS_URL`| 12     | 14      |
-| `COVERBAND_REDIS_URL`  | 13     | 15      |
+| Responsibility          | Dev DB | Test DB |
+| ----------------------- | ------ | ------- |
+| `CACHE_REDIS_URL`       | 0      | 3       |
+| `RATE_LIMIT_REDIS_URL`  | 1      | 4       |
+| `AUTH_STATE_REDIS_URL`  | 2      | 5       |
+| `PERFORMANCE_REDIS_URL` | 12     | 14      |
+| `COVERBAND_REDIS_URL`   | 13     | 15      |
 
 Amended 2026-09-17: `PERFORMANCE_REDIS_URL` and `COVERBAND_REDIS_URL` back the development-only
 diagnostic dashboards (`adr/diagnostic-surfaces-performance-coverband-swagger.md`). They get their
 own logical DBs rather than a namespace inside an existing one because `rails_performance` reads
 with `redis.keys("performance|*")`, an O(keyspace) blocking scan; confined to its own DB it cannot
 stall cache, rate-limit, or auth-state. The test rows are declared so `assert_nonprod_db!` has an
-expected index to validate against, but nothing connects to them — both gems are `group
-:development` — and they are deliberately absent from `Umaxica::Valkey::TestTarget::URL_NAMES` so
-test boot does not demand variables it will never use.
+expected index to validate against, but nothing connects to them — both gems are
+`group :development` — and they are deliberately absent from
+`Umaxica::Valkey::TestTarget::URL_NAMES` so test boot does not demand variables it will never use.
 
 Both are resolved by `Umaxica::Valkey::ResponsibilityUrls.require_url`, which uses one-argument
 `ENV.fetch`. That matters more here than elsewhere: handed no URL, both gems fall back to

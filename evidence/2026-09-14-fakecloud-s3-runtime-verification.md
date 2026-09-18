@@ -15,11 +15,11 @@ task names, bucket names, and endpoint match the repository.
 From inside the `core` container, against `fakecloud:4566` (the in-network address, not the
 `127.0.0.1:4566` loopback publication).
 
-| Step                               | Result                                              |
-| ---------------------------------- | --------------------------------------------------- |
+| Step                               | Result                                               |
+| ---------------------------------- | ---------------------------------------------------- |
 | `GET /_fakecloud/health`           | `200 OK`, `{"status":"ok","version":"0.44.10", ...}` |
-| `bin/rails object_storage:prepare` | Both buckets created                                |
-| `bin/rails object_storage:smoke`   | PUT → HEAD → GET → DELETE succeeded on both buckets |
+| `bin/rails object_storage:prepare` | Both buckets created                                 |
+| `bin/rails object_storage:smoke`   | PUT → HEAD → GET → DELETE succeeded on both buckets  |
 
 Buckets created:
 

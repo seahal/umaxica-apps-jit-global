@@ -30,8 +30,8 @@ decision. See `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
 Keep the existing fresh, scope-bound Step-Up requirement before an authenticated `app` account can
 start linking a Google or Apple identity. Preserve the current `social_link` requirement, its
 session/token/purpose/audience binding, and the existing one-time callback state and
-account-consistency checks. Do not let provider authentication substitute for UMAXICA
-account-owner approval.
+account-consistency checks. Do not let provider authentication substitute for UMAXICA account-owner
+approval.
 
 Keep Step-Up on unlink/removal as well, together with the existing guard that prevents removing the
 last eligible sign-in method.

@@ -74,8 +74,8 @@ The `principal` database name is retained for compatibility and is not renamed i
 must not infer Principal authority ownership from the name `principal`.
 
 Regional-ready application data belongs in the future Regional repository's own application
-database. This repository must not add it to the retained `principal` connection keys without a
-new placement decision.
+database. This repository must not add it to the retained `principal` connection keys without a new
+placement decision.
 
 This is a semantic redefinition of the retained storage role, not a database rename. It does not
 restore `principal` as the canonical store for Principal / Identity / Persona / Organization
@@ -165,9 +165,9 @@ Relevant file paths:
 
 ## Design Rules
 
-- New regional-ready models are out of scope for this repository. They belong in the future
-  Regional repository after an explicit placement decision and must not depend on `principal` as a
-  canonical authority boundary.
+- New regional-ready models are out of scope for this repository. They belong in the future Regional
+  repository after an explicit placement decision and must not depend on `principal` as a canonical
+  authority boundary.
 - Do not place new global authority models in `principal` merely because the retained database name
   is `principal`. Authority ownership must be decided from the semantic role of the data, not from
   the database name.

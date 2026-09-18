@@ -34,7 +34,7 @@ Collection pagination for the public publishing entries API is **Pagy offset pag
 
 ```json
 {
-  "data": [ { } ],
+  "data": [{}],
   "page": { "current": 2, "previous": 1, "next": 3, "last": 10 }
 }
 ```

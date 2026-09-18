@@ -5,8 +5,9 @@ Date: 2026-09-11. Branch `feature`, base commit `65d61c2d0`. All commands ran in
 
 ## Starting state
 
-- `bin/rails test` could not load: `test/controllers/concerns/authentication_current_resource_resolver_coverage_test.rb`
-  had a stray `do:` (introduced in `65d61c2d0`).
+- `bin/rails test` could not load:
+  `test/controllers/concerns/authentication_current_resource_resolver_coverage_test.rb` had a stray
+  `do:` (introduced in `65d61c2d0`).
 - With that file excluded: 12929 runs, 2 failures, 8 errors. One was caused by the JWT work
   (`ArchitectureBaselineTest`: `authentication_jwt_configuration.rb` had 7 explicit-visibility
   offenses, baseline 6). The other nine are listed under "Pre-existing failures".
@@ -45,8 +46,10 @@ Date: 2026-09-11. Branch `feature`, base commit `65d61c2d0`. All commands ran in
 - numeric `sub`, array or missing `scope`, and a future `nbf`
 - `scp`, `act` and payload `typ` rejected
 - a legacy-format token rejected
-- preference: expired token, numeric or mismatched `sub`, sibling host, and an `aud` missing the host scope
-- the dev/test issuer boundary, and production boot validation (rejects non-production values, accepts production values)
+- preference: expired token, numeric or mismatched `sub`, sibling host, and an `aud` missing the
+  host scope
+- the dev/test issuer boundary, and production boot validation (rejects non-production values,
+  accepts production values)
 - fixed leeway, and a required explicit JOSE `typ`
 
 Existing tests were updated to the new contract.
@@ -62,8 +65,8 @@ Existing tests were updated to the new contract.
 
 ## Pre-existing failures
 
-All nine remaining failures also failed, with identical messages, in the first full run before
-this work began:
+All nine remaining failures also failed, with identical messages, in the first full run before this
+work began:
 
 - `test/controllers/auth/com/up/checkpoint_telephone_controller_test.rb` (5):
   `visitor_passkey_statuses` foreign key violation

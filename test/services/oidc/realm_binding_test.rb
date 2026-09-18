@@ -115,8 +115,14 @@ class OidcRealmBindingTest < ActiveSupport::TestCase
   end
 
   test "replay family revocation reads and writes the RP Session on the surface writer" do
+    code_store = Object.new
+    code_store.define_singleton_method(:mark_replay!) do |**|
+      Valkey::AuthState::AuthorizationCodeStore::ConsumeResult.new(status: :missing, payload: nil)
+    end
     coordinator = OidcTokenExchangeCoordinator.new(
       grant_type: "authorization_code",
+      code: "replayed-code",
+      code_store: code_store,
       client_id: "rp",
       redirect_uri: "https://rp.example.test/callback",
       code_verifier: "verifier",

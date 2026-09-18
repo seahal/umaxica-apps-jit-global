@@ -173,7 +173,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       settings:
@@ -351,7 +351,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       settings:
@@ -533,7 +533,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       settings:
@@ -551,7 +551,7 @@ en:
     disconnect: Disconnect
     edit: Edit
     save: Save
-    up: Up
+    up: Back
   activemodel:
     errors:
       models:
@@ -1023,7 +1023,7 @@ en:
         timezone_settings: Timezone Settings
         title: Preferences
         token_guidance: Use the link in the email to edit your preferences within two hours.
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
@@ -1117,7 +1117,7 @@ en:
         timezone_settings: Timezone Settings
         title: Preferences
         token_guidance: Use the link in the email to edit your preferences within two hours.
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
@@ -1201,7 +1201,7 @@ en:
         timezone_settings: Timezone Settings
         title: Preferences
         token_guidance: Use the emailed link to change settings before it expires.
-        up_link: Back to top
+        up_link: Back
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
@@ -1239,7 +1239,7 @@ en:
           switcher: Switcher
           userinfo: UserInfo
       identity:
-        up_link: Back to top
+        up_link: Back
         activities:
           title: Activity history
           description: Recent security-related activity for your account.
@@ -1445,7 +1445,7 @@ en:
         title: Settings
     com:
       preference:
-        up_link: up to
+        up_link: Back
       preferences:
         footer:
           privacy: Privacy
@@ -1540,7 +1540,7 @@ en:
         timezones:
           invalid: Invalid timezone selected
         title: Preferences
-        up_link: Back to top
+        up_link: Back
         update_success: Preferences updated successfully
       registration:
         new:
@@ -2197,7 +2197,7 @@ en:
         create:
           success: Your inquiry has been received.
         new:
-          back_to_root: up
+          back_to_root: Back
           badge: Contact
           body: Body
           cancel: Cancel
@@ -2767,7 +2767,7 @@ en:
           invalid: Invalid timezone selected
           updated: Timezone updated to %{timezone}
         title: Preferences
-        up_link: Back to top
+        up_link: Back
     com:
       preference:
         cookie:
@@ -2865,7 +2865,7 @@ en:
           invalid: Invalid timezone selected
           updated: Timezone updated to %{timezone}
         title: Preferences
-        up_link: Back to top
+        up_link: Back
     org:
       preference:
         cookie:
@@ -4243,7 +4243,7 @@ en:
             title: Accept operator invitation
       ups:
         new:
-          back_to_root: Up
+          back_to_root: Back
           description: Create an account to start the administrative operations reserved for you.
           heading: Create an account
           links:

@@ -4,7 +4,8 @@ require:
   - ../lib/rubocop/cop/umaxica/explicit_method_visibility
 
 Umaxica/NoConcernInclusionHooks:
-  Description: "Forbid `included do` / `prepended do` host behavior injection in application concerns."
+  Description:
+    "Forbid `included do` / `prepended do` host behavior injection in application concerns."
   Enabled: true
   Include:
     - "app/**/*.rb"

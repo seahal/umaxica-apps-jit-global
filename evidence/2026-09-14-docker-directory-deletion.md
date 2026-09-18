@@ -30,14 +30,15 @@ ls podman/
 - No functional reference into `docker/` remains. The four surviving matches outside documentation
   are all exclusion rules, which now name a non-existent directory and are inert:
 
-  | Location           | Line      | Purpose                             |
-  | ------------------ | --------- | ----------------------------------- |
-  | `.containerignore` | 129       | build-context exclusion             |
-  | `.dockerignore`    | 143       | build-context exclusion             |
-  | `.rubocop.yml`     | 1403      | `docker/**/*` lint exclusion        |
-  | `.gitignore`       | 118 – 120 | `core/preferences` ignore rules     |
+  | Location           | Line      | Purpose                         |
+  | ------------------ | --------- | ------------------------------- |
+  | `.containerignore` | 129       | build-context exclusion         |
+  | `.dockerignore`    | 143       | build-context exclusion         |
+  | `.rubocop.yml`     | 1403      | `docker/**/*` lint exclusion    |
+  | `.gitignore`       | 118 – 120 | `core/preferences` ignore rules |
 
   `.rubocop/custom_exclusions.yml`, named by the Step 2 plan, does not exist in the worktree.
+
 - `docker/tailscale/serve/serve.json` — the one file with no `podman/` counterpart, flagged by
   `evidence/2026-09-14-docker-directory-dependency-audit.md` — is gone and was **not** copied into
   `podman/`. Its content was `{"TCP":{"22":{"TCPForward":"core:2222"}}}`.

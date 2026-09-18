@@ -16,11 +16,6 @@ module Security
 
       setup do
         ensure_client_token_reference_records!
-        ClientToken.skip_callback(:validation, :before, :ensure_device_session_record)
-      end
-
-      teardown do
-        ClientToken.set_callback(:validation, :before, :ensure_device_session_record)
       end
 
       test "refresh token reuse revokes only the compromised token family" do

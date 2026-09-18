@@ -1332,6 +1332,42 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
   end
 
+  test "a verified replay that lands between consume and link stops the winning exchange" do
+    code_record = issue_code!
+    delegate = authorization_code_store
+    code_store = Object.new
+    code_store.define_singleton_method(:read) { |raw_code| delegate.read(raw_code) }
+    code_store.define_singleton_method(:consume!) { |**arguments| delegate.consume!(**arguments) }
+    code_store.define_singleton_method(:link_family!) do |raw_code:, **arguments|
+      # The replaying request passed its PKCE check and marked the tombstone first.
+      delegate.mark_replay!(raw_code: raw_code)
+      delegate.link_family!(raw_code: raw_code, **arguments)
+    end
+    rp_session_count = ClientRpSession.count
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          code_store: code_store,
+          expected_resource_type: "client",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_nil result.token_response
+    assert_equal rp_session_count, ClientRpSession.count
+    assert_predicate delegate.read(code_record.code).fetch("replay_detected_at"), :present?
+  end
+
   test "fails closed when family linkage returns an unknown completion status" do
     code_record = issue_code!
     delegate = authorization_code_store
@@ -1367,7 +1403,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
   end
 
-  test "concurrent exchanges of one code produce a single token response" do
+  test "concurrent exchanges of one code never leave usable credentials from the replayed code" do
     code_record = issue_code!
     results = Array.new(2)
 
@@ -1395,11 +1431,17 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     successes = results.select(&:success?)
     denials = results.reject(&:success?)
 
-    assert_equal 1, successes.size
-    assert_equal 1, denials.size
-    assert_equal "invalid_grant", denials.first.error
+    # Both requests carry a valid PKCE verifier, so the second one is a verified replay.
+    # Depending on ordering it either stops the first before its family link (no success)
+    # or revokes the family the first already linked (one success, revoked).
+    assert_operator successes.size, :<=, 1
+    assert_operator denials.size, :>=, 1
+    denials.each { |denial| assert_equal "invalid_grant", denial.error }
     assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
-    assert_equal 1, ClientRpSession.where(oidc_client_id: "core-next-rp", client_token_id: @user_session_token.id).count
+    sessions = ClientRpSession.where(oidc_client_id: "core-next-rp", client_token_id: @user_session_token.id)
+
+    assert_operator sessions.count, :<=, 1
+    assert sessions.none?(&:active?)
   end
 
   test "same-owner replay after a lost HTTP response does not unconsume the code or mint a second family" do

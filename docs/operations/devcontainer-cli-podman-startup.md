@@ -199,7 +199,7 @@ Two rules make that hold, and both are asserted by
    stays behind `--profile tunnel-edge`.
 
 The same `-f` also suppresses Compose's auto-discovery of `compose.override.yaml`, so that file
-applies to a bare `docker compose` and to explicit `-f` runs, not to the editor. Because it *is*
+applies to a bare `docker compose` and to explicit `-f` runs, not to the editor. Because it _is_
 auto-discovered on the bare path, every service in it must carry a `profiles:` entry — an unprofiled
 overlay there would change `core` on every plain `up`. `ComposeLocalOverrideOptionalTest` enforces
 this.

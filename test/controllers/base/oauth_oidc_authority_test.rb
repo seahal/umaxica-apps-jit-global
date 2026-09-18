@@ -6,6 +6,8 @@ require "test_helper"
 # require "helpers/auth_helpers"
 
 class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
+  include OidcAuthorizationResponseHelper
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -757,8 +759,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"), headers: browser_headers
     end
 
-    assert_response :bad_request
-    assert_equal "login_required", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(error: "login_required", redirect_uri: oidc_authorize_params.fetch(:redirect_uri))
   end
 
   test "base oauth authorize rejects requests without openid scope" do

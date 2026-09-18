@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted 2026-09-14. Completes Step 3 of
-`plans/analysis/docker-to-podman-directory-migration.md` (Steps 1 and 2 done 2026-08-10).
+Accepted 2026-09-14. Completes Step 3 of `plans/analysis/docker-to-podman-directory-migration.md`
+(Steps 1 and 2 done 2026-08-10).
 
 ## Decision
 
@@ -44,8 +44,8 @@ tailscale serve --bg --tcp=22 tcp://127.0.0.1:2222
 That command persists its configuration in the `tailscale-core-state` volume, and re-declaring an
 identical forward is a no-op, so the entrypoint — not a JSON file — is the source of truth for
 tailnet SSH ingress. The JSON was not carried into `podman/` and is not recreated. Consequence: the
-sidecar topology can no longer be restored from the repository. Restoring it would require
-rewriting the file from the record above or from git history
+sidecar topology can no longer be restored from the repository. Restoring it would require rewriting
+the file from the record above or from git history
 (`git show 9d89b33e2^:docker/tailscale/serve/serve.json`).
 
 ## Consequences
@@ -53,7 +53,7 @@ rewriting the file from the record above or from git history
 - Remote access over the tailnet depends on `.devcontainer/remote-sshd-entrypoint.sh` alone. A
   change to the SSH port mapping is made there, not in a mounted config file. See
   `docs/operations/remote-codex-over-tailscale.md`.
-- Tooling entries that merely *exclude* `docker/` (`.containerignore`, `.dockerignore`,
+- Tooling entries that merely _exclude_ `docker/` (`.containerignore`, `.dockerignore`,
   `.rubocop.yml`, `.gitignore`) now name a directory that does not exist. They are inert, not
   broken, and are removed separately so this deletion stays reviewable on its own.
 - Deleting the directory does not restart or rebuild anything. Any rebuild that follows must account

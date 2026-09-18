@@ -9,8 +9,8 @@
 
 PgHero 4.0.1 `PgHero::Database#build_connection_model` creates one anonymous `PgHero::Connection`
 subclass per database and calls `establish_connection`, registering a pool for the **writing role
-only**. `config/initializers/multi_db.rb` enables `ActiveRecord::Middleware::DatabaseSelector`, which
-wraps requests in `connected_to(role: :reading)`; the PgHero model has no reading pool there.
+only**. `config/initializers/multi_db.rb` enables `ActiveRecord::Middleware::DatabaseSelector`,
+which wraps requests in `connected_to(role: :reading)`; the PgHero model has no reading pool there.
 Identical to the Flipper case documented in `config/initializers/flipper.rb`.
 
 Outside a request (`bin/rails runner`) the same model connects fine, which is why the failure only
@@ -27,7 +27,8 @@ requires).
 In-process `Rack::Test` against `Rails.application`, host `pghero.core.dev.localhost`, HTTP Basic
 credentials from `.env`:
 
-- before fix: `GET /primary` 500 (first request 200, subsequent 500), `POST /primary/enable_query_stats` 500
+- before fix: `GET /primary` 500 (first request 200, subsequent 500),
+  `POST /primary/enable_query_stats` 500
 - after fix: `GET /primary` 200 twice, `POST /primary/enable_query_stats` 302, `GET /app_zenith` 200
 - `bundle exec rubocop config/initializers/pghero.rb` - no offenses
 

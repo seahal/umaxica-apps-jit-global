@@ -36,9 +36,9 @@ get:
   responses:
     "200":
       description: >-
-        One page of published entries. The collection is always bounded: a request that omits
-        `page` still receives at most the server-defined page size (20). Pagination is Pagy
-        offset pagination; callers send `page`, never a SQL OFFSET.
+        One page of published entries. The collection is always bounded: a request that omits `page`
+        still receives at most the server-defined page size (20). Pagination is Pagy offset
+        pagination; callers send `page`, never a SQL OFFSET.
       headers:
         Cache-Control:
           schema:

@@ -25,8 +25,8 @@ domain and subdomain matter in both development and production.
 
 ### Frontend
 
-- Two coexisting frontend approaches: Inertia Rails (React) and Rails' own default
-  Vite Rails + Stimulus + Turbo stack
+- Two coexisting frontend approaches: Inertia Rails (React) and Rails' own default Vite Rails +
+  Stimulus + Turbo stack
 - Tailwind CSS via Vite, Propshaft for static assets
 - Vite and Bun for JavaScript build, linting, formatting, and tests
 
@@ -108,14 +108,15 @@ bin/setup
 ```
 
 `compose.yaml` owns shared infrastructure for both development modes. In Dev Container mode,
-`.devcontainer/compose.yaml` adds `core`; in host-native mode, Rails runs directly on the VM and
+`.devcontainer/compose.yaml` adds `core`, and the same three commands above are run by hand inside
+`core` — `devcontainer.json` declares no `postCreateCommand`, so creating the container neither
+fetches dependencies nor touches a database; in host-native mode, Rails runs directly on the VM and
 `podman compose up -d` starts only PostgreSQL, Valkey, FakeCloud, and observability services.
 `compose.override.yaml` is the only other root Compose file. It is **untracked and gitignored**
 (since 2026-09-14), auto-discovered by a bare `podman compose`, and everything in it is
 profile-gated: it carries the opt-in `remote-access` Tailscale/sshd overlay of `core` and is where
 per-machine settings go. Being untracked is what keeps those settings per-machine; a fresh clone
-does not have the file, and does not need it. See the Dev
-Container startup documentation.
+does not have the file, and does not need it. See the Dev Container startup documentation.
 
 ```bash
 POSTGRESQL_USER=root
@@ -270,9 +271,9 @@ COVERAGE=true scripts/test-isolated bin/rails test test/
 ```
 
 The isolated wrapper requires an explicit PostgreSQL test host and the test Valkey logical DBs
-before Rails boots; it performs a read-only identity check and cleans only its run-scoped
-auth-state keys. Coverage reports are written to `coverage/`. Set `PARALLEL_WORKERS=1` for a
-focused run when diagnosing a failure.
+before Rails boots; it performs a read-only identity check and cleans only its run-scoped auth-state
+keys. Coverage reports are written to `coverage/`. Set `PARALLEL_WORKERS=1` for a focused run when
+diagnosing a failure.
 
 ### JavaScript Tests
 
@@ -336,9 +337,12 @@ These checks cover formatting, linting, security audits, database consistency, a
 
 - `adr/` — accepted architecture and design decisions, with the tradeoffs behind them.
 - `docs/` — current, stable documentation of how the system works.
-- `memos/` — exploratory field notes and rough analysis not yet stable enough for `docs/`, `plans/`, `adr/`, or `notes/`.
-- `notes/` — non-authoritative implementation handoff and ADR-adjacent notes, candidates for later promotion.
-- `plans/` — planning material not yet an implementation source of truth; GitHub issues remain the source of truth for accepted active work.
+- `memos/` — exploratory field notes and rough analysis not yet stable enough for `docs/`, `plans/`,
+  `adr/`, or `notes/`.
+- `notes/` — non-authoritative implementation handoff and ADR-adjacent notes, candidates for later
+  promotion.
+- `plans/` — planning material not yet an implementation source of truth; GitHub issues remain the
+  source of truth for accepted active work.
 - `evidence/` — dated, flat records of completed tests, verifications, and audits.
 
 ## Acknowledgement
