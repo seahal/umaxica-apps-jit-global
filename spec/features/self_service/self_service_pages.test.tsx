@@ -104,6 +104,19 @@ describe("SelfServiceShell", () => {
     expect(upIndex).toBeGreaterThan(-1);
     expect(upIndex).toBeLessThan(titleIndex);
   });
+
+  it("renders the action link the server resolved beside the title", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+        action_link={{ label: "Edit", href: "/account/edit?ri=jp" }}
+      />,
+    );
+
+    expect(html).toContain('href="/account/edit?ri=jp"');
+    expect(html).toContain("Edit");
+  });
 });
 
 describe("EntityList", () => {
