@@ -330,8 +330,10 @@ class HealthRevisionContractTest < ActionDispatch::IntegrationTest
 
     assert_response :success
 
+    # Rails.root is "/app" in the container. Intentional namespaces such as
+    # "base/app" contain that substring, so check for a quoted filesystem path
+    # rather than a bare Rails.root substring.
     forbidden = [
-      Rails.root.to_s,
       APP_HOST,
       "secret_key_base",
       "git",
@@ -341,6 +343,11 @@ class HealthRevisionContractTest < ActionDispatch::IntegrationTest
     ]
 
     forbidden.each { |value| assert_not_includes response.body, value }
+    # Prefer quoted path checks: bare Rails.root ("/app") is a substring of "base/app".
+    root_path = Rails.root.to_s
+
+    assert_not_includes response.body, %("#{root_path}")
+    assert_not_includes response.body, %("#{root_path}/")
     assert_no_match(/\.rb:\d+|backtrace|Traceback/, response.body)
   end
 
