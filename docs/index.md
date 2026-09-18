@@ -33,7 +33,7 @@ Rules:
 
 Current content-model references:
 
-- `docs/architecture/umaxica-v1-architecture-lock.md` locks the v1 Identity / Account / Organization
+- `docs/architecture/umaxica-v1-architecture-lock.md` records the v1 Identity / Persona / Organization
   / Unit / Avatar / Group resource model, Avatar DB vs content DB boundary, actor snapshot
   exclusion, Avatar lifecycle states, known violations, and guard-rail scope before implementation.
 - `docs/architecture/avatar-social-graph.md` records the Avatar-to-Avatar follow, block, and mute
@@ -41,23 +41,27 @@ Current content-model references:
 - `docs/architecture/model-database-inventory.md` is the current-state model/database placement map
   used for future authority and placement decisions.
 - `adr/principal-zenith-physical-consolidation.md` records the accepted physical consolidation of
-  `*_principal` migration history into matching `*_zenith` databases while retaining empty
-  `*_principal` connection keys for future regional-ready storage.
+  `*_principal` migration history into matching `*_zenith` databases. The retained `*_principal`
+  connection keys are compatibility seams, not a regional-ready application store.
 - `docs/architecture/principal-zenith-membership-organization-placement.md` audits the ambiguous
-  `Member` / `ClientMembership` / `Organization` cluster and the related runtime actor and OIDC
+  `Member` / `ClientMembership` / `OperatorOrganization` cluster and the related runtime actor and OIDC
   connection rows.
 - `adr/member-client-membership-organization-decomposition-before-placement.md` establishes the
   decomposition-first rule before any placement migration for that cluster.
 - `docs/architecture/acme-sign-core-base-port.md`
 - `docs/architecture/sns-subject-resource-grill.md`
-- `docs/architecture/sns-subject-resource-decision-record.md`
+- `docs/architecture/sns-subject-resource-decision-record.md` records the deferred Avatar/SNS
+  boundary; it is not part of the current Persona/Organization authority implementation.
 - `docs/architecture/database-authority-placement.md`
+- `docs/architecture/persona-organization-authority.md` is the current surface-local Persona /
+  Organization authority shape and phase-gated implementation reference.
 - `docs/identity/authority-boundary.md`
 - `docs/architecture/actor-naming.md`
 - `docs/architecture/current_context.md`
 - `docs/architecture/database-boundaries.md`
 - `docs/architecture/flat-ruby-source-layout.md`
 - `docs/architecture/controller-boundaries.md`
+- `docs/architecture/dashboard-navigation.md`
 - `docs/architecture/controller-lifecycle.md`
 - `docs/architecture/avatar-account-bridge.md`
 - `docs/architecture/docs-help-news-content-boundary.md`
@@ -129,9 +133,9 @@ Current content-model references:
   9745 / RFC 8594 deprecation signaling, and the protocol endpoints exempt from those rules. Areas
   with no governing standard are recorded separately as decisions in
   `adr/api-error-format-problem-details.md`, `adr/api-collection-contract.md`,
-  `adr/api-collection-offset-pagination.md`, and
-  `adr/api-versioning-and-client-conventions.md`.
+  `adr/api-collection-offset-pagination.md`, and `adr/api-versioning-and-client-conventions.md`.
 - `docs/reference/feature-flags.md`
 - `docs/reference/forbidden-rails-methods.md`
 - `docs/reference/repository-language-policy.md`
 - `docs/reference/ruby-static-analysis.md`
+- `docs/reference/url-identifier-policy.md`

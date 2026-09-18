@@ -1,0 +1,6 @@
+### Normative Language
+
+The terms **MUST**, **SHOULD**, and **MAY** are interpreted as defined by BCP 14 (RFC 2119 and RFC 8174) when written in uppercase.
+
+Express requirements positively. Do not use the negative BCP 14 forms; state the behavior, invariant, or protection that the implementation is required to preserve instead.
+

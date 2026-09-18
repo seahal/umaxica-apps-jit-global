@@ -70,7 +70,6 @@ module Base
           description: t("base.shared.dashboard.description"),
           sections: [
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
-            { heading: t("base.shared.dashboard.sections.protocol_links"), items: protocol_links },
           ],
         }
       end
@@ -83,16 +82,9 @@ module Base
           { label: t("base.shared.dashboard.links.avatar"), href: base_org_avatar_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.identity"), href: base_org_identity_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.selector"), href: base_org_selector_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.preference"), href: base_org_preference_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.offline"), href: base_org_pwa_offline_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.logout"), href: new_base_org_sign_out_path(ri: params[:ri]) },
-        ]
-      end
-
-      def protocol_links
-        [
-          { label: t("base.shared.dashboard.links.oidc_discovery"),
-            href: base_org_well_known_openid_configuration_path, },
-          { label: t("base.shared.dashboard.links.jwks"), href: base_org_well_known_jwks_path },
-          { label: t("base.shared.dashboard.links.userinfo"), href: base_org_oauth_userinfo_path },
         ]
       end
 

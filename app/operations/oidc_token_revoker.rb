@@ -7,13 +7,14 @@ class OidcTokenRevoker < ApplicationService
       def success? = success
     end
 
-  def initialize(token:, client_id:, client_secret:, token_type_hint: nil, host: nil)
+  def initialize(token:, client_id:, client_secret:, token_type_hint: nil, host: nil, expected_resource_type: nil)
     super()
     @token = token
     @client_id = client_id
     @client_secret = client_secret
     @token_type_hint = token_type_hint
     @host = host
+    @expected_resource_type = expected_resource_type
   end
 
   def call
@@ -25,9 +26,15 @@ class OidcTokenRevoker < ApplicationService
 
   private
 
-  attr_reader :token, :client_id, :client_secret, :token_type_hint, :host
+  attr_reader :token, :client_id, :client_secret, :token_type_hint, :host, :expected_resource_type
 
   def authenticated_client?
+    if expected_resource_type.present?
+      client = OidcClientRegistry.find(client_id)
+      return false unless client
+      return false if OidcIssuer.resource_type_for_client(client) != expected_resource_type.to_s
+    end
+
     OidcClientRegistry.authenticate(client_id, client_secret)
   end
 
@@ -43,7 +50,7 @@ class OidcTokenRevoker < ApplicationService
     return false unless token_record.oidc_client_id == client_id
     return false unless token_record.refresh_token_digest_matches?(verifier)
 
-    token_record.revoke!
+    RpSessionRevoker.call(scope: :rp_session, record: token_record)
     true
   end
 
@@ -61,14 +68,18 @@ class OidcTokenRevoker < ApplicationService
     )
     return false unless payload
 
+    # OIDC revocation is scoped to the RP Session that issued the token. A
+    # parent Base Browser Session may also carry an OIDC sid for legacy or
+    # first-party browser flows, but falling back to that row here would let an
+    # RP revoke the whole browser session when its own RP Session is absent.
     token_record = find_rp_session_by_sid(
       client_resource_type,
       payload["sid"],
-    ) || find_token_by_sid(client_resource_type, payload["sid"])
+    )
     return false unless token_record&.oidc_client_id == client_id
     return false unless token_jti_matches?(token_record, payload)
 
-    token_record.revoke!
+    RpSessionRevoker.call(scope: :rp_session, record: token_record)
     true
   end
 
@@ -88,16 +99,6 @@ class OidcTokenRevoker < ApplicationService
     end
   end
 
-  def find_token_by_sid(resource_type, sid)
-    return if sid.blank?
-
-    context, token_class = token_context_and_class(resource_type)
-
-    context.connected_to(role: :writing) do
-      token_class.find_by(oidc_sid: sid)
-    end
-  end
-
   def token_jti_matches?(token_record, payload)
     return false unless token_record.has_attribute?(:oidc_jti)
     return false if token_record.oidc_jti.blank?
@@ -107,14 +108,6 @@ class OidcTokenRevoker < ApplicationService
     return false unless expected.bytesize == actual.bytesize
 
     ActiveSupport::SecurityUtils.secure_compare(expected, actual)
-  end
-
-  def token_context_and_class(resource_type)
-    case resource_type
-    when "operator" then [OrgTicketRecord, OperatorToken]
-    when "visitor" then [ComTicketRecord, VisitorToken]
-    else [AppTicketRecord, ClientToken]
-    end
   end
 
   def rp_session_context_and_class(resource_type)

@@ -18,7 +18,7 @@ The Phase 1.5 feasibility assessment
 `DB_SPLIT_FEASIBLE_WITH_ARCHITECTURAL_CHANGES`, conditional on one unresolved decision it labelled
 `M1`:
 
-> Does the `*_zenith` account / identity / organization graph stay Global, or does each region own
+> Does the `*_zenith` Persona / identity / organization graph stay Global, or does each region own
 > its own copy?
 
 The repository was internally inconsistent on this point:
@@ -28,7 +28,7 @@ The repository was internally inconsistent on this point:
 - `app/models/org_rp_record.rb` header comment said "Deployment scope: Global."
 - `docs/architecture/model-database-inventory.md` and
   `docs/architecture/database-authority-placement.md` treated `*_zenith` as the **target authority**
-  store for Account / Identity / Organization data.
+  store for Persona / Identity / Organization data.
 - `adr/identity-authority-boundary.md` and `docs/identity/authority-boundary.md` make `acme/www`
   (this repository) the sole Session, Token, Account, Preference, Authorization, and
   downstream-token Authority.
@@ -46,15 +46,16 @@ changes no code, migration, schema, `config/database.yml`, or runtime configurat
 
 ### 1. `*_zenith` is Global authority (M1 resolved)
 
-`app_zenith`, `org_zenith`, and `com_zenith` are **Global-only** databases. The Account, Identity,
+`app_zenith`, `org_zenith`, and `com_zenith` are **Global-only** databases. The Persona, Identity,
 Organization, and principal graph they contain is Global canonical authority and is not
 region-owned. Concretely, the Global canonical authority for the following is this repository:
 
 - runtime actors: `Client`, `Operator`, `Visitor`
-- accounts: `Persona`, `Agent`, `Individual`; `ClientAccount`, `OperatorAccount`, `VisitorAccount`
+- Persona resources: `ClientPersona`, `Agent`, `Individual`; RP-account projections remain
+  `ClientAccount`, `OperatorAccount`, and `VisitorAccount`.
 - identity bindings: `ClientIdentity`, `OperatorIdentity`, `VisitorIdentity`
-- organization hierarchy: `Enterprise`, `Bureau`, `Company` (and their unit / closure models);
-  `Organization`, `Division`, `Department`
+- organization resources: `Enterprise`, `Bureau`, and `Company` (and their unit / closure models);
+  the legacy `OperatorOrganization` hierarchy remains separately mapped to `organizations`.
 - membership and assignment identity data: `Member`, `ClientMembership`, `PersonaAssignment` /
   `AgentAssignment` / `IndividualAssignment`, `PersonaMembership` / `AgentMembership` /
   `IndividualMembership`, `OperatorWorkspaceAccount` and its membership join
@@ -63,7 +64,7 @@ region-owned. Concretely, the Global canonical authority for the following is th
 - privacy, retention, and withdrawal state
 - enforcement state: `{App,Com,Org}EnforcementCase` and all `*_enforcement_*` effect tables
 - Entra federation records: `OperatorEntraIdentity`, `OrganizationEntraConnection`
-- any other canonical account / identity / organization state currently stored in `*_zenith`
+- any other canonical Persona / identity / organization state currently stored in `*_zenith`
 
 This is consistent with `adr/identity-authority-boundary.md`: `acme/www` is the Account, Session,
 Token, Preference, and Authorization Authority, and downstream services trust acme-issued downstream

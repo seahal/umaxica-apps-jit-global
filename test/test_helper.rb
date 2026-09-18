@@ -300,6 +300,10 @@ module ActiveSupport
     parallel_workers = Integer(ENV.fetch("PARALLEL_WORKERS") { Concurrent.physical_processor_count.to_s }, 10)
     raise ArgumentError, "PARALLEL_WORKERS must be positive" unless parallel_workers.positive?
 
+    # The concrete legacy organization model was renamed to OperatorOrganization while the
+    # physical table and fixture filename remain `organizations`. Without this explicit mapping,
+    # Rails infers the removed Organization constant and loads the fixture on the wrong connection.
+    set_fixture_class organizations: OperatorOrganization
     fixtures :all
     ValkeyTestIsolation.install!
     ParallelTestDatabaseCloner.install!(workers: parallel_workers)

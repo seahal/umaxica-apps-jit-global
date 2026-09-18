@@ -39,6 +39,7 @@ class JwtAnomalyEvent < OccurrenceRecord
   validates :request_host, length: { maximum: 255 }, allow_blank: true
   validates :kid, :alg, :typ, :issuer, :jti, :error_class, length: { maximum: 255 }, allow_blank: true
   validates :error_message, length: { maximum: 1000 }, allow_blank: true
-  validates :metadata, presence: true
+  # Empty metadata is valid when a payload carries no allowlisted keys; only NULL is rejected.
+  validates :metadata, exclusion: { in: [nil] }
   validates :occurred_at, presence: true
 end

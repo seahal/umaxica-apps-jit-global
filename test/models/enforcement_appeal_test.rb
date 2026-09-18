@@ -105,6 +105,63 @@ class EnforcementAppealTest < ActiveSupport::TestCase
     assert_not_nil appeal.reviewed_at
   end
 
+  test "an approved appeal remains committed when Case convergence fails" do
+    enforcement_case = AppEnforcementCase.create!(
+      kind: "security_lock", state: "active", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: "client-standing-approved", applied_by_operator_public_id: "operator-applying",
+    )
+    appeal = AppEnforcementAppeal.create!(
+      enforcement_case: enforcement_case,
+      reason_code: "incorrect_decision",
+      statement: "The decision does not match what happened.",
+      submitted_at: Time.current,
+      state: "submitted",
+    )
+
+    error =
+      assert_raises(RuntimeError) do
+        EnforcementCaseEndOperation.stub(
+          :call, ->(*) { raise RuntimeError, "release service unavailable" },
+        ) do
+          appeal.resolve!(reviewer_operator_public_id: "operator-reviewing", resolution_code: "approved")
+        end
+      end
+
+    assert_equal "release service unavailable", error.message
+    assert_equal "approved", appeal.reload.state
+    assert_equal "approved", appeal.resolution_code
+    assert_nil enforcement_case.reload.ended_at
+  end
+
+  test "a rejected appeal remains committed when its audit side effect fails" do
+    enforcement_case = AppEnforcementCase.create!(
+      kind: "security_lock", state: "active", duration_mode: "indefinite", visibility: "visible",
+      release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+      principal_public_id: "client-standing-rejected-audit", applied_by_operator_public_id: "operator-applying",
+    )
+    appeal = AppEnforcementAppeal.create!(
+      enforcement_case: enforcement_case,
+      reason_code: "new_information",
+      statement: "The supporting facts changed.",
+      submitted_at: Time.current,
+      state: "submitted",
+    )
+
+    error =
+      assert_raises(RuntimeError) do
+        EnforcementEvent.stub(
+          :create!, ->(*) { raise RuntimeError, "chronicle unavailable" },
+        ) do
+          appeal.resolve!(reviewer_operator_public_id: "operator-reviewing", resolution_code: "rejected")
+        end
+      end
+
+    assert_equal "chronicle unavailable", error.message
+    assert_equal "rejected", appeal.reload.state
+    assert_equal "rejected", appeal.resolution_code
+  end
+
   test "submit! persists the appeal and writes one audit event on the Case" do
     enforcement_case = AppEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",

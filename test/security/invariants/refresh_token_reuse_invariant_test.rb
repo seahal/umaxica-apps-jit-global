@@ -66,11 +66,11 @@ module Security
         usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
         reused_refresh = usage.issue_refresh_token!
 
-        rotation = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh)
+        rotation = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh, resource_type: "client")
 
         assert_predicate rotation, :success?, "The first redemption must rotate normally."
 
-        replay = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh)
+        replay = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh, resource_type: "client")
 
         assert_not replay.success?
         assert_equal :refresh_token_reuse_detected, replay.reason,
@@ -90,10 +90,13 @@ module Security
         usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
         first_refresh = usage.issue_refresh_token!
 
-        first_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_refresh)
+        first_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_refresh, resource_type: "client")
 
         assert_predicate first_rotation, :success?
-        second_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_rotation.refresh_token)
+        second_rotation = OidcRefreshTokenIssuer.call(
+          refresh_token: first_rotation.refresh_token,
+          resource_type: "client",
+        )
 
         assert_predicate second_rotation, :success?,
                          "Reuse detection must not break the legitimate rotation chain."

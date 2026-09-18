@@ -350,6 +350,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "refresh", captured[:token]
     assert_equal "core-next-rp", captured[:client_id]
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), captured[:host]
+    assert_equal "client", captured[:expected_resource_type]
   end
 
   test "base com revocation delegates with com host binding" do
@@ -371,6 +372,26 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "refresh", captured[:token]
     assert_equal "core-next-rp", captured[:client_id]
     assert_equal host, captured[:host]
+    assert_equal "visitor", captured[:expected_resource_type]
+  end
+
+  test "base org revocation delegates with operator realm binding" do
+    captured = nil
+    result = RevocationResult.new(success: true)
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+
+    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+      post base_org_oauth_revocation_url(host: host),
+           params: {
+             token: "refresh",
+             client_id: "core-org",
+             client_secret: "secret",
+             token_type_hint: "refresh_token",
+           }
+    end
+
+    assert_response :ok
+    assert_equal "operator", captured[:expected_resource_type]
   end
 
   test "base com revocation returns unauthorized when the revoker fails" do

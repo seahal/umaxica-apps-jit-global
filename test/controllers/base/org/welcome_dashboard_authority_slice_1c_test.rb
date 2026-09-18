@@ -57,11 +57,15 @@ class Base::Org::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal base_org_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
     assert_equal base_org_avatar_path(ri: "jp"), labelled.fetch(dashboard_label(:avatar))
     assert_includes hrefs, base_org_selector_path(ri: "jp")
+    assert_equal base_org_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
+    assert_equal base_org_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
+    assert_not hrefs.any? { |href| href.match?(%r{/preference/(calendar|clock|currency)}) }
+    assert_not hrefs.any? { |href| href.match?(%r{/identity/(emails|telephones|secrets|sessions)}) }
     assert_includes hrefs, new_base_org_sign_out_path(ri: "jp")
     assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
-    assert_includes labelled.keys, dashboard_label(:oidc_discovery)
-    assert_includes labelled.keys, dashboard_label(:jwks)
-    assert_includes labelled.keys, dashboard_label(:userinfo)
+    assert_not labelled.key?(dashboard_label(:oidc_discovery))
+    assert_not labelled.key?(dashboard_label(:jwks))
+    assert_not labelled.key?(dashboard_label(:userinfo))
 
     publishing_heading = I18n.t("base.shared.dashboard.sections.publishing", locale: :ja)
 

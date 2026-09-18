@@ -65,13 +65,11 @@ module EnforcementRecoveryCeremonyFlow
     return render_invalid_recovery_otp(started_at) \
       unless recovery_subject_eligible?(subject) && recovery_email_verified?(email)
 
-    result = verify_otp_code(email, params[:pass_code])
+    result = verify_otp_code_and_consume(email, params[:pass_code])
     unless result[:success]
-      increment_otp_attempts!(email)
       return render_invalid_recovery_otp(started_at)
     end
 
-    clear_otp(email)
     session.delete(REENTRY_SESSION_KEY)
     ensure_min_elapsed(started_at)
     ceremony = recovery_ceremony_class.issue!(subject: subject, request: request)

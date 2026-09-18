@@ -606,6 +606,8 @@ en:
         operation: Operation
       client_identity:
         source_record_id: Source record ID
+      client_persona:
+        client_identity_id: Client identity
       client_telephone:
         number: Telephone number
         number_digest: Telephone number digest
@@ -1081,7 +1083,10 @@ en:
             option_label: Time Format
       preferences:
         back_to_settings: Back to settings
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
         language_settings: Language Settings
@@ -1225,7 +1230,10 @@ en:
             option_label: Time Format
       preferences:
         back_to_settings: Back to Preferences
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
         language_settings: Language Settings
@@ -1394,7 +1402,10 @@ en:
             timezone_label: Timezone
       preferences:
         back_to_settings: Back to Preferences
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
         language_settings: Language Settings
@@ -1431,12 +1442,16 @@ en:
           authorize_sign_in: Authorize (sign in)
           authorize_sign_up: Authorize (sign up)
           avatar: Avatar
+          billings: Billings
           dashboard: Dashboard
+          groups: Groups
           identity: Identity
           jwks: JWKS
           logout: Logout
+          offline: Offline
           oidc_discovery: OIDC discovery
           organization: Organization
+          preference: Preferences
           root: Root
           selector: Selector
           switcher: Switcher
@@ -3734,8 +3749,8 @@ en:
               identifier_placeholder: Enter the staff ID
               page_title: Emergency Access
               restricted_mode_notice:
-                This sign-in produces a restricted session. Step-up verification and the operations that
-                require it are unavailable until you sign out and sign in normally.
+                This sign-in produces a restricted session. Step-up verification and the operations
+                that require it are unavailable until you sign out and sign in normally.
               submit: Sign in with passkey
         entra:
           errors:

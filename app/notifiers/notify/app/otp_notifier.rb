@@ -28,7 +28,7 @@ module Notify
             {
               encrypted_hotp_token: params[:encrypted_hotp_token],
               email_address: recipient.address,
-              verification_token: params[:verification_token],
+              encrypted_verification_token: params[:encrypted_verification_token],
               public_id: params[:public_id],
               purpose: params[:purpose],
             }

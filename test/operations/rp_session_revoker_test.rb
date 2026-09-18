@@ -39,6 +39,56 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     assert_predicate @session_b.reload, :revoked?
   end
 
+  test "browser_session scope locks the parent before any RP Session" do
+    lock_tables = []
+    callback =
+      lambda do |*, payload|
+        next if payload[:cached]
+
+        sql = payload[:sql].to_s
+        next unless sql.match?(/\bFOR UPDATE\b/i)
+
+        if sql.match?(/\b#{Regexp.escape(ClientToken.table_name)}\b/i)
+          lock_tables << :parent
+        elsif sql.match?(/\b#{Regexp.escape(ClientRpSession.table_name)}\b/i)
+          lock_tables << :child
+        end
+      end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      RpSessionRevoker.call(scope: :browser_session, record: @root)
+    end
+
+    assert_equal :parent, lock_tables.first,
+                 "browser-session revocation must lock the parent before child RP Sessions"
+    assert_includes lock_tables, :child
+  end
+
+  test "rp_session scope locks the parent before the targeted child" do
+    lock_tables = []
+    callback =
+      lambda do |*, payload|
+        next if payload[:cached]
+
+        sql = payload[:sql].to_s
+        next unless sql.match?(/\bFOR UPDATE\b/i)
+
+        if sql.match?(/\b#{Regexp.escape(ClientToken.table_name)}\b/i)
+          lock_tables << :parent
+        elsif sql.match?(/\b#{Regexp.escape(ClientRpSession.table_name)}\b/i)
+          lock_tables << :child
+        end
+      end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      RpSessionRevoker.call(scope: :rp_session, record: @session_a)
+    end
+
+    assert_equal :parent, lock_tables.first,
+                 "RP-session revocation must lock the parent before the child"
+    assert_includes lock_tables, :child
+  end
+
   test "identity scope walks each Base Browser Session" do
     other_root = ClientToken.create!(user: Client.create!)
     other_session = ClientRpSession.create!(

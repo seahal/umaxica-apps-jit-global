@@ -14,7 +14,7 @@ module Email::Com
 
     def create
       @pass_code = OutboundSensitivePayload.decrypt_email_otp(params[:encrypted_hotp_token])
-      @verification_token = params[:verification_token]
+      @verification_token = verification_token_from_params
       @public_id = params[:public_id]
       @verification_url = verification_url
 
@@ -25,6 +25,14 @@ module Email::Com
     end
 
     private
+
+    def verification_token_from_params
+      # Read-only compatibility for jobs/direct calls created before the encrypted
+      # parameter was introduced. New producers always use the encrypted field.
+      return params[:verification_token] if params[:encrypted_verification_token].blank?
+
+      OutboundSensitivePayload.decrypt_email_verification_token(params[:encrypted_verification_token])
+    end
 
     def otp_subject
       purpose = params[:purpose].to_s

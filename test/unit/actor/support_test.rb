@@ -36,7 +36,7 @@ class ActorSupportTest < ActiveSupport::TestCase
 
   # --- set_current_observability ---
 
-  test "set_current_observability is no-op when OpenTelemetry is not loaded" do
+  test "set_current_observability leaves ids empty without a valid span context" do
     @host.set_current_observability
 
     assert_nil Actor.trace_id
@@ -53,14 +53,20 @@ class ActorSupportTest < ActiveSupport::TestCase
     assert_equal :app, Actor.tld
   end
 
-  test "set_current_observability keeps trace correlation when performant cookie is not consented" do
+  test "set_current_observability uses the valid span context without analytics consent" do
     # Default preference has performant? == false
     assert_not Actor.preferences.cookie.performant?
 
+    @host.define_singleton_method(:request) do
+      Struct.new(:request_id).new("request-correlation-id")
+    end
+
     hex_trace_id = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+    hex_span_id = "f1e2d3c4b5a6f1e2"
     span_context = Minitest::Mock.new
     span_context.expect(:valid?, true)
     span_context.expect(:hex_trace_id, hex_trace_id)
+    span_context.expect(:hex_span_id, hex_span_id)
 
     span = Minitest::Mock.new
     span.expect(:context, span_context)
@@ -73,7 +79,11 @@ class ActorSupportTest < ActiveSupport::TestCase
     end
 
     assert_equal hex_trace_id, Actor.trace_id
-    assert_nil Actor.span_id, "span_id must not be set without performant consent"
+    assert_equal hex_span_id, Actor.span_id
+    assert_not_equal @host.request.request_id, Actor.trace_id
+
+    span_context.verify
+    span.verify
   end
 
   test "set_current_observability sets trace_id and span_id when performant is consented" do
@@ -108,7 +118,7 @@ class ActorSupportTest < ActiveSupport::TestCase
     span.verify
   end
 
-  test "set_current_observability skips when span context is invalid" do
+  test "set_current_observability does not substitute request id for an invalid span context" do
     cookie = Actor::Preference::Cookie.new(
       consented: true, functional: true, performant: true,
       targetable: false, consent_version: "1", consented_at: Time.current,
@@ -120,6 +130,10 @@ class ActorSupportTest < ActiveSupport::TestCase
 
     span = Minitest::Mock.new
     span.expect(:context, span_context)
+
+    @host.define_singleton_method(:request) do
+      Struct.new(:request_id).new("request-correlation-id")
+    end
 
     otel_trace = Module.new
     otel_trace.define_singleton_method(:current_span) { span }

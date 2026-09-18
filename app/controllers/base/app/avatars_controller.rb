@@ -143,7 +143,7 @@ module Base
       end
 
       def current_persona
-        Persona.find_by!(public_id: Actor.selection.account_public_id)
+        ClientPersona.find_by!(public_id: Actor.selection.account_public_id)
       end
 
       def avatar_params

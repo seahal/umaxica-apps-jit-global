@@ -117,11 +117,14 @@ deliberately excludes operator notes, reporter data, ticket identifiers, and int
 
 An appeal is text-only, has one row per Case, and has no filing deadline or attachment support. The
 current self-service entry is the verified recovery ceremony for eligible visible security locks;
-broader Case entry points remain follow-up work. Submission writes the `appeal_submitted` chronicle
-event without the appeal statement. An org appeal-review resource requires step-up and rejects
-self-review by the applying or approving operator. An approved review ends the Case through the
-normal refcounted release path; rejection leaves it in force. Redaction clears the encrypted
-statement while preserving the decision record.
+broader Case entry points remain follow-up work. The submitted/approved/rejected appeal state is
+committed before its Chronicle event, Case-ending operation, or access-lock release. A recurring
+reconciliation job rediscovers persisted appeal state after a process or queue failure. An org
+appeal-review resource requires step-up and rejects self-review by the applying or approving
+operator. An approved review ends the Case through the normal refcounted release path; rejection
+leaves it in force. Redaction clears the encrypted statement while preserving the decision record.
+Chronicle remains a separate database: the source decision is not rolled back when audit delivery
+fails, and the system does not claim distributed exactly-once audit delivery.
 
 For a visible `security_lock` with `release_mode = verification_required`, `app` and `com` expose an
 open recovery entry backed by a short-lived, opaque recovery-ceremony cookie. A verified email OTP

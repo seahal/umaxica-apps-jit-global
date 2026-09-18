@@ -14,8 +14,12 @@ Rails.application.configure do
 
   config.lograge.custom_options =
     lambda do |event|
+      observability_context = ObservabilityContextResolver.call
+
       {
         request_id: event.payload[:request_id],
+        trace_id: observability_context.trace_id,
+        span_id: observability_context.span_id,
         host: event.payload[:host],
       }.compact
     end

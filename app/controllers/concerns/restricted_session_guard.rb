@@ -51,11 +51,7 @@ module RestrictedSessionGuard
 
     # Find the nearest abstract base record that defines the database
     # connection (e.g., AppTicketRecord, OrgTicketRecord)
-    base_class =
-      session.class.ancestors.find { |a|
-        a.respond_to?(:abstract_class?) && a.abstract_class? && a < ApplicationRecord
-      }
-    base_class ||= ApplicationRecord
+    base_class = session.class.connection_class_for_self
 
     base_class.connected_to(role: :writing) do
       session.revoke!

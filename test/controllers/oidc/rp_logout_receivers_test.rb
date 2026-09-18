@@ -49,12 +49,12 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "back-channel receiver rejects non-UUID sid without mutating session state" do
+  test "back-channel receiver rejects malformed sid without mutating session state" do
     SURFACES.each do |surface|
       token_record = create_session_token(surface, SecureRandom.uuid)
 
       with_oidc_key(namespace_for(surface.fetch(:resource_type))) do
-        token = forge_logout_token(surface, payload: base_logout_payload(surface, sid: "not-a-uuid"))
+        token = forge_logout_token(surface, payload: base_logout_payload(surface, sid: "not a sid"))
 
         post "https://#{surface.fetch(:host)}#{backchannel_logout_path(surface)}", params: { logout_token: token }
 
@@ -177,6 +177,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         staff: staff,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE,
+        oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
       )
       token.rotate_refresh_token!
@@ -191,6 +192,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         visitor: visitor,
         visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+        oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
       )
       token.rotate_refresh_token!
@@ -205,6 +207,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         user: user,
         user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
+        oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
       )
       token.rotate_refresh_token!

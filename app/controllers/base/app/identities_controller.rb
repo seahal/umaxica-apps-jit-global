@@ -53,6 +53,7 @@ module Base
             { label: t("sign.app.settings.show.mfa"), href: base_app_identity_mfa_challenge_path(ri: params[:ri]) },
             { label: t("sign.app.settings.show.mfa_reset"), href: base_app_identity_mfa_reset_path(ri: params[:ri]) },
             identity_hub_link(:secrets, base_app_identity_secrets_path(ri: params[:ri])),
+            identity_hub_link(:sessions, base_app_sessions_path(ri: params[:ri])),
             identity_hub_link(:activities, base_app_identity_activities_path(ri: params[:ri])),
             identity_hub_link(:standing, base_app_identity_standing_path(ri: params[:ri])),
           ],

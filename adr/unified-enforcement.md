@@ -538,15 +538,30 @@ against a `*_zenith` transaction.
 
 ## Failure recovery
 
-A Case whose `state = active` with `sessions_revoked_at` or `audited_at` still null after apply is
-in a recoverable, not inconsistent, state: the security decision (the committed `*_zenith` row) is
-already correct and enforced; only the convergent side effects are pending.
+A Case whose `state = active`, `ended_at IS NULL`, and `sessions_revoked_at` or `audited_at` still
+null after apply is in a recoverable, not inconsistent, state: the security decision (the committed
+`*_zenith` row) is already correct and enforced; only the convergent side effects are pending. An
+end operation follows the same boundary: its `ended_at` decision commits before principal-lock
+release and audit delivery, and an ended Case is reconciled separately rather than being treated as
+a new active apply.
+
+Appeal submission and resolution follow the same rule. The appeal state commits before the
+Case-ending operation or Chronicle event. An approved appeal is therefore durable current-state work
+even when release or audit delivery fails. A rejected/submitted appeal remains discoverable by its
+persisted state until its corresponding Chronicle event is present.
 
 ## Reconciliation
 
-A recurring job selects Cases with `state = active` and either `sessions_revoked_at` or `audited_at`
-null, and retries the corresponding job. Idempotent by construction (session revocation and
-chronicle writes are both safe to repeat).
+A recurring job selects active, not-yet-ended Cases with either `sessions_revoked_at` or
+`audited_at` null and retries the apply convergence. It separately selects ended Cases whose end
+audit marker is still missing, and persisted appeals in `submitted`, `approved`, or `rejected`
+state. Approved appeals retry the refcounted release path before their `appeal_approved` event; the
+other appeal states retry only their matching event. Chronicle existence is checked on its writer
+connection under the source Case lock before a retry, so a crash after Chronicle commit but before
+the source marker update does not normally duplicate an event. This is not distributed exactly-once:
+a crash between that check and the Chronicle insert remains within the accepted non-atomic Chronicle
+durability limit. A persisted state is never changed to a success marker merely because a queue row
+exists.
 
 ## Concern architecture
 

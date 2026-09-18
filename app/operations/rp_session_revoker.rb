@@ -43,18 +43,47 @@ class RpSessionRevoker < ApplicationService
   def revoke_rp_session(session)
     return 0 if session.blank? || session.revoked?
 
-    session.revoke!(status: status, now: now)
+    with_writing_connection(session.class) do
+      parent = session.parent_token
+      return 0 if parent.blank?
+
+      # Token exchange and refresh rotation lock the Browser Session before
+      # the RP Session. Keep the child-only revoke in that order so a revoke
+      # cannot race a first exchange or a refresh that already owns the parent.
+      parent.with_lock do
+        session.with_lock do
+          return 0 if session.revoked?
+
+          session.revoke!(status: status, now: now)
+        end
+      end
+    end
     1
   end
 
   def revoke_browser_session(token)
     return 0 if token.blank?
 
-    association = rp_sessions_association_for(token)
-    sessions = token.public_send(association).currently_usable_at(now).to_a
-    sessions.each { |session| session.revoke!(status: status, now: now) }
-    revoke_parent_token!(token)
-    sessions.size
+    with_writing_connection(token.class) do
+      association = rp_sessions_association_for(token)
+
+      # Token exchange locks the parent before it looks up or creates an RP
+      # Session. Keep browser-session revocation in that same order; locking a
+      # child first can deadlock when an exchange already owns the parent and is
+      # waiting for that child. The ordered child lock also makes concurrent
+      # multi-child revocations deterministic.
+      token.with_lock do
+        sessions =
+          token.public_send(association)
+            .currently_usable_at(now)
+            .order(:id)
+            .lock
+            .to_a
+        sessions.each { |session| session.revoke!(status: status, now: now) }
+        revoke_parent_token!(token)
+        sessions.size
+      end
+    end
   end
 
   def revoke_identity(browser_sessions)
@@ -75,6 +104,21 @@ class RpSessionRevoker < ApplicationService
     return if token.respond_to?(:discarded?) && token.discarded?
 
     token.discard
+  end
+
+  def with_writing_connection(klass, &)
+    owner = connection_owner_for(klass)
+    return yield if owner.blank?
+
+    owner.connected_to(role: :writing, &)
+  end
+
+  def connection_owner_for(klass)
+    return unless klass.respond_to?(:connection_class?)
+
+    owner = klass
+    owner = owner.superclass until owner.connection_class? || owner == ApplicationRecord
+    owner
   end
 
   def rp_sessions_association_for(token)

@@ -193,6 +193,7 @@ class HealthTest < ActiveSupport::TestCase
     fake_connection = Object.new
     fake_connection.define_singleton_method(:execute) { |_| 1 }
     record_class = Class.new
+    record_class.define_singleton_method(:connection_class_for_self) { record_class }
     record_class.define_singleton_method(:connected_to) do |**, &block|
       block.call
     end

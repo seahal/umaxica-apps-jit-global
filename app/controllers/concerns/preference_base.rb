@@ -526,17 +526,13 @@ module PreferenceBase
     connection_owner.connected_to(role: :writing) { yield }
   end
 
+  # Only Active Record classes own a connection; callers write plain objects directly.
   def model_connection_owner(klass)
-    klass.ancestors.find do |ancestor|
-      ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-    end
+    klass.connection_class_for_self if klass.is_a?(Class) && klass < ActiveRecord::Base
   end
 
   def preference_connection_owner
-    @preference_connection_owner ||=
-      preference_class.ancestors.find do |ancestor|
-        ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-      end
+    @preference_connection_owner ||= model_connection_owner(preference_class)
   end
 
   def with_preference_connection(role)

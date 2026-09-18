@@ -499,6 +499,9 @@ test:
     schema_dump: com_signal_structure.sql
   queue:
     !!merge <<: *test_default
+    # A manually started isolated Solid Queue worker needs one execution
+    # connection plus its polling and heartbeat connections.
+    pool: 5
     database: test_queue_db
     host: <%= test_host %>
     migrations_paths: db/queues_migrate

@@ -5,11 +5,11 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SignUp::ParticipantPolicyTest < ActiveSupport::TestCase
-  test "enter_guardrail? is true for a mutable ticket at contact_verified" do
+  test "enter_guardrail? is true but enter_checkpoint? is false at contact_verified" do
     policy = build_policy(step: "contact_verified", status: :contact_verified)
 
     assert policy.send(:enter_guardrail?)
-    assert policy.send(:enter_checkpoint?)
+    assert_not policy.send(:enter_checkpoint?)
   end
 
   test "enter_checkpoint? is true for a mutable ticket at guardrail or checkpoint" do

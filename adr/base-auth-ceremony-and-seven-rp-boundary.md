@@ -89,3 +89,33 @@ and surface roles. Live registries, routes, and docs must converge on it.
 ## Implementation progress
 
 See `evidence/2026-09-13-auth-boundary-consolidation.md` for phase SHAs and remaining gaps.
+
+## Current hardening amendment (2026-09-17)
+
+The Base token and revocation controllers now pass an endpoint-owned resource type into the token
+exchange/revocation boundary. The request cannot select a realm from its payload or client naming.
+The authorization-code resource type is checked before Valkey consumption; refresh checks the
+surface-local RP-session class before rotation. A mismatch is an OAuth failure without token
+consumption, rotation, or session replacement.
+
+An RP Session is unique for the same parent Browser Session and registered RP while the existing row
+is unrevoked or still within its retirement window. A new authorization code never overwrites the
+old row's JTI, scope, refresh family, or other credentials. Each surface RP-session table records
+the monotonically greatest issued Access JWT expiry in `oidc_access_token_max_expires_at`; a missing
+value on a legacy row is conservative and blocks replacement until its issuance history is resolved.
+This does not make an already-issued Access JWT immediately invalid: natural JWT expiry and the
+verifier clock-skew allowance remain the boundary.
+
+OIDC connection revocation is also bound to the authorization-code issuance time. A code issued
+before a connection was revoked cannot restore that connection and is rejected before consumption; a
+new authorization code issued after revocation may explicitly establish the new connection state.
+The recorder locks the connection row and repeats this check so a revoke/exchange race cannot turn
+an old code into a reconnection.
+
+OIDC revocation is scoped to the matching surface-local RP Session and requires its client binding
+and JTI. The revoker does not fall back from an RP `sid` lookup to a parent Base Browser Session;
+parent termination is a separate explicit logout/revocation scope.
+
+The amendment does not resolve the separate regional JP/US RP-registration conflict with the
+accepted seven-client ADR. Client IDs, redirect registrations, external RP configuration, and
+legacy-session migration remain blocked until that matrix is approved and verified.

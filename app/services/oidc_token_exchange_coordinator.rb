@@ -6,6 +6,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   class ReplayRevocationError < StandardError; end
 
+  class RpSessionAlreadyExists < StandardError; end
+
   Result =
     Data.define(:success, :token_response, :error, :error_description) do
       def success? = success
@@ -24,6 +26,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
                  code_verifier: nil,
                  client_assertion_type: nil, client_assertion: nil,
                  dpop_proof: nil, token_endpoint_uri: nil, request_method: "POST",
+                 expected_resource_type:,
                  code_store: Valkey::AuthState::AuthorizationCodeStore.new)
     super()
     @grant_type = grant_type
@@ -38,6 +41,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     @dpop_proof = dpop_proof
     @token_endpoint_uri = token_endpoint_uri
     @request_method = request_method
+    @expected_resource_type = expected_resource_type
     @code_store = code_store
   end
 
@@ -45,6 +49,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     return failure(
       "invalid_request", "grant_type must be 'authorization_code' or 'refresh_token'",
     ) unless valid_grant_type?
+    return failure("invalid_request", "token endpoint realm is required") unless expected_realm_configured?
     return failure("invalid_client", "OIDC client authentication failed") unless authenticated_client?
 
     if grant_type == "refresh_token"
@@ -52,12 +57,16 @@ class OidcTokenExchangeCoordinator < ApplicationService
     else
       exchange_authorization_code!
     end
+  rescue OidcConnectionRecorder::StaleAuthorization
+    failure("invalid_grant", "authorization code predates OIDC connection revocation")
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::SerializationError, Umaxica::Valkey::OperationError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] auth-state store failure: #{e.class}: #{e.message}")
     failure("server_error", "authorization code store unavailable")
   rescue TokenIssuanceError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] token issuance failed: #{e.class}")
     failure("server_error", "token issuance failed")
+  rescue RpSession::IssuanceRejected
+    failure("invalid_grant", "RP Session is no longer active")
   rescue ReplayRevocationError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] replay revocation failed: #{e.class}")
     failure("server_error", "authorization code replay revocation failed")
@@ -67,7 +76,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   attr_reader :grant_type, :code, :refresh_token, :redirect_uri, :client_id, :client_secret, :client_assertion_type,
               :client_assertion, :code_verifier,
-              :dpop_proof, :token_endpoint_uri, :request_method, :code_store
+              :dpop_proof, :token_endpoint_uri, :request_method, :expected_resource_type, :code_store
 
   def valid_grant_type?
     %w(authorization_code refresh_token).include?(grant_type)
@@ -115,6 +124,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
     peeked = code_store.read(code)
     return failure("invalid_grant", "Authorization code not found") if peeked.blank?
 
+    return failure("invalid_grant", "authorization code realm mismatch") unless
+      expected_realm_matches?(peeked["resource_type"])
+
     precheck = prevalidate_payload(peeked)
     return precheck if precheck
 
@@ -128,6 +140,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
         redirect_uri: redirect_uri,
         code_challenge: peeked["code_challenge"],
         code_challenge_method: peeked["code_challenge_method"],
+        resource_type: expected_resource_type,
       },
     )
 
@@ -146,12 +159,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
     else
       failure("server_error", "authorization code consume failed")
     end
+  rescue RpSessionAlreadyExists
+    failure("invalid_grant", "RP Session already exists for this Browser Session and client")
   end
 
   def exchange_refresh_token!
     return failure("invalid_grant", "refresh_token is required") if refresh_token.blank?
 
-    resolved = OidcRefreshTokenIssuer.resolve(refresh_token: refresh_token)
+    resolved = resolve_refresh_usage
     return failure("invalid_grant", "refresh token not found") unless resolved
 
     usage = resolved.usage
@@ -159,6 +174,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
       usage.oidc_client_id == client_id
 
     resource_type = resource_type_for_usage(usage)
+    return failure("invalid_grant", "refresh token realm mismatch") unless
+      expected_realm_matches?(resource_type)
+
     client = OidcClientRegistry.find(client_id)
     return failure("invalid_client", "unknown OIDC client") unless client
     return failure("invalid_grant", "refresh token resource mismatch") unless
@@ -178,7 +196,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     dpop_jkt = validate_refresh_dpop_proof(usage, resource_type)
     return dpop_jkt if dpop_jkt.is_a?(Result)
 
-    rotation = OidcRefreshTokenIssuer.call(refresh_token: refresh_token, client_id: client_id)
+    rotation = rotate_refresh_token
     return failure("invalid_grant", "refresh token could not be rotated") unless rotation.success?
 
     usage = rotation.token
@@ -204,6 +222,21 @@ class OidcTokenExchangeCoordinator < ApplicationService
     when VisitorRpSession then "visitor"
     else nil
     end
+  end
+
+  def resolve_refresh_usage
+    OidcRefreshTokenIssuer.resolve(
+      refresh_token: refresh_token,
+      resource_type: expected_resource_type,
+    )
+  end
+
+  def rotate_refresh_token
+    OidcRefreshTokenIssuer.call(
+      refresh_token: refresh_token,
+      client_id: client_id,
+      resource_type: expected_resource_type,
+    )
   end
 
   def resource_for_root_token(root_token, resource_type)
@@ -261,6 +294,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
       return failure("invalid_grant", "Authorization code already consumed")
     end
 
+    return failure("invalid_grant", "authorization code predates OIDC connection revocation") if
+      oidc_connection_revoked_after_code?(payload)
+
     if parse_time(payload["auth_time"]).blank?
       return failure("invalid_grant", "Authorization code authentication time missing")
     end
@@ -285,6 +321,33 @@ class OidcTokenExchangeCoordinator < ApplicationService
     return nil if requested_scopes.include?("openid") && invalid_scopes.empty?
 
     failure("invalid_grant", "Authorization code scope is invalid")
+  end
+
+  def oidc_connection_revoked_after_code?(payload)
+    issued_at = parse_time(payload["issued_at"])
+    return true if issued_at.blank?
+
+    resource_type = payload["resource_type"].to_s
+    resource = resolve_resource(wrap_payload(payload))
+    return false unless resource
+
+    connection_class = oidc_connection_class_for(resource_type)
+    actor_key = connection_class.actor_foreign_key
+    connection =
+      connection_owner_for(connection_class).connected_to(role: :writing) do
+        connection_class.find_by(actor_key => resource.id, :client_id => payload["client_id"])
+      end
+    connection&.revoked_at.present? && issued_at <= connection.revoked_at
+  end
+
+  def oidc_connection_class_for(resource_type)
+    case resource_type.to_s
+    when "operator" then OperatorOidcConnection
+    when "visitor" then VisitorOidcConnection
+    when "client" then ClientOidcConnection
+    else
+      raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
+    end
   end
 
   def verify_pkce(payload)
@@ -320,6 +383,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
           resource: resource,
           client: client,
           scope: authorization_code.scope,
+          authorization_issued_at: authorization_code.issued_at,
           used_at: Time.current,
         )
 
@@ -432,18 +496,21 @@ class OidcTokenExchangeCoordinator < ApplicationService
     rp_ref = payload["rp_session_ref"].presence
     family_ref = payload["refresh_family_ref"].presence
     resource_type = payload["resource_type"].to_s
+    session_class = rp_session_class_for(resource_type)
+    return unless session_class
 
-    if rp_ref.present?
-      session = rp_session_class_for(resource_type)&.find_by(public_id: rp_ref)
-      RpSessionRevoker.call(scope: :rp_session, record: session, status: "failed") if session
-      return
-    end
+    connection_owner_for(session_class).connected_to(role: :writing) do
+      if rp_ref.present?
+        session = session_class.find_by(public_id: rp_ref)
+        RpSessionRevoker.call(scope: :rp_session, record: session, status: "failed") if session
+        next
+      end
 
-    return if family_ref.blank?
+      next if family_ref.blank?
 
-    sessions = rp_session_class_for(resource_type)&.where(refresh_token_family_id: family_ref)
-    sessions&.find_each do |rp_session|
-      RpSessionRevoker.call(scope: :rp_session, record: rp_session, status: "failed")
+      session_class.where(refresh_token_family_id: family_ref).find_each do |rp_session|
+        RpSessionRevoker.call(scope: :rp_session, record: rp_session, status: "failed")
+      end
     end
   rescue StandardError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] replay family revoke failed: #{e.class}")
@@ -474,27 +541,20 @@ class OidcTokenExchangeCoordinator < ApplicationService
     usage = nil
 
     owner.connected_to(role: :writing) do
-      usage = usage_class.lock.find_by(
-        parent_token_foreign_key_for(usage_class) => root_token.id,
-        :oidc_client_id => client.client_id,
-        :revoked_at => nil,
-      )
+      # Lock the parent before looking for a child. A missing child row cannot be
+      # locked, so a child-only lock would allow two first exchanges to race into
+      # the unique index and leave one request with an ambiguous failure path.
+      locked_root_token = root_token.class.lock.find(root_token.id)
+      parent_key = parent_token_foreign_key_for(usage_class)
+      lookup = { oidc_client_id: client.client_id }
+      lookup[parent_key] = locked_root_token.id
+      existing_usage = usage_class.lock.where(lookup).to_a
+      if existing_usage.any? { |record| record.retirement_pending? }
+        raise RpSessionAlreadyExists, "an RP Session for this Browser Session and client is not retired"
+      end
 
-      usage ||= usage_class.create!(
-        parent_token_foreign_key_for(usage_class) => root_token,
-        :oidc_client_id => client.client_id,
-        :oidc_scope => scope,
-        :oidc_jti => SecureRandom.uuid,
-        :dpop_jkt => dpop_jkt,
-        :oidc_auth_time => auth_time,
-        :oidc_acr => acr,
-        :oidc_amr => JSON.generate(Array(amr).map(&:to_s)),
-        :oidc_nonce => nonce,
-        :last_used_at => Time.current,
-        :refresh_token_expires_at => refresh_expires_at_for(root_token),
-      )
-
-      usage.update!(
+      attributes = {
+        oidc_client_id: client.client_id,
         oidc_scope: scope,
         oidc_jti: SecureRandom.uuid,
         dpop_jkt: dpop_jkt,
@@ -503,13 +563,15 @@ class OidcTokenExchangeCoordinator < ApplicationService
         oidc_amr: JSON.generate(Array(amr).map(&:to_s)),
         oidc_nonce: nonce,
         last_used_at: Time.current,
-      )
-      usage.public_send("#{parent_token_foreign_key_for(usage_class)}=", root_token)
+        refresh_token_expires_at: refresh_expires_at_for(root_token),
+      }
+      attributes[parent_key] = root_token
+      usage = usage_class.create!(**attributes)
 
       usage
     end
   rescue ActiveRecord::RecordNotUnique
-    retry
+    raise RpSessionAlreadyExists, "an RP Session for this Browser Session and client already exists"
   end
 
   def issue_or_rotate_usage_refresh_token!(usage)
@@ -529,6 +591,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     subject = OidcSubject.for(resource, resource_type: resource_type)
     access_expires_at = session_token_expiry(now, root_token)
     auth_time = authorization_code.auth_time
+    usage.record_access_token_expiry!(access_expires_at)
     access_token = encode_exchanged_access_token(
       authorization_code: authorization_code, resource: resource, client: client, root_token: root_token,
       usage: usage, dpop_jkt: dpop_jkt, access_expires_at: access_expires_at,
@@ -565,6 +628,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     access_expires_at = session_token_expiry(now, root_token)
     scopes = usage.oidc_scope.to_s.split
     amr = parse_stored_amr(usage.oidc_amr)
+    usage.record_access_token_expiry!(access_expires_at)
     access_token = refreshed_access_token(
       usage:, resource:, root_token:, dpop_jkt:, auth_time:, resource_type:, client:, issuer:, subject:,
       scopes:, amr:, access_expires_at:,
@@ -788,5 +852,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   def failure(error, description)
     Result.new(success: false, token_response: nil, error: error, error_description: description)
+  end
+
+  def expected_realm_matches?(actual_resource_type)
+    expected_realm_configured? &&
+      actual_resource_type.to_s == expected_resource_type.to_s
+  end
+
+  def expected_realm_configured?
+    %w(client operator visitor).include?(expected_resource_type.to_s)
   end
 end

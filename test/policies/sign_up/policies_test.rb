@@ -105,7 +105,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     assert_not_predicate SignUp::TicketPolicy.new(context, user: nil), :show?
   end
 
-  test "participant policy allows checkpoint only from sign-up participant states" do
+  test "participant policy requires guardrail before checkpoint" do
     contact_verified = build_ticket(
       ClientSignUpFlow, status_id: ClientSignUpFlowStatus::CONTACT_VERIFIED,
                         step: "contact_verified",
@@ -115,7 +115,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
                         step: "contact",
     )
 
-    assert_predicate SignUp::ParticipantPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
+    assert_not_predicate SignUp::ParticipantPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
     assert_not_predicate SignUp::ParticipantPolicy.new(policy_context(contact_pending), user: nil), :enter_checkpoint?
   end
 
@@ -308,12 +308,12 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     assert_predicate SignUp::TicketPolicy.new(policy_context(ticket), user: nil), :enter_guardrail?
   end
 
-  test "ticket policy enter_checkpoint requires contact_verified or guardrail step" do
+  test "ticket policy enter_checkpoint requires guardrail or checkpoint step" do
     contact_verified = build_ticket(ClientSignUpFlow, step: "contact_verified")
     guardrail = build_ticket(ClientSignUpFlow, step: "guardrail")
     start = build_ticket(ClientSignUpFlow, step: "start")
 
-    assert_predicate SignUp::TicketPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
+    assert_not_predicate SignUp::TicketPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
     assert_predicate SignUp::TicketPolicy.new(policy_context(guardrail), user: nil), :enter_checkpoint?
     assert_not_predicate SignUp::TicketPolicy.new(policy_context(start), user: nil), :enter_checkpoint?
   end

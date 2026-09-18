@@ -101,7 +101,7 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
         encrypted_hotp_token: encrypted_otp("123456"),
         email_address: "target@example.com",
         public_id: public_id,
-        verification_token: token,
+        encrypted_verification_token: OutboundSensitivePayload.encrypt_email_verification_token(token),
       ).create
 
       assert_match host, mail.html_part.body.decoded

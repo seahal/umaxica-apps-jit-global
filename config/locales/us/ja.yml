@@ -533,6 +533,8 @@ ja:
         operation: 操作
       client_identity:
         source_record_id: ソースレコードID
+      client_persona:
+        client_identity_id: ClientIdentity
       client_telephone:
         number: 電話番号
         number_digest: 電話番号ダイジェスト
@@ -949,7 +951,10 @@ ja:
             disabled_description: このアドレス宛のプロモーションメールはすでに停止されています。
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         description: アカウントの設定を管理します。
         regions:
           back_link: もどる
@@ -1004,7 +1009,10 @@ ja:
           title: 設定のリセット
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1168,7 +1176,10 @@ ja:
             timezone_label: タイムゾーン
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1205,12 +1216,16 @@ ja:
           authorize_sign_in: 認可（サインイン）
           authorize_sign_up: 認可（サインアップ）
           avatar: アバター
+          billings: 請求
           dashboard: ダッシュボード
+          groups: グループ
           identity: 本人情報
           jwks: JWKS
           logout: ログアウト
+          offline: オフライン
           oidc_discovery: OIDC ディスカバリー
           organization: 組織
+          preference: 設定
           root: トップ
           selector: セレクター
           switcher: スイッチャー

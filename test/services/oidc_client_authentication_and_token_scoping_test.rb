@@ -49,6 +49,7 @@ class OidcClientAuthenticationAndTokenScopingTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.new(
         grant_type: "authorization_code", code: "code", redirect_uri: "https://rp.example.test/callback",
         client_id: "rp-1", code_verifier: "verifier",
+        expected_resource_type: "client",
       )
 
     {
@@ -69,6 +70,7 @@ class OidcClientAuthenticationAndTokenScopingTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.new(
         grant_type: "authorization_code", code: "code", redirect_uri: "https://rp.example.test/callback",
         client_id: "rp-1", code_verifier: "verifier",
+        expected_resource_type: "client",
       )
 
     assert_not coordinator.send(:root_token_actor_matches?, ClientEmail.new, Object.new)
@@ -83,6 +85,7 @@ class OidcClientAuthenticationAndTokenScopingTest < ActiveSupport::TestCase
       OidcTokenExchangeCoordinator.new(
         grant_type: "authorization_code", code: "code", redirect_uri: "https://rp.example.test/callback",
         client_id: "rp-1", code_verifier: "verifier",
+        expected_resource_type: "client",
       )
 
     assert_equal :operator_token, coordinator.send(:parent_token_foreign_key_for, OperatorRpSession)

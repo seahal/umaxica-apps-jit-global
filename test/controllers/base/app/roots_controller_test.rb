@@ -16,6 +16,27 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Base App", inertia_props.fetch("heading")
   end
 
+  test "preserves an incoming request id through Rails request and response handling" do
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    request_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    get base_app_root_url(ri: "jp"), headers: { "X-Request-ID" => request_id }
+
+    assert_response :success
+    assert_equal request_id, request.request_id
+    assert_equal request_id, response.headers.fetch("X-Request-Id")
+  end
+
+  test "generates a request id when the request does not provide one" do
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+
+    get base_app_root_url(ri: "jp")
+
+    assert_response :success
+    assert_predicate request.request_id, :present?
+    assert_equal request.request_id, response.headers.fetch("X-Request-Id")
+  end
+
   test "renders the control-plane root for the us region" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get base_app_root_url(ri: "us")

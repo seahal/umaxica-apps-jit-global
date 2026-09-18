@@ -114,6 +114,47 @@ module Sign
         assert_predicate email.reload.get_otp, :present?
       end
 
+      test "a failed delivery still consumes the resend slot" do
+        address = "failed-resend-#{SecureRandom.hex(4)}@example.test"
+        ClientEmail.create!(
+          user: clients(:one),
+          address: address,
+          confirm_policy: "1",
+          user_email_status_id: ClientEmailStatus::VERIFIED,
+        )
+        state = SignInOtpResendState.issue(kind: :email, target: address, surface: :app)
+        adapter = Object.new
+        delivery_attempts = 0
+        adapter.define_singleton_method(:deliver) do |**|
+          delivery_attempts += 1
+          raise IOError, "provider unavailable"
+        end
+
+        adapter_factory =
+          lambda do |surface:, channel:|
+            assert_equal :app, surface
+            assert_equal :email, channel
+            adapter
+          end
+
+        OtpAdapter.stub(:for, adapter_factory) do
+          result = SignInOtpResender.new(kind: :email, state: state, surface: :app).call
+
+          assert_equal :bad_request, result.status
+          assert_not result.resendable
+
+          blocked = SignInOtpResender.new(kind: :email, state: state, surface: :app).call
+
+          assert_equal :too_many_requests, blocked.status
+          assert_not blocked.resendable
+        end
+
+        occurrence = EmailOccurrence.find_by!(body: OccurrenceHmac.digest(kind: "email", body: address.downcase))
+
+        assert_match(/purpose=in issued=/, occurrence.memo)
+        assert_equal 1, delivery_attempts
+      end
+
       test "corporate resend selects the visitor email and corporate adapter" do
         VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
         address = "corporate-resend-#{SecureRandom.hex(4)}@example.test"

@@ -4,15 +4,12 @@
 class ProcessorErasureNotificationJob < ApplicationJob
   queue_as :retention
 
-  SUPPORTED_PROCESSORS = %w(
-    email_delivery
-    sms_delivery
-    push_delivery
-    analytics
-    object_storage
-    search_index
-    log_pipeline
-  ).freeze
+  # There is no concrete processor adapter in this repository yet. Keep the
+  # allowlist empty until a real integration can distinguish request acceptance
+  # from provider delivery and expose its retry/receipt contract. Marking a
+  # processor as notified without that boundary would turn an unperformed
+  # erasure request into a false success.
+  SUPPORTED_PROCESSORS = [].freeze
 
   def perform(surface:, public_id:)
     notification = notification_class_for(surface).find_by!(public_id: public_id)

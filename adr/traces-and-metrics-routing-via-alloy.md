@@ -114,11 +114,27 @@ configuration; divergence is treated as a defect.
 
 ### Request identifier preservation
 
-`X-Request-Id` (ActionDispatch::RequestId) and the W3C `traceparent` `trace_id` are both retained.
-`request_id` continues to identify the request for operational and support purposes. `trace_id`
-becomes the primary key for traces in Tempo. Each span carries the request_id as an attribute, and
-the Rails request environment carries the current `trace_id` so it can be surfaced on error pages
-and in audit records.
+The three correlation identifiers have separate authorities:
+
+- `request_id` is the HTTP request correlation identifier managed by Rails
+  `ActionDispatch::RequestId`. An incoming `X-Request-ID` may be preserved by Rails; otherwise Rails
+  generates one.
+- `trace_id` is the OpenTelemetry/W3C Trace ID read from a valid current `SpanContext`.
+- `span_id` is the OpenTelemetry Span ID read from that same valid current `SpanContext`.
+
+`request_id` must never be substituted for `trace_id` or `span_id`. The access log retains the
+request identifier and includes the OpenTelemetry identifiers only when a valid current span exists.
+OpenTelemetry being disabled therefore leaves `trace_id` and `span_id` absent or null; it does not
+cause Rails to manufacture a tracing context.
+
+`trace_id` remains the primary key for traces in Tempo. Each span carries the request_id as an
+attribute where the existing instrumentation provides it. Rails request-completion access logs
+surface the current trace/span identifiers without making them part of the authentication or audit
+authority.
+
+OpenTelemetry is technical/operational telemetry. Product analytics consent, including the optional
+`performant` preference, does not alter the presence or value of technical trace/span correlation
+identifiers.
 
 In preparation for the eventual logs migration, Rails stdout output is expected to include
 `trace_id` and `request_id` even though logs are not currently shipped to a backend. This keeps the

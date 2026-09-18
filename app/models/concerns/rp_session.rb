@@ -8,12 +8,61 @@ module RpSession
 
   LOGOUT_STATUSES = %w(success no_session unsupported failed).freeze
 
+  class IssuanceRejected < StandardError; end
+
   public
 
   def active?
     revoked_at.blank? &&
       root_token_active? &&
       (refresh_token_expires_at.blank? || refresh_token_expires_at > Time.current)
+  end
+
+  # A revoked RP Session cannot be replaced until every Access JWT issued by it
+  # is outside the verifier's configured clock-skew window. A nil value on an
+  # old row is deliberately conservative: the application cannot prove when a
+  # JWT was issued, so it must not treat that row as already retired.
+  def retirement_pending?(now = Time.current)
+    return true if revoked_at.blank?
+    return true unless has_attribute?(:oidc_access_token_max_expires_at)
+
+    max_expires_at = self[:oidc_access_token_max_expires_at]
+    return true if max_expires_at.blank?
+
+    now < max_expires_at + SecurityTokenLifetimes::OIDC_ACCESS_JWT_CLOCK_LEEWAY_SECONDS
+  end
+
+  def access_token_retirement_deadline
+    return nil unless has_attribute?(:oidc_access_token_max_expires_at)
+
+    max_expires_at = self[:oidc_access_token_max_expires_at]
+    return nil if max_expires_at.blank?
+
+    max_expires_at + SecurityTokenLifetimes::OIDC_ACCESS_JWT_CLOCK_LEEWAY_SECONDS
+  end
+
+  # Persist the maximum Access JWT exp before the token response leaves the
+  # application. The value is monotonic so an older/shorter issuance cannot
+  # shorten the retirement window established by a longer-lived JWT.
+  def record_access_token_expiry!(expires_at)
+    raise ArgumentError, "expires_at must be a time" unless expires_at.respond_to?(:to_time)
+
+    unless has_attribute?(:oidc_access_token_max_expires_at)
+      raise ActiveRecord::StatementInvalid,
+            "RP Session schema is missing oidc_access_token_max_expires_at"
+    end
+
+    candidate = expires_at.to_time
+    with_parent_and_self_lock do
+      raise IssuanceRejected, "RP Session is no longer active" unless active?
+
+      current = self[:oidc_access_token_max_expires_at]
+      next if current.present? && current >= candidate
+
+      update!(oidc_access_token_max_expires_at: candidate)
+    end
+
+    self[:oidc_access_token_max_expires_at]
   end
 
   def revoked?
@@ -33,23 +82,27 @@ module RpSession
   end
 
   def issue_refresh_token!(expires_at: refresh_token_expires_at || default_refresh_token_expires_at)
-    expires_at = SessionAbsoluteExpiryValue.cap(
-      proposed_expiry: expires_at,
-      absolute_expiry: parent_token&.discarded_at,
-    )
-    raw_refresh_token, verifier = generate_refresh_token(public_id: public_id)
-    update!(
-      refresh_token_digest: encoded_refresh_token_digest(verifier),
-      refresh_token_expires_at: expires_at,
-      refresh_token_rotated_at: nil,
-      previous_refresh_token_digest: nil,
-      last_used_at: Time.current,
-    )
-    raw_refresh_token
+    with_parent_and_self_lock do
+      raise IssuanceRejected, "RP Session is no longer active" unless active?
+
+      expires_at = SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: expires_at,
+        absolute_expiry: parent_token&.discarded_at,
+      )
+      raw_refresh_token, verifier = generate_refresh_token(public_id: public_id)
+      update!(
+        refresh_token_digest: encoded_refresh_token_digest(verifier),
+        refresh_token_expires_at: expires_at,
+        refresh_token_rotated_at: nil,
+        previous_refresh_token_digest: nil,
+        last_used_at: Time.current,
+      )
+      raw_refresh_token
+    end
   end
 
   def rotate_refresh_token!(expires_at: refresh_token_expires_at || default_refresh_token_expires_at)
-    with_lock do
+    with_parent_and_self_lock do
       raise ActiveRecord::RecordInvalid.new(self) unless active?
 
       expires_at = SessionAbsoluteExpiryValue.cap(
@@ -94,21 +147,25 @@ module RpSession
   end
 
   def revoke!(status: "failed", now: Time.current)
-    update!(
-      revoked_at: now,
-      last_logout_status: status,
-      last_logout_attempted_at: now,
-      logged_out_at: now,
-    )
+    with_parent_and_self_lock do
+      update!(
+        revoked_at: now,
+        last_logout_status: status,
+        last_logout_attempted_at: now,
+        logged_out_at: now,
+      )
+    end
   end
 
   def mark_logout_status!(status:, now: Time.current)
-    update!(
-      last_logout_status: status,
-      last_logout_attempted_at: now,
-      logged_out_at: ((status == "success") ? now : logged_out_at),
-      revoked_at: ((status == "success") ? now : revoked_at),
-    )
+    with_parent_and_self_lock do
+      update!(
+        last_logout_status: status,
+        last_logout_attempted_at: now,
+        logged_out_at: ((status == "success") ? now : logged_out_at),
+        revoked_at: ((status == "success") ? now : revoked_at),
+      )
+    end
   end
 
   private
@@ -134,5 +191,14 @@ module RpSession
 
   def parent_association_name
     raise NotImplementedError
+  end
+
+  def with_parent_and_self_lock
+    parent = parent_token
+    return with_lock { yield } unless parent
+
+    parent.with_lock do
+      with_lock { yield }
+    end
   end
 end

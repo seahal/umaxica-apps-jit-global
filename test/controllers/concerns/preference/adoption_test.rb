@@ -46,7 +46,7 @@ module Preference
       @adoption = build_adoption_context(@preference)
 
       # Clean up any existing ClientPreference for our test user
-      AppPrincipalRecord.connected_to(role: :writing) do
+      AppZenithRecord.connected_to(role: :writing) do
         ClientPreference.where(user_id: @user.id).delete_all
       end
     end
@@ -244,9 +244,9 @@ module Preference
 
       user_pref = create_user_preference!(@user)
       # Simulate a row that existed before the explicit_fields column was
-      # added: AppPrincipalRecord.connected_to since this write bypasses the
+      # added: AppZenithRecord.connected_to since this write bypasses the
       # ordinary writing-role guard used elsewhere in this file.
-      AppPrincipalRecord.connected_to(role: :writing) { user_pref.update_column(:explicit_fields, nil) }
+      AppZenithRecord.connected_to(role: :writing) { user_pref.update_column(:explicit_fields, nil) }
       user_pref.reload
       @user.reload
 
@@ -266,7 +266,7 @@ module Preference
 
     test "sync_preferences! leaves a legacy principal untouched even when the browser side is non-explicit too" do
       user_pref = create_user_preference!(@user)
-      AppPrincipalRecord.connected_to(role: :writing) { user_pref.update_column(:explicit_fields, nil) }
+      AppZenithRecord.connected_to(role: :writing) { user_pref.update_column(:explicit_fields, nil) }
       user_pref.reload
       @user.reload
 
@@ -287,7 +287,7 @@ module Preference
 
     test "an explicit user action on a legacy principal row transitions it to known" do
       user_pref = create_user_preference!(@user)
-      AppPrincipalRecord.connected_to(role: :writing) { user_pref.update_column(:explicit_fields, nil) }
+      AppZenithRecord.connected_to(role: :writing) { user_pref.update_column(:explicit_fields, nil) }
       user_pref.reload
 
       assert_predicate user_pref, :legacy_unknown_explicit_state?
@@ -448,7 +448,7 @@ module Preference
     end
 
     def create_user_preference!(user)
-      AppPrincipalRecord.connected_to(role: :writing) do
+      AppZenithRecord.connected_to(role: :writing) do
         pref = ClientPreference.create!(user_id: user.id)
         ClientPreferenceLanguage.create!(preference_id: pref.id, option_id: ClientPreferenceLanguageOption::JA)
         ClientPreferenceTimezone.create!(preference_id: pref.id, option_id: ClientPreferenceTimezoneOption::ASIA_TOKYO)

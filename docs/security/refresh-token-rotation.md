@@ -23,8 +23,56 @@ Missing authentication-event time fails closed. Replay and revoke outcomes remai
 owning RP session/family, and the project continues to accept the residual risk that already-issued
 short-lived access JWTs remain usable until their normal expiry after session termination.
 
+The three Base OAuth token controllers bind their expected realm from the controller class
+(`client`, `visitor`, or `operator`). Authorization-code exchange rejects a code whose stored realm
+does not match that fixed endpoint binding before code consumption, rotation, or RP-session side
+effects. Refresh exchange performs the equivalent check against the concrete RP-session class before
+rotation: the resolver receives the controller-selected realm and queries only that surface's
+writing database and RP-session class. It does not scan the other surface databases and then rely on
+a later realm comparison. The request does not supply or select the expected realm.
+
+For one Base Browser Session and one registered RP client, an authorization-code exchange may have
+at most one non-retired RP Session. A second authorization-code request is rejected; it does not
+replace the existing JTI, scope, refresh family, or session row. Revoked sessions remain occupied
+until the latest Access JWT they issued is outside the configured verifier clock-skew window. The
+maximum Access JWT `exp` is persisted monotonically on the RP Session before the token response is
+returned. A legacy row without a recorded maximum is conservatively treated as not retired until a
+separate migration/backfill decision establishes its history.
+
+Browser-session revocation uses the same database lock order as exchange: it locks the parent Base
+Browser Session first, then locks eligible child RP Sessions in ascending primary-key order before
+recording the revocations. This prevents a revocation that already owns a child row from waiting on
+the parent while an exchange owns the parent and waits on that child.
+
+Initial refresh issuance, refresh-token rotation, and RP-session revocation use the same
+parent-before-child order. The refresh issuer locks the surface-local Base Browser Session before
+its RP Session and performs replay, activity, digest, and rotation checks while both locks are held.
+A refresh cannot acquire a child-only lock and pass a revoke that has already serialized on the
+parent. The RP-session model methods enforce the same boundary for direct callers; issuance after
+the RP Session or its parent is no longer active is rejected before a refresh digest is written.
+
+Access-token reissue has a second issuance boundary after refresh rotation: it reacquires the same
+parent-before-child lock order, rechecks that the RP Session and parent remain active, and records
+the monotonic maximum Access JWT `exp` before encoding and returning credentials. If revocation wins
+that boundary, the response is rejected and no Access JWT is returned. The already-rotated refresh
+token is not restored; the caller must use the defined new authorization path after the RP Session's
+retirement window. This prevents a revoke/refresh race from issuing credentials after PostgreSQL has
+committed the revocation.
+
+RP-session-only revocation follows the same order on the writing connection: it locks the parent
+Browser Session, then the targeted RP Session, and never revokes the parent or sibling RP Sessions.
+OIDC token revocation and verified back-channel logout use this operation rather than directly
+updating the child row. Back-channel logout records a successful RP-session revoke only after the
+client-bound, surface-local lookup succeeds. A legacy UUID `sid` that identifies a Base Browser
+Session remains on the existing parent logout primitive; it is not reinterpreted as an RP Session.
+
 Logical authority moves now; physical storage may remain where it is. Existing sign-side tables,
 models, services, controllers, namespaces, and tests do not imply sign-side authority.
+
+The current implementation adds `oidc_access_token_max_expires_at` to each surface-local RP Session
+table through three explicit migrations. Those migrations must be applied before token issuance is
+enabled on a deployment; the application fails closed if the column is absent. The column is not an
+Access JWT revocation list and is not read on ordinary bearer-request authentication paths.
 
 ## Legacy Namespace References
 
@@ -76,8 +124,8 @@ Step-up freshness is not sticky across refresh. A refresh must not extend `recen
 
 ## Browser Transparent Refresh
 
-Transparent refresh is a Base browser recovery path for expired or missing access cookies. It is
-not an Auth credential ceremony and not an Auth token endpoint.
+Transparent refresh is a Base browser recovery path for expired or missing access cookies. It is not
+an Auth credential ceremony and not an Auth token endpoint.
 
 Transparent refresh is allowed only when Base policy permits it, typically when:
 
@@ -112,16 +160,49 @@ Base policy classifies them that way.
 DBSC and device binding are attached to Base session and refresh-token authority. Refresh rotation
 must evaluate the expected device/session binding and reject mismatches according to Base policy.
 
-Auth may execute credential ceremonies that help prove an actor or credential, but it must not
-use DBSC/device binding to rotate refresh tokens or update session state.
+Auth may execute credential ceremonies that help prove an actor or credential, but it must not use
+DBSC/device binding to rotate refresh tokens or update session state.
 
 ## Downstream Tokens
 
 Downstream tokens must be Base-issued. `core`, `line`, and future downstream services must not trust
 Auth-issued session, access, refresh, or downstream tokens.
 
-Refresh rotation may result in new Base access tokens or downstream-token eligibility, but Auth
-does not mint those tokens.
+Refresh rotation may result in new Base access tokens or downstream-token eligibility, but Auth does
+not mint those tokens.
+
+### RP retirement and the remaining Access JWT window
+
+Revoking an RP Session is PostgreSQL state and is serialized with Access JWT-expiry recording on the
+RP-session row. Reissue is permitted only after the recorded maximum `exp` plus the configured 30
+second verifier clock-skew allowance. The allowance is a verifier safety margin, not a promise that
+an already-issued JWT becomes invalid immediately at revocation. A valid old Access JWT can
+therefore remain usable until its natural `exp` (and the verifier's accepted clock-skew boundary);
+the contract guarantees that a new session is not layered onto the same parent/RP while that window
+remains.
+
+This does not provide exactly-once external effects, retroactive cancellation of already accepted
+requests, or a new per-request RP-session lookup for bearer authentication. Provider-side cookies,
+long-lived connections, and external RP acceptance remain separate integration boundaries and must
+not be described as fully retired until those consumers are verified.
+
+OIDC connection rows use the authorization-code `issued_at` as the reconnect boundary. An
+authorization code issued before `revoked_at` is rejected before Valkey consumption and cannot clear
+the marker. A code issued after revocation is the explicit fresh authorization flow that may restore
+the connection; the connection row is locked and checked again during recording to cover a
+concurrent revocation.
+
+OIDC token revocation is scoped to the RP Session identified by the token's `sid`, and the matching
+client and `jti` are required. If no RP Session matches, revocation does not fall back to a parent
+Base Browser Session. Parent-session termination remains an explicit logout or parent-scope
+operation; an RP cannot revoke sibling RPs or the parent merely because it knows a parent `sid`.
+
+Back-channel logout uses the verified logout-token audience as the client binding. Its `sid` is an
+opaque, bounded identifier: the implementation accepts the URL-safe Nanoid used by RP Sessions as
+well as the UUID values retained by legacy Base Browser Session bindings. A matching RP Session is
+resolved before a legacy parent-session binding, and the logout primitive receives the concrete
+matched class so revoking an RP Session cannot accidentally revoke its parent. A different client
+cannot revoke a RP Session merely by presenting its `sid` to its own verified endpoint.
 
 ## Grace Window Decision
 

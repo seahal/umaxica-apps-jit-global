@@ -114,16 +114,18 @@ module Auth
                             status: :unprocessable_content
             end
 
-            result = verify_otp_code(@user_email, @user_email.pass_code)
-            unless result[:success] && @user_email.visitor&.login_allowed?
-              increment_otp_attempts!(@user_email) unless result[:success]
+            visitor = nil
+            result =
+              verify_otp_code_and_consume(@user_email, @user_email.pass_code) do |record|
+                visitor = record.visitor
+                visitor&.login_allowed?
+              end
+            unless result[:success]
               @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
               return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
                             status: :unprocessable_content
             end
 
-            visitor = @user_email.visitor
-            clear_otp(@user_email)
             session.delete(:user_email_authentication_id)
             session.delete(:user_email_authentication_address)
             result = AuthenticationSessionCommitter.call(

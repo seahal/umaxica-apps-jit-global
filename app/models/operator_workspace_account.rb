@@ -26,7 +26,7 @@
 
 class OperatorWorkspaceAccount < OrgRpRecord
   include Retainable
-  include ::Account
+  include ::PublicId
 
   attribute :status_id, default: OperatorWorkspaceAccountStatus::NOTHING
 

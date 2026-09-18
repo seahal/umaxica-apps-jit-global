@@ -327,15 +327,14 @@ module Auth
           end
 
           def verify_existing_email_otp(user_email)
-            result = verify_otp_code(user_email, user_email.pass_code)
-
-            if result[:success]
-              user = user_from_user_email(user_email)
-              unless user&.login_allowed?
-                return { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
+            user = nil
+            result =
+              verify_otp_code_and_consume(user_email, user_email.pass_code) do |record|
+                user = user_from_user_email(record)
+                user&.login_allowed?
               end
 
-              clear_otp(user_email)
+            if result[:success]
               SignAppInEmailAuthenticationState.clear!(session)
               pt = peek_pt
               result = AuthenticationSessionCommitter.call(
@@ -356,9 +355,9 @@ module Auth
               else
                 { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
               end
+            elsif result[:error] == :consumption_rejected
+              { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
             else
-              user = user_from_user_email(user_email)
-              increment_otp_attempts!(user_email)
               handle_failed_otp_attempt(user_email, user)
             end
           end

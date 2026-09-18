@@ -49,11 +49,15 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal base_com_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
     assert_equal base_com_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
     assert_includes hrefs, base_com_selector_path(ri: "jp")
+    assert_equal base_com_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
+    assert_equal base_com_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
+    assert_not hrefs.any? { |href| href.match?(%r{/preference/(calendar|clock|currency)}) }
+    assert_not hrefs.any? { |href| href.match?(%r{/identity/(emails|telephones|secrets|sessions)}) }
     assert_includes hrefs, new_base_com_sign_out_path(ri: "jp")
     assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
-    assert_includes labelled.keys, dashboard_label(:oidc_discovery)
-    assert_includes labelled.keys, dashboard_label(:jwks)
-    assert_includes labelled.keys, dashboard_label(:userinfo)
+    assert_not labelled.key?(dashboard_label(:oidc_discovery))
+    assert_not labelled.key?(dashboard_label(:jwks))
+    assert_not labelled.key?(dashboard_label(:userinfo))
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
   end
 

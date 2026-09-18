@@ -662,6 +662,8 @@ ja:
       client_identity:
         identity_state: ID状態
         source_record_id: ソースレコードID
+      client_persona:
+        client_identity_id: ClientIdentity
       client_telephone:
         number: 電話番号
         number_digest: 電話番号ダイジェスト
@@ -1207,7 +1209,10 @@ ja:
             option_label: 時刻形式
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1347,7 +1352,10 @@ ja:
             option_label: 時刻形式
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1516,7 +1524,10 @@ ja:
             timezone_label: タイムゾーン
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1553,12 +1564,16 @@ ja:
           authorize_sign_in: 認可（サインイン）
           authorize_sign_up: 認可（サインアップ）
           avatar: アバター
+          billings: 請求
           dashboard: ダッシュボード
+          groups: グループ
           identity: 本人情報
           jwks: JWKS
           logout: ログアウト
+          offline: オフライン
           oidc_discovery: OIDC ディスカバリー
           organization: 組織
+          preference: 設定
           root: トップ
           selector: セレクター
           switcher: スイッチャー
@@ -2244,7 +2259,8 @@ ja:
       pii_required: メールアドレスまたは電話番号を入力してください
       sign_count_mismatch: パスキーのセキュリティカウンターに問題があります。
       sign_in_transaction_required:
-        サインインの手続きが期限切れであるか、Microsoft サインインから開始されていません。最初からやり直してください。
+        サインインの手続きが期限切れであるか、Microsoft
+        サインインから開始されていません。最初からやり直してください。
       verification_failed: パスキーの検証に失敗しました。
       verification_required: パスキーの登録は WebAuthn 認証で完了する必要があります。
   hello: やぁ、せかい
@@ -3778,7 +3794,9 @@ ja:
         emergency:
           passkey:
             new:
-              description: スタッフIDと登録済みのパスキーでサインインします。Microsoft サインインは使用しません。
+              description:
+                スタッフIDと登録済みのパスキーでサインインします。Microsoft
+                サインインは使用しません。
               identifier_label: ID
               identifier_placeholder: スタッフIDを入力してください
               page_title: 緊急アクセス
@@ -3836,8 +3854,7 @@ ja:
             title: 携帯電話番号
           title: 登録方法を選ぶ
         mode_switch:
-          sign_out_required:
-            すでにサインインしています。モードを変更するには、いったんサインアウトしてください（%{sign_out_url}）。
+          sign_out_required: すでにサインインしています。モードを変更するには、いったんサインアウトしてください（%{sign_out_url}）。
         new:
           back: 他の方法を選びますか？
           back_link: もどる

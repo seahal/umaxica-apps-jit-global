@@ -52,7 +52,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
       submit_contact: ["STARTED", :verify_contact],
       verify_contact: ["STARTED", :enter_guardrail],
       enter_guardrail: ["STARTED", :enter_checkpoint],
-      enter_checkpoint: ["STARTED", :clear_requirement],
+      enter_checkpoint: ["GUARDRAIL_PENDING", :clear_requirement],
       fail: ["STARTED", nil],
       expire: ["STARTED", nil],
       cancel: ["STARTED", nil],

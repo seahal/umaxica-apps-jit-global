@@ -100,6 +100,8 @@ class SignUpStateMachine
     when :enter_guardrail
       transition_to!("GUARDRAIL_PENDING", step: "guardrail", next_event: :enter_checkpoint)
     when :enter_checkpoint
+      return invalid("guardrail is required") unless status?("GUARDRAIL_PENDING")
+
       transition_to!("CHECKPOINT_PENDING", step: "checkpoint", next_event: :clear_requirement)
     when :clear_requirement
       clear_requirement

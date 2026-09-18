@@ -40,5 +40,23 @@ module Outbound
 
       assert_not called
     end
+
+    test "permanent malformed payloads are reported when discarded" do
+      reported = []
+
+      ActiveSupport.error_reporter.stub(
+        :report,
+        ->(error, **context) { reported << [error, context] },
+      ) do
+        SmsDeliveryJob.perform_now(to: "+819012345678", title: "Verification", body: "Your code is 123456")
+      end
+
+      error, context = reported.fetch(0)
+
+      assert_instance_of ArgumentError, error
+      assert_equal "application.active_job", context.fetch(:source)
+      assert_match(/Plaintext SMS job payload is no longer accepted/, error.message)
+      assert_not_includes error.message, "123456"
+    end
   end
 end

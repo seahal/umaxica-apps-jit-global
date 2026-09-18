@@ -53,8 +53,10 @@ Whether a channel uses Solid Queue, Action Mailer, provider SDKs, or synchronous
 implementation detail of that channel service. Callers should not choose `deliver_later`,
 `perform_later`, or a provider-specific service directly for new external message delivery code. SMS
 delivery uses Solid Queue by default and selects the concrete provider with `SMS_PROVIDER`.
-Sensitive payloads, including SMS bodies and email OTP values, are encrypted before being placed in
-background job arguments.
+Sensitive payloads, including SMS bodies, email OTP values, and email verification tokens, are
+encrypted before being placed in background job arguments. The receiving mailer decrypts the
+verification token only while rendering the message; new producers must not pass the plaintext token
+through Action Mailer or Noticed job parameters.
 
 ## Consequences
 

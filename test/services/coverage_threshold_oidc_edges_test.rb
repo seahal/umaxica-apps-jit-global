@@ -5,7 +5,7 @@ require "test_helper"
 
 class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
   def service(**attrs)
-    defaults = { grant_type: "authorization_code", code: "code", redirect_uri: "https://client/cb", client_id: "client", client_secret: nil, code_verifier: "verifier", client_assertion_type: nil, client_assertion: nil, dpop_proof: nil, token_endpoint_uri: nil }
+    defaults = { grant_type: "authorization_code", code: "code", redirect_uri: "https://client/cb", client_id: "client", client_secret: nil, code_verifier: "verifier", client_assertion_type: nil, client_assertion: nil, dpop_proof: nil, token_endpoint_uri: nil, expected_resource_type: "client" }
     OidcTokenExchangeCoordinator.new(**defaults.merge(attrs))
   end
 
@@ -46,6 +46,7 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
       "client_id" => "client",
       "resource_type" => "client",
       "auth_time" => Time.current.iso8601,
+      "issued_at" => Time.current.iso8601,
     }
     svc = service
     svc.define_singleton_method(:verify_pkce) { |_| nil }
@@ -134,6 +135,7 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
       "resource_type" => "client",
       "scope" => "openid",
       "auth_time" => Time.current.iso8601,
+      "issued_at" => Time.current.iso8601,
       "code_challenge" => "verifier",
       "code_challenge_method" => "S256",
     }
@@ -182,7 +184,12 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
   test "public refresh grant rejects missing credentials and unsafe session state" do
     client = Struct.new(:registered_token_endpoint_auth_method).new("none")
     OidcClientRegistry.stub(:find, client) do
-      missing = service(grant_type: "refresh_token", code: nil, refresh_token: nil).call
+      missing = service(
+        grant_type: "refresh_token",
+        code: nil,
+        refresh_token: nil,
+        expected_resource_type: "client",
+      ).call
 
       assert_equal "invalid_grant", missing.error
       assert_equal "refresh_token is required", missing.error_description

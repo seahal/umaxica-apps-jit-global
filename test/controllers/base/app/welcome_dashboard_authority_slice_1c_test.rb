@@ -50,17 +50,22 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal base_app_avatars_path(ri: "jp"), labelled.fetch(dashboard_label(:avatar))
     assert_equal base_app_switcher_path(ri: "jp"), labelled.fetch(dashboard_label(:switcher))
     assert_equal base_app_identity_path(ri: "jp"), labelled.fetch(dashboard_label(:identity))
-    assert_equal base_app_sessions_path(ri: "jp"),
-                 labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
+    assert_equal base_app_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
+    assert_equal base_app_billings_path(ri: "jp"), labelled.fetch(dashboard_label(:billings))
+    assert_equal base_app_groups_path(ri: "jp"), labelled.fetch(dashboard_label(:groups))
+    assert_equal base_app_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
+    assert_not_includes hrefs, base_app_sessions_path(ri: "jp")
+    assert_not hrefs.any? { |href| href.match?(%r{/preference/(calendar|clock|currency)}) }
+    assert_not hrefs.any? { |href| href.match?(%r{/identity/(emails|telephones|secrets|sessions)}) }
     assert_not_includes hrefs, base_app_selector_path(ri: "jp")
     assert_not labelled.key?(dashboard_label(:selector))
     assert_includes hrefs, new_base_app_sign_out_path(ri: "jp")
-    # The dashboard only links to ceremonies; it never posts a logout itself.
+    # The dashboard links to pages; it never posts a logout itself.
     assert_select "form[action^=?]", base_app_oidc_logout_path, count: 0
     assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
-    assert_includes labelled.keys, dashboard_label(:oidc_discovery)
-    assert_includes labelled.keys, dashboard_label(:jwks)
-    assert_includes labelled.keys, dashboard_label(:userinfo)
+    assert_not labelled.key?(dashboard_label(:oidc_discovery))
+    assert_not labelled.key?(dashboard_label(:jwks))
+    assert_not labelled.key?(dashboard_label(:userinfo))
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
     assert_no_match(/サインイン済み|Signed in/i, response.body)
   end
@@ -112,7 +117,8 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
     assert_equal base_app_identity_secrets_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
-    assert_not_includes labelled.values, base_app_sessions_path(ri: "jp")
+    assert_equal base_app_sessions_path(ri: "jp"),
+                 labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
     assert_equal base_app_identity_activities_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
     assert_equal base_app_identity_standing_path(ri: "jp"),

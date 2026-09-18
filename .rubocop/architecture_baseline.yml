@@ -30,14 +30,12 @@ Umaxica/NoConcernInclusionHooks:
   app/controllers/concerns/surface_inertia_page.rb: 1
   app/controllers/concerns/webauthn_surface_declarable.rb: 1
   app/controllers/concerns/withdrawal_ceremony_reentry.rb: 1
-  app/models/concerns/account.rb: 1
   app/models/concerns/account_assignment.rb: 1
   app/models/concerns/acme_logout_transactionable.rb: 1
   app/models/concerns/actor_lifecycle_consistency.rb: 1
   app/models/concerns/administrative_access_lockable.rb: 1
   app/models/concerns/avatar_assignment_authority_protection.rb: 1
   app/models/concerns/banner_model.rb: 1
-  app/models/concerns/collective.rb: 1
   app/models/concerns/collective_membership.rb: 1
   app/models/concerns/collective_unit.rb: 1
   app/models/concerns/core_rp_bridge.rb: 1
@@ -884,7 +882,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/actor/authentication.rb: 6
   app/models/actor/configuration.rb: 21
   app/models/actor/preference.rb: 15
-  app/models/actor/selected_context.rb: 3
   app/models/app_enforcement_case.rb: 2
   app/models/app_enforcement_identifier_effect.rb: 4
   app/models/app_preference.rb: 1
@@ -970,7 +967,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/com_preference_time_format_option.rb: 2
   app/models/com_preference_timezone_option.rb: 2
   app/models/company.rb: 1
-  app/models/concerns/account.rb: 6
   app/models/concerns/account_assignment.rb: 3
   app/models/concerns/acme_logout_transactionable.rb: 11
   app/models/concerns/administrative_access_lockable.rb: 4
@@ -981,7 +977,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/avatar_persona_binding_revocation.rb: 3
   app/models/concerns/banner_model.rb: 1
   app/models/concerns/client_secret_credential_kinds.rb: 6
-  app/models/concerns/collective_membership.rb: 7
   app/models/concerns/collective_unit.rb: 5
   app/models/concerns/core_rp_bridge.rb: 3
   app/models/concerns/dbsc_bindable.rb: 10
@@ -990,7 +985,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/email_ceremony_transactionable.rb: 4
   app/models/concerns/email_verification_challengeable.rb: 6
   app/models/concerns/enforcement_appeal.rb: 4
-  app/models/concerns/enforcement_case_applicable.rb: 6
   app/models/concerns/enforcement_recovery_ceremony_recordable.rb: 4
   app/models/concerns/flow_base.rb: 8
   app/models/concerns/flow_sign_in.rb: 23
@@ -1101,7 +1095,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/org_preference_time_format_option.rb: 2
   app/models/org_preference_timezone_option.rb: 2
   app/models/organization_invitation.rb: 6
-  app/models/persona.rb: 2
   app/models/publishing/content_families.rb: 1
   app/models/publishing/docs/app/revision_multiple_taxonomy_assignment.rb: 1
   app/models/publishing/docs/app/revision_single_taxonomy_assignment.rb: 1

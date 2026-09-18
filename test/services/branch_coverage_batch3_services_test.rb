@@ -11,6 +11,7 @@ class BranchCoverageBatch3ServicesTest < ActiveSupport::TestCase
       redirect_uri: "https://example.test/cb",
       client_id: "base-rails-rp",
       code_verifier: "v",
+      expected_resource_type: "client",
     )
 
     connection = Object.new

@@ -139,6 +139,7 @@ module CoreBrowserApiBoundary
 
   def install_authenticated_actor!
     Actor.clear
+    observability_context = ObservabilityContextResolver.call
     # The Core Browser API boundary is the Core BFF browser cookie flow, so the
     # transport/channel axes are known and concrete here.
     context = ActorValuesContext.new(
@@ -168,8 +169,8 @@ module CoreBrowserApiBoundary
       configuration: Actor::Configuration::NULL,
       step_up: Actor::StepUp::NULL,
       selection: Actor::SelectedContext::NULL,
-      trace_id: request.request_id,
-      span_id: nil,
+      trace_id: observability_context.trace_id,
+      span_id: observability_context.span_id,
     )
     Actor.install_context!(**context.to_h)
   end

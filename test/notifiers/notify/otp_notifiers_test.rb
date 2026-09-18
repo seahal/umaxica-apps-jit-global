@@ -38,17 +38,28 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
 
   # The linchpin of the migration: Noticed serializes `params` straight into the
   # delivery job, so anything secret has to be ciphertext before `with` is called.
-  test "issue puts only the encrypted otp into the job arguments" do
+  test "issue puts encrypted sensitive values into the job arguments" do
     record = create_otp_email_record(:app, address: "notifier-secret@example.com")
     clear_enqueued_jobs
 
-    Notify::App::OtpNotifier.issue(record: record, otp_code: "123456")
+    Notify::App::OtpNotifier.issue(
+      record: record,
+      otp_code: "123456",
+      verification_token: "verification-token",
+    )
 
     arguments = enqueued_jobs.last[:args].inspect
 
     assert_not_includes arguments, "123456"
     assert_not_includes arguments, "notifier-secret@example.com"
+    assert_not_includes arguments, "verification-token"
     assert_equal "123456", OutboundSensitivePayload.decrypt_email_otp(enqueued_encrypted_hotp_token)
+    assert_equal(
+      "verification-token",
+      OutboundSensitivePayload.decrypt_email_verification_token(
+        enqueued_jobs.last[:args].last.fetch("params").fetch("encrypted_verification_token"),
+      ),
+    )
   end
 
   test "issue serialises the recipient as a global id" do

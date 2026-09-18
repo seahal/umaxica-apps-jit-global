@@ -7,8 +7,8 @@ require "test_helper"
 # the registered client: an operator client must never reach a visitor usage row
 # and vice versa. OidcTokenRevokerCoverageTest stubs the lookups away, so these
 # tests exercise them against the real per-surface ticket databases, including
-# the sid fallback that revokes an access token bound to a browser session
-# rather than to an OAuth usage row.
+# an access token bound to an OAuth usage row rather than to a parent browser
+# session row.
 class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses,
@@ -82,7 +82,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
                "#{usage.public_id}: a visitor-authenticated revocation must not reach a staff usage row"
   end
 
-  test "an access token is revoked through the session sid when no usage row matches" do
+  test "an access token sid that names only the parent does not revoke the parent" do
     token = ClientToken.create!(
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -104,7 +104,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       end
 
     assert_predicate result, :success?
-    assert_predicate token.reload, :revoked?
+    assert_predicate token.reload, :currently_usable?
   end
 
   test "an access token whose jti does not match the session is not revoked" do

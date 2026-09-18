@@ -142,7 +142,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
       ClientToken.where(id: @current_session_id).find_each(&:destroy!) if defined?(@current_session_id)
     end
 
-    AppPrincipalRecord.connected_to(role: :writing) do
+    AppZenithRecord.connected_to(role: :writing) do
       ClientEmail.where(user_id: @user.id).find_each(&:destroy!)
       Client.where(id: @user.id).find_each(&:destroy!)
     end

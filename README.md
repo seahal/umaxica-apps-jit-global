@@ -8,20 +8,35 @@
 - `app`: end-user application
 - `org`: staff and organization surface
 - `com`: public and corporate surface
+- `net`: network-facing surface supporting other TLDs (`app`/`com`/`org`), including
+  cookie-authentication-less access
+- `dev`: support and status surface
 
-Multi-domain Rails application serving three independent audience surfaces. Routing is
-host-constrained, so domain and subdomain matter in both development and production.
+Multi-domain Rails application serving these audience surfaces. Routing is host-constrained, so
+domain and subdomain matter in both development and production.
 
 ## Stack
 
-- Ruby `4.0.x`
-- PostgreSQL
-  - Solid Queue
-- Valkey/Redis
-- Vite Rails + Stimulus + Turbo
-- Tailwind CSS via Vite
-- Propshaft
+### Backend
+
+- Ruby on Rails (`8.2.x`, pre-release)
+- Podman services for local infrastructure
+- Storage: PostgreSQL (with Solid Queue), Valkey/Redis
+
+### Frontend
+
+- Two coexisting frontend approaches: Inertia Rails (React) and Rails' own default
+  Vite Rails + Stimulus + Turbo stack
+- Tailwind CSS via Vite, Propshaft for static assets
 - Vite and Bun for JavaScript build, linting, formatting, and tests
+
+### Infrastructure
+
+- Dev: FakeCloud
+- Test: N/A
+- Prod: N/A
+- CI: GitHub Actions
+- CD: N/A
 
 ## Frontend and Assets
 
@@ -159,7 +174,7 @@ continue to use Compose DNS names. See `docs/operations/development-host-port-ex
 | Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                        |
 | Auth                       | `http://auth.{app,com,org}.localhost:3000`                                    |
 | Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                            |
-| Side / Palm                | `http://side.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` |
+| Side / Palm                | `http://wide.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` |
 | Info / Help / Docs / News  | `http://{info,help,docs,news}.{app,com,org}.localhost:3000`                   |
 
 The application contract supplies PUBLIC and PRIVATE URL values in both supported modes; Compose
@@ -173,11 +188,11 @@ end-to-end evidence.
 `sign.{app,com,org}.localhost` resolves only when `AUTH_*_URL` and `PUBLIC_AUTH_*_URL` are unset.
 Under Compose the canonical local names for the credential gateway are `auth.*`.
 
-## コード品質
+## Code Quality
 
-本プロジェクトのコード品質は、ISO/IEC 25010 の System / Software Product
-Quality モデルに基づいて整理する。以降の `Linting and Formatting` / `Testing` /
-`Security and Quality Checks` は、この品質特性をそれぞれ運用面で支えるための具体的手段に対応する。
+This project organizes code quality around the ISO/IEC 25010 System / Software Product Quality
+model. The `Linting and Formatting` / `Testing` / `Security and Quality Checks` sections below each
+correspond to concrete, operational means of supporting these quality characteristics.
 
 ```mermaid
 flowchart LR
@@ -277,16 +292,15 @@ JavaScript tests are located in `spec/` and use Vitest. Coverage reports are wri
 ```bash
 bundle exec brakeman --no-pager
 bundle exec bundler-audit check --update
-bundle exec database_consistency
 bun audit
-bin/debride
+bundle exec debride
 ```
 
-`bin/debride` is configured for Rails-aware analysis and can also be scoped to specific paths:
+`debride` is configured for Rails-aware analysis and can also be scoped to specific paths:
 
 ```bash
-bin/debride app/services
-DEBRIDE_MINIMUM=5 bin/debride
+bundle exec debride app/services
+DEBRIDE_MINIMUM=5 bundle exec debride
 ```
 
 ## Logging
@@ -317,6 +331,15 @@ These checks cover formatting, linting, security audits, database consistency, a
 | Tests fail because databases are missing | Run `bin/rails db:prepare`                                                   |
 | `bin/dev` stops during boot              | Check `PUBLIC_AUTH_*_URL` and database availability                          |
 | Credentials cannot be decrypted          | Obtain the key; see `docs/operations/development-credential-provisioning.md` |
+
+## Repository Knowledge Base
+
+- `adr/` — accepted architecture and design decisions, with the tradeoffs behind them.
+- `docs/` — current, stable documentation of how the system works.
+- `memos/` — exploratory field notes and rough analysis not yet stable enough for `docs/`, `plans/`, `adr/`, or `notes/`.
+- `notes/` — non-authoritative implementation handoff and ADR-adjacent notes, candidates for later promotion.
+- `plans/` — planning material not yet an implementation source of truth; GitHub issues remain the source of truth for accepted active work.
+- `evidence/` — dated, flat records of completed tests, verifications, and audits.
 
 ## Acknowledgement
 

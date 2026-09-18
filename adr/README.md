@@ -100,8 +100,8 @@ Current API design decisions:
   permitted), and OpenAPI 3.2.x. Records the areas where no standard exists, keeping
   `docs/reference/api-design-standards.md` limited to specification-backed rules.
 - `adr/api-route-vocabulary-consolidation.md` — accepted naming direction consolidating `/web/v0`
-  and `/edge/v0` under `/api/v0`; its 2026-09-15 amendment records the reviewed Core preference
-  API migration, while the remaining services stay subject to endpoint-specific review.
+  and `/edge/v0` under `/api/v0`; its 2026-09-15 amendment records the reviewed Core preference API
+  migration, while the remaining services stay subject to endpoint-specific review.
 
 Current database naming decisions:
 
@@ -169,8 +169,16 @@ Preference decisions:
 
 Current hierarchy / collective decisions:
 
-- `adr/collective-hierarchy-model.md`
 - `adr/surface-account-collective-model-naming.md`
+- `docs/architecture/persona-organization-authority.md` is the implementation reference for the
+  amended Persona / Organization interface and authority-table boundary.
+
+Deferred historical records:
+
+- `adr/collective-hierarchy-model.md` — superseded; it must not be used to reintroduce a shared
+  Collective hierarchy or authority table.
+- `adr/avatar-account-bridge-boundary.md` — deferred and excluded from the current authority
+  program.
 
 Current request-context decisions:
 
@@ -212,9 +220,9 @@ Current infrastructure / environment decisions:
   dropped; Kubernetes is left open but not adopted). The no-real-AWS scope covers object storage and
   streaming only: the relational database is outside FakeCloud's coverage and is deferred, while
   Valkey stays a plain container and needs no alternative. Outbound email (SES over SMTP) and SMS
-  (SNS, whose client accepts no custom endpoint) keep using real AWS, making SMS the second
-  real-AWS exception after the database. Records that no Terraform command has yet
-  been run against any environment.
+  (SNS, whose client accepts no custom endpoint) keep using real AWS, making SMS the second real-AWS
+  exception after the database. Records that no Terraform command has yet been run against any
+  environment.
 
 Current health / edge access decisions:
 

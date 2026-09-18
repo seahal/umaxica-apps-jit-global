@@ -431,7 +431,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_no_difference("Client.count") do
       assert_no_difference("ClientGoogleIdentity.count") do
         assert_no_difference("ClientAccount.count") do
-          assert_no_difference("Organization.count") do
+          assert_no_difference("OperatorOrganization.count") do
             assert_no_difference("Avatar.count") do
               assert_no_difference("ClientToken.count") do
                 get auth_app_social_google_callback_url(ri: "jp"),
@@ -467,7 +467,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_no_difference("Client.count") do
       assert_no_difference("ClientGoogleIdentity.count") do
         assert_no_difference("ClientAccount.count") do
-          assert_no_difference("Organization.count") do
+          assert_no_difference("OperatorOrganization.count") do
             assert_no_difference("Avatar.count") do
               assert_no_difference("ClientToken.count") do
                 patch sign_app_sign_up_check_google_birthdate_url(ri: "jp"),
@@ -579,7 +579,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_no_difference("Client.count") do
       assert_no_difference("ClientAppleIdentity.count") do
         assert_no_difference("ClientAccount.count") do
-          assert_no_difference("Organization.count") do
+          assert_no_difference("OperatorOrganization.count") do
             assert_no_difference("Avatar.count") do
               assert_no_difference("ClientToken.count") do
                 get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),

@@ -166,30 +166,31 @@ module SignEmailRegistrable
       end
     end
 
-    result = verify_otp_code(@user_email, submitted_code)
+    result = nil
+    begin
+      @user_email.transaction do
+        result = verify_otp_code_and_consume(@user_email, submitted_code)
+        if result[:success]
+          @user_email.user_email_status_id = verified_email_status_id if commit_verified_status
+
+          yield(@user_email) if block_given?
+          @user_email.save! if @user_email.changed?
+        end
+      end
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
+      # Transaction rolled back
+      @user_email.errors.add(:base, e.message) if @user_email.errors.empty?
+      return false
+    end
 
     unless result[:success]
-      increment_otp_attempts!(@user_email)
       if @user_email.locked?
         @user_email.destroy!
         @user_email.errors.add(:base, :locked)
         return :locked
       end
+
       @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
-      return false
-    end
-
-    begin
-      @user_email.transaction do
-        clear_otp(@user_email)
-        @user_email.user_email_status_id = verified_email_status_id if commit_verified_status
-
-        yield(@user_email) if block_given?
-        @user_email.save! if @user_email.changed?
-      end
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
-      # Transaction rolled back
-      @user_email.errors.add(:base, e.message) if @user_email.errors.empty?
       return false
     end
 

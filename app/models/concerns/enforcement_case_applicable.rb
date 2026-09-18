@@ -54,7 +54,11 @@ module EnforcementCaseApplicable
     end
 
     def pending_convergence
-      where(state: "active").where("sessions_revoked_at IS NULL OR audited_at IS NULL")
+      where(state: "active", ended_at: nil).where("sessions_revoked_at IS NULL OR audited_at IS NULL")
+    end
+
+    def pending_end_convergence
+      where(state: "active").where.not(ended_at: nil).where(audited_at: nil)
     end
 
     # adr/unified-enforcement.md, Retention interaction / Purge protection:
@@ -86,6 +90,8 @@ module EnforcementCaseApplicable
         .exists?
     end
   end
+
+  public
 
   def in_force?
     return false unless state == "active"
@@ -156,6 +162,34 @@ module EnforcementCaseApplicable
       )
     end
     update!(audited_at: Time.current)
+  end
+
+  # Chronicle is a separate database, so the source-state transaction cannot
+  # make this write atomic. The source Case row lock serializes retries within
+  # a realm, while checking the Chronicle writer first prevents a crash after
+  # the event commit but before `audited_at` is updated from creating another
+  # event on the next retry. A process crash between the check and insert is
+  # still covered by the existing documented Chronicle durability limit.
+  def write_audit_event_once!(event_type)
+    with_lock do
+      if audit_event_recorded?(event_type)
+        update!(audited_at: Time.current) if audited_at.blank?
+        return false
+      end
+
+      write_audit_event!(event_type)
+      true
+    end
+  end
+
+  def audit_event_recorded?(event_type)
+    ChronicleRecord.connected_to(role: :writing) do
+      EnforcementEvent.exists?(
+        realm: self.class.realm,
+        case_public_id: public_id,
+        event_type: event_type,
+      )
+    end
   end
 
   # D9: applying a new open effect for a slot another Case still holds open
