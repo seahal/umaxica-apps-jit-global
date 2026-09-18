@@ -102,4 +102,68 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
     assert_not_includes failed_row.values.join(" "), "123456"
     assert_not_includes reuse_row.values.join(" "), "family-internal"
   end
+
+  test "rejects an unsupported surface" do
+    assert_raises(ArgumentError) { Base::Identity::ActivityLogPresenter.new(surface: :side) }
+  end
+
+  test "labels an Apple provider sign-in and common device agents" do
+    presenter = Base::Identity::ActivityLogPresenter.new(surface: :app)
+
+    apple = ActivityRecord.new(
+      event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+      context: {
+        "provider" => "apple",
+        "user_agent" => "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1",
+      },
+      occurred_at: Time.utc(2026, 9, 13, 9, 8),
+    )
+    edge = ActivityRecord.new(
+      event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+      context: {
+        "provider" => "password",
+        "user_agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Edg/120.0.0.0",
+      },
+      occurred_at: Time.utc(2026, 9, 13, 9, 8),
+    )
+    chrome_android = ActivityRecord.new(
+      event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+      context: {
+        "user_agent" => "Mozilla/5.0 (Linux; Android 14) Chrome/120.0.0.0 Mobile Safari/537.36",
+      },
+      occurred_at: Time.utc(2026, 9, 13, 9, 8),
+    )
+    safari_mac = ActivityRecord.new(
+      event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+      context: {
+        "user_agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Version/17.0 Safari/605.1.15",
+      },
+      occurred_at: Time.utc(2026, 9, 13, 9, 8),
+    )
+    unknown = ActivityRecord.new(
+      event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+      context: { "user_agent" => "CustomAgent/1.0" },
+      occurred_at: Time.utc(2026, 9, 13, 9, 8),
+    )
+    non_hash = ActivityRecord.new(
+      event_id: ClientChronicleEvent::LOGIN_SUCCESS,
+      context: "not-a-hash",
+      occurred_at: Time.utc(2026, 9, 13, 9, 8),
+    )
+
+    apple_row = I18n.with_locale(:en) { presenter.present(apple) }
+    edge_row = I18n.with_locale(:en) { presenter.present(edge) }
+    chrome_row = I18n.with_locale(:en) { presenter.present(chrome_android) }
+    safari_row = I18n.with_locale(:en) { presenter.present(safari_mac) }
+    unknown_row = I18n.with_locale(:en) { presenter.present(unknown) }
+    non_hash_row = I18n.with_locale(:en) { presenter.present(non_hash) }
+
+    assert_equal "Signed in with Apple", apple_row.fetch(:activity)
+    assert_equal "Safari / iOS", apple_row.fetch(:device)
+    assert_equal "Edge / Windows", edge_row.fetch(:device)
+    assert_equal "Chrome / Android", chrome_row.fetch(:device)
+    assert_equal "Safari / macOS", safari_row.fetch(:device)
+    assert_match(/unknown|不明/i, unknown_row.fetch(:device))
+    assert_match(/unknown|不明/i, non_hash_row.fetch(:device))
+  end
 end
