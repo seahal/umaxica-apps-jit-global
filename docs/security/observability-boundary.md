@@ -41,7 +41,9 @@ The current access log pipeline is:
 - `config/initializers/lograge.rb`
 - `config.lograge.enabled = !Rails.env.test?`
 - `config.lograge.formatter = Lograge::Formatters::Json.new`
-- `config.lograge.logger` writes one JSON object per line to stdout
+- `config.lograge.logger` writes one JSON object per line to stdout, and in development also to
+  `log/development.access.jsonl` so Alloy can ship it to Loki
+  (`adr/application-logging-boundary.md`). The line is identical; only the destinations differ.
 
 Access logs should contain request-level fields such as method, path, status, duration,
 `request_id`, and host. When a valid current OpenTelemetry span exists, the same JSON access-log
