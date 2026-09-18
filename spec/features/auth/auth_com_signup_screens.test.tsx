@@ -178,6 +178,30 @@ describe("auth/com sign-up OTP screens", () => {
     expect(markup).toContain("認証コードが正しくありません");
   });
 
+  it("omits the challenge widget when the server sent no turnstile props", () => {
+    const markup = renderToStaticMarkup(
+      <ComSignUpEmailEdit
+        {...otpProps}
+        turnstile={null}
+      />,
+    );
+
+    expect(markup).not.toContain("data-turnstile-site-key");
+    expect(markup).not.toContain('name="cf-turnstile-response"');
+  });
+
+  it("keys the challenge widget with a stable fallback when challenge_id is absent", () => {
+    const markup = renderToStaticMarkup(
+      <ComSignUpEmailEdit
+        {...otpProps}
+        turnstile={turnstile}
+      />,
+    );
+
+    expect(markup).toContain('data-turnstile-site-key="site-key"');
+    expect(markup).not.toContain("data-turnstile-challenge-id");
+  });
+
   it("leaves the email OTP input empty when rendering a previous error", () => {
     const markup = renderToStaticMarkup(
       <ComSignUpEmailEdit

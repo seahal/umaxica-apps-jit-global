@@ -306,6 +306,41 @@ describe("session inventory", () => {
     expect(markup).toContain("This session ends at its expiry and cannot be extended.");
     expect(markup).not.toContain("DBSC");
   });
+
+  it("keeps the mode column when the session itself carried no mode label", () => {
+    const { mode: unusedMode, ...sessionWithoutMode } = currentRow;
+    void unusedMode;
+    const markup = renderToStaticMarkup(
+      <SessionShow
+        title="Session"
+        back_link={backLink}
+        columns={columns}
+        expires_at_description="This session ends at its expiry and cannot be extended."
+        session={sessionWithoutMode}
+      />,
+    );
+
+    expect(markup).toContain("Mode");
+    expect(markup).toContain("Unknown device");
+    expect(markup).not.toContain("Emergency");
+  });
+
+  it("omits the mode row when the column set has no mode label", () => {
+    const { mode: unusedModeColumn, ...columnsWithoutMode } = columns;
+    void unusedModeColumn;
+    const markup = renderToStaticMarkup(
+      <SessionShow
+        title="Session"
+        back_link={backLink}
+        columns={columnsWithoutMode}
+        expires_at_description="This session ends at its expiry and cannot be extended."
+        session={currentRow}
+      />,
+    );
+
+    expect(markup).not.toContain(">Mode<");
+    expect(markup).toContain("Unknown device");
+  });
 });
 
 describe("read-only identity screens", () => {
