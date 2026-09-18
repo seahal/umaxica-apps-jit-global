@@ -66,7 +66,9 @@ export default defineConfig({
     fileParallelism: true,
     // Bun's fork pool cannot start reliably in this runtime. Worker threads retain Vitest's
     // per-file isolation, while a bounded pool prevents startup contention from consuming the
-    // five-second test timeout.
+    // five-second test timeout. The jsdom project still cannot run inside Bun worker threads:
+    // jsdom's EventTarget brand check rejects the window Vitest installs, so `package.json`
+    // `test` / `test:watch` / `test:coverage` invoke Node rather than `bun --bun`.
     pool: "threads",
     maxWorkers: 4,
     // Two projects: Node for pure/static-markup specs, jsdom for DOM-dependent specs. jsdom is

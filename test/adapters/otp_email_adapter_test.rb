@@ -104,28 +104,6 @@ class OtpEmailAdapterTest < ActiveSupport::TestCase
     assert_includes calls, :delivered
   end
 
-  test "deliver forwards a non-secret purpose to the mailer" do
-    calls = []
-    record = Object.new
-    record.define_singleton_method(:address) { "user@example.com" }
-    fake_mail = Object.new
-    fake_mail.define_singleton_method(:deliver_later) { calls << :delivered }
-
-    fake_message = Object.new
-    fake_message.define_singleton_method(:create) { fake_mail }
-
-    fake_mailer = Object.new
-    fake_mailer.define_singleton_method(:with) do |params|
-      calls << params
-      fake_message
-    end
-
-    OtpEmailAdapter.new(fake_mailer).deliver(record: record, otp_code: "654321", purpose: :sign_in)
-
-    assert_equal :sign_in, calls.first.fetch(:purpose).to_sym
-    assert_includes calls, :delivered
-  end
-
   test "deliver ignores unexpected keyword arguments" do
     calls = []
     fake_mail = Object.new

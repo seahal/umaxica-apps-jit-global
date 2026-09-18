@@ -21,7 +21,8 @@ class ObservabilityGatewayContractTest < Minitest::Test
 
   # Every collector or log shipper that the ADR retires or forbids. Stacking a second agent beside
   # Alloy reintroduces the duplicated-role problem the ADR removed.
-  FORBIDDEN_AGENT_SERVICES = %w(otel-collector otelcol opentelemetry-collector promtail fluent-bit fluentbit vector).freeze
+  FORBIDDEN_AGENT_SERVICES = %w(otel-collector otelcol opentelemetry-collector promtail fluent-bit fluentbit
+                                vector).freeze
 
   def test_no_retired_or_duplicate_collector_service_exists
     offenders =
@@ -57,11 +58,11 @@ class ObservabilityGatewayContractTest < Minitest::Test
                    "#{name} must declare a deterministic UID so cross-datasource references resolve."
     end
 
-    assert_equal EXPECTED_DATASOURCE_UIDS.keys.sort, datasources.map { |d| d["name"] }.sort
+    assert_equal EXPECTED_DATASOURCE_UIDS.keys.sort, datasources.pluck("name").sort
   end
 
   def test_datasource_cross_references_resolve_to_a_provisioned_uid
-    known = datasources.map { |datasource| datasource["uid"] }
+    known = datasources.pluck("uid")
     referenced = referenced_datasource_uids(datasources)
 
     refute_empty referenced, "Tempo keeps a trace-to-logs correlation into Loki."
