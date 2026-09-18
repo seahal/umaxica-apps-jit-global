@@ -163,7 +163,8 @@ jobs:
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          # Administration database for scripts/test-environment-check (POSTGRESQL_DATABASE).
+          POSTGRES_DB: db
         ports:
           - 5432:5432
         options: >-
@@ -227,7 +228,8 @@ jobs:
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          # Administration database for scripts/test-environment-check (POSTGRESQL_DATABASE).
+          POSTGRES_DB: db
         ports:
           - 5432:5432
         options: >-
