@@ -49,10 +49,12 @@ beforeEach(() => {
 describe("CookieBannerController", () => {
   describe("connect", () => {
     it("removes itself for a visitor who already consented", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ show_banner: false })),
-      );
+      // Fresh Response per call: a shared mockResolvedValue Response can only be .json()'d once,
+      // and connect() already consumes the body before this assertion runs.
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockImplementation(() => Promise.resolve(jsonResponse({ show_banner: false })));
+      vi.stubGlobal("fetch", fetchMock);
       const { controller } = await mount();
 
       await controller.checkConsentState();
