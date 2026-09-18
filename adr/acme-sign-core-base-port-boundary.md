@@ -1,12 +1,16 @@
 # Acme, Sign, Core, Base, And Palm Boundary
 
+> **Supersession (2026-09-13):** Physical Rails authority is Base (sole IdP/AS). Auth is a ceremony
+> service, not a special RP. Seven first-party RPs replace shared browser clients. See
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`. Acme remains conceptual vocabulary.
+
 > Core browser credential transport update:
 > `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` supersedes this ADR's
 > `__Host-core_sid`-only Core browser credential model in the Web Boundary and Guardrails sections.
 
 ## Status
 
-Accepted (2026-06-12)
+Accepted; partially superseded (2026-09-13) (2026-06-12)
 
 ## Context
 
@@ -252,7 +256,7 @@ Do not:
 - `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`
 - `adr/core-browser-credential-transport.md`
 - `docs/architecture/acme-sign-core-base-port.md`
-- `plans/active/acme-sign-core-base-port-implementation.md`
+- GH issue #829
 - `adr/identity-authority-boundary.md`
 - `adr/acme-session-and-token-authority.md`
 - `adr/sign-residual-idp-surface-retirement.md`

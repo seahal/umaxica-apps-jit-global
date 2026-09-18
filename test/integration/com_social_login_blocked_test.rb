@@ -40,7 +40,10 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
 
   test "corporate sign-in page does not contain social login buttons" do
     host! @corporate_host
-    get "/sign/in", params: { ri: "jp", login_challenge: login_challenge_for("com") }
+    get "/sign/in", params: { ri: "jp", admission: login_challenge_for("com") }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_not_includes response.body, "/auth/google_app"
@@ -73,7 +76,7 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
   private
 
   def login_challenge_for(surface)
-    OidcAuthorizationTransactionCoordinator.issue!(
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: surface,
       intent: "sign_in",
       params: {
@@ -86,7 +89,8 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
         nonce: SecureRandom.urlsafe_base64(16),
         scope: "openid profile",
       },
-    ).transaction.login_challenge
+    ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
   end
 
   def with_env(values)

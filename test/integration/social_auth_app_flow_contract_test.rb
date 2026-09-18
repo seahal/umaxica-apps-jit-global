@@ -70,6 +70,38 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     assert_settings_link_contract(PROVIDERS.fetch(:apple))
   end
 
+  test "Google settings link rejects a signed-in client without fresh social-link step-up" do
+    user = create_social_client
+    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    assert_no_difference("ClientExternalIdentity.count") do
+      post(
+        settings_url_for(PROVIDERS.fetch(:google), ri: "jp"),
+        headers: sign_user_headers(user, token),
+      )
+    end
+
+    assert_response :see_other
+    assert_includes response.location, "scope=social_link"
+    assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
+  end
+
+  test "Apple settings link rejects a signed-in client without fresh social-link step-up" do
+    user = create_social_client
+    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    assert_no_difference("ClientExternalIdentity.count") do
+      post(
+        settings_url_for(PROVIDERS.fetch(:apple), ri: "jp"),
+        headers: sign_user_headers(user, token),
+      )
+    end
+
+    assert_response :see_other
+    assert_includes response.location, "scope=social_link"
+    assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
+  end
+
   test "Google settings link rejects replacing an existing provider with a different uid" do
     assert_settings_replacement_rejected(PROVIDERS.fetch(:google))
   end
@@ -158,6 +190,22 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
     assert_response :unauthorized
     assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
+  end
+
+  test "Apple settings unlink rejects a signed-in client without social unlink step-up" do
+    user = create_social_client
+    apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "step_up_apple")
+    create_social_identity(PROVIDERS.fetch(:google), user:, uid: "step_up_backup_google")
+    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    delete(
+      settings_url_for(PROVIDERS.fetch(:apple), ri: "jp", host: @host),
+      headers: sign_user_headers(user, token),
+      params: { "cf-turnstile-response": "test" },
+    )
+
+    assert_response :unauthorized
+    assert PROVIDERS.fetch(:apple).fetch(:model).exists?(apple_identity.id)
   end
 
   test "Google settings link rejects settings step-up scope" do
@@ -300,9 +348,9 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       end
     end
 
-    # The completion form posts to the public base origin, so the dashboard
-    # handoff continues from there.
-    assert_redirected_to "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/dashboard"
+    # The completion form posts to the public base origin; Base root `/` is the
+    # post-login landing (retired `/dashboard`).
+    assert_redirected_to "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/"
     identity.reload
 
     assert_equal user.id, identity.user_id

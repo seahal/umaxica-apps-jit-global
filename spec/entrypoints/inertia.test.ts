@@ -268,7 +268,6 @@ describe.each([
   ["side/org", "../../src/entrypoints/inertia/side_org.tsx"],
   ["core/app", "../../src/entrypoints/inertia/core_app.tsx"],
   ["core/com", "../../src/entrypoints/inertia/core_com.tsx"],
-  ["core/dev", "../../src/entrypoints/inertia/core_dev.tsx"],
   ["core/org", "../../src/entrypoints/inertia/core_org.tsx"],
 ])("%s inertia entrypoint", (surface, modulePath) => {
   beforeEach(() => {

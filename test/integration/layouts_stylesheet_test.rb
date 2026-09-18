@@ -20,7 +20,7 @@ class StylesheetTagsTest < ActiveSupport::TestCase
     base/app base/com base/org
     auth/app auth/com auth/org
     side/app side/com side/org
-    core/app core/com core/org core/dev
+    core/app core/com core/org
     palm/app
   ).to_h do |surface|
     family, boundary = surface.split("/")

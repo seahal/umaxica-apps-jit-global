@@ -19,6 +19,12 @@ in Edge `adr/015` but is not deployed. Historical Rails ADRs that name Next.js r
 
 The twelve audience × surface cells are listed in `docs/architecture/content-surface-matrix.md`.
 
+> **Rails rendering strategy (2026-09-14):** Per `adr/publish-repository-importmap-boundary.md`,
+> the future publish repository (which absorbs `info`/`docs`/`news`/`help` and, eventually,
+> `edit.*.org`) renders with Rails-standard importmap, not `vite_rails`/Inertia/React. This is
+> consistent with — not a change to — the Edge-owns-the-screen boundary above: Rails' HTML for
+> these surfaces stays thin either way, so it carries no JS bundler or JS runtime dependency.
+
 Edge owns, when those pages are implemented:
 
 - public HTML;

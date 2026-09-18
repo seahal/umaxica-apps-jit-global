@@ -5,10 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class PageTitlePresenceTest < ActiveSupport::TestCase
-  # Pure static analysis test - no database/fixtures needed
-  self.use_transactional_tests = false
-  self.fixture_table_names = []
-
   # Patterns that indicate a page title is set
   PAGE_TITLE_PATTERNS = [
     /content_for\s+:page_title/,
@@ -50,5 +46,19 @@ class PageTitlePresenceTest < ActiveSupport::TestCase
 
     assert_empty missing,
                  "#{missing.size} view(s) missing page_title declaration:\n  #{missing.join("\n  ")}"
+  end
+  private
+
+  # Pure static analysis test - no database/fixtures needed. `use_transactional_tests = false`
+  # was the wrong tool for that: it makes Rails clear the process-wide fixture cache
+  # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
+  # class to reload all ~200 fixture tables (~600 extra queries) on its next example. Overriding
+  # these two hooks as no-ops opts this class out of the fixtures machinery entirely, without that
+  # side effect, while keeping every other `ActiveSupport::TestCase` behavior (assertions, the
+  # `test` DSL) intact. See docs/guides/test-profiling.md.
+  def setup_fixtures(*)
+  end
+
+  def teardown_fixtures(*)
   end
 end

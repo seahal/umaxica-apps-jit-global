@@ -5,11 +5,14 @@
 // spec that types its router mocks from the adapter -- which is what makes the recorded url and
 // payload assertions meaningful -- has to supply it. Building it once here keeps every spec free
 // of both a type assertion and forty lines of irrelevant fixture.
-import type { ActiveVisit } from "@inertiajs/core";
+import type { router } from "@inertiajs/react";
 
 import { present } from "./present";
 
 const noop = () => {};
+
+type VisitHelperOptions = NonNullable<Parameters<typeof router.delete>[1]>;
+type ActiveVisit = Parameters<NonNullable<VisitHelperOptions["onFinish"]>>[0];
 
 const ACTIVE_VISIT: ActiveVisit = {
   // Visit
@@ -62,19 +65,19 @@ const ACTIVE_VISIT: ActiveVisit = {
 };
 
 /** Tells the component its request started, the way the adapter would. */
-export function startVisit(options: { onStart?: (visit: ActiveVisit) => void } | undefined): void {
-  present(
+export function startVisit(options: VisitHelperOptions | undefined): void {
+  const callback = present(
     present(options, "the recorded visit options").onStart,
     "an onStart callback",
-  )(ACTIVE_VISIT);
+  );
+  callback(ACTIVE_VISIT);
 }
 
 /** Tells the component its request finished, the way the adapter would. */
-export function finishVisit(
-  options: { onFinish?: (visit: ActiveVisit) => void } | undefined,
-): void {
-  present(
+export function finishVisit(options: VisitHelperOptions | undefined): void {
+  const callback = present(
     present(options, "the recorded visit options").onFinish,
     "an onFinish callback",
-  )(ACTIVE_VISIT);
+  );
+  callback(ACTIVE_VISIT);
 }

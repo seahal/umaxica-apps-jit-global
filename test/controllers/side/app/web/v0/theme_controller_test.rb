@@ -12,7 +12,7 @@ class Side::App::Web::V0::ThemeControllerTest < ActionDispatch::IntegrationTest
   PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1")
 
   setup do
-    @host = ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost")
+    @host = ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost")
     host! @host
   end
 

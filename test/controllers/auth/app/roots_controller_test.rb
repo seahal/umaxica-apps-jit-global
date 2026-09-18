@@ -26,22 +26,21 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
     Rails.configuration.x.rate_limit.fetch(:store).clear
   end
 
-  test "permanently redirects the jp region to the sign in entry point" do
+  test "renders the ceremony-service root for the jp region" do
     get auth_app_root_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
 
-    assert_response :moved_permanently
-    assert_equal auth_app_sign_in_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")),
-                 response.location
-    assert_includes response.location, "/sign/in?ri=jp"
+    assert_response :success
+    assert_equal "auth/app/roots/index", inertia_component
+    assert_equal "Sign App", inertia_props.fetch("heading")
+    assert_equal auth_app_sign_in_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
   end
 
-  test "permanently redirects the us region to the sign in entry point" do
+  test "renders the ceremony-service root for the us region" do
     get auth_app_root_url(ri: "us", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
 
-    assert_response :moved_permanently
-    assert_equal auth_app_sign_in_url(ri: "us", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")),
-                 response.location
-    assert_includes response.location, "/sign/in?ri=us"
+    assert_response :success
+    assert_equal "auth/app/roots/index", inertia_component
+    assert_equal auth_app_sign_in_path(ri: "us"), inertia_props.fetch("sign_in").fetch("href")
   end
 
   test "an unrecognized region falls through to the shared region normalization" do
@@ -52,38 +51,31 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
                  response.location
   end
 
-  test "a missing region normalizes first and then reaches the sign in entry point" do
+  test "a missing region normalizes first and then renders the ceremony-service root" do
     get "/"
 
     assert_response :found
     follow_redirect!
 
-    assert_response :moved_permanently
-    assert_includes response.location, "/sign/in?ri=jp"
-
-    follow_redirect!
-
     assert_response :success
+    assert_equal "auth/app/roots/index", inertia_component
   end
 
-  test "the sign in entry point terminates the redirect chain for both regions" do
+  test "the ceremony-service root terminates the redirect chain for both regions" do
     %w(jp us).each do |region|
       get auth_app_root_url(ri: region, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
 
-      assert_response :moved_permanently
-      follow_redirect!
-
-      assert_response :success, "the #{region} sign in entry point must not redirect again"
+      assert_response :success, "the #{region} ceremony-service root must not redirect again"
     end
   end
 
-  test "the root redirect takes precedence over the logged in dashboard redirect" do
+  test "an auth ceremony cookie does not turn Root into a dashboard" do
     user = clients(:one)
     get auth_app_root_url(ri: "jp"),
         headers: as_user_headers(user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
 
-    assert_response :moved_permanently
-    assert_includes response.location, "/sign/in?ri=jp"
+    assert_response :success
+    assert_equal "auth/app/roots/index", inertia_component
   end
   private
 

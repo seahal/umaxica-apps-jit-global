@@ -54,11 +54,12 @@ Transports are not replaced. A delivery method calls the existing surface mailer
 - Kill switches stay where they are and are not duplicated in a `config.if`. Mail sent through
   Noticed still passes `OutboundEmailSuspensionInterceptor`, because the interceptor keys off
   `message.delivery_handler`, which is still the surface mailer.
-- Sensitive payloads are encrypted with `OutboundSensitivePayload` **before** `Notifier.with` is
-  called, in the caller's process. Noticed serializes `params` verbatim into the delivery job, so
-  this is the only point at which plaintext can be kept out of the job arguments. The recipient's
-  address is read from the recipient inside the delivery method's `params` proc, at perform time, so
-  it does not reach the job arguments either.
+- Sensitive payloads, including the OTP and optional email verification token, are encrypted with
+  `OutboundSensitivePayload` **before** `Notifier.with` is called, in the caller's process. Noticed
+  serializes `params` verbatim into the delivery job, so this is the only point at which plaintext
+  credentials can be kept out of the job arguments. The recipient's address is read from the
+  recipient inside the delivery method's `params` proc, at perform time, so it does not reach the
+  job arguments either.
 - The Noticed email delivery method is configured without `enqueue`, so it calls `deliver_now`
   inside the Noticed job. One message remains one job.
 

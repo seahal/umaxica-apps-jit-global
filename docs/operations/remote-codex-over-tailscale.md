@@ -6,7 +6,9 @@ same toolchain.
 
     client ---- tailnet tcp/22 ----> tailscaled in core ---- 127.0.0.1:2222 ----> sshd
 
-Opt-in. Nothing loads `compose.remote-access.yaml` implicitly.
+Opt-in. The overlay lives in `compose.override.yaml` behind `profiles: [remote-access]`, so
+nothing starts it implicitly: a bare `podman compose up` resolves `core` out of the merged
+configuration entirely, and the Dev Containers CLI never loads that file.
 
 This document is one of three. `umaxica-apps-global`, `umaxica-apps-edge` and `portal` share one
 contract, described in `plans/global-portal-edge-dreamy-spring.md`; only the account name, the
@@ -99,7 +101,8 @@ substitute for it.
 
    ```bash
    .devcontainer/remote-access-preflight.sh
-   podman compose -f compose.yaml -f compose.remote-access.yaml up -d
+   podman compose -f compose.yaml -f .devcontainer/compose.yaml \
+     -f compose.override.yaml --profile remote-access up -d
    ```
 
 5. **Confirm the node registered.**
@@ -153,8 +156,10 @@ not a copy.
 ## Restart behaviour
 
 ```bash
-podman compose -f compose.yaml -f compose.remote-access.yaml down
-podman compose -f compose.yaml -f compose.remote-access.yaml up -d
+podman compose -f compose.yaml -f .devcontainer/compose.yaml \
+  -f compose.override.yaml --profile remote-access down
+podman compose -f compose.yaml -f .devcontainer/compose.yaml \
+  -f compose.override.yaml --profile remote-access up -d
 ssh umaxica-global-core hostname
 ```
 
@@ -211,6 +216,6 @@ volumes, which deregisters the node and forces a fresh enrolment.
   second project that collides with the Dev Container over the `global-devcontainer-*` container
   names and the published ports. Volume names are prefixed with the project name, which is why the
   preflight looks for `umaxicaappsglobaldc_tailscale-state`. A bare
-  `podman compose -f compose.yaml -f compose.remote-access.yaml` without the override uses a
-  different project and therefore different, empty volumes — include the override, or expect to
-  enrol a second node.
+  `podman compose -f compose.yaml -f compose.override.yaml` without `.devcontainer/compose.yaml`
+  has no `core` to overlay at all. Include all three files, or expect the profile to select
+  nothing.

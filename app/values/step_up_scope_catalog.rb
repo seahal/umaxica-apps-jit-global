@@ -5,7 +5,7 @@ module StepUpScopeCatalog
   APP = {
     "social_link" => %r{\A/settings/(?:google|apple)(?:/edit)?(?:\z|[?#])},
     "social_unlink" => %r{\A/settings/(?:google|apple)(?:/edit)?(?:\z|[?#])},
-    "session_revoke_all" => %r{\A(?:/sign/settings/sessions|/settings/sessions|/identity/sessions)},
+    "session_revoke_all" => %r{\A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions)},
     "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)},
     "settings_email" => %r{\A(?:/settings/emails|/identity/emails)},
     "settings_telephone" => %r{\A(?:/settings/telephones|/identity/telephones)},
@@ -25,7 +25,7 @@ module StepUpScopeCatalog
     "social_link" => %r{\A/settings/google(?:\z|[?#])},
     "social_unlink" => %r{\A/?(?:social/|settings/google(?:\z|[?#]))},
     "session_revoke_all" => %r{
-      \A(?:/sign/settings/sessions|/settings/sessions|/identity/sessions|
+      \A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions|
          /support/(?:clients|visitors|operators)/\d+/sessions/(?:purge|emergency_revoke))
     }x,
     "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)},

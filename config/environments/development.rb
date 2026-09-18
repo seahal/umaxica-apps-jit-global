@@ -98,10 +98,6 @@ Rails.application.configure do
   # Make template changes take effect immediately.
   config.action_mailer.perform_caching = false
 
-  ## Letter Opener => https://github.com/ryanb/letter_opener
-  #  config.action_mailer.delivery_method = :letter_opener
-  # config.action_mailer.perform_deliveries = true
-
   # Raise on deprecation warnings to catch issues early.
   config.active_support.deprecation = :raise
 
@@ -173,7 +169,10 @@ Rails.application.configure do
 
   # Use Solid Queue in Development.
   config.active_job.queue_adapter = :solid_queue
-  config.solid_queue.connects_to = { database: { writing: :queue } }
+  # `reading` is mapped to the same `queue` database, not a replica: the queue database has no
+  # replica entry in config/database.yml, and Mission Control Jobs reads the queue through the
+  # reading role, which raises ConnectionNotDefined when only `writing` is declared.
+  config.solid_queue.connects_to = { database: { writing: :queue, reading: :queue } }
 
   # Enable Gzip compression
   config.middleware.use(Rack::Deflater)
@@ -188,6 +187,7 @@ Rails.application.configure do
     [boot_hosts.help_service, boot_hosts.help_corporate, boot_hosts.help_staff],
     boot_hosts.info_origins,
     boot_hosts.guid_service,
+    boot_hosts.edit_staff,
   ].flatten
   boot_config_hosts.map!(&:host)
 
@@ -220,17 +220,36 @@ Rails.application.configure do
     core.app.localhost:3000
     core.net.localhost:3000
     core.dev.localhost:3000
+    core.dev.localhost:3001
     docs.com.localhost:3000
     docs.org.localhost:3000
     docs.app.localhost:3000
     news.com.localhost:3000
     news.org.localhost:3000
     news.app.localhost:3000
-    side.com.localhost:3000
-    side.org.localhost:3000
-    side.app.localhost:3000
+    wide.com.localhost:3000
+    wide.com.localhost:3001
+    wide.org.localhost:3000
+    wide.org.localhost:3001
+    wide.app.localhost:3000
+    wide.app.localhost:3001
     palm.app.localhost:3000
     guid.net.localhost:3000
+    edit.org.localhost:3000
+    mission.core.dev.localhost:3000
+    mission.core.dev.localhost:3001
+    flipper.core.dev.localhost:3000
+    flipper.core.dev.localhost:3001
+    blazer.core.dev.localhost:3000
+    blazer.core.dev.localhost:3001
+    pghero.core.dev.localhost:3000
+    pghero.core.dev.localhost:3001
+    performance.core.dev.localhost:3000
+    performance.core.dev.localhost:3001
+    coverband.core.dev.localhost:3000
+    coverband.core.dev.localhost:3001
+    swagger.core.dev.localhost:3000
+    swagger.core.dev.localhost:3001
   )
 
   # Both families, deliberately. Per adr/public-private-url-boundaries.md, `PUBLIC_*` names
@@ -252,11 +271,20 @@ Rails.application.configure do
     PRIVATE_CORE_SERVICE_URL
     PRIVATE_CORE_STAFF_URL
     PRIVATE_CORE_CORPORATE_URL
+    PRIVATE_CORE_DEVELOPER_URL
     PRIVATE_PALM_SERVICE_URL
     PRIVATE_INFO_SERVICE_URL
     PRIVATE_INFO_STAFF_URL
     PRIVATE_INFO_CORPORATE_URL
     PRIVATE_GUID_SERVICE_URL
+    PRIVATE_EDIT_STAFF_URL
+    PRIVATE_MISSION_URL
+    PRIVATE_FLIPPER_URL
+    PRIVATE_BLAZER_URL
+    PRIVATE_PGHERO_URL
+    PRIVATE_PERFORMANCE_URL
+    PRIVATE_COVERBAND_URL
+    PRIVATE_SWAGGER_URL
     PRIVATE_DOCS_SERVICE_URL
     PRIVATE_DOCS_STAFF_URL
     PRIVATE_DOCS_CORPORATE_URL
@@ -276,6 +304,7 @@ Rails.application.configure do
     PUBLIC_CORE_SERVICE_URL
     PUBLIC_CORE_CORPORATE_URL
     PUBLIC_CORE_STAFF_URL
+    PUBLIC_CORE_DEVELOPER_URL
     PUBLIC_SIDE_SERVICE_URL
     PUBLIC_SIDE_CORPORATE_URL
     PUBLIC_SIDE_STAFF_URL
@@ -284,6 +313,14 @@ Rails.application.configure do
     PUBLIC_INFO_CORPORATE_URL
     PUBLIC_INFO_STAFF_URL
     PUBLIC_GUID_SERVICE_URL
+    PUBLIC_EDIT_STAFF_URL
+    PUBLIC_MISSION_URL
+    PUBLIC_FLIPPER_URL
+    PUBLIC_BLAZER_URL
+    PUBLIC_PGHERO_URL
+    PUBLIC_PERFORMANCE_URL
+    PUBLIC_COVERBAND_URL
+    PUBLIC_SWAGGER_URL
     PUBLIC_DOCS_SERVICE_URL
     PUBLIC_DOCS_CORPORATE_URL
     PUBLIC_DOCS_STAFF_URL

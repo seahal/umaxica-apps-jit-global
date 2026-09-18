@@ -588,6 +588,8 @@ en:
         operation: Operation
       client_identity:
         source_record_id: Source record ID
+      client_persona:
+        client_identity_id: Client identity
       client_telephone:
         number: Telephone number
         number_digest: Telephone number digest
@@ -1001,7 +1003,10 @@ en:
             disabled_description: Promotional email is already turned off for this address.
       preferences:
         back_to_settings: Back to settings
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
         email_settings: Request email preferences
@@ -1092,7 +1097,10 @@ en:
           title: Reset Preferences
       preferences:
         back_to_settings: Back to Preferences
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
         email_settings: Request email preferences
@@ -1112,6 +1120,9 @@ en:
         up_link: Back to top
         update_settings: Update Settings
         update_success: Preferences updated successfully
+      roots:
+        message: Thin landing endpoint.
+    dev:
       roots:
         message: Thin landing endpoint.
     org:
@@ -1170,7 +1181,10 @@ en:
           title: Reset Preferences
       preferences:
         back_to_settings: Back to Preferences
+        calendar_settings: Calendar Settings
+        clock_settings: Clock Settings
         cookie_settings: Cookie Settings
+        currency_settings: Currency Settings
         density_settings: Density Settings
         description: Manage language, theme, and other preferences in one place.
         email_settings: Request email preference link
@@ -1193,6 +1207,11 @@ en:
       roots:
         message: Thin landing endpoint.
     shared:
+      lobby:
+        title: Lobby
+        heading: Lobby
+        description: Sign in to continue.
+        sign_in: Sign in
       dashboard:
         title: Dashboard
         description: Signed in
@@ -1205,16 +1224,87 @@ en:
           authorize_sign_in: Authorize (sign in)
           authorize_sign_up: Authorize (sign up)
           avatar: Avatar
+          billings: Billings
           dashboard: Dashboard
+          groups: Groups
           identity: Identity
           jwks: JWKS
           logout: Logout
+          offline: Offline
           oidc_discovery: OIDC discovery
           organization: Organization
+          preference: Preferences
           root: Root
           selector: Selector
           switcher: Switcher
           userinfo: UserInfo
+      identity:
+        up_link: Back to top
+        activities:
+          title: Activity history
+          description: Recent security-related activity for your account.
+          empty: No activities to show.
+          unknown_device: Unknown device
+          unknown_location: Location unavailable
+          columns:
+            occurred_at: Occurred at
+            activity: Activity
+            device: Device
+            source: Source
+            risk: Risk
+          events:
+            sign_in: Signed in
+            google_sign_in: Signed in with Google
+            apple_sign_in: Signed in with Apple
+            google_account_created: Account created with Google
+            apple_account_created: Account created with Apple
+            email_account_created: Account created with email
+            telephone_account_created: Account created with phone number
+            sign_out: Signed out
+            sign_in_failed: Sign-in failed
+            step_up_completed: Step-up authentication completed
+            step_up_failed: Step-up authentication failed
+            session_revoked: Session ended
+            security_change: Security settings changed
+            session_security_alert: Session ended for security reasons
+          risks:
+            none: None
+            low: Low
+            medium: Medium
+            high: High
+            critical: Critical
+        sessions:
+          title: Sessions
+          empty: No active sessions.
+          unknown_device: Unknown device
+          expires_at_description: This session ends at this time. This limit cannot be extended.
+          current_session: Current session
+          active: Active
+          normal: Normal
+          emergency: Emergency
+          unknown_mode: Unknown
+          revoke: Revoke
+          columns:
+            device: Device
+            last_activity: Last activity
+            created: Created
+            expires_at: Expires at
+            status: Status
+            mode: Mode
+            action: Action
+        sections:
+          account: Account
+          profile: Profile
+          security: Security
+        links:
+          activities: Activity
+          birthdate: Birthdate
+          emails: Email
+          secrets: Secrets
+          sessions: Sessions
+          standing: Account standing
+          telephones: Telephone
+          withdrawal: Withdrawal
       preference_emails:
         token_invalid: That link is no longer valid. Request a new one to continue.
         turnstile_error: Turnstile verification failed. Please refresh and try again.
@@ -1763,6 +1853,9 @@ en:
       preferences:
         footer:
           preference: Preferences
+    dev:
+      roots:
+        message: Thin landing endpoint.
     org:
       preference:
         emails:
@@ -2300,6 +2393,9 @@ en:
             ignore_instruction: If you did not request this, please ignore this email.
             instruction: "Please use the following verification code to complete your registration:"
             subject: Your verification code
+            subjects:
+              sign_in: UMAXICA - Confirm your sign-in
+              sign_up: UMAXICA - Verify your email address
             title: Verify your email address
             verify_link: Verify email
       com:
@@ -2309,6 +2405,9 @@ en:
             ignore_instruction: If you did not request this, please ignore this email.
             instruction: "Please use the following verification code to continue:"
             subject: Your verification code
+            subjects:
+              sign_in: UMAXICA - Confirm your sign-in
+              sign_up: UMAXICA - Verify your email address
             title: Verify your email address
             verify_link: Verify email
       org:
@@ -3643,8 +3742,8 @@ en:
               identifier_placeholder: Enter the staff ID
               page_title: Emergency Access
               restricted_mode_notice:
-                This sign-in produces a restricted session. Step-up verification and the operations that
-                require it are unavailable until you sign out and sign in normally.
+                This sign-in produces a restricted session. Step-up verification and the operations
+                that require it are unavailable until you sign out and sign in normally.
               submit: Sign in with passkey
         entra:
           errors:

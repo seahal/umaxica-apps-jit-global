@@ -126,7 +126,7 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       is_system: false,
     )
     avatar = Avatar.create!(
-      moniker: "Constraint Persona Revoke Avatar",
+      moniker: "Constraint ClientPersona Revoke Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -204,7 +204,7 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       is_system: false,
     )
     avatar = Avatar.create!(
-      moniker: "Constraint Persona Unique Avatar",
+      moniker: "Constraint ClientPersona Unique Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )

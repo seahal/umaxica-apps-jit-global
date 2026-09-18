@@ -130,6 +130,11 @@ class IdentitySocialCeremonyResultIssuer
       "candidate_ref" => candidate&.ref,
       "candidate_digest" => candidate&.digest,
       "birthdate" => birthdate,
+      # The adapter's verified_at is the only trusted authentication-event
+      # timestamp available at this boundary. Preserve it in the signed
+      # handoff so Base can establish its session with the event time rather
+      # than the later browser handoff time.
+      "auth_time" => principal.verified_at.to_i,
       "verified_at" => now.to_i,
       "challenge_id" => challenge_id.presence || transaction.transaction_id,
       "expires_at" => transaction.expires_at.to_i,

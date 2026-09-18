@@ -4,50 +4,41 @@
 require "test_helper"
 
 class BranchCoverageBatch3ServicesTest < ActiveSupport::TestCase
-  test "OidcTokenExchangeCoordinator consume_and_issue_tokens! grant failure arms" do
+  test "OidcTokenExchangeCoordinator issue_tokens_for_consumed! grant failure arms" do
     coordinator = OidcTokenExchangeCoordinator.new(
       grant_type: "authorization_code",
       code: "x",
       redirect_uri: "https://example.test/cb",
       client_id: "base-rails-rp",
       code_verifier: "v",
+      expected_resource_type: "client",
     )
 
     connection = Object.new
     connection.define_singleton_method(:connected_to) { |**_, &block| block.call }
     connection.define_singleton_method(:transaction) { |&block| block.call }
     coordinator.define_singleton_method(:connection_class_for) { |_| connection }
-    coordinator.define_singleton_method(:root_token_from_authorization_code) do |code|
-      code.root_token
-    end
 
     inactive = Object.new
     inactive.define_singleton_method(:active?) { false }
-    result = coordinator.send(:consume_and_issue_tokens!, build_auth_code(resource: inactive))
+    coordinator.define_singleton_method(:resolve_resource) { |_| inactive }
+    coordinator.define_singleton_method(:resolve_root_token) { |_| usable_root }
+    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload, dpop_jkt: nil)
 
     assert_not result.success?
     assert_equal "invalid_grant", result.error
 
-    {
-      expired: true,
-      consumed: true,
-      revoked: true,
-    }.each do |flag, value|
-      kwargs = { :resource => active_resource, flag => value }
-      result = coordinator.send(:consume_and_issue_tokens!, build_auth_code(**kwargs))
-
-      assert_equal "invalid_grant", result.error, flag
-    end
-
-    unbound = build_auth_code(resource: active_resource, root_token: nil)
-    result = coordinator.send(:consume_and_issue_tokens!, unbound)
+    resource = active_resource
+    coordinator.define_singleton_method(:resolve_resource) { |_| resource }
+    coordinator.define_singleton_method(:resolve_root_token) { |_| nil }
+    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload, dpop_jkt: nil)
 
     assert_equal "invalid_grant", result.error
 
     dead_root = Object.new
     dead_root.define_singleton_method(:currently_usable?) { false }
-    dead = build_auth_code(resource: active_resource, root_token: dead_root)
-    result = coordinator.send(:consume_and_issue_tokens!, dead)
+    coordinator.define_singleton_method(:resolve_root_token) { |_| dead_root }
+    result = coordinator.send(:issue_tokens_for_consumed!, issued_payload, dpop_jkt: nil)
 
     assert_equal "invalid_grant", result.error
   end
@@ -80,28 +71,27 @@ class BranchCoverageBatch3ServicesTest < ActiveSupport::TestCase
     resource
   end
 
-  def build_auth_code(resource:, expired: false, consumed: false, revoked: false, root_token: :default)
-    code = Object.new
-    code.define_singleton_method(:resource) { resource }
-    code.define_singleton_method(:expired?) { expired }
-    code.define_singleton_method(:consumed?) { consumed }
-    code.define_singleton_method(:revoked?) { revoked }
-    code.define_singleton_method(:lock!) { true }
-    code.define_singleton_method(:scope) { "openid" }
-    token =
-      if root_token == :default
-        t = Object.new
-        t.define_singleton_method(:currently_usable?) { true }
-        t
-      else
-        root_token
-      end
-    coordinator_root = token
-    # root_token_from_authorization_code usually reads association; stub on coordinator side via code methods
-    code.define_singleton_method(:client_token) { coordinator_root }
-    code.define_singleton_method(:visitor_token) { nil }
-    code.define_singleton_method(:operator_token) { nil }
-    code.define_singleton_method(:root_token) { coordinator_root }
-    code
+  def usable_root
+    token = Object.new
+    token.define_singleton_method(:currently_usable?) { true }
+    token
+  end
+
+  def issued_payload
+    {
+      "client_id" => "base-rails-rp",
+      "redirect_uri" => "https://example.test/cb",
+      "subject" => "cli_one_id",
+      "base_session_ref" => "tok_1",
+      "code_challenge" => "challenge",
+      "code_challenge_method" => "S256",
+      "nonce" => "n",
+      "scope" => "openid",
+      "auth_time" => Time.current.iso8601,
+      "resource_type" => "client",
+      "issued_at" => Time.current.iso8601,
+      "expires_at" => 10.seconds.from_now.iso8601,
+      "state" => "issued",
+    }
   end
 end

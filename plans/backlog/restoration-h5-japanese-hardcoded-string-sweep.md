@@ -21,5 +21,3 @@ Grep finds no hardcoded Japanese in `.erb` / `.rb` outside locale files. Pages r
 both `en` and `ja`.
 
 ## Related
-
-- `plans/backlog/restoration-f3-i18n-inline-default-ban.md` — overlapping i18n discipline rule.

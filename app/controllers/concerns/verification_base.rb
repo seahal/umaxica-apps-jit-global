@@ -231,7 +231,7 @@ module VerificationBase
           verification_redirect_fallback
         end
 
-      safe_redirect_to(destination, fallback: fallback, status: :found)
+      redirect_to_verification_destination(destination, fallback: fallback, status: :found)
     elsif request.format.json?
       render json: { error: I18n.t("auth.step_up.register_methods_required") }, status: :unprocessable_content
     else
@@ -248,7 +248,7 @@ module VerificationBase
           verification_redirect_fallback
         end
 
-      safe_redirect_to(
+      redirect_to_verification_destination(
         destination,
         fallback: fallback,
         status: :see_other,
@@ -559,6 +559,18 @@ module VerificationBase
 
   def verification_setup_redirect_fallback
     actor_root_path(ri: params[:ri])
+  end
+
+  def redirect_to_verification_destination(destination, fallback:, **redirect_options)
+    if destination.to_s.start_with?("/")
+      safe_redirect_to(destination, fallback: fallback, **redirect_options)
+    else
+      redirect_to(
+        destination,
+        allow_other_host: cross_host_redirect_allowed?,
+        **redirect_options,
+      )
+    end
   end
 
   def actor_verification_path(**args)

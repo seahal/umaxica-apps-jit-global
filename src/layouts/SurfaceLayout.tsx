@@ -19,13 +19,14 @@ import type { ReactNode } from "react";
 
 import CookieBanner from "@/components/chrome/CookieBanner";
 import ThemeControls from "@/components/chrome/ThemeControls";
+import type { SharedProps } from "@/types/inertia";
 
 const SHELL = "mx-auto w-full max-w-4xl px-4 sm:px-6";
 
 const NAV_LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 
 export default function SurfaceLayout({ children }: { children: ReactNode }) {
-  const { chrome } = usePage().props;
+  const { chrome } = usePage<SharedProps>().props;
 
   return (
     <div className="flex min-h-screen flex-col">

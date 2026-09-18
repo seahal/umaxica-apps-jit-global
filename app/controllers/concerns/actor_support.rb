@@ -423,21 +423,10 @@ module ActorSupport
   end
 
   def set_current_observability
-    if respond_to?(:request, true) && request.respond_to?(:request_id) && request.request_id.present?
-      Actor.install_context!(trace_id: request.request_id)
-    end
-    return unless defined?(OpenTelemetry::Trace)
-
-    preference_cookie = Actor.preferences.cookie
-    analytics_allowed = preference_cookie.performant?
-
-    span = OpenTelemetry::Trace.current_span
-    context = span.context
-    return unless context.valid?
-
+    observability_context = ObservabilityContextResolver.call
     Actor.install_context!(
-      trace_id: context.hex_trace_id,
-      span_id: analytics_allowed ? context.hex_span_id : nil,
+      trace_id: observability_context.trace_id,
+      span_id: observability_context.span_id,
     )
   end
 end

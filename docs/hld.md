@@ -217,9 +217,10 @@ Sensitive columns leverage Active Record encryption.
 - Rate limiting uses Rails' `rate_limit` DSL against `config.x.rate_limit.store`, a separate
   `ActiveSupport::Cache::RedisCacheStore` on Valkey configured by `RATE_LIMIT_REDIS_URL`. The
   default limit is 1,000 req/hour per client.
-- The two stores stay separate even though both are Valkey: development runs `valkey-cache` and
-  `valkey-rate-limit` as distinct services, so a cache flush cannot reset rate-limit windows.
-  Counters and cache entries are both disposable; neither can lose authoritative state.
+- Cache, rate-limit, and auth-state share one nonprod Valkey with logical DBs 0/1/2 (dev) and 3/4/5
+  (test) via responsibility URLs (`adr/valkey-nonprod-logical-db-topology.md`). Production may still
+  use separate hosts. Counters and cache entries are both disposable; neither can lose authoritative
+  state.
 - Staging and production both use logical DB 0. Staging shares `CACHE_REDIS_URL`; production
   requires both URLs on `/0` (one managed database or two).
 - Runtime URL context is resolved from the Preference JWT projection and request-local context, not

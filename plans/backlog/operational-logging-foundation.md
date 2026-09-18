@@ -153,7 +153,7 @@ They should not be collapsed into one undifferentiated stream.
 
 ## Related
 
-- `plans/archive/gh659-pre-consent-event-allowlist.md`
+- GH issue #659
 
 ## 2026-05-07 What to leave as current differences and improvements
 

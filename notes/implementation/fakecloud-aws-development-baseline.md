@@ -2,9 +2,11 @@
 
 > **Amendment, 2026-08-31.** This note records the state at implementation time, when OpenTofu was
 > the intended driver for the HCL under `terraform/`. OpenTofu was subsequently not adopted;
-> `terraform` is used instead and is installed in the dev container by
-> `ghcr.io/devcontainers/features/terraform`. Read every "OpenTofu" below as "Terraform". Nothing
-> else in this note changed, and the HCL itself is unchanged -- it was always plain HCL.
+> `terraform` is used instead. This note originally said it was installed in the dev container by
+> `ghcr.io/devcontainers/features/terraform`; that was not true when written. The feature was
+> actually added on 2026-09-14 — see `evidence/2026-09-14-terraform-devcontainer-feature.md`.
+> Read every "OpenTofu" below as "Terraform". Nothing else in this note changed, and the HCL
+> itself is unchanged -- it was always plain HCL.
 
 ## Context
 
@@ -79,7 +81,7 @@ request the same documented `/_fakecloud/health` endpoint with no added package.
 Querying the GHCR tag list directly shows only `latest`, `main`, and `sha-<commit>` tags — the
 project publishes no semver tag. `latest@sha256:...` is the only form that is both reproducible and
 updatable by the existing Dependabot `docker` ecosystem, and it matches the `tailscale` pin already
-in `compose.remote-access.yaml`.
+in `compose.override.yaml`'s `remote-access` overlay.
 
 ## Deviations from the Approved Plan
 
@@ -129,4 +131,5 @@ Reported rather than fixed, because none is caused by or blocking this change:
    namespaces, documented but easy to misread.
 7. `DevelopmentContainerContractTest#test_the_Dev_Container_loads_only_the_two_repository_Compose_files`
    fails on `develop` before this change: `devcontainer.json` loads three Compose files and
-   `.devcontainer/compose.override.yml` is tracked, both of which the test forbids.
+   `.devcontainer/compose.override.yml` is tracked, both of which the test forbids. (Both files
+   were untracked and gitignored on 2026-09-14, and the test itself has since been deleted.)

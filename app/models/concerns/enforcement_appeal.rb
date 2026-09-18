@@ -31,31 +31,37 @@ module EnforcementAppeal
   end
 
   def submit!
-    transaction do
-      save!
-      enforcement_case.write_audit_event!("appeal_submitted")
-    end
+    save!
+    enforcement_case.write_audit_event_once!("appeal_submitted")
   end
 
   def resolve!(reviewer_operator_public_id:, resolution_code:)
-    raise InvalidResolutionError, "appeal has already been resolved" unless %w(submitted under_review).include?(state)
     raise InvalidResolutionError, "unsupported appeal resolution" unless RESOLUTION_CODES.include?(resolution_code.to_s)
 
-    self.reviewer_operator_public_id = reviewer_operator_public_id
-    self.resolution_code = resolution_code
-    validate_reviewer_separation!
-
     transaction do
+      lock!
+      raise InvalidResolutionError, "appeal has already been resolved" unless %w(submitted under_review).include?(state)
+
+      self.reviewer_operator_public_id = reviewer_operator_public_id
+      self.resolution_code = resolution_code
+      validate_reviewer_separation!
+
+      if resolution_code == "approved"
+        enforcement_case.lock!
+        raise InvalidResolutionError, "enforcement case is no longer active" unless enforcement_case.in_force?
+      end
+
       update!(
         state: resolution_code,
         reviewed_at: Time.current,
       )
-      EnforcementCaseEndOperation.call(
-        enforcement_case: enforcement_case, reason: "appeal_approved",
-        ended_by_operator_public_id: reviewer_operator_public_id,
-      ) if resolution_code == "approved"
-      enforcement_case.write_audit_event!("appeal_#{resolution_code}")
     end
+
+    EnforcementCaseEndOperation.call(
+      enforcement_case: enforcement_case, reason: "appeal_approved",
+      ended_by_operator_public_id: reviewer_operator_public_id,
+    ) if resolution_code == "approved"
+    enforcement_case.write_audit_event_once!("appeal_#{resolution_code}")
   end
 
   def redacted? = state == "redacted"

@@ -41,6 +41,7 @@ gem "pg_search"
 gem "rails-pg-extras", require: false
 # Redis client.
 gem "redis"
+gem "hiredis-client"
 # HTTP client for hand-written outbound requests. Already resolved transitively
 # through the OIDC and OAuth gem chain; declared here because application code
 # depends on it directly via OutboundHttp::Connection.
@@ -230,10 +231,6 @@ group :development do
   gem "foreman", require: false
   # Documentation generator.
   gem "yard", require: false
-  # Browser email previewer.
-  gem "letter_opener", require: false
-  # Web UI for email previews.
-  gem "letter_opener_web", require: false
   # Hotwire live reload helper.
   gem "hotwire-spark"
   # Rails live reload helper.
@@ -252,6 +249,23 @@ group :development do
   # arbitrary-SQL endpoint. test/security/invariants/mounted_engine_invariant_test.rb
   # guards this.
   gem "rails_db"
+  # Server-side request performance dashboard, on performance.umaxica.dev. Development only: the
+  # gem's own config/routes.rb ends with an unguarded
+  # `Rails.application.routes.draw { mount RailsPerformance::Engine => RailsPerformance.mount_at }`
+  # with no flag to disable it, which would put the dashboard on every host. config/application.rb
+  # drops the engine's routing path to suppress that; config/routes/performance.rb draws the routes
+  # and mounts the engine behind the host constraint instead.
+  gem "rails_performance", require: false
+  # Runtime code-execution coverage (which Ruby actually ran), on coverband.umaxica.dev. Kept to
+  # `group :development` alongside the other mounted dashboards, so it observes development
+  # execution rather than production -- see adr/diagnostic-surfaces-performance-coverband-swagger.md
+  # for what that costs. Distinct from SimpleCov, which measures test coverage and is unaffected.
+  gem "coverband", require: false
+  # Swagger UI and the OpenAPI document endpoint it reads, on swagger.umaxica.dev. `rswag-specs` is
+  # deliberately absent: it is RSpec-only, and this application's contract tests are Minitest +
+  # Committee against the same descriptions (test/support/openapi_contract.rb).
+  gem "rswag-api", require: false
+  gem "rswag-ui", require: false
   # Package boundary enforcement.
   gem "packwerk", require: false
   # ERB linter.

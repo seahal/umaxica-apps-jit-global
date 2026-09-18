@@ -200,11 +200,11 @@ class BranchCoverageBatch39EasyMissesTest < ActiveSupport::TestCase
     end
   end
 
-  test "Publishing org entries controllers respond to CRUD verbs for method coverage" do
+  test "Edit Publishing entries controllers respond to CRUD verbs for method coverage" do
     controllers = [
-      Base::Org::Publishing::Docs::App::EntriesController,
-      Base::Org::Publishing::News::App::EntriesController,
-      Base::Org::Publishing::Info::App::EntriesController,
+      Edit::Org::Publishing::Docs::App::EntriesController,
+      Edit::Org::Publishing::News::App::EntriesController,
+      Edit::Org::Publishing::Info::App::EntriesController,
     ]
     controllers.each do |klass|
       %i(index show new create edit update).each do |action|

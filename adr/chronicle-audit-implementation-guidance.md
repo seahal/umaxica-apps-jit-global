@@ -46,6 +46,27 @@ Audit records should be written when the business outcome is known. The preferre
 service or domain operation layer. Controllers may provide request context, but they should not
 become the primary location where audit meaning is decided.
 
+### User-Facing Activity Projection
+
+An audit event's **Event Type**, **Risk Level**, and **Visibility Level** are independent
+dimensions. Event type names what happened; risk ranks its security significance; visibility says
+whether and how it should appear in an account owner's activity history. A low-risk event can be
+user-visible, and a high-risk event can require attention. Neither risk nor visibility is inferred
+from the other.
+
+The legacy Client and Operator Chronicle catalogs have event and log-level references, but no
+risk-level reference or user-visibility field. Their `level_id` is Chronicle logging severity, not
+security risk. Until a persistent catalog is justified, the shared Base Identity presenter owns the
+explicit event-ID to risk-and-visibility mapping. Risk uses a stable numeric rank; it is never sorted
+alphabetically. User-facing reads filter `internal` event IDs in SQL and serialize a normalized
+projection rather than exposing Chronicle IDs, raw context, provider metadata, or source IP
+addresses.
+
+Successful refresh rotation is a durable internal authentication audit event because it is useful
+for investigation but too frequent for the user activity list. Refresh-token replay and failed
+step-up verification are user-attention events. Audit context may include non-secret family
+metadata, but never token values, OTPs, authorization codes, or PKCE verifiers.
+
 ## OWASP: Implementation Checklist
 
 Chronicle implementations must be reviewed against a practical application-security checklist:

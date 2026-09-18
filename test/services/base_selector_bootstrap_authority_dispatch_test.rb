@@ -15,7 +15,7 @@ class BaseSelectorBootstrapAuthorityDispatchTest < ActiveSupport::TestCase
   end
 
   test "each account kind names its own subject type" do
-    assert_equal :persona, @authority.send(:subject_type_for, Persona.new)
+    assert_equal :persona, @authority.send(:subject_type_for, ClientPersona.new)
     assert_equal :agent, @authority.send(:subject_type_for, Agent.new)
     assert_equal :individual, @authority.send(:subject_type_for, Individual.new)
   end

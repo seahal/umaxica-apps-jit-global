@@ -59,6 +59,15 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "rejects an authentication event time from the future" do
+    assert_social_ceremony_error("auth_time must not be in the future") do
+      IdentitySocialCeremonyResult.new(
+        valid_result_claims.merge("auth_time" => (@now + 2.minutes).to_i),
+        now: @now,
+      )
+    end
+  end
+
   test "candidate store is one-shot and persists only a verified principal" do
     travel_to(@now) do
       callback_result = ExternalAuthentication::CallbackResult.verified(

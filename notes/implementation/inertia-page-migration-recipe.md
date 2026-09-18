@@ -3,9 +3,6 @@
 The canonical procedure for converting one Rails browser HTML page from ERB to an Inertia + React +
 TypeScript page. Follow it per route/action; one resource or ceremony is one commit.
 
-Design decisions behind it are recorded in
-`plans/inertia-react-typescript-full-view-migration-audit.md`.
-
 ## Scope
 
 Migrate: every browser HTML page action of the `base`, `auth`, `core`, `side` and `palm` families,

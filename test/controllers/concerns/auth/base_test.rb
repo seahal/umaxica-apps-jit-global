@@ -131,7 +131,7 @@ module Auth
         :app
       end
 
-      def sign_app_dashboard_path(ri: nil, pt: nil)
+      def auth_app_root_path(ri: nil, pt: nil)
         path = "/dashboard"
         query = []
         query << "ri=#{ri}" if ri.present?
@@ -323,7 +323,7 @@ module Auth
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
-      cycle.update!(return_to: "/dashboard?ri=jp")
+      cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -333,7 +333,7 @@ module Auth
       redirected = URI.parse(harness.redirected.first)
 
       assert_equal "/welcome", redirected.path
-      assert_equal "/dashboard?ri=jp",
+      assert_equal "/?ri=jp",
                    harness.path_from_signed_pt(Rack::Utils.parse_query(redirected.query).fetch("pt"))
     end
 
@@ -398,7 +398,7 @@ module Auth
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
-      cycle.update!(return_to: "/dashboard?ri=jp")
+      cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
       harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
@@ -406,7 +406,7 @@ module Auth
       harness.send(:continue_dashboard_sequence_without_content!)
 
       assert_nil harness.redirected
-      assert_equal "/dashboard?ri=jp", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/?ri=jp", harness.instance_variable_get(:@welcome_next_path)
       assert_predicate cycle.reload, :sign_in_completed?
       assert_nil cycle.return_to
     end
@@ -423,7 +423,7 @@ module Auth
       harness.send(:continue_dashboard_sequence_without_content!)
 
       assert_nil harness.redirected
-      assert_equal "/dashboard", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/", harness.instance_variable_get(:@welcome_next_path)
       assert_predicate cycle.reload, :sign_in_completed?
       assert_nil cycle.return_to
     end

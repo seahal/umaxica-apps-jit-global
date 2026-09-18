@@ -389,7 +389,8 @@ COPY --chown=0:0 podman/core/dev-supervisor.sh /usr/local/bin/core-dev-superviso
 # these there would let anything with a development shell rewrite what the next
 # container start executes -- including which keys it accepts.
 #
-# Both are inert unless `compose.remote-access.yaml` replaces `core`'s command.
+# Both are inert unless `compose.override.yaml`'s `remote-access` profile replaces
+# `core`'s command.
 # The names are the shared ones: umaxica-apps-edge and portal bake the same two
 # paths from the same two source files.
 COPY --chown=0:0 .devcontainer/remote-sshd_config /etc/ssh/remote-sshd_config

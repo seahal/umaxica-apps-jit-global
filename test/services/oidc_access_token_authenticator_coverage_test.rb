@@ -386,9 +386,7 @@ class OidcAccessTokenAuthenticatorCoverageTest < ActiveSupport::TestCase
     assert_equal ComTicketRecord, visitor_authenticator.send(:token_context)
     assert_equal ClientToken, client_authenticator.send(:token_class_for_resource_type)
     assert_equal AppTicketRecord, client_authenticator.send(:token_context)
-    assert_equal OperatorTokenUsage, operator_authenticator.send(:usage_class_for_resource_type)
-    assert_equal VisitorTokenUsage, visitor_authenticator.send(:usage_class_for_resource_type)
-    assert_equal ClientTokenUsage, client_authenticator.send(:usage_class_for_resource_type)
+    assert_not client_authenticator.respond_to?(:usage_class_for_resource_type, true)
 
     failure = client_authenticator.send(:failure, "invalid_token")
 

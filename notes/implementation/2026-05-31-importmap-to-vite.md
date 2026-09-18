@@ -3,8 +3,7 @@
 ## Context
 
 - Original request: migrate JavaScript entrypoint management from importmap to Vite Rails.
-- Related docs: `adr/frontend-architecture-toolchain.md`, `docs/srs.md`, `docs/dds.md`,
-  `plans/archive/restoration-f4-frontend-toolchain-vite-plus.md`.
+- Related docs: `adr/frontend-architecture-toolchain.md`, `docs/srs.md`, `docs/dds.md`.
 - Implementation date: 2026-05-31.
 
 ## Decisions Made During Implementation

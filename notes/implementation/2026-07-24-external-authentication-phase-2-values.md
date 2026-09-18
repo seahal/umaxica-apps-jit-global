@@ -2,7 +2,7 @@
 
 ## Context
 
-- Original plan: `plans/apple-google-external-authentication-architecture-audit.md`
+- Original plan: `plans/analysis/apple-google-external-authentication-architecture-audit.md`
 - Prior implementation note: `notes/implementation/2026-07-24-external-authentication-phase-1.md`
 - Implementation date: 2026-07-24
 

@@ -29,20 +29,18 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
     assert_source_includes core_routes, 'resource :renewal, only: :create, path: "refresh", controller: :refreshes'
     assert_source_includes base_routes, "resource :customization, only: %i(edit destroy)"
     assert_source_excludes base_routes, 'path: "reset", as: :reset, controller: :resets'
-    assert_source_includes base_routes,
-                           'resource :revocation, only: :destroy, path: "sessions", ' \
-                           'controller: "revocations/alls", as: :session_set'
+    assert_source_excludes base_routes, 'controller: "revocations/alls"'
     assert_source_includes base_routes,
                            'resource :revocation, only: :destroy, path: "other_sessions", ' \
                            'controller: "revocations/others", as: :other_sessions'
     assert_source_includes auth_routes, 'resource :registration, only: :show, path: "up", controller: :ups, as: :up'
     assert_source_includes auth_routes, 'resource :session, only: :show, path: "in", controller: :ins, as: :in'
     assert_source_includes auth_routes,
-                           "resource :termination, only: %i(new edit create destroy), " \
+                           "resource :termination, only: %i(show new edit create destroy), " \
                            'path: "out", controller: :outs, as: :out'
     assert_source_includes base_routes,
                            'resource :termination, path: "out", controller: :sign_outs, ' \
-                           "as: :sign_out, only: %i(new edit create)"
+                           "as: :sign_out, only: %i(show new edit create)"
   end
 
   test "refresh rotation target path uses acme authority" do

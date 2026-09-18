@@ -86,6 +86,7 @@ class BranchCoverageBatch12OtpAndZerosTest < ActiveSupport::TestCase
 
   test "app email otp create update early returns" do
     c = stub_otp_controller!(attach!(Auth::App::Sign::Up::Check::Email::OtpsController.new))
+    c.define_singleton_method(:cloudflare_turnstile_validation) { { "success" => true } }
     c.define_singleton_method(:load_gate_context!) { |_| false }
 
     assert_nil c.show

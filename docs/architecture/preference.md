@@ -273,8 +273,8 @@ In a normal request, `Actor.preferences` is built in two stages:
 
 1. Build the base preference from the Preference JWT payload (`preference_payload_preferences`), via
    `Actor::Preference.from_jwt`. When no Preference JWT cookie exists (Bearer/OIDC APIs and
-   endpoints that skip `set_preferences_cookie`), fall back to the default preference values
-   (theme `sy`). `Actor::Preference::NULL` is the unbound-context snapshot, not the guest default.
+   endpoints that skip `set_preferences_cookie`), fall back to the default preference values (theme
+   `sy`). `Actor::Preference::NULL` is the unbound-context snapshot, not the guest default.
 2. Overlay valid request-local `lx`, `ct`, and `tz` values when they were explicitly present in the
    request.
 
@@ -309,14 +309,14 @@ an explicit preference write path changes them and reissues a token.
 A `/preference/region` write is not a single-field write. It rewrites the region-owned locale
 defaults to the region's values in one transaction and marks each one explicit:
 
-| Region | language | date format         | clock  |
-| ------ | -------- | ------------------- | ------ |
-| `jp`   | `ja`     | `iso` (YYYY-MM-DD)  | 24h    |
-| `us`   | `en`     | `us` (MM/DD/YYYY)   | 12h    |
+| Region | language | date format        | clock | currency |
+| ------ | -------- | ------------------ | ----- | -------- |
+| `jp`   | `ja`     | `iso` (YYYY-MM-DD) | 24h   | `jpy`    |
+| `us`   | `en`     | `us` (MM/DD/YYYY)  | 12h   | `usd`    |
 
-The individual language / calendar / clock screens still let a person override any of these
-afterwards; the override is then explicit and survives a later `?ri` change. If any of the four
-child writes fails, the whole change rolls back — a half-applied bundle is never persisted.
+The individual language / calendar / clock / currency screens still let a person override any of
+these afterwards; the override is then explicit and survives a later `?ri` change. If any of the
+five child writes fails, the whole change rolls back — a half-applied bundle is never persisted.
 
 Do not reverse this flow.
 
@@ -427,8 +427,7 @@ to the database or JWT.
 - Should shared preference keep a full history, or only the latest state?
 - ~~Should logout clear the local copy, or only stop writing to it?~~ Resolved 2026-07-02:
   keep-values (do not clear or downgrade on logout). See
-  `docs/architecture/preference-behavior-contract.md`'s State Transitions table and
-  `memos/2026-07-02-preference-audit.md`.
+  `docs/architecture/preference-behavior-contract.md`'s State Transitions table.
 - Should `App`, `Org`, and `Com` use the same shared schema forever, or should each surface keep a
   separate shape?
 - Should activity records stay near the `com_setting` database, or move to a separate audit surface

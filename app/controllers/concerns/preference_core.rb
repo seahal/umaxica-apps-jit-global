@@ -25,6 +25,7 @@ module PreferenceCore
       @preference_language = load_or_refresh_preference_child("Language", option_id: nil)
       @preference_date_format = load_or_refresh_preference_child("DateFormat", option_id: nil)
       @preference_time_format = load_or_refresh_preference_child("TimeFormat", option_id: nil)
+      @preference_currency = load_or_refresh_preference_child("Currency", option_id: nil)
 
       update_region_and_regional_defaults!
     end
@@ -517,18 +518,19 @@ module PreferenceCore
   end
 
   # The child options a region owns and the constant that names each one's value per region. A
-  # region change is a regional-bundle reset: it rewrites language, date format and clock format
-  # to the region's defaults and marks each one explicit, the same way it has always done for
-  # language. Individual screens still let a person override any of them afterwards.
+  # region change is a regional-bundle reset: it rewrites language, date format, clock format
+  # and currency to the region's defaults and marks each one explicit, the same way it has
+  # always done for language. Individual screens still let a person override any of them afterwards.
   REGIONAL_DEFAULT_OPTION_NAMES = {
-    "jp" => { language: :JA, date_format: :ISO, time_format: :HOUR_24 },
-    "us" => { language: :EN, date_format: :US, time_format: :HOUR_12 },
+    "jp" => { language: :JA, date_format: :ISO, time_format: :HOUR_24, currency: :JPY },
+    "us" => { language: :EN, date_format: :US, time_format: :HOUR_12, currency: :USD },
   }.freeze
 
   REGIONAL_DEFAULT_AUDIT_EVENTS = {
     language: "UPDATE_PREFERENCE_LANGUAGE",
     date_format: "UPDATE_PREFERENCE_DATE_FORMAT",
     time_format: "UPDATE_PREFERENCE_TIME_FORMAT",
+    currency: "UPDATE_PREFERENCE_CURRENCY",
   }.freeze
 
   def update_region_and_regional_defaults!
@@ -565,8 +567,8 @@ module PreferenceCore
     write_resource_preference_option!(resource_pref, field, option_id) if resource_pref
   end
 
-  # region option id -> { language:, date_format:, time_format: } option ids, or nil when the
-  # submitted region is not one this application models.
+  # region option id -> { language:, date_format:, time_format:, currency: } option ids, or nil
+  # when the submitted region is not one this application models.
   def regional_default_option_ids(region_option_id)
     region = option_id_to_region(region_option_id, preference_prefix)
     names = REGIONAL_DEFAULT_OPTION_NAMES[region]

@@ -184,7 +184,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_not_equal "evil.example", uri.host
     assert_includes [nil, host], uri.host
-    assert_equal base_app_dashboard_path(ri: "jp"), uri.request_uri
+    assert_equal base_app_root_path(ri: "jp"), uri.request_uri
     assert_equal "settings_email", token.reload.last_step_up_scope
   end
 

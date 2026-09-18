@@ -644,6 +644,7 @@ module Preference
         roles << role
         block.call
       end
+      connection_owner.define_singleton_method(:connection_class_for_self) { connection_owner }
 
       record_class = Class.new(connection_owner)
       record_class.define_singleton_method(:create!) { |attributes| created_records << attributes }
@@ -1499,6 +1500,7 @@ module Preference
         UPDATE_PREFERENCE_LANGUAGE
         UPDATE_PREFERENCE_DATE_FORMAT
         UPDATE_PREFERENCE_TIME_FORMAT
+        UPDATE_PREFERENCE_CURRENCY
       )
 
       assert_nothing_raised do

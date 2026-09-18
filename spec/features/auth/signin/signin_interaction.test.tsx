@@ -1,3 +1,4 @@
+import type { ClientSideVisitOptions } from "@inertiajs/core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +15,9 @@ import { present } from "../../../support/present";
 // real DOM events, which is the only way to reach the submit, resend and WebAuthn handlers that
 // moved out of Stimulus.
 const post = vi.fn();
-const patch = vi.fn();
+const patch = vi.fn(
+  (_url: string, _options?: { onFinish?: (visit: ClientSideVisitOptions) => void }) => undefined,
+);
 const setData = vi.fn();
 
 vi.mock("@inertiajs/react", () => ({
@@ -249,8 +252,9 @@ describe("pass code form interaction", () => {
     back_link: backLink,
   };
 
-  it("submits the code with PATCH, the verb the route expects", () => {
+  it("submits the code with PATCH, the verb the route expects", async () => {
     mount(<EmailPassCodeForm {...props} />);
+    await flush();
 
     type("input[type=text]", "123456");
 
@@ -262,17 +266,47 @@ describe("pass code form interaction", () => {
         ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    expect(patch).toHaveBeenCalledWith("/sign/in/email");
+    expect(patch.mock.calls[0]?.[0]).toBe("/sign/in/email");
+    expect(patch.mock.calls[0]?.[1]?.onFinish).toEqual(expect.any(Function));
+  });
+
+  it("clears the code and replaces the Turnstile challenge after the request finishes", async () => {
+    mount(<EmailPassCodeForm {...props} />);
+    await flush();
+    type("input[type=text]", "123456");
+
+    act(() => {
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const visitOptions = patch.mock.calls[0]?.[1];
+    expect(visitOptions?.onFinish).toEqual(expect.any(Function));
+
+    act(() => {
+      visitOptions?.onFinish?.({} satisfies ClientSideVisitOptions);
+    });
+    await flush();
+
+    expect(setData).toHaveBeenCalledWith("client_email", { pass_code: "" });
+    expect(setData).toHaveBeenCalledWith("cf-turnstile-response", "");
+    expect(container.querySelector<HTMLInputElement>("input[type=text]")?.value).toBe("");
+    expect(window.turnstile?.render).toHaveBeenCalledTimes(2);
   });
 
   it("clears the code field when the server confirms a resend", async () => {
     stubFetch(200, { resendable: true });
 
     mount(<EmailPassCodeForm {...props} />);
+    await flush();
     click("button[type=button]");
     await flush();
 
     expect(setData).toHaveBeenCalledWith("client_email", { pass_code: "" });
+    expect(setData).toHaveBeenCalledWith("cf-turnstile-response", "");
+    expect(container.querySelector<HTMLInputElement>("input[type=text]")?.value).toBe("");
+    expect(window.turnstile?.render).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();
   });
 });

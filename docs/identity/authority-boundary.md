@@ -51,9 +51,11 @@ inversion plans, not a competing source of truth.
 Current browser route contract keeps Acme as the only OP/AS authority. RP browser start and callback
 routes use `/oidc/authorization` and `/oidc/callback`; Acme owns the protocol `/oauth/*` surface and
 `/oidc/logout`, while RP local sign-out remains `/sign/out/new`, `/sign/out/edit`, `/sign/out`, and
-`/sign/out/complete`. Social login entry points use `/social/:provider/sign/in`,
-`/social/:provider/sign/up`, and `/social/:provider/callback`. `google` and `apple` are canonical
-provider names; `google_app` is retained only in historical or compatibility data.
+`/sign/out/complete` on Auth, Core, Side, and Palm. Base local sign-out confirms on
+`/sign/out/edit`, mutates on `POST /sign/out`, and completes with `303` to `/lobby`. Social login
+entry points use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and
+`/social/:provider/callback`. `google` and `apple` are canonical provider names; `google_app` is
+retained only in historical or compatibility data.
 
 Acme's local browser flow and Base Rails surfaces use the shared browser RP client id
 `base-rails-rp`. Callback ownership is host-local: Acme hosts use Acme `/oidc/callback` endpoints,
@@ -113,7 +115,6 @@ authorization, or freshness state.
 - `adr/identity-authority-boundary.md`
 - `adr/acme-session-and-token-authority.md`
 - `adr/sign-credential-gateway-surface.md`
-- `plans/identity-authority-inversion-implementation.md`
 - `docs/security/credential-gateway.md`
 - `docs/security/session-token-authority.md`
 

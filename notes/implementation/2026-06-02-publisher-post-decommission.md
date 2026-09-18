@@ -4,8 +4,7 @@
 
 - Original plan/spec: user requested removal of `app_publisher`, `org_publisher`, and
   `com_publisher` post routing, controllers, models, and related database state.
-- Related plans/docs: `plans/active/post-publication-implementation-plan.md`,
-  `adr/regional-docs-news-content-model.md`.
+- Related plans/docs: `adr/regional-docs-news-content-model.md`.
 - Implementation date: 2026-06-02.
 
 ## Decisions Made During Implementation

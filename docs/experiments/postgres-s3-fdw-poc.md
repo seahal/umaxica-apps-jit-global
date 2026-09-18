@@ -2,12 +2,19 @@
 
 ## Status
 
-**Pending manual execution.** The artifacts below were prepared and reviewed against authoritative
-Wrappers/PostgreSQL documentation, but the actual build and query run require `podman`
-container-build access that was not available in the environment that authored this document. Every
-result field in this document must be filled in from a real run before any suitability claim is
-treated as verified. Do not treat this document as evidence of feasibility until the "Results"
-section below is populated with actual command output.
+**Abandoned, never executed. Artifacts removed; this document is the permanent record.**
+
+The artifacts were prepared and reviewed against authoritative Wrappers/PostgreSQL documentation,
+but the build and query run were never carried out: they required `podman` container-build access
+the authoring environment did not have. No result field below was ever filled in from a real run, so
+nothing here is evidence of feasibility.
+
+The PoC was then overtaken by its own premise. It queried RustFS, and RustFS has since been retired
+in favour of `fakecloud` (`notes/implementation/fakecloud-aws-development-baseline.md`); the
+overlay's `depends_on: rustfs` pointed at a service `compose.yaml` no longer defines, so it could not
+have started. The Cleanup Manifest below was executed on 2026-09-14 and the disposable artifacts are
+gone. The reproduction steps and artifact paths that follow are retained as a record of what was
+built, not as instructions — the files they name no longer exist.
 
 ## Question
 
@@ -180,3 +187,23 @@ git rm -r podman/fdw-poc/Containerfile podman/fdw-poc/compose.fdw-poc.yml \
 ```
 
 After this manifest is executed, only this document remains as the permanent record of the PoC.
+
+### Execution record (2026-09-14)
+
+Steps 1-3 were no-ops and were not run: no `fdw-poc` container, image, or volume existed
+(`podman ps -a`, `podman images`, `podman volume ls` all returned nothing for `fdw-poc`), and step
+3's target, the RustFS bucket, was gone with RustFS itself.
+
+Step 4 was executed, widened to both directory trees and to the `docker/` mirror the manifest
+predates:
+
+```sh
+git rm -r podman/fdw-poc docker/fdw-poc
+```
+
+That removed eight tracked files: `Containerfile`, `compose.fdw-poc.yml`,
+`fixtures/generate_fixtures.sh`, and `smoke/run_smoke_checks.sql` under each of `podman/fdw-poc/`
+and `docker/fdw-poc/`. References in `test/tooling/compose_host_port_exposure_test.rb`,
+`test/tooling/compose_local_override_optional_test.rb`,
+`docs/operations/container-engine-podman-notes.md`, and
+`docs/operations/fakecloud-migration-verification.md` were dropped in the same change.

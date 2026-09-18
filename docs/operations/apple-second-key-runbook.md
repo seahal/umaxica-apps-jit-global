@@ -1,7 +1,7 @@
 # Apple Second Sign in with Apple Key — Portal Runbook
 
 Deadline-critical operator procedure for
-`plans/apple-google-external-authentication-architecture-audit.md` §11 Phase 0 and §12.
+`plans/analysis/apple-google-external-authentication-architecture-audit.md` §11 Phase 0 and §12.
 
 **This runbook contains no secret values and must never be edited to include any.** Do not paste a
 `.p8` file, a client-secret JWT, a private key, a client secret, or a complete provider subject into

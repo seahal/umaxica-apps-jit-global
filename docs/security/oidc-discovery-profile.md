@@ -28,7 +28,7 @@ This is a deliberate private profile:
 
 The logout completion URI is not part of discovery. Discovery continues to publish
 `end_session_endpoint` as `https://<acme-surface-host>/oidc/logout`; browser completion returns to
-the RP or Acme surface-local `/sign/out/complete`.
+the RP surface-local `/sign/out/complete`, or Base `/lobby` when the RP is a Base host.
 
 If `RS256` is ever required, it must be implemented end to end (key rotation, JWKS publication, ID
 token signing selection, client-assertion verification, and tests) rather than advertised in

@@ -19,7 +19,7 @@ class AcmeSelectorSurfaceConfigTest < ActiveSupport::TestCase
     assert_equal :user_id, config.rp_account_foreign_key
     assert_equal ClientIdentity, config.identity_class
     assert_equal ClientIdentityState, config.identity_state_class
-    assert_equal Persona, config.account_class
+    assert_equal ClientPersona, config.account_class
     assert_equal PersonaAssignment, config.account_assignment_class
     assert_equal :persona_id, config.account_assignment_account_key
     assert_equal :client_identity_id, config.account_assignment_identity_key

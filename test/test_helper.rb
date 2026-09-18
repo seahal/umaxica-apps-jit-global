@@ -51,7 +51,17 @@ unless ViteRuby.commands.build
 end
 
 require "rails/test_help"
+# `Minitest.load(:test_prof)` only requires the Minitest reporter shims
+# (`lib/minitest/test_prof_plugin.rb`); it does not load the TestProf recipe classes
+# (`TestProf::EventProf`, `TestProf::StackProf`, `TestProf::MinitestSample`, ...), which live
+# behind the gem's top-level `require "test_prof"` entrypoint. Loading them here only defines
+# classes and registers `TestProf.activate` hooks that stay inert unless their env var
+# (`EVENT_PROF`, `TEST_STACK_PROF`, `SAMPLE`, ...) is set, so this carries no cost for an
+# ordinary `bin/rails test` run.
+require "test_prof"
 Minitest.load(:test_prof)
+# `MinitestSample` (backs `SAMPLE`/`SAMPLE_GROUPS`) is a recipe, not part of the top-level
+# `test_prof` require above, and must be loaded explicitly like any other TestProf recipe.
 require "test_prof/recipes/minitest/sample"
 require_relative "support/parallel_test_database_cloner"
 require_relative "support/external_identity_test_helper"
@@ -59,7 +69,10 @@ require_relative "support/publishing_content_helper"
 require_relative "support/form_action_policy_helper"
 require_relative "support/fetch_metadata_defaults"
 require_relative "support/turnstile_verifier_stub"
+require_relative "support/outbound_http_guard"
 require_relative "support/outbound_http_stub"
+require_relative "support/service_stubs"
+require_relative "support/valkey_test_isolation"
 require_relative "support/login_cooldown_helper"
 require_relative "support/inertia_page_object"
 require_relative "support/org_entra_first_stage_helper"
@@ -274,8 +287,11 @@ module ActiveSupport
     include LoginCooldownHelper
     include OutboundHttpStub
 
-    # Physical cores, not logical: measured on a 16C/32T host -- 32 workers lost more in fork +
-    # per-worker DB-clone overhead than they gained.
+    # Physical cores, not logical processors (SMT/vCPUs): measured on a 16-core/32-thread host --
+    # `PARALLEL_WORKERS=32` (one per logical thread) took 37s on a 3000-test subset versus 22-24s
+    # at 8 or 16 workers, because that many forked Rails processes plus Postgres itself oversubscribe
+    # the physical cores and thrash instead of parallelizing further. See
+    # docs/guides/test-profiling.md.
     #
     # A coverage run uses the same workers as any other run. `.simplecov` sets
     # `merge_subprocesses true`, so SimpleCov hooks `Process._fork` and each worker records and
@@ -284,7 +300,12 @@ module ActiveSupport
     parallel_workers = Integer(ENV.fetch("PARALLEL_WORKERS") { Concurrent.physical_processor_count.to_s }, 10)
     raise ArgumentError, "PARALLEL_WORKERS must be positive" unless parallel_workers.positive?
 
+    # The concrete legacy organization model was renamed to OperatorOrganization while the
+    # physical table and fixture filename remain `organizations`. Without this explicit mapping,
+    # Rails infers the removed Organization constant and loads the fixture on the wrong connection.
+    set_fixture_class organizations: OperatorOrganization
     fixtures :all
+    ValkeyTestIsolation.install!
     ParallelTestDatabaseCloner.install!(workers: parallel_workers)
     parallelize(workers: parallel_workers, parallelize_databases: false)
 

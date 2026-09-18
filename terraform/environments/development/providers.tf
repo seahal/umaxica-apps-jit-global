@@ -10,9 +10,11 @@
 # first driven from the developer's host against the loopback publication in
 # compose.yaml.
 #
-# `terraform` is now also installed inside `core` (see
-# .devcontainer/devcontainer.json). Running it there needs the container-side
-# address instead, because `localhost` in `core` is `core` itself:
+# `terraform` is installed inside `core` by the devcontainer feature in
+# .devcontainer/devcontainer.json. That feature was added 2026-09-14; comments
+# here and in three documents had claimed it since 2026-08-31, while the binary
+# was in fact absent. Running Terraform in `core` needs the container-side
+# address, because `localhost` in `core` is `core` itself:
 #
 #   TF_VAR_fakecloud_endpoint=http://fakecloud:4566 terraform plan
 #

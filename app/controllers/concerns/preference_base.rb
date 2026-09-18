@@ -370,7 +370,7 @@ module PreferenceBase
     ChronicleRecord.connected_to(role: :writing) do
       ensure_model_defaults!(preference_audit_level_class)
       # Seed the full event catalog once. Per-id find_or_create_by! N+1s when a
-      # region change writes language, date format, and clock as one bundle.
+      # region change writes language, date format, clock, and currency as one bundle.
       ensure_model_defaults!(preference_audit_event_class) if normalized_event_id.present?
 
       preference_audit_class.create!(
@@ -526,17 +526,13 @@ module PreferenceBase
     connection_owner.connected_to(role: :writing) { yield }
   end
 
+  # Only Active Record classes own a connection; callers write plain objects directly.
   def model_connection_owner(klass)
-    klass.ancestors.find do |ancestor|
-      ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-    end
+    klass.connection_class_for_self if klass.is_a?(Class) && klass < ActiveRecord::Base
   end
 
   def preference_connection_owner
-    @preference_connection_owner ||=
-      preference_class.ancestors.find do |ancestor|
-        ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-      end
+    @preference_connection_owner ||= model_connection_owner(preference_class)
   end
 
   def with_preference_connection(role)

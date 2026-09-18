@@ -8,9 +8,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class LocaleInitializerTest < ActiveSupport::TestCase
-  self.use_transactional_tests = false
-  self.fixture_table_names = []
-
   INITIALIZER_PATH = Rails.root.join("config/initializers/locale.rb")
 
   test "loads locale files when REGION_CODE is not set" do
@@ -286,6 +283,19 @@ class LocaleInitializerTest < ActiveSupport::TestCase
   end
 
   private
+
+  # Pure I18n/config test - no database/fixtures needed. `use_transactional_tests = false` was
+  # the wrong tool for that: it makes Rails clear the process-wide fixture cache
+  # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
+  # class to reload all ~200 fixture tables (~600 extra queries) on its next example. Overriding
+  # these two hooks as no-ops opts this class out of the fixtures machinery entirely, without that
+  # side effect, while keeping every other `ActiveSupport::TestCase` behavior (assertions, the
+  # `test` DSL) intact. See docs/guides/test-profiling.md.
+  def setup_fixtures(*)
+  end
+
+  def teardown_fixtures(*)
+  end
 
   def reload_locale_initializer
     load(INITIALIZER_PATH)

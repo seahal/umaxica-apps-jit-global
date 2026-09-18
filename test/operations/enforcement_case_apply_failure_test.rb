@@ -29,7 +29,7 @@ class EnforcementCaseApplyFailureTest < ActiveSupport::TestCase
 
     def revoke_method_sessions! = raise(ActiveRecord::RecordNotUnique, "duplicate revocation")
 
-    def write_audit_event!(_name) = true
+    def write_audit_event_once!(_name) = true
 
     def principal_effect = nil
 

@@ -60,6 +60,12 @@ App and com account withdrawal should follow one shared business model.
   termination.
 - Withdrawal handling revokes other sessions while preserving the current MFA-verified session as
   the withdrawal-continuation session, because no separate withdrawal ticket exists yet.
+
+  > **Superseded (2026-09-13):** A withdrawal ceremony now exists. Suspension and termination revoke
+  > every session of the actor, including the requesting session, clear the auth cookies, and
+  > continue status, recovery, and early termination through the withdrawal ceremony
+  > (`WithdrawalLifecycle`, `BaseSettingsWithdrawalFlow`).
+
 - The ID surface may keep enough authenticated behavior to show withdrawal status, recovery, and
   actor-initiated early termination, but RP/OIDC actions must reject the actor while closing,
   suspended, or terminated.

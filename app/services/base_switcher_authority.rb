@@ -48,7 +48,7 @@ class BaseSwitcherAuthority
     raise InvalidSwitch, "invalid_switch" if candidate.blank?
 
     persist_selection!(candidate)
-    { status: "switched", next: "/dashboard" }
+    { status: "switched", next: "/" }
   end
 
   # --- Read helpers for entity CRUD controllers (scoped to the principal's available set) ---

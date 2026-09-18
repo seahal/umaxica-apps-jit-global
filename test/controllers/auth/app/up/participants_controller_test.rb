@@ -123,7 +123,7 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
       assert_no_difference("ClientGoogleIdentity.count") do
         assert_no_difference("ClientAppleIdentity.count") do
           assert_no_difference("ClientAccount.count") do
-            assert_no_difference("Organization.count") do
+            assert_no_difference("OperatorOrganization.count") do
               assert_no_difference("Avatar.count") do
                 assert_no_difference("ClientToken.count", &)
               end

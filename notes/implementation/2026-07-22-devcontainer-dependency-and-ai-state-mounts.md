@@ -2,7 +2,6 @@
 
 ## Context
 
-- Original plan/spec: `plans/chatgpt-pro-compose-scalable-mochi.md`
 - Related decisions/docs/plans:
   - `.devcontainer/devcontainer.json`
   - `.devcontainer/compose.override.yml`

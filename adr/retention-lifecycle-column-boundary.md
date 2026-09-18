@@ -108,10 +108,9 @@ Every migration adding a retainable table must include:
 
 - The earlier two-column retention, `Retainable`, and `RetentionPurgeJob` decisions remain in force;
   this ADR defines their boundary and operational rules.
-- `clients.deletable_at` is a dead, noncompliant column tracked for removal in
-  `plans/backlog/retention-vocabulary-drift-cleanup.md`.
-- The defensive `has_attribute?(:deletable_at)` branches in sign-up cleanup are removed by that
-  plan.
+- `clients.deletable_at` was a dead, noncompliant column. The column and the defensive
+  `has_attribute?(:deletable_at)` branches in sign-up cleanup have since been removed (verified
+  against the schema and `app/` on 2026-09-13).
 - `RefreshTokenable#default_lapses_at` remains as the approved domain-alias pattern and must be
   documented as an alias for `discarded_at`.
 - Lifecycle timestamp behavior belongs in separate ADRs or plans; this ADR defines only its

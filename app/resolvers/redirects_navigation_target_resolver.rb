@@ -17,7 +17,7 @@ class RedirectsNavigationTargetResolver
     },
     dashboard: ->(routes, params) {
       routes.public_send(
-        "acme_#{RedirectsNavigationTargetResolver.surface(params)}_dashboard_path",
+        "base_#{RedirectsNavigationTargetResolver.surface(params)}_root_path",
         ri: params[:ri],
       )
     },

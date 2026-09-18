@@ -75,8 +75,6 @@ avoid churning existing development volumes.
   (`test/controllers/concerns/external_authentication_endpoint_test.rb:104`). Narrowing it to
   `ActiveRecord::ActiveRecordError` is a behaviour change to an authentication gate and is out of
   scope here. Recorded as follow-up.
-- `plans/docker-core-env-compose-async-harp.md` still names `VALKEY_URL` and `REDIS_NORMAL_URL`; it
-  is a record of a completed migration and describes the state at the time. Left historical.
 - `adr/audit-findings-2026-03-30.md` line 308 references the old emitter FIXME. Dated audit record,
   left historical.
 

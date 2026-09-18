@@ -11,6 +11,8 @@ import { waitForTurnstileApi, type TurnstileApi } from "@/lib/turnstile";
 export type TurnstileWidgetProps = {
   /** Site key, published by the server; the secret half never reaches the browser. */
   site_key: string;
+  /** Server-generated render identity used by pages that must force a fresh challenge. */
+  challenge_id?: string | null;
   action?: string | null;
   cdata?: string | null;
   /** "execute" runs the challenge immediately; "render" shows the widget and waits. */

@@ -4,7 +4,9 @@
 module AuthenticationJwtTokens
   extend ActiveSupport::Concern
 
-  def encode_login_access_token(resource, token_record, token_kind_id:, dpop_jkt:, access_expires_at:)
+  def encode_login_access_token(
+    resource, token_record, token_kind_id:, dpop_jkt:, access_expires_at:, authentication_event_at: nil
+  )
     AuthenticationToken.encode(
       resource,
       host: request.host,
@@ -13,9 +15,13 @@ module AuthenticationJwtTokens
       oidc_jti: token_record_oidc_jti(token_record),
       resource_type: resource_type,
       dpop_jkt: dpop_jkt,
-      expires_at: access_expires_at,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: access_expires_at,
+        absolute_expiry: token_record_expiry_at(token_record),
+      ),
       acr: "aal1",
       amr: normalize_amr(token_kind_id, token_record: token_record),
+      auth_time: authentication_event_at || token_record_authentication_event_at(token_record),
       jwt_issuer_id: auth_jwt_issuer_id,
       authentication_context: token_record_authentication_context(token_record),
     )
@@ -32,9 +38,13 @@ module AuthenticationJwtTokens
       oidc_jti: token_record_oidc_jti(token_record),
       resource_type: resource_type,
       dpop_jkt: token_record_attribute(token_record, :dpop_jkt),
-      expires_at: access_expires_at,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: access_expires_at,
+        absolute_expiry: token_record_expiry_at(token_record),
+      ),
       acr: "aal1",
       amr: nil,
+      auth_time: token_record_authentication_event_at(token_record) || current_authentication_event_at_for_token,
       jwt_issuer_id: auth_jwt_issuer_id,
       authentication_context: token_record_authentication_context(token_record),
     )
@@ -62,6 +72,18 @@ module AuthenticationJwtTokens
     return nil unless token_record.respond_to?(:authentication_context_value)
 
     token_record.authentication_context_value.to_s
+  end
+
+  def token_record_authentication_event_at(token_record)
+    return nil unless token_record&.respond_to?(:authentication_event_at)
+
+    token_record.authentication_event_at
+  end
+
+  def current_authentication_event_at_for_token
+    return unless respond_to?(:current_authentication_event_at, true)
+
+    current_authentication_event_at
   end
 
   def token_record_oidc_sid(token_record)
@@ -112,6 +134,7 @@ module AuthenticationJwtTokens
       resource_type: resource_type,
       dpop_jkt: token_record_attribute(current_session, :dpop_jkt),
       expires_at: access_expires_at,
+      auth_time: token_record_authentication_event_at(current_session) || current_authentication_event_at_for_token,
       jwt_issuer_id: auth_jwt_issuer_id,
       authentication_context: token_record_authentication_context(current_session),
     )
@@ -127,7 +150,10 @@ module AuthenticationJwtTokens
   end
 
   def access_token_expires_at_for(token_record, now: Time.current)
-    [now + AuthenticationBase::ACCESS_TOKEN_TTL, token_record_expiry_at(token_record)].compact.min
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: now + AuthenticationBase::ACCESS_TOKEN_TTL,
+      absolute_expiry: token_record_expiry_at(token_record),
+    )
   end
 
   def auth_jwt_issuer_id

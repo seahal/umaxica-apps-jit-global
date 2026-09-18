@@ -34,7 +34,7 @@ module AvatarBackfill
         detail = result.details.find { |row| row[:avatar_id] == avatar.id }
 
         assert_equal "safe_to_backfill", detail.fetch(:conflict_bucket)
-        assert_equal "Persona", detail.fetch(:resolved_subject_type)
+        assert_equal "ClientPersona", detail.fetch(:resolved_subject_type)
         assert_equal persona.id, detail.fetch(:resolved_subject_id)
         assert_predicate detail.fetch(:reason), :present?
         assert_predicate detail.fetch(:recommended_next_action), :present?
@@ -202,7 +202,7 @@ module AvatarBackfill
         source_record_id: client.id,
         status_id: ClientIdentityState::ACTIVE,
       )
-      Persona.create!(client_identity: identity, moniker: "Legacy Persona", title: "Legacy1")
+      ClientPersona.create!(client_identity: identity, moniker: "Legacy ClientPersona", title: "Legacy1")
     end
 
     def create_avatar(client: nil, client_id: nil, lifecycle_state: AvatarLifecycleState.find_by!(key: "active"))

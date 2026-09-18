@@ -15,9 +15,10 @@ class IdentitySocialCeremonyResultIssuerTest < ActiveSupport::TestCase
 
   test "issues a result token bound to the grant, candidate, and transaction" do
     captured = nil
+    authentication_event_at = @now - 2.minutes
 
     with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
-      result = issuer.issue!
+      result = issuer(callback_result: verified_callback(verified_at: authentication_event_at)).issue!
 
       assert_equal "issued-token", result
     end
@@ -33,6 +34,7 @@ class IdentitySocialCeremonyResultIssuerTest < ActiveSupport::TestCase
     assert_equal "cand-digest", captured.fetch("candidate_digest")
     assert_equal "1990-01-01", captured.fetch("birthdate")
     assert_equal "explicit-challenge", captured.fetch("challenge_id")
+    assert_equal authentication_event_at.to_i, captured.fetch("auth_time")
     assert_equal @now.to_i, captured.fetch("verified_at")
     assert_kind_of String, captured.fetch("result_jti")
   end
@@ -192,14 +194,14 @@ class IdentitySocialCeremonyResultIssuerTest < ActiveSupport::TestCase
     }.merge(overrides)
   end
 
-  def verified_callback
+  def verified_callback(verified_at: @now)
     ExternalAuthentication::CallbackResult.verified(
       principal: ExternalAuthentication::VerifiedPrincipal.new(
         provider: "google",
         subject: "uid-1",
         issuer: "https://accounts.google.com",
         audience: "google-client-id",
-        verified_at: @now,
+        verified_at: verified_at,
         verification_authority: "test",
       ),
     )

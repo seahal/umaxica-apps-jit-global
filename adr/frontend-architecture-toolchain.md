@@ -1,5 +1,9 @@
 # Frontend Architecture Decision: Rails + Vite Rails + Direct pnpm Tooling
 
+Status: Superseded (2026-09-07) by `adr/20260907-frontend-stack-importmap-vite-bun.md`, which
+restores Importmap/Propshaft for Rails layouts, keeps Vite Rails for Inertia layouts, and makes Bun
+the package manager. Retained as the record of the earlier Vite-only, pnpm-based decision.
+
 ## Overview
 
 This document records the architecture for browser JavaScript and asset tooling.

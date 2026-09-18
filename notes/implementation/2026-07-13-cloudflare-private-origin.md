@@ -2,7 +2,6 @@
 
 ## Context
 
-- Original plan: `plans/you-are-working-in-enchanted-sunbeam.md`
 - Related decisions: `adr/public-private-url-boundaries.md`,
   `adr/internal-health-endpoint-edge-isolation.md`, and
   `adr/org-cloudflare-access-authentication-layer.md`

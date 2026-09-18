@@ -2,8 +2,6 @@
 
 Date: 2026-05-20
 
-Plan: `plans/active/sign-in-state-machine-authentication-authorization-plan.md`
-
 ## Scope
 
 This note records the Phase 0 route/action matrix used before rebuilding the sign-in cycle status

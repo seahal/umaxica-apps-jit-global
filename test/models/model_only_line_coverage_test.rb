@@ -217,9 +217,9 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "oidc token usage scope and rotation update the refresh token family" do
-    assert_kind_of ActiveRecord::Relation, ClientTokenUsage.currently_usable_at(Time.current)
+    assert_kind_of ActiveRecord::Relation, ClientRpSession.currently_usable_at(Time.current)
 
-    usage = ClientTokenUsage.new(public_id: "usage-public-id", refresh_token_digest: "previous")
+    usage = ClientRpSession.new(public_id: "usage-public-id", refresh_token_digest: "previous")
     updates = []
     usage.stub(:with_lock, ->(&block) { block.call }) do
       usage.stub(:active?, true) do

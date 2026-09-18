@@ -23,8 +23,9 @@ behavior with cleanup policy.
 
 ## Decision
 
-`ClientSignUpCycle`, `VisitorSignUpCycle`, and `OperatorSignUpCycle` classify sign-up lifecycle by
-`status_id`.
+`ClientSignUpFlow`, `VisitorSignUpFlow`, and `OperatorSignUpFlow` classify sign-up lifecycle by
+`status_id`. The older `*SignUpCycle` wording in historical references means these concrete flow
+records; it is not a second model or authority path.
 
 Cancelable sign-up states are limited to states before durable finalization starts:
 
@@ -59,7 +60,7 @@ Cleanup must be idempotent.
 This decision applies to app/client and com/visitor sign-up cancellation.
 
 Org/operator public self-service sign-up remains out of scope. Org operator acquisition continues to
-use invitation and operator lifecycle routes. `OperatorSignUpCycle` may expose shared lifecycle
+use invitation and operator lifecycle routes. `OperatorSignUpFlow` may expose shared lifecycle
 predicates for future reuse, but this decision does not add org public checkpoint cancellation or
 operator creation behavior.
 
@@ -70,3 +71,18 @@ unique identifiers until the purge window expires. UI should tell the actor to r
 after a short delay.
 
 Occurrence/audit records must remain independent of the physical deletion lifecycle.
+
+## Amendment: expiry recovery (2026-09-17)
+
+The current app/com implementation has a separate `SignUpExpiryJob` on the `retention` queue. Its
+recurring entry runs every fifteen minutes in development and production and selects only
+in-progress `ClientSignUpFlow` and `VisitorSignUpFlow` rows whose explicit `expires_at` has passed.
+It delegates terminalization to `SignUpTermination` and leaves the existing physical
+`RetentionPurgeJob` and `SignUpArtifactCleanup` responsibilities separate.
+
+Expiry is authoritative at request time: an expired flow is rejected without waiting for the
+scheduler. The job is a bounded recovery sweep for flows that were not reached by a request. It
+re-reads and locks each flow through the existing operation, treats already-terminal rows as
+idempotent, re-raises deadlocks for Active Job retry, and records other per-row failures so one row
+does not prevent the next sweep. It does not include public org/operator signup because that flow
+has a different acquisition boundary.

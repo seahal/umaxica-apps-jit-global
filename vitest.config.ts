@@ -64,6 +64,11 @@ export default defineConfig({
     teardownTimeout: 5_000,
     slowTestThreshold: 1_000,
     fileParallelism: true,
+    // Bun's fork pool cannot start reliably in this runtime. Worker threads retain Vitest's
+    // per-file isolation, while a bounded pool prevents startup contention from consuming the
+    // five-second test timeout.
+    pool: "threads",
+    maxWorkers: 4,
     // Two projects: Node for pure/static-markup specs, jsdom for DOM-dependent specs. jsdom is
     // used instead of Vitest Browser Mode because several specs stub `window`/`location`, which
     // are non-configurable in a real Chromium tab. Cookie Store / matchMedia / scrollTo gaps are

@@ -25,6 +25,9 @@ module BasePreferenceIndexPage
     theme: :theme_settings,
     cookie: :cookie_settings,
     customization: :reset_settings,
+    calendar: :calendar_settings,
+    clock: :clock_settings,
+    currency: :currency_settings,
   }.freeze
 
   private
@@ -45,7 +48,7 @@ module BasePreferenceIndexPage
       screens: PREFERENCE_INDEX_SCREENS.map do |screen, label_key|
         {
           key: screen.to_s,
-          label: t(preference_base_i18n_key(:preferences, label_key)),
+          label: t(preference_index_screen_i18n_key(label_key)),
           href: public_send(preference_index_screen_helper_name(screen)),
         }
       end,
@@ -54,5 +57,10 @@ module BasePreferenceIndexPage
 
   def preference_index_screen_helper_name(screen)
     "edit_#{preference_route_authority}_#{preference_surface_key}_preference_#{screen}_path"
+  end
+
+  def preference_index_screen_i18n_key(label_key)
+    segments = Array(label_key)
+    preference_base_i18n_key(:preferences, *segments)
   end
 end

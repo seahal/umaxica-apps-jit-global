@@ -104,8 +104,13 @@
   "updateRemoteUserUID": false,
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/jsburckhardt/devcontainer-features/herdr:1": { "VERSION": "v0.8.0" },
     "ghcr.io/srzstephen/devcontainer-features/claude-code:1": {},
-    "ghcr.io/nolanjx/devcontainer-features/codex:1": {}
+    "ghcr.io/nolanjx/devcontainer-features/codex:1": {},
+    // Drives the HCL under terraform/. Documented as present since 2026-08-31
+    // in three places, but never actually added until 2026-09-14; `terraform`
+    // was absent from the container that whole time. From inside `core` the
+    // emulator is not on loopback, so runs need the container-side address:
+    //   TF_VAR_fakecloud_endpoint=http://fakecloud:4566 terraform plan
+    "ghcr.io/devcontainers/features/terraform:1": {}
   }
 }

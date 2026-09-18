@@ -63,7 +63,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
       end
 
     TurnstileVerifierStub.challenge_enabled = false
-    JitSecurityTurnstileVerifier.stub(:verify, verifier) do
+    TurnstileVerifierStub.stub(:verify, verifier) do
       post(
         auth_app_sign_up_email_url(ri: "jp"),
         params: {
@@ -97,6 +97,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal "auth/app/sign/up/emails/new", inertia_component
     assert_equal I18n.t("sign.app.registration.email.new.page_title"), inertia_props.fetch("title")
     assert_equal "client_email", inertia_props.fetch("scope")
+    assert_equal "", inertia_props.fetch("field").fetch("value")
     checkbox_names = inertia_props.fetch("checkboxes").map { |checkbox| checkbox.fetch("name") }
 
     assert_equal 1, checkbox_names.count("promotional")
@@ -430,6 +431,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :unprocessable_content
+    assert_equal email, inertia_props.fetch("field").fetch("value")
     assert_includes @response.body, I18n.t("sign.app.registration.email.new.error_summary")
     assert_not_includes @response.body, "prohibited this sample from being saved"
   end
@@ -452,6 +454,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :unprocessable_content
+    assert_equal "policy_missing@example.com", inertia_props.fetch("field").fetch("value")
     assert_includes @response.body, I18n.t("sign.app.registration.email.new.error_summary")
     assert_includes @response.body, ClientEmail.human_attribute_name(:confirm_policy)
     assert_not_includes @response.body, "prohibited this sample from being saved"
@@ -478,6 +481,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     assert_response :unprocessable_content
+    assert_equal email, inertia_props.fetch("field").fetch("value")
     assert_includes @response.body, I18n.t("sign.app.registration.email.create.turnstile_validation_failed")
   ensure
     TurnstileVerifierStub.challenge_response = { "success" => true }

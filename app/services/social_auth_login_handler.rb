@@ -170,7 +170,7 @@ class SocialAuthLoginHandler
   end
 
   def ensure_reference_record!(model, id, code)
-    AppPrincipalRecord.connected_to(role: :writing) do
+    AppZenithRecord.connected_to(role: :writing) do
       attributes = { id: id }
       attributes[:code] = code if model.column_names.include?("code")
 

@@ -28,6 +28,7 @@
 #  rotated_at                         :datetime
 #  selected_at                        :datetime
 #  created_at                         :datetime         not null
+#  authentication_event_at            :datetime
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
 #  device_session_id                  :bigint
@@ -106,7 +107,7 @@ class OperatorToken < OrgTicketRecord
   belongs_to :staff_token_dbsc_status, class_name: "OperatorTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "OperatorOidcConnection"
   belongs_to :device_session, class_name: "OperatorDeviceSession", inverse_of: :staff_tokens
-  has_many :operator_token_usages, inverse_of: :operator_token, dependent: :delete_all
+  has_many :operator_rp_sessions, inverse_of: :operator_token, dependent: :delete_all
   has_many :staff_verifications, class_name: "OperatorVerification",
                                  foreign_key: :staff_token_id,
                                  dependent: :delete_all,

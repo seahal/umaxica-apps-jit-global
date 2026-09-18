@@ -73,7 +73,7 @@ module OauthAuthorizeRateLimit
         count: count,
         retry_after_seconds: profile.retry_after,
         request_id: request.request_id,
-        flow_id: params[:login_challenge].presence,
+        flow_kind: params[:result].present? ? "result" : (params[:admission].present? ? "admission" : nil),
       ),
     )
   end
@@ -95,7 +95,7 @@ module OauthAuthorizeRateLimit
         count: count,
         retry_after_seconds: profile.retry_after,
         request_id: request.request_id,
-        flow_id: params[:login_challenge].presence,
+        flow_kind: params[:result].present? ? "result" : (params[:admission].present? ? "admission" : nil),
       ),
     )
   end

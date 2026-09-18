@@ -16,11 +16,12 @@ class AuthenticationToken
   class << self
     def encode(resource, host:, session_public_id: nil, session_id: nil, oidc_sid: nil, oidc_jti: nil,
                resource_type: nil, dpop_jkt: nil, expires_at: nil, acr: nil, amr: nil, jwt_issuer_id: nil,
-               authentication_context: nil)
+               auth_time: nil, authentication_context: nil)
       AuthenticationTokenService.encode(
         resource, host: host, session_public_id: session_public_id, session_id: session_id,
                   oidc_sid: oidc_sid, oidc_jti: oidc_jti, resource_type: resource_type, dpop_jkt: dpop_jkt,
                   expires_at: expires_at, acr: acr, amr: amr, jwt_issuer_id: jwt_issuer_id,
+                  auth_time: auth_time,
                   authentication_context: authentication_context,
       )
     end

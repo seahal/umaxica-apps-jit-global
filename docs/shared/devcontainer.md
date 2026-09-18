@@ -21,7 +21,8 @@ the required host configuration.
 
 ### Notes
 
-- Published host ports are loopback-only and are declared in `.devcontainer/compose.yaml`: `3000`
-  and `3036` on `core`. No JetBrains backend port is published; Gateway tunnels its own connection.
+- Published host ports are loopback-only and are declared in `.devcontainer/compose.yaml`: host
+  `3001` forwards to Rails `3000`, while Vite uses `3036` on `core`. No JetBrains backend port is
+  published; Gateway tunnels its own connection.
   `docs/operations/development-host-port-exposure.md` is the contract.
 - The image carries no desktop or X11 libraries. Only the headless IntelliJ backend is supported.

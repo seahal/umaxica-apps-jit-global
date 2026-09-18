@@ -16,35 +16,13 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     load_jump_rt_env!
   end
 
-  test "base auth entrypoints redirect to acme authorize with base callback and signup intent" do
-    [
-      { host: BASE_APP_HOST, acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost") },
-      { host: BASE_COM_HOST, acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.com.localhost") },
-      { host: BASE_ORG_HOST, acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost") },
-    ].each do |surface|
-      host! surface.fetch(:host)
-
-      get "/oidc/authorization"
-
-      assert_response :redirect
-      uri = URI.parse(response.location)
-      query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-      redirect_uri = URI.parse(query.fetch("redirect_uri"))
-
-      assert_equal surface.fetch(:acme_host), uri.host
-      assert_equal "/oauth/authorize", uri.path
-      assert_not_equal "jump.umaxica.net", uri.host
-      assert_equal "base-rails-rp", query.fetch("client_id")
-      assert_equal "signup", query.fetch("screen_hint")
-      assert_equal surface.fetch(:host), redirect_uri.host
-      assert_equal "/oidc/callback", redirect_uri.path
-      assert_equal uri.scheme, redirect_uri.scheme
-      assert_predicate query["state"], :present?
-      assert_predicate query["nonce"], :present?
-      assert_predicate query["code_challenge"], :present?
-      assert_equal query.fetch("state"), session[:oidc_state]
-      assert_predicate session[:oidc_code_verifier], :present?
+  test "base leftover RP authorize and callback paths are unroutable" do
+    [BASE_APP_HOST, BASE_COM_HOST, BASE_ORG_HOST].each do |host|
+      ["/oidc/authorization", "/oidc/callback"].each do |path|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)
+        end
+      end
     end
   end
 
@@ -99,50 +77,33 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     assert_equal "Invalid client", response.body
   end
 
-  test "base callback routes are host constrained" do
-    {
-      BASE_APP_HOST => "base/app/oidc/callbacks",
-      BASE_COM_HOST => "base/com/oidc/callbacks",
-      BASE_ORG_HOST => "base/org/oidc/callbacks",
-    }.each do |host, controller|
-      assert_routing(
-        { method: :get, path: "http://#{host}/oidc/callback" },
-        { controller: controller, action: "show" },
-      )
-    end
-  end
-
-  test "base callbacks reject requests without rp state" do
+  test "base leftover RP callback routes stay unroutable" do
     [BASE_APP_HOST, BASE_COM_HOST, BASE_ORG_HOST].each do |host|
-      host! host
-
-      get "/oidc/callback", params: { code: "code", state: "state" }
-
-      assert_response :unprocessable_content
-      assert_equal I18n.t("errors.messages.login_required"), response.body
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/oidc/callback", method: :get)
+      end
     end
   end
 
-  # The base roots no longer render a sign up entry point: they canonicalize to the regional root,
-  # which owns the entry point. Palm still serves its own.
-  test "base roots canonicalize to the regional root and palm root exposes sign up links" do
+  # Base Root is the control-plane home. Palm still serves native sign-up links.
+  test "base roots render the control-plane home and palm root exposes sign up links" do
     host! BASE_APP_HOST
     get "/", params: { ri: "jp" }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
 
     host! BASE_COM_HOST
     get "/", params: { ri: "jp" }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.com/", response.location
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
 
     host! BASE_ORG_HOST
     get "/", params: { ri: "jp" }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
 
     # Palm renders regional HTML, so its root owes the same `ri` contract as the other HTML
     # surfaces: a request without a region is redirected to the canonical URL that carries one,

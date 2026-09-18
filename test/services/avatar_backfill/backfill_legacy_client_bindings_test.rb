@@ -142,7 +142,7 @@ module AvatarBackfill
         source_record_id: client.id,
         status_id: ClientIdentityState::ACTIVE,
       )
-      Persona.create!(client_identity: identity, moniker: "Backfill Persona", title: "Backfill1")
+      ClientPersona.create!(client_identity: identity, moniker: "Backfill ClientPersona", title: "Backfill1")
     end
 
     def create_avatar(client:)

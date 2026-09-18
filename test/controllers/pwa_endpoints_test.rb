@@ -15,9 +15,9 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
     ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
     ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
     ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
-    ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost"),
-    ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "side.com.localhost"),
-    ENV.fetch("PUBLIC_SIDE_STAFF_URL", "side.org.localhost"),
+    ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"),
+    ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"),
+    ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"),
     ENV.fetch("PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"),
   ].freeze
 

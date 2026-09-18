@@ -68,13 +68,15 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
 
 ## 4. Test Approach
 
-- **Unit tests (Ruby)**: `bin/rails test` covers models (e.g., `ServiceSiteContact`,
+- **Unit tests (Ruby)**: `scripts/test-isolated bin/rails test` covers models (e.g., `ServiceSiteContact`,
   `UserIdentityEmail`, `TimeBasedOneTimePassword`), controllers, concerns, services, consumers.
   Fixtures stored under `test/fixtures`; multi-database fixtures split by context. The test database
   configuration uses Rails' standard process parallelization with a conservative default of 1 worker
   for low-shared-memory local containers, overridable via `PARALLEL_WORKERS`, disables PostgreSQL
   query/maintenance parallelism for test connections, and prepares separate writer/reader database
   names for each configured connection.
+  The wrapper requires explicit test-only PostgreSQL and Valkey endpoints, verifies the Valkey
+  responsibility DBs (3/4/5), and removes only its run-scoped auth-state prefixes after the run.
 - **Unit tests (JS/TS)**: `pnpm test` runs the JavaScript test baseline directly through Vitest.
 - **Integration/system tests**: Rails integration and system tests remain the automated baseline.
   Browser-level Playwright scenarios are deferred until a concrete release flow requires them.

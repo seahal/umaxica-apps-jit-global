@@ -4,7 +4,7 @@
 # Side owns the Rails control-plane surface.
 scope module: :side, as: :side do
   # App control-plane host. Hosts listed declaratively (DRY intentionally broken).
-  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_service.host, "side.app.localhost"].compact do
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_service.host, "wide.app.localhost"].compact do
     # App surface controllers.
     scope module: :app, as: :app do
       # Thin landing endpoint.
@@ -56,6 +56,9 @@ scope module: :side, as: :side do
       # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
       # it the theme/cookie controls rendered in the Side chrome POST to a route that does not
       # exist, so a choice changes the page but is never persisted.
+      # FIXME: Keep the Side browser preference endpoints under `/web/v0` until a compatibility
+      # review identifies every direct chrome caller and an owning `/api/v0` contract. This is a
+      # valuable application API, but a namespace-only move would break the current controls.
       namespace :web do
         namespace :v0 do
           resource :theme, only: %i(show update)
@@ -67,16 +70,15 @@ scope module: :side, as: :side do
       resource :dashboard, only: :show
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
-      namespace :sign do
-        resource :termination, only: %i(new edit create), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+      scope path: "sign", as: :sign do
+        get "in", to: "oidc/authorizations#show", as: :in
+        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
       end
 
-      # RP login start: redirects to Base /oauth/authorize.
-      namespace :oidc do
-        resource :authorization, only: :show
-        resource :callback, only: :show
+      namespace :sign do
+        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+
+        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
       # Browser CSP report sink; keep configured report-uri path.
@@ -93,7 +95,7 @@ scope module: :side, as: :side do
 
   # Corporate control-plane host.
   constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_corporate.host,
-                     "side.com.localhost",].compact do
+                     "wide.com.localhost",].compact do
     # Corporate surface controllers.
     scope module: :com, as: :com do
       # Thin landing endpoint.
@@ -145,6 +147,9 @@ scope module: :side, as: :side do
       # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
       # it the theme/cookie controls rendered in the Side chrome POST to a route that does not
       # exist, so a choice changes the page but is never persisted.
+      # FIXME: Keep the Side browser preference endpoints under `/web/v0` until a compatibility
+      # review identifies every direct chrome caller and an owning `/api/v0` contract. This is a
+      # valuable application API, but a namespace-only move would break the current controls.
       namespace :web do
         namespace :v0 do
           resource :theme, only: %i(show update)
@@ -156,16 +161,15 @@ scope module: :side, as: :side do
       resource :dashboard, only: :show
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
-      namespace :sign do
-        resource :termination, only: %i(new edit create), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+      scope path: "sign", as: :sign do
+        get "in", to: "oidc/authorizations#show", as: :in
+        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
       end
 
-      # RP login start: redirects to Base /oauth/authorize.
-      namespace :oidc do
-        resource :authorization, only: :show
-        resource :callback, only: :show
+      namespace :sign do
+        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+
+        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
       # Browser CSP report sink; keep configured report-uri path.
@@ -181,7 +185,7 @@ scope module: :side, as: :side do
   end
 
   # Staff control-plane host.
-  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_staff.host, "side.org.localhost"].compact do
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).side_staff.host, "wide.org.localhost"].compact do
     # Staff surface controllers.
     scope module: :org, as: :org do
       # Thin landing endpoint.
@@ -233,6 +237,9 @@ scope module: :side, as: :side do
       # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
       # it the theme/cookie controls rendered in the Side chrome POST to a route that does not
       # exist, so a choice changes the page but is never persisted.
+      # FIXME: Keep the Side browser preference endpoints under `/web/v0` until a compatibility
+      # review identifies every direct chrome caller and an owning `/api/v0` contract. This is a
+      # valuable application API, but a namespace-only move would break the current controls.
       namespace :web do
         namespace :v0 do
           resource :theme, only: %i(show update)
@@ -244,16 +251,15 @@ scope module: :side, as: :side do
       resource :dashboard, only: :show
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
-      namespace :sign do
-        resource :termination, only: %i(new edit create), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+      scope path: "sign", as: :sign do
+        get "in", to: "oidc/authorizations#show", as: :in
+        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
       end
 
-      # RP login start: redirects to Base /oauth/authorize.
-      namespace :oidc do
-        resource :authorization, only: :show
-        resource :callback, only: :show
+      namespace :sign do
+        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+
+        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
       # Browser CSP report sink; keep configured report-uri path.

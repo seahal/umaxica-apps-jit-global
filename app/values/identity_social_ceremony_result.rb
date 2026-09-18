@@ -59,6 +59,11 @@ class IdentitySocialCeremonyResult
     IdentitySocialCeremonyContract.validate_timestamp!(payload, "verified_at")
     raise IdentitySocialCeremonyContract::Error,
           "verified_at must not be in the future" if payload["verified_at"].to_i > now.to_i + IdentitySocialCeremonyContract::LEEWAY
+    return if payload["auth_time"].blank?
+
+    IdentitySocialCeremonyContract.validate_timestamp!(payload, "auth_time")
+    raise IdentitySocialCeremonyContract::Error,
+          "auth_time must not be in the future" if payload["auth_time"].to_i > now.to_i + IdentitySocialCeremonyContract::LEEWAY
   end
 
   def self.default_claims(attributes, now:)

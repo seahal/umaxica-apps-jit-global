@@ -11,7 +11,7 @@ owner: internal-architecture-owner
 last-reviewed: 2026-06-24
 source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
-related-audit-ledger: plans/umaxica-immutable-pinwheel.md
+related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
 # Purpose
@@ -53,7 +53,7 @@ Not a full cryptographic spec. Does not cover infrastructure-layer TLS or key ma
 - `docs/architecture/dpop.md`
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`
 - `adr/security-audit-findings-2026-06-13.md`
-- `plans/umaxica-immutable-pinwheel.md` (DEC-001~~013, NR-001~~004)
+- `docs/vendor/identity/11_decision-register.md` (DEC-001~~013, NR-001~~004)
 
 # Authority Decisions (current)
 
@@ -265,4 +265,4 @@ privilege; separate append-only audit table; hash chain / periodic digest; exter
 - `docs/security/session-token-authority.md`
 - `docs/security/refresh-token-rotation.md`
 - `docs/architecture/dpop.md`
-- `plans/umaxica-immutable-pinwheel.md`
+- `docs/vendor/identity/11_decision-register.md`

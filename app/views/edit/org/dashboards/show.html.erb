@@ -1,0 +1,46 @@
+<% page_title(title) %>
+<div class="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+  <div>
+    <h1 class="text-2xl font-bold text-fg"><%= title %></h1>
+    <% if description.present? %>
+      <p class="text-sm text-fg-muted"><%= description %></p>
+    <% end %>
+  </div>
+
+  <% sections.each do |section| %>
+    <section class="rounded-lg border border-line bg-surface p-4">
+      <h2 class="mb-3 text-sm font-semibold text-fg"><%= section[:heading] %></h2>
+
+      <% (section[:groups] || []).each do |group| %>
+        <div class="mb-3 flex flex-col gap-1">
+          <h3 class="text-sm font-medium text-fg"><%= group[:heading] %></h3>
+          <ul class="flex flex-col gap-1">
+            <% group[:items].each do |item| %>
+              <li class="text-sm">
+                <% if item[:href] %>
+                  <%= link_to item[:label], item[:href], class: "text-fg underline-offset-4 hover:underline" %>
+                <% else %>
+                  <span class="text-fg-muted"><%= item[:label] %></span>
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <% if section[:items].present? %>
+        <ul class="flex flex-col gap-1">
+          <% section[:items].each do |item| %>
+            <li class="text-sm">
+              <% if item[:href] %>
+                <%= link_to item[:label], item[:href], class: "text-fg underline-offset-4 hover:underline" %>
+              <% else %>
+                <span class="text-fg-muted"><%= item[:label] %></span>
+              <% end %>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+    </section>
+  <% end %>
+</div>

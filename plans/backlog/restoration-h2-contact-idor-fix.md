@@ -21,5 +21,4 @@ Test that user A cannot read or write user B's contact, even by ID guess.
 
 ## Related
 
-- `plans/backlog/restoration-d1-pundit-to-action-policy.md` — depends on the Action Policy migration
-  landing first.
+landing first.

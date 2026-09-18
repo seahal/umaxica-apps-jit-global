@@ -8,7 +8,8 @@
     "tailwindcss-react-aria-components",
     "@tailwindcss/forms",
     "@tailwindcss/typography",
-    "linkinator"
+    "linkinator",
+    "@inertiajs/core"
   ],
   "includeEntryExports": false,
   "exclude": ["types", "nsTypes", "catalog"]

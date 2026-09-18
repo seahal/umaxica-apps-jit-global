@@ -2,7 +2,8 @@
 
 ## Context
 
-- Original plan: `plans/apple-google-external-authentication-architecture-audit.md`, Phase 5.
+- Original plan: `plans/analysis/apple-google-external-authentication-architecture-audit.md`,
+  Phase 5.
 - Related decision: `adr/social-omniauth-callback-transport.md`.
 - Implementation date: 2026-07-24.
 

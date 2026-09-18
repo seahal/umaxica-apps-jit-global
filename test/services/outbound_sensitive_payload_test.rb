@@ -35,4 +35,11 @@ class OutboundSensitivePayloadTest < ActiveSupport::TestCase
       OutboundSensitivePayload.decrypt_sms_delivery(token),
     )
   end
+
+  test "an email verification token round-trips through its dedicated encryption boundary" do
+    token = OutboundSensitivePayload.encrypt_email_verification_token("verification-token")
+
+    assert_equal "verification-token", OutboundSensitivePayload.decrypt_email_verification_token(token)
+    assert_not_equal "verification-token", token
+  end
 end

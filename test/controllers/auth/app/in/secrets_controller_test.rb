@@ -130,7 +130,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       end
 
     TurnstileVerifierStub.challenge_enabled = false
-    JitSecurityTurnstileVerifier.stub(:verify, verifier) do
+    TurnstileVerifierStub.stub(:verify, verifier) do
       post(
         auth_app_sign_in_secret_url(ri: "jp"),
         params: login_params(identifier: @raw_email, secret_credential_value: "not-checked"),
@@ -692,8 +692,8 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       redirects << [pt || default_path, {}]
     }
     controller.define_singleton_method(:auth_app_settings_path) { |ri: nil| "/settings?ri=#{ri}" }
-    controller.define_singleton_method(:auth_app_dashboard_path) { |ri: nil, pt: nil|
-      "/dashboard?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
+    controller.define_singleton_method(:auth_app_root_path) { |ri: nil, pt: nil|
+      "/?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
     }
     controller.define_singleton_method(:auth_app_sign_in_session_path) { "/sign/in/session" }
     controller.define_singleton_method(:auth_app_sign_in_check_path) { |pt: nil, ri: nil|
@@ -863,12 +863,12 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     controller.define_singleton_method(:issue_bulletin!) { true }
     controller.handle_successful_mfa(@user, secret_credential)
 
-    assert_equal "http://www.umaxica.app/dashboard?ri=jp", redirects.last.first
+    assert_equal "http://www.umaxica.app/?ri=jp", redirects.last.first
 
     controller.define_singleton_method(:issue_bulletin!) { false }
     controller.handle_successful_mfa(@user, secret_credential)
 
-    assert_equal "http://www.umaxica.app/dashboard?ri=jp", redirects.last.first
+    assert_equal "http://www.umaxica.app/?ri=jp", redirects.last.first
     assert_empty redirects.last.second
 
     controller.define_singleton_method(:finalize_mfa_login!) { |_| { status: :unexpected } }
@@ -899,12 +899,12 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     controller.define_singleton_method(:issue_bulletin!) { true }
     controller.process_standard_login(@user)
 
-    assert_equal ["http://www.umaxica.app/dashboard?ri=jp", {}], redirects.last
+    assert_equal ["http://www.umaxica.app/?ri=jp", {}], redirects.last
 
     controller.define_singleton_method(:issue_bulletin!) { false }
     controller.process_standard_login(@user)
 
-    assert_equal ["http://www.umaxica.app/dashboard?ri=jp", {}], redirects.last
+    assert_equal ["http://www.umaxica.app/?ri=jp", {}], redirects.last
   end
 end
 

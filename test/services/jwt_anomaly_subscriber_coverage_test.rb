@@ -18,7 +18,7 @@ class JwtAnomalySubscriberCoverageTest < ActiveSupport::TestCase
     end
   end
 
-  test "emit creates anomaly event and preserves extra metadata" do
+  test "emit creates anomaly event without unallowlisted metadata" do
     mock_event = MockEvent.new(
       name: "jwt.anomaly.detected",
       payload: {
@@ -43,7 +43,7 @@ class JwtAnomalySubscriberCoverageTest < ActiveSupport::TestCase
     event = JwtAnomalyEvent.order(:id).last
 
     assert_equal jwt_occurrences(:auth_user_malformed_token), event.jwt_occurrence
-    assert_equal({ "extra" => "kept" }, event.metadata)
+    assert_equal({}, event.metadata)
   end
 
   test "emit ignores unrelated events and logs creation failures" do
@@ -87,11 +87,11 @@ class JwtAnomalySubscriberCoverageTest < ActiveSupport::TestCase
 
     event = JwtAnomalyEvent.order(:id).last
 
-    assert_equal({ "extra" => "kept" }, event.metadata)
+    assert_equal({}, event.metadata)
     assert_equal Time.zone.parse("2026-06-15 21:00:00"), event.occurred_at
   end
 
-  test "build_metadata includes extra fields" do
+  test "build_metadata excludes unallowlisted fields" do
     subscriber = JwtAnomalySubscriber.new
     payload = {
       code: "TEST_CODE",
@@ -109,6 +109,6 @@ class JwtAnomalySubscriberCoverageTest < ActiveSupport::TestCase
 
     metadata = subscriber.send(:build_metadata, payload)
 
-    assert_equal({ extra_field1: "extra1", extra_field2: "extra2" }, metadata)
+    assert_equal({}, metadata)
   end
 end

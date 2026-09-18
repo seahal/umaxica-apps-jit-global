@@ -570,6 +570,7 @@ module Auth
         def sign_in(user, pt: nil, provider_name: nil)
           result = AuthenticationSessionCommitter.call(
             controller: self, resource: user, pt: pt, ri: params[:ri], auth_method: "social",
+            authentication_event_at: social_authentication_event_at,
             audit_context: social_login_audit_context,
             # "social" cannot distinguish google from apple; the provider is
             # known to the caller (adr/unified-enforcement.md, Session attribution).
@@ -583,6 +584,13 @@ module Auth
             ),
           )
           result
+        end
+
+        def social_authentication_event_at
+          callback_result = @external_authentication_callback_result
+          return unless callback_result.is_a?(ExternalAuthentication::CallbackResult) && callback_result.verified?
+
+          callback_result.principal.verified_at
         end
 
         def social_login_result_log_payload(result)

@@ -24,11 +24,10 @@ Searched for, and did not find, any Astro or Hono application:
 | `find . -name "astro.config.*" -o -name "wrangler.*"`            | no matches                                                               |
 | `grep -rli "\bastro\b"` over source and config                   | no matches                                                               |
 
-The absence is deliberate and recorded. `plans/l-hono-ethereal-babbage.md` states that diagnostic
-section L (Hono / React Router) "は本プロジェクトに実装がないため対象外", and
-`adr/read-only-content-surfaces-in-rails.md` records that Hono and ReactRouter are not owners of the
-`docs`, `news`, `help` or `core` public frontend. No health endpoint was implemented for either;
-scaffolding two new applications was declined as out of scope by the requester.
+The absence is deliberate and recorded: `adr/read-only-content-surfaces-in-rails.md` records that
+Hono and ReactRouter are not owners of the `docs`, `news`, `help` or `core` public frontend. No
+health endpoint was implemented for either; scaffolding two new applications was declined as out of
+scope by the requester.
 
 ## Rails: the endpoints already exist, under a different contract
 

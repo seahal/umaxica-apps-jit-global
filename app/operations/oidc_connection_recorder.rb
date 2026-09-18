@@ -2,11 +2,14 @@
 # frozen_string_literal: true
 
 class OidcConnectionRecorder < ApplicationService
-  def initialize(resource:, client:, scope:, used_at: Time.current)
+  class StaleAuthorization < StandardError; end
+
+  def initialize(resource:, client:, scope:, authorization_issued_at:, used_at: Time.current)
     super()
     @resource = resource
     @client = client
     @scope = scope
+    @authorization_issued_at = authorization_issued_at
     @used_at = used_at
   end
 
@@ -14,7 +17,9 @@ class OidcConnectionRecorder < ApplicationService
     attributes = { actor_key => resource.id }
     attributes[:client_id] = client.client_id
 
-    connection = connection_model.find_or_initialize_by(attributes)
+    connection = connection_model.lock.find_or_initialize_by(attributes)
+    reject_stale_authorization!(connection)
+
     connection.scope = normalized_scope
     connection.last_used_at = used_at
     connection.revoked_at = nil
@@ -24,7 +29,14 @@ class OidcConnectionRecorder < ApplicationService
 
   private
 
-  attr_reader :resource, :client, :scope, :used_at
+  attr_reader :resource, :client, :scope, :authorization_issued_at, :used_at
+
+  def reject_stale_authorization!(connection)
+    return if connection.revoked_at.blank?
+    return if authorization_issued_at.present? && authorization_issued_at > connection.revoked_at
+
+    raise StaleAuthorization, "authorization code predates OIDC connection revocation"
+  end
 
   def connection_model
     case resource

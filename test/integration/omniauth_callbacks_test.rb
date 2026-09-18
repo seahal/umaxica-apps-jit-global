@@ -257,14 +257,14 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
 
     # Established social login is base authority: the sign callback emits a
     # one-shot completion form (evidence only) and the session is established on
-    # base completion, which redirects to the base dashboard.
+    # base completion, which redirects to the Base root (`/`).
     assert_emits_acme_completion_only!
 
     submit_social_completion_if_present!
 
-    # The completion form posts to the public base origin, so the dashboard
-    # handoff continues from there.
-    assert_equal "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/dashboard",
+    # The completion form posts to the public base origin; Base root `/` is the
+    # post-login landing (retired `/dashboard`).
+    assert_equal "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/",
                  response.location
   end
 

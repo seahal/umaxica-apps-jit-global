@@ -174,8 +174,12 @@ module Health
       def check_roles
         operation =
           lambda do
+            # Logical records such as AppPrincipalRecord share the connection
+            # established by their physical zenith base; role switching is only
+            # permitted on the class that called connects_to.
+            connection_owner = record_class.connection_class_for_self
             ROLES.each do |role|
-              record_class.connected_to(role: role) do
+              connection_owner.connected_to(role: role) do
                 record_class.with_connection { |connection| connection.execute(SQL) }
               end
             end

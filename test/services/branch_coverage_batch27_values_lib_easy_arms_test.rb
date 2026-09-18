@@ -128,7 +128,7 @@ class BranchCoverageBatch27ValuesLibEasyArmsTest < ActiveSupport::TestCase
       "url" => "https://example.test/path",
       "rpl" => "once",
       "iat" => now.to_i,
-      "exp" => now.to_i + 60,
+      "exp" => now.to_i + 30,
       "nbf" => now.to_i,
     }
 

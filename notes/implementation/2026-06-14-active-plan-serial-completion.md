@@ -6,7 +6,6 @@
 - Related decisions/docs/plans:
   - `plans/README.md`
   - `adr/acme-sign-core-base-port-boundary.md`
-  - `plans/active/csp-violation-reporting-plan.md`
 - Implementation date: 2026-06-14
 
 ## Decisions Made During Implementation
@@ -66,11 +65,7 @@
 ## Completion Update
 
 - Archived after focused verification:
-  - `plans/archive/csp-violation-reporting-plan.md`
-  - `plans/archive/token-theft-defense-hardening.md`
-  - `plans/archive/surface-routing-pass-remediation-plan.md`
 - Archived after medium cleanup implementation:
-  - `plans/archive/docs-news-help-content-surface-reimplementation-plan.md`
 - Medium cleanup status:
   - Docs/news/help Rails routes now expose thin roots and `/api/v0/entries` read APIs.
   - Rails-owned docs/news/help public HTML entries routes, old `edge/v0/entries` routes, and unused
@@ -78,10 +73,10 @@
   - Sign/Acme boundary plan was corrected for current state: Acme welcome route duplication is gone,
     `welcome_entry` helper compatibility stays, and Acme preference screen helper compatibility is
     intentionally preserved.
-  - `plans/active/sign-acme-boundary-remediation.md` was demoted to backlog after completing the
+  - `plans/backlog/sign-acme-boundary-remediation.md` was demoted to backlog after completing the
     medium cleanup slice; remaining Sign route retirement is human-review-gated.
 - Remaining active blocker:
-  - `plans/active/administrative-access-lock-implementation-plan.md` still needs a reachable,
-    prepared test database before schema dump and focused verification can close.
+  - GH issue #830 still needs a reachable, prepared test database before schema dump and focused
+    verification can close.
   - Focused medium-cleanup tests could not complete because the local test DB host `primary` is not
     resolvable in this environment.

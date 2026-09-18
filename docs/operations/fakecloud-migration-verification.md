@@ -28,7 +28,7 @@ script was therefore orphaned; it was removed rather than corrected. Development
 are fixed literals in `compose.yaml` (`docs/operations/development-credential-provisioning.md`).
 
 The one file it created that something still reads is `.secrets/codex_authorized_keys`, whose bind
-mount in `compose.remote-access.yaml` needs a file to exist.
+mount in `compose.override.yaml`'s `remote-access` overlay needs a file to exist.
 `docs/operations/remote-codex-over-tailscale.md` already documents creating it by hand as step 1 of
 enrolment.
 
@@ -96,9 +96,11 @@ Static checks only, all run inside `core`:
 
 ## Part 3 — What Was Never Run
 
-`podman`, `docker`, and `aws` are absent from the `core` image. `terraform` is present since
-2026-08-31 via `ghcr.io/devcontainers/features/terraform`, but was not exercised, so **no runtime
-verification of any kind was performed.** Two things in particular have never executed even once:
+`podman`, `docker`, and `aws` are absent from the `core` image. `terraform` was claimed present
+since 2026-08-31 via `ghcr.io/devcontainers/features/terraform`, but the feature was not actually
+added until 2026-09-14; it was absent for that whole period. It has still not been exercised, so
+**no runtime verification of any kind was performed.** Two things in particular have never executed
+even once:
 
 - **The healthcheck.** fakecloud's own documentation publishes a `curl`-based probe, but the image
   is Debian bookworm carrying only `ca-certificates nftables kmod procps` — no `curl`, no `wget`.
@@ -132,7 +134,7 @@ Run on a machine that can rebuild. Record failures here rather than deleting the
 
 - [ ] `fakecloud` reaches healthy — **this exercises the untested `/dev/tcp` probe.** If it fails,
       the fallback is to install `curl` in a derived image or to drop to a plain TCP-connect probe;
-      do not silently remove the healthcheck, because `fdw-poc` depends on `service_healthy`.
+      do not silently remove the healthcheck.
 - [ ] `curl -s http://localhost:4566/_fakecloud/health` returns `{"status":"ok",...}` from the host
 - [ ] `core` reaches `http://fakecloud:4566`
 - [ ] persistence: create a bucket, `podman compose down`, `up` — the bucket survives

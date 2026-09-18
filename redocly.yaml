@@ -1,8 +1,16 @@
 # Redocly CLI configuration for the per-surface OpenAPI descriptions.
 #
-# `openapi/` is the source tree; `public/openapi.*.yml` is the bundled output that
-# committee, oasdiff, and any future client generator read. Both are committed, and CI
+# `openapi/` is the source tree; `openapi/bundled/openapi.*.yml` is the bundled output that
+# committee, oasdiff, rswag-ui, and any future client generator read. Both are committed, and CI
 # fails when the bundle does not match the source (see .github/workflows/ci.yml).
+#
+# The bundle lives here rather than under `public/` because `public/` is statically served in
+# development (config/environments/development.rb sets public_file_server.enabled = true), which
+# put the full internal API description on every admitted development host with no credential.
+# The only intended reader over HTTP is Swagger UI on swagger.umaxica.dev, which reaches it
+# through rswag-api behind that host's Basic Auth (config/initializers/rswag_api.rb). Production
+# never served these files -- config/environments/production.rb sets public_file_server.enabled
+# = false -- so this closes a development exposure, not a production one.
 #
 # The source lives under `openapi/` rather than `docs/` on purpose: .github/workflows/ci.yml
 # sets `paths-ignore: docs/**`, so a description placed there would not trigger CI.
@@ -10,13 +18,13 @@
 apis:
   app:
     root: openapi/app.yml
-    output: public/openapi.app.yml
+    output: openapi/bundled/openapi.app.yml
   com:
     root: openapi/com.yml
-    output: public/openapi.com.yml
+    output: openapi/bundled/openapi.com.yml
   org:
     root: openapi/org.yml
-    output: public/openapi.org.yml
+    output: openapi/bundled/openapi.org.yml
 
 extends:
   - recommended

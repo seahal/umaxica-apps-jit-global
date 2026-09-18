@@ -104,6 +104,12 @@ The AAL1 availability state follows the same reference-value shape as AAL2 avail
 Removing an AAL1 credential is a sensitive operation. The normal removal path requires recent normal
 step-up even when the actor will still have one or more AAL1 credentials afterward.
 
+Adding Google or Apple to an already-established `app` account is a post-enrollment `1 -> N`
+credential transition and requires fresh Step-Up. The provider ceremony alone does not authorize
+binding that identity to the current UMAXICA account. Initial provider enrollment remains governed by
+the sign-up transaction, and social-identity removal retains its Step-Up and no-lockout guards. See
+[`adr/social-identity-linking-requires-step-up.md`](../../adr/social-identity-linking-requires-step-up.md).
+
 Social-login unlink has a narrower no-lockout rule than the general AAL1 inventory. For `app`,
 removing Google or Apple social login must leave at least one verified email OTP, active passkey, or
 active social login provider other than the removed provider. Passcode remains an AAL1 method, but

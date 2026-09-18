@@ -4,6 +4,19 @@
 class ApplicationRecord < ActiveRecord::Base
   primary_abstract_class
 
+  # Every domain gets its own dedicated abstract class with its own `connects_to`
+  # (PublishingRecord, AppTicketRecord, ...); nothing does business logic through
+  # ApplicationRecord directly. Without a connection of its own, though,
+  # `ActiveRecord::Base.connection` (what any gem or Rails-provided model that skips those
+  # dedicated classes ends up calling -- rails_db's dashboard, ActiveStorage, ActionMailbox)
+  # raised ActiveRecord::ConnectionNotEstablished, and DatabaseSelector
+  # (config/initializers/multi_db.rb) wraps every GET in `connected_to(role: :reading)`, which
+  # needs a reading pool to exist at all or raises ActiveRecord::ConnectionNotDefined. `primary`
+  # is this repository's conventional default database for exactly this kind of
+  # application-wide, non-domain-specific state (Flipper's own model connects to it the same
+  # way; see config/initializers/flipper.rb and adr/global-regional-database-ownership.md).
+  connects_to database: { writing: :primary, reading: :primary }
+
   FIXED_ID_SEED_CACHE = Concurrent::Map.new
   private_constant :FIXED_ID_SEED_CACHE
 

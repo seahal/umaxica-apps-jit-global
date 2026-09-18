@@ -39,7 +39,7 @@ AcmeSelectorSurfaceConfig::CONFIGS = {
     rp_account_foreign_key: :user_id,
     identity_class: ::ClientIdentity,
     identity_state_class: ::ClientIdentityState,
-    account_class: ::Persona,
+    account_class: ::ClientPersona,
     account_identity_association: :client_identity,
     account_assignment_class: ::PersonaAssignment,
     account_assignment_account_key: :persona_id,

@@ -13,12 +13,23 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
         %i(oidc_jti oidc_client_id).include?(name.to_sym)
       end
 
-      def revoke!
+      def revoke!(status: "failed", now: Time.current)
+        @revoke_arguments = { status: status, now: now }
         @revoked = true
       end
 
+      attr_reader :revoke_arguments
+
       def revoked?
         @revoked == true
+      end
+
+      def parent_token
+        self
+      end
+
+      def with_lock
+        yield
       end
     end
 
@@ -38,6 +49,28 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
     end
   end
 
+  test "rejects an authenticated client from the wrong surface realm" do
+    service = ::OidcTokenRevoker.new(
+      token: "token",
+      client_id: "client-1",
+      client_secret: "secret",
+      expected_resource_type: "visitor",
+      host: "com.example.test",
+    )
+    client = Struct.new(:resource_type).new("client")
+
+    OidcClientRegistry.stub(:find, client) do
+      OidcIssuer.stub(:resource_type_for_client, "client") do
+        OidcClientRegistry.stub(:authenticate, true) do
+          result = service.call
+
+          assert_not result.success?
+          assert_equal "invalid_client", result.error
+        end
+      end
+    end
+  end
+
   test "revokes refresh token when the digest matches" do
     token = Token.new("client-1", nil)
     service = ::OidcTokenRevoker.new(
@@ -50,7 +83,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
     OidcClientRegistry.stub(:authenticate, true) do
       ClientToken.stub(:parse_refresh_token, ["public", "verifier"]) do
         service.stub(:client_resource_type, "client") do
-          service.stub(:find_usage_by_public_id, token) do
+          service.stub(:find_rp_session_by_public_id, token) do
             token.define_singleton_method(:refresh_token_digest_matches?) { |verifier| verifier == "verifier" }
 
             result = service.call
@@ -82,7 +115,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
               OidcIssuer.stub(:for_client, "issuer") do
                 OidcIssuer.stub(:jwt_issuer_id_for_client, "issuer-id") do
                   AuthenticationTokenService.stub(:decode_allow_expired, { "sid" => "sid-1", "jti" => "jti-1" }) do
-                    service.stub(:find_token_by_sid, token) do
+                    service.stub(:find_rp_session_by_sid, token) do
                       result = service.call
 
                       assert_predicate result, :success?
@@ -130,7 +163,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
     OidcClientRegistry.stub(:authenticate, true) do
       ClientToken.stub(:parse_refresh_token, ["public", "verifier"]) do
         service.stub(:client_resource_type, "client") do
-          service.stub(:find_usage_by_public_id, token) do
+          service.stub(:find_rp_session_by_public_id, token) do
             result = service.call
 
             assert_predicate result, :success?
@@ -163,7 +196,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
                     :decode_allow_expired,
                     { "sid" => "sid-1", "jti" => "different-jti" },
                   ) do
-                    service.stub(:find_token_by_sid, token) do
+                    service.stub(:find_rp_session_by_sid, token) do
                       result = service.call
 
                       assert_predicate result, :success?
@@ -179,7 +212,7 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
     end
   end
 
-  test "token lookup branches use the expected resource contexts" do
+  test "RP Session lookup branches use the expected resource contexts" do
     service = ::OidcTokenRevoker.new(
       token: "token",
       client_id: "client-1",
@@ -187,8 +220,8 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
       host: "app.example.test",
     )
 
-    assert_equal [AppTicketRecord, ClientToken], service.send(:token_context_and_class, "client")
-    assert_equal [OrgTicketRecord, OperatorToken], service.send(:token_context_and_class, "operator")
-    assert_equal [ComTicketRecord, VisitorToken], service.send(:token_context_and_class, "visitor")
+    assert_equal [AppTicketRecord, ClientRpSession], service.send(:rp_session_context_and_class, "client")
+    assert_equal [OrgTicketRecord, OperatorRpSession], service.send(:rp_session_context_and_class, "operator")
+    assert_equal [ComTicketRecord, VisitorRpSession], service.send(:rp_session_context_and_class, "visitor")
   end
 end

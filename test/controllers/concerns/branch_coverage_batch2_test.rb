@@ -222,6 +222,7 @@ class BranchCoverageBatch2Test < ActiveSupport::TestCase
       redirect_uri: "https://example.test/cb",
       client_id: "",
       code_verifier: "v",
+      expected_resource_type: "client",
     )
 
     assert_not coordinator.send(:authenticated_client?)
@@ -235,6 +236,7 @@ class BranchCoverageBatch2Test < ActiveSupport::TestCase
       client_assertion: "assert",
       client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
       token_endpoint_uri: nil,
+      expected_resource_type: "client",
     )
 
     assert_not coordinator2.send(:authenticated_client_assertion?)

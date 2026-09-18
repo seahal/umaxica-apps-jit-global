@@ -8,10 +8,6 @@ require "jit_security_turnstile_verifier"
 module Jit
   module Security
     class TurnstileVerifierTest < ActiveSupport::TestCase
-      # Pure unit test - no database/fixtures needed
-      self.use_transactional_tests = false
-      self.fixture_table_names = []
-
       def setup
         # All four stub slots, not just the two this file sets: the challenge slot wins over the
         # verifier slot inside the stub, so a value left behind by another test would answer these
@@ -95,6 +91,14 @@ module Jit
         result = Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
 
         assert result["success"]
+      end
+
+      test "injected verifier rejects an unstubbed provider call" do
+        TurnstileVerifierStub.reset!
+
+        assert_raises(TestSupport::ExternalCommunicationError) do
+          Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
+        end
       end
 
       test "performs http request when verifying" do
@@ -372,6 +376,19 @@ module Jit
       end
 
       private
+
+      # Pure unit test - no database/fixtures needed. `use_transactional_tests = false` was the
+      # wrong tool for that: it makes Rails clear the process-wide fixture cache
+      # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
+      # class to reload all ~200 fixture tables (~600 extra queries) on its next example.
+      # Overriding these two hooks as no-ops opts this class out of the fixtures machinery
+      # entirely, without that side effect, while keeping every other `ActiveSupport::TestCase`
+      # behavior (assertions, the `test` DSL) intact. See docs/guides/test-profiling.md.
+      def setup_fixtures(*)
+      end
+
+      def teardown_fixtures(*)
+      end
 
       # siteverify is reached through OutboundHttp::Connection, so the stub
       # states the URL and the response body rather than mocking a transport

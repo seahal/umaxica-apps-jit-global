@@ -152,4 +152,4 @@ layer after `Authentication::LogoutAllSessions`, for example in
 
 - `adr/session-reset-on-privilege-transition.md`
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`
-- `plans/active/logout-state-machine-implementation-plan.md`
+- GH issue #833

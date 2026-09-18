@@ -82,7 +82,57 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
   test "rejects wrong audience" do
     token = sign_return_token(aud: "https://www.umaxica.com")
 
+    assert_equal "audience_mismatch", verify(token).error
+  end
+
+  test "rejects wrong issuer" do
+    token = sign_return_token(iss: "https://evil.example")
+
+    assert_equal "issuer_mismatch", verify(token).error
+  end
+
+  test "rejects an expired token" do
+    token = sign_return_token(iat: @now.to_i - 20, nbf: @now.to_i - 20, exp: @now.to_i - 10)
+
+    assert_equal "invalid_claim", verify(token).error
+  end
+
+  test "rejects a token that is not yet valid" do
+    token = sign_return_token(nbf: @now.to_i + 20, exp: @now.to_i + 30)
+
+    assert_equal "invalid_claim", verify(token).error
+  end
+
+  test "rejects a tampered payload with a valid header" do
+    token = sign_return_token
+    parts = token.split(".")
+    payload = JSON.parse(Base64.urlsafe_decode64(parts[1]))
+    payload["dst"] = "external"
+    parts[1] = Base64.urlsafe_encode64(JSON.generate(payload), padding: false)
+
+    assert_equal "invalid_signature", verify(parts.join(".")).error
+  end
+
+  test "rejects the same kid signed with a different private key" do
+    other_key = OpenSSL::PKey::EC.generate("secp384r1")
+    token = sign_return_token_with(other_key)
+
     assert_equal "invalid_signature", verify(token).error
+  end
+
+  test "rejects none es256 and rs256 algorithms" do
+    payload = return_payload
+    none_header = Base64.urlsafe_encode64({ typ: "JWT", alg: "none", kid: "jump-test" }.to_json, padding: false)
+    none_payload = Base64.urlsafe_encode64(JSON.generate(payload), padding: false)
+    none = "#{none_header}.#{none_payload}.e30"
+    es256_key = OpenSSL::PKey::EC.generate("prime256v1")
+    es256 = JWT.encode(payload, es256_key, "ES256", { typ: "JWT", kid: "jump-test" })
+    rsa_key = OpenSSL::PKey::RSA.generate(2048)
+    rs256 = JWT.encode(payload, rsa_key, "RS256", { typ: "JWT", kid: "jump-test" })
+
+    assert_equal "invalid_header", verify(none).error
+    assert_equal "invalid_header", verify(es256).error
+    assert_equal "invalid_header", verify(rs256).error
   end
 
   test "rejects wrong source for destination origin" do
@@ -123,7 +173,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       now: @now,
     )
 
-    assert_equal "invalid_signature", result.error
+    assert_equal "unknown_kid", result.error
   end
 
   test "rejects excessive ttl" do
@@ -171,7 +221,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
         now: @now,
       )
 
-      assert_equal "invalid_signature", result.error
+      assert_equal "unknown_kid", result.error
     end
 
     assert_equal 2, calls
@@ -198,11 +248,11 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
         now: @now,
       )
 
-      assert_equal "invalid_signature", result.error
+      assert_equal "jwks_unavailable", result.error
     end
   end
 
-  test "uses stale cached jwks when refresh fails" do
+  test "fails closed when jwks refresh fails even if a stale cache exists" do
     token = sign_return_token
     jwks_url = "https://jump.umaxica.net/.well-known/jwks.json"
     stale_key = "jump_rt:return_jwks:stale:#{Digest::SHA256.hexdigest(jwks_url)}"
@@ -216,7 +266,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       now: @now,
     )
 
-    assert_predicate result, :success?
+    assert_equal "jwks_unavailable", result.error
   end
 
   test "jump_gateway_url fails fast in production when host is missing" do
@@ -262,6 +312,24 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
                     verify(sign_return_token(nbf: @now.to_i + 90, exp: @now.to_i + 60)).error
   end
 
+  test "rejects http claimed urls outside local environments" do
+    token = sign_return_token(aud: "http://www.umaxica.app", url: "http://www.umaxica.app/path?ok=1")
+
+    with_env("PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net") do
+      Rails.stub(:env, ActiveSupport::StringInquirer.new("production")) do
+        result = JumpRtReturnVerifier.call(
+          token: token,
+          request_url: "http://www.umaxica.app/path?ok=1&rt=#{token}",
+          request_base_url: "http://www.umaxica.app",
+          fetcher: -> { { "keys" => [@public_jwk] } },
+          now: @now,
+        )
+
+        assert_equal "invalid_url", result.error
+      end
+    end
+  end
+
   test "rejects claimed urls that include userinfo or fragments" do
     assert_equal "invalid_url", verify(sign_return_token(url: "https://user:pass@www.umaxica.app/path?ok=1")).error
     assert_equal "invalid_url", verify(sign_return_token(url: "https://www.umaxica.app/path?ok=1#frag")).error
@@ -279,9 +347,9 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
       "JUMP_GATEWAY_JWKS_URL" => "not a valid url",
     ) do
-      error = assert_raises(ArgumentError) { verifier.send(:fetch_jwks) }
+      error = assert_raises(JWT::DecodeError) { verifier.send(:fetch_jwks) }
 
-      assert_equal "invalid origin", error.message
+      assert_equal "jwks fetch failed", error.message
     end
   end
 
@@ -321,7 +389,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       "url" => "https://www.umaxica.app/path",
       "iat" => now.to_i,
       "nbf" => now.to_i,
-      "exp" => now.to_i + 60,
+      "exp" => now.to_i + 30,
       "jti" => "jti",
     }
 
@@ -337,7 +405,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_nil verifier.send(:normalize_url_without_rt, "mailto:x@y.z")
   end
 
-  test "cached_jwks raises when fetch fails and stale cache missing" do
+  test "cached_jwks raises when fetch fails" do
     verifier = JumpRtReturnVerifier.new(
       token: "dummy",
       request_url: "https://www.umaxica.app/path",
@@ -348,7 +416,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     Rails.cache.stub(:read, nil) do
       Rails.cache.stub(:delete, true) do
         Rails.cache.stub(:write, true) do
-          assert_raises(JWT::DecodeError) { verifier.send(:cached_jwks, force: true) }
+          assert_raises(JumpRtReturnVerifier::JwksUnavailable) { verifier.send(:cached_jwks, force: true) }
         end
       end
     end
@@ -409,22 +477,28 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
   end
 
   def sign_return_token(overrides = {})
+    JWT.encode(return_payload.merge(overrides), @private_key, "ES384", { typ: "JWT", kid: "jump-test" })
+  end
+
+  def sign_return_token_with(private_key, overrides = {})
+    JWT.encode(return_payload.merge(overrides), private_key, "ES384", { typ: "JWT", kid: "jump-test" })
+  end
+
+  def return_payload
     iat = @now.to_i
-    payload = {
+    {
       schema: 1,
       iss: "https://jump.umaxica.net",
       aud: "https://www.umaxica.app",
       sub: "jump-redirect",
       iat: iat,
       nbf: iat,
-      exp: iat + 60,
+      exp: iat + 30,
       jti: "jump-return-jti",
       src: "https://log.umaxica.app",
       dst: "internal",
       url: "https://www.umaxica.app/path?ok=1",
-    }.merge(overrides)
-
-    JWT.encode(payload, @private_key, "ES384", { typ: "JWT", kid: "jump-test" })
+    }
   end
 
   def with_env(values)

@@ -18,7 +18,7 @@ module Base
           credential_warning: apple_only_credential_warning_props,
           next_link: {
             label: "Next",
-            href: @welcome_next_path || base_app_dashboard_path(ri: params[:ri]),
+            href: @welcome_next_path || base_app_root_path(ri: params[:ri]),
           },
         }
       end
@@ -26,7 +26,7 @@ module Base
       private
 
       def after_welcome_path
-        base_app_dashboard_path(ri: params[:ri])
+        base_app_root_path(ri: params[:ri])
       end
     end
   end

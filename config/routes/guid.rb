@@ -22,6 +22,10 @@ scope module: :guid, as: :guid do
 
       namespace :api do
         namespace :v0 do
+          # FIXME: The public GUID lookup path is intentionally retained while its durable
+          # persistence owner, opaque-ID lifecycle/uniqueness contract, and dedicated `net`
+          # OpenAPI surface are decided. The current controller is a transport-safe 404 boundary;
+          # do not add a model, issuance API, or guessed OpenAPI schema as part of route cleanup.
           resources :resources, only: :show, param: :guid
           resource :health, only: :show, path: "health.json", format: false
           resource :revision, only: :show, path: "revision.json", format: false

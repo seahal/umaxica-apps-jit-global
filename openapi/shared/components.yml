@@ -2,7 +2,7 @@
 #
 # This file is not a valid OpenAPI document on its own. It is referenced from
 # openapi/{app,com,org}.yml and from openapi/shared/paths/*.yml, and Redocly CLI
-# bundles it into public/openapi.{app,com,org}.yml.
+# bundles it into openapi/bundled/openapi.{app,com,org}.yml.
 #
 # Rules that apply to everything here, from
 # adr/api-versioning-and-client-conventions.md section 4 as amended 2026-08-22:

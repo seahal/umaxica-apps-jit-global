@@ -1,8 +1,12 @@
 # Logout Ceremony Boundary
 
+> **Supersession (2026-09-13):** Browser completion is one-shot `GET /sign/out` (no
+> `/sign/out/complete`). See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+
 ## Status
 
-Accepted (2026-06-21)
+Accepted; partially superseded (2026-09-13) (2026-06-21). Amended for Base completion destination by
+`adr/base-lobby-unauthenticated-entry.md`.
 
 ## Context
 

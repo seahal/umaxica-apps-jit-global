@@ -23,10 +23,12 @@ class HealthRevisionContractTest < ActionDispatch::IntegrationTest
 
   APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
   COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+  EDIT_HOST = ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost")
 
   SURFACES = {
     APP_HOST => Health::Profiles::App,
     COM_HOST => Health::Profiles::Com,
+    EDIT_HOST => Health::Profiles::Org,
   }.freeze
 
   PROBES = %w(startup liveness readiness).freeze

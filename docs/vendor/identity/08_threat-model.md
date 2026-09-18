@@ -40,7 +40,6 @@ This is not a complete enterprise threat model.
 - `docs/security/cookie-domain-scope.md`
 - `docs/security/sign-in-sequence.md`
 - `docs/security/sign-up-sequence.md`
-- `docs/auth-ceremony/EVIDENCE-LEDGER.md`
 
 # Protected Assets
 

@@ -9,26 +9,18 @@ module Auth
     class AuthInsControllerTest < ActionDispatch::IntegrationTest
       setup do
         @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+        host! @host
       end
 
       test "direct entry without login challenge lists the sign-in methods" do
         get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
-        assert_response :success
+        assert_response :see_other
         assert_includes response.headers["Cache-Control"], "no-store"
+        location = URI.parse(response.location)
 
-        query = {}
-
-        assert_equal "auth/app/sign_ins/new", inertia_component
-        assert_equal [
-          new_auth_app_sign_in_email_path(query, ri: "jp"),
-          new_auth_app_sign_in_passkey_path(query, ri: "jp"),
-          new_auth_app_sign_in_secret_path(query, ri: "jp"),
-        ], inertia_props.fetch("methods").map { |method| method.fetch("href") }
-        assert_equal [
-          auth_app_social_google_session_path(ri: "jp"),
-          auth_app_social_apple_session_path(ri: "jp"),
-        ], inertia_props.fetch("social_providers").map { |provider| provider.fetch("action") }
+        assert_equal "/", location.path
+        assert_nil session[:oidc_authorization_login_challenge]
       end
 
       test "direct entry without login challenge starts no OIDC handoff state" do
@@ -42,7 +34,10 @@ module Auth
       end
 
       test "local ceremony renders authentication links" do
-        get auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
 
@@ -72,7 +67,10 @@ module Auth
         AppPreferenceCookie.create!(preference: preference)
         cookies[::PreferenceCookieName.refresh(surface: :app)] = token
 
-        get auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
       end
@@ -80,8 +78,11 @@ module Auth
       test "authentication links carry pt" do
         pt = Base64.urlsafe_encode64("https://log.umaxica.app/settings/sessions?ri=jp", padding: false)
 
-        get auth_app_sign_in_url(ri: "jp", pt: pt, login_challenge: login_challenge),
+        get auth_app_sign_in_url(ri: "jp", pt: pt, admission: login_challenge),
             headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         assert_equal [
@@ -92,8 +93,11 @@ module Auth
       end
 
       test "sign up link includes pt when pt is present" do
-        get auth_app_sign_in_url(ri: "jp", pt: "abc", login_challenge: login_challenge),
+        get auth_app_sign_in_url(ri: "jp", pt: "abc", admission: login_challenge),
             headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         assert_equal "/sign/up?ri=jp", inertia_props.fetch("registration_link").fetch("href")
@@ -101,7 +105,10 @@ module Auth
       end
 
       test "sign up link includes only ri when pt is absent" do
-        get auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         assert_equal "/sign/up?ri=jp", inertia_props.fetch("registration_link").fetch("href")
@@ -110,8 +117,11 @@ module Auth
 
       test "sign up link preserves encoded-like pt value safely" do
         pt = "aHR0cHM6Ly9leGFtcGxlLmNvbS8_cD0xJmE9Mg%3D%3D"
-        get auth_app_sign_in_url(ri: "jp", pt: pt, login_challenge: login_challenge),
+        get auth_app_sign_in_url(ri: "jp", pt: pt, admission: login_challenge),
             headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         assert_equal "/sign/up?ri=jp", inertia_props.fetch("registration_link").fetch("href")
@@ -119,8 +129,11 @@ module Auth
       end
 
       test "should render in english when lx=en" do
-        get auth_app_sign_in_url(lx: "en", ri: "jp", login_challenge: login_challenge),
+        get auth_app_sign_in_url(lx: "en", ri: "jp", admission: login_challenge),
             headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         assert_select "html[lang=en]"
@@ -128,7 +141,10 @@ module Auth
       end
 
       test "shows social login buttons" do
-        get auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         providers = inertia_props.fetch("social_providers")
@@ -148,7 +164,10 @@ module Auth
       end
 
       test "apple button carries a permitted call to action on the custom button element" do
-        get auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         apple = inertia_props.fetch("social_providers").find { |provider| provider.fetch("key") == "apple" }
@@ -159,7 +178,10 @@ module Auth
       end
 
       test "apple button renders the official logo artwork for both appearances" do
-        get auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+        follow_redirect!
 
         assert_response :success
         apple = inertia_props.fetch("social_providers").find { |provider| provider.fetch("key") == "apple" }
@@ -195,9 +217,9 @@ module Auth
             params: authorize_params,
           )
         headers = as_user_headers(user, host: @host)
+        code = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
 
-        get auth_app_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
-            headers: headers
+        get auth_app_sign_in_url(ri: "jp", admission: code), headers: headers
 
         assert_response :conflict
         assert_equal "Sign-in is unavailable while authenticated.", response.body
@@ -213,11 +235,12 @@ module Auth
       private
 
       def login_challenge(intent: "sign_in")
-        OidcAuthorizationTransactionCoordinator.issue!(
+        transaction = OidcAuthorizationTransactionCoordinator.issue!(
           surface: "app",
           intent: intent,
           params: authorize_params,
-        ).transaction.login_challenge
+        ).transaction
+        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
       end
 
       def authorize_params

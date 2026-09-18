@@ -7,20 +7,29 @@
 # The file layout:
 #
 #   compose.yaml                  — infrastructure services and loopback host ports.
+#   compose.override.yaml         — UNTRACKED since 2026-09-14, and gitignored. The
+#                                   only other root Compose file. It carries the
+#                                   opt-in `remote-access` overlay of `core` and is
+#                                   where per-machine settings go; untracking it is
+#                                   what keeps those per-machine.
 #   .devcontainer/compose.yaml    — the Dev Container `core` application service.
 #   .devcontainer/compose.override.yml
-#                                 — TRACKED. The Dev Container's own overlay
-#                                   (container names, SELinux labels, ports). Part
-#                                   of the standard environment, not a local file.
-#   compose.override.yaml         — OPTIONAL, gitignored, per developer/machine.
-#                                   Never created automatically; documented by
-#                                   `compose.override.yaml.example`.
-#   compose.remote-access.yaml    — opt-in, tracked, never in `dockerComposeFile`.
+#                                 — UNTRACKED since 2026-09-14, and gitignored. A
+#                                   19-line compatibility overlay for callers that
+#                                   load it explicitly; it only restates
+#                                   `container_name` values this file already sets,
+#                                   so nothing depends on it.
 #
-# `.devcontainer/devcontainer.json` loads the first two, in that order. The Dev
-# Containers CLI passes each entry to Compose as `-f`, which also suppresses
-# Compose's auto-discovery of `compose.override.yaml` — so a local override
-# applies to a bare `docker compose`, not to the editor.
+# Neither override is required. `devcontainer.json` names its Compose files
+# explicitly and includes neither, and a bare `podman compose` skips an override
+# that is absent. A fresh clone has neither file and works.
+#
+# `.devcontainer/devcontainer.json` loads `compose.yaml` and
+# `.devcontainer/compose.yaml`, in that order. The Dev Containers CLI passes each
+# entry to Compose as `-f`, which also suppresses Compose's auto-discovery of
+# `compose.override.yaml` — so the root override applies to a bare
+# `docker compose`, not to the editor. Everything in it is profile-gated, so a
+# bare `docker compose up` still starts only the infrastructure services.
 #
 # The `dc` suffix is historical and is kept deliberately: the project name is the
 # prefix of every named volume, so changing it would orphan the development
@@ -217,62 +226,31 @@ services:
       retries: 30
       start_period: 10s
   # Disposable, reconstructible application cache (Rails.cache). Every entry
-  # carries an explicit TTL; flushing this service must never change application
-  # correctness, and must not touch rate-limit counters.
-  valkey-cache:
-    container_name: global-devcontainer-valkey-cache
+  # One nonprod Valkey -- still one service, one volume, one port. Valkey's
+  # default `databases 16` gives indexes 0-15, allocated as:
+  #   0/1/2   dev  cache / rate-limit / auth-state
+  #   3/4/5   test cache / rate-limit / auth-state
+  #   6-11    unallocated, reserved for further application responsibilities
+  #   12/13   dev  performance / coverband (diagnostic dashboards)
+  #   14/15   test performance / coverband -- declared for validation only;
+  #           nothing connects, both gems are `group :development`
+  # The diagnostic pair is flush against the top of the range deliberately, so
+  # adding an application responsibility takes the next free index from 6 and
+  # never has to renumber a dashboard. Note there is now no room above 15: a
+  # third diagnostic responsibility takes from the 6-11 block, or the service
+  # needs `--databases` raised, which would be a change to this file.
+  # Responsibility URLs remain mandatory; logical DBs are not a security
+  # boundary (see adr/valkey-nonprod-logical-db-topology.md).
+  valkey:
+    container_name: global-devcontainer-valkey
     image: docker.io/valkey/valkey:8.0-alpine3.22
     networks:
       - backend
-    # Host-native Rails reaches cache through loopback.
     ports:
-      - "127.0.0.1:${VALKEY_CACHE_HOST_PORT:-6379}:6379"
+      - "127.0.0.1:${VALKEY_HOST_PORT:-6379}:6379"
     volumes:
-      - valkey-cache-volume:/data
-    # Bounded on purpose. Podman applies no backoff to a restart policy, so a service that
-    # exits immediately on a bad configuration is recreated several times a second until
-    # the netns, veth, conmon, and journald churn saturates a CPU. Five attempts ride out
-    # a transient failure and leave a real misconfiguration stopped and visible.
+      - valkey-volume:/data
     restart: on-failure:5
-    # journald enforces no per-container size cap, and a restart loop writes the same
-    # startup failure thousands of times, so a capped json-file driver is what actually
-    # bounds the disk cost of a bad configuration. Container output no longer reaches
-    # `journalctl`; read it with `podman logs`, which serves either driver.
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test:
-        - CMD
-        - valkey-cli
-        - ping
-      interval: 3s
-      timeout: 2s
-      retries: 20
-      start_period: 3s
-  # Distributed rate-limit counters, TTL-bound to the rate-limit window. Kept in
-  # its own service so cache maintenance can never reset abuse protection.
-  valkey-rate-limit:
-    container_name: global-devcontainer-valkey-rate-limit
-    image: docker.io/valkey/valkey:8.0-alpine3.22
-    networks:
-      - backend
-    # Host-native Rails reaches rate limits through loopback.
-    ports:
-      - "127.0.0.1:${VALKEY_RATE_LIMIT_HOST_PORT:-6380}:6379"
-    volumes:
-      - valkey-rate-limit-volume:/data
-    # Bounded on purpose. Podman applies no backoff to a restart policy, so a service that
-    # exits immediately on a bad configuration is recreated several times a second until
-    # the netns, veth, conmon, and journald churn saturates a CPU. Five attempts ride out
-    # a transient failure and leave a real misconfiguration stopped and visible.
-    restart: on-failure:5
-    # journald enforces no per-container size cap, and a restart loop writes the same
-    # startup failure thousands of times, so a capped json-file driver is what actually
-    # bounds the disk cost of a bad configuration. Container output no longer reaches
-    # `journalctl`; read it with `podman logs`, which serves either driver.
     logging:
       driver: json-file
       options:
@@ -571,8 +549,7 @@ volumes:
   fakecloud-data: {}
   primary-data: {}
   replica-data: {}
-  valkey-cache-volume: {}
-  valkey-rate-limit-volume: {}
+  valkey-volume: {}
   alloy-volume: {}
   loki-volume: {}
   tempo-volume: {}

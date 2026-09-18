@@ -208,9 +208,6 @@ will be authored in a separate plan under `plans/active/` before execution begin
 Existing plans that presuppose the wrapper apps architecture are marked superseded so that
 implementers do not follow conflicting guidance:
 
-- `plans/active/wrapper-app-architecture-plan.md` — superseded
-- `plans/active/root-app-retirement-plan.md` — superseded
-
 Plans that may still apply but require re-evaluation are not marked superseded yet; they will be
 reviewed when the detailed implementation plan is drafted.
 

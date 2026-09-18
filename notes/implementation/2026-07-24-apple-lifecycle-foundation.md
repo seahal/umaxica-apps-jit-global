@@ -2,7 +2,8 @@
 
 ## Context
 
-- Original plan: `plans/apple-google-external-authentication-architecture-audit.md`, Phase 6.
+- Original plan: `plans/analysis/apple-google-external-authentication-architecture-audit.md`,
+  Phase 6.
 - Related decisions: the Apple token-minimization and second-key decisions recorded in the audit.
 - Implementation date: 2026-07-24.
 

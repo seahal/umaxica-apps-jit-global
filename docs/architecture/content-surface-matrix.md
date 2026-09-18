@@ -195,5 +195,7 @@ targets, not public DNS.
 ## Related
 
 - `adr/publishing-db-content-authority.md`
+- `adr/publish-repository-importmap-boundary.md` — Rails-side rendering for these twelve cells (and,
+  eventually, `edit.*.org`) uses Rails-standard importmap, not `vite_rails`/Inertia/React.
 - `docs/architecture/docs-help-news-content-boundary.md`
 - `docs/architecture/regional-content.md`

@@ -10,8 +10,11 @@ require File.join(
 )
 
 class ApplicationPushNotification < ActionPushNative::Notification
-  # Set a custom job queue_name
-  # queue_as :realtime
+  # Keep the application notification queue explicit. The queue is consumed by
+  # the exact `default` worker in config/queue.yml; relying on the gem default
+  # would make a future Active Job default or notification override an
+  # undocumented delivery-topology change.
+  queue_as :default
 
   # Controls whether push notifications are enabled.
   # self.enabled = Rails.env.production?

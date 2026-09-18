@@ -180,10 +180,8 @@ registers no callbacks from `included do`; controllers that need locale/timezone
 `before_action :apply_localization_preferences` explicitly in their base class. All surface
 `ApplicationController`s now also run `set_color_theme` after `set_current_actor`, so theme
 reflection can rely on `Actor.preferences` being complete. These two gaps are resolved as of the
-2026-07-17 controller-layer audit (`memos/2026-07-17-controller-layer-problem-audit.md`).
+2026-07-17 controller-layer audit.
 
 Some preference setup code still has deliberate side effects, including preference token reissue,
 cookie writes, refresh token lifetime updates, and login-time adoption. Those effects should remain
 inside preference/authentication concerns and must not be moved into `set_current_context`.
-
-Exception controllers are tracked by `plans/active/controller-boundary-lifecycle-unification.md`.

@@ -45,6 +45,8 @@ class ClientChronicleEvent < ChronicleRecord
   EMAIL_REGISTERED = 31
   TELEPHONE_REGISTERED = 32
   CREDENTIAL_SECURITY_TRANSITION = 33
+  STEP_UP_FAILED = 34
+  REFRESH_TOKEN_REUSE_DETECTED = 35
 
   # Association with client_chronicles
   has_many :client_chronicles,
@@ -86,6 +88,8 @@ class ClientChronicleEvent < ChronicleRecord
     EMAIL_REGISTERED,
     TELEPHONE_REGISTERED,
     CREDENTIAL_SECURITY_TRANSITION,
+    STEP_UP_FAILED,
+    REFRESH_TOKEN_REUSE_DETECTED,
   ].freeze
 
   public_constant :ACCOUNT_RECOVERED
@@ -121,6 +125,8 @@ class ClientChronicleEvent < ChronicleRecord
   public_constant :EMAIL_REGISTERED
   public_constant :TELEPHONE_REGISTERED
   public_constant :CREDENTIAL_SECURITY_TRANSITION
+  public_constant :STEP_UP_FAILED
+  public_constant :REFRESH_TOKEN_REUSE_DETECTED
   public_constant :DEFAULTS
 
   def self.ensure_defaults!

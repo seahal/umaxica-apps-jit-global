@@ -127,4 +127,4 @@ Rejected. Next.js must not hold important credentials.
 
 - `adr/acme-sign-core-base-port-boundary.md`
 - `docs/architecture/acme-sign-core-base-port.md`
-- `plans/active/acme-sign-core-base-port-implementation.md`
+- GH issue #829

@@ -147,7 +147,7 @@ class Auth::Com::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
   def assert_no_sign_in_guard_durable_changes(&)
     assert_no_difference("Visitor.count") do
       assert_no_difference("VisitorAccount.count") do
-        assert_no_difference("Organization.count") do
+        assert_no_difference("OperatorOrganization.count") do
           assert_no_difference("Avatar.count") do
             assert_no_difference("VisitorToken.count") do
               assert_no_difference("VisitorSignUpFlow.count", &)

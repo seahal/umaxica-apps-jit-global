@@ -33,6 +33,18 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
     assert_nil decode_auth(preference_signed)
   end
 
+  test "auth access facade preserves an explicitly supplied authentication time" do
+    auth_time = Time.utc(2026, 1, 2, 3, 4, 5)
+    token = AuthenticationToken.encode(
+      clients(:one), host: AUTH_HOST, session_public_id: "sid", resource_type: "client",
+                     auth_time: auth_time,
+    )
+
+    payload = decode_auth(token)
+
+    assert_equal auth_time.to_i, payload.fetch("auth_time")
+  end
+
   test "auth access rejects malformed and missing required claims" do
     variants = {
       "client_id missing" => ->(p) { p.except("client_id") },

@@ -23,6 +23,8 @@ module Base
           body: "account",
           empty: "None available",
           entries: accounts.map { |account| serialize_account(account) },
+          create_action: { label: "Create Account" },
+          up_link: dashboard_up_link,
         }
       end
 

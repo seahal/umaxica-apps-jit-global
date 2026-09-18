@@ -123,8 +123,7 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
   test "OidcTokenRevoker private guards refuse blank sid and blank jti" do
     revoker = OidcTokenRevoker.new(token: "tok", client_id: "cid", client_secret: "sec")
 
-    assert_nil revoker.send(:find_usage_by_sid, "client", "")
-    assert_nil revoker.send(:find_token_by_sid, "client", "")
+    assert_nil revoker.send(:find_rp_session_by_sid, "client", "")
 
     token = Object.new
     token.define_singleton_method(:has_attribute?) { |_| false }

@@ -72,4 +72,4 @@ the avatar DB.
 ## Related
 
 - `docs/architecture/umaxica-v1-architecture-lock.md`
-- `plans/active/umaxica-v1-architecture-implementation-plan.md`
+- GH issue #835

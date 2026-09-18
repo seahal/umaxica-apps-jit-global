@@ -119,6 +119,10 @@ class RecoveryPasscodeTopUp
   def preload_recovery_identity_associations!
     actor.client_emails.load if actor.respond_to?(:client_emails)
     actor.client_telephones.load if actor.respond_to?(:client_telephones)
+    actor.visitor_emails.load if actor.respond_to?(:visitor_emails)
+    actor.visitor_telephones.load if actor.respond_to?(:visitor_telephones)
+    actor.staff_emails.load if actor.respond_to?(:staff_emails)
+    actor.staff_telephones.load if actor.respond_to?(:staff_telephones)
   end
 
   def secret_credential_relation

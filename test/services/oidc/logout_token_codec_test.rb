@@ -24,7 +24,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
       assert_equal OidcLogoutTokenCodec::TOKEN_TYPE, result.payload.fetch("typ")
       assert result.payload.fetch("events").key?(OidcLogoutTokenCodec::EVENT_CLAIM)
       assert_operator result.payload.fetch("exp"), :>, result.payload.fetch("iat")
-      assert_match OidcLogoutTokenCodec::UUID_PATTERN, result.payload.fetch("sid")
+      assert_match OidcLogoutTokenCodec::SID_PATTERN, result.payload.fetch("sid")
       assert_not result.payload.key?("nonce")
     end
   end
@@ -46,7 +46,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       assert_predicate result, :success?
       assert_not result.payload.key?("sub")
-      assert_match OidcLogoutTokenCodec::UUID_PATTERN, result.payload.fetch("sid")
+      assert_match OidcLogoutTokenCodec::SID_PATTERN, result.payload.fetch("sid")
     end
   end
 
@@ -171,16 +171,38 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
     end
   end
 
-  test "rejects non-UUID sid at encode" do
+  test "rejects malformed sid at encode" do
     with_oidc_key("ACME_APP") do
       assert_raises(ArgumentError) do
         OidcLogoutTokenCodec.encode(
           client_id: "sign-rp",
           resource_type: "client",
           subject: "subject-1",
-          sid: "not-a-uuid",
+          sid: "not a sid",
         )
       end
+    end
+  end
+
+  test "encodes and verifies a URL-safe RP session sid" do
+    sid = Nanoid.generate(size: 21)
+
+    with_oidc_key("ACME_APP") do
+      token = OidcLogoutTokenCodec.encode(
+        client_id: "sign-rp",
+        resource_type: "client",
+        subject: "subject-1",
+        sid: sid,
+      )
+
+      result = OidcLogoutTokenCodec.decode(
+        logout_token: token,
+        client_id: "sign-rp",
+        resource_type: "client",
+      )
+
+      assert_predicate result, :success?
+      assert_equal sid, result.payload.fetch("sid")
     end
   end
 
@@ -205,9 +227,9 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
     end
   end
 
-  test "rejects non-UUID sid at decode" do
+  test "rejects malformed sid at decode" do
     with_oidc_key("ACME_APP") do
-      token = forge_logout_token(resource_type: "client", payload: base_logout_payload("sid" => "not-a-uuid"))
+      token = forge_logout_token(resource_type: "client", payload: base_logout_payload("sid" => "not a sid"))
 
       assert_not_predicate decode_logout_token(token), :success?
     end

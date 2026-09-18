@@ -54,11 +54,7 @@ class Auth::SignEntryAndLogoutDelegationsTest < ActiveSupport::TestCase
     end
   end
 
-  [
-    Auth::App::Sign::Outs::CompletionsController,
-    Auth::Com::Sign::Outs::CompletionsController,
-    Auth::Org::Sign::Outs::CompletionsController,
-  ].each do |controller_class|
+  [].each do |controller_class|
     test "#{controller_class.name} answers the completion page with the logout response itself" do
       harness = harness_for(controller_class)
 

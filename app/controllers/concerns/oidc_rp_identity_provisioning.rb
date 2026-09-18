@@ -132,12 +132,6 @@ module OidcRpIdentityProvisioning
   end
 
   def record_context_for(model_class)
-    model_class.ancestors.find do |ancestor|
-      ancestor.is_a?(Class) &&
-        ancestor < ApplicationRecord &&
-        ancestor.respond_to?(:abstract_class?) &&
-        ancestor.abstract_class? &&
-        ancestor != ApplicationRecord
-    end || ApplicationRecord
+    model_class.connection_class_for_self
   end
 end

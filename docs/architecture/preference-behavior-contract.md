@@ -151,8 +151,9 @@ The following fields must never be overwritten from client-side anonymous state:
 
 `base` owns OP, Authorization Server protocol routes, identity authority, and the browser preference
 HTML authority. `auth` owns credential ceremony and sign-related relying-party UI. `core` owns the
-Rails browser API/BFF boundary. The cookie and theme JSON endpoints remain in `/web/v0` on each
-surface.
+Rails browser API/BFF boundary. Core's cookie and theme JSON endpoints use `/api/v0/preferences`;
+the equivalent non-Core browser endpoints remain in the legacy `/web/v0` namespace until their
+own migration is reviewed.
 
 Com-tier `ApplicationController` classes that include visitor authentication and can recreate a
 `ComPreference` must also include `PreferenceAdoption`, matching the app/org tiers. Without that
@@ -213,7 +214,20 @@ Regression coverage should include:
 | Parallel PATCH updates                    | Last valid write may win, but writes must remain scoped and authorized.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Missing authorization on signed-in update | Rejected by the normal controller/policy pipeline.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Cache leakage                             | Effective preferences must not be cached across users or surfaces.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Cross-surface before_action parity        | The app/com/org `edge/v0/cookies` controllers must skip the same before_actions that are actually defined on their respective surface `ApplicationController` (e.g. `transparent_refresh_access_token`); a missing skip on one surface can trigger a token-refresh side effect on this otherwise side-effect-free JSON endpoint. Skips for callbacks that a surface's `ApplicationController` never defines (e.g. `enforce_withdrawal_gate!` on org, which has no staff withdrawal concept) are intentionally surface-specific and are not a parity violation. |
+| Cross-surface before_action parity        | The non-Core app/com/org browser cookie controllers (currently under the legacy `web/v0`/`edge/v0` namespaces) must skip the same before_actions that are actually defined on their respective surface `ApplicationController` (e.g. `transparent_refresh_access_token`); a missing skip on one surface can trigger a token-refresh side effect on this otherwise side-effect-free JSON endpoint. Core's canonical `/api/v0/preferences/cookie` controller is covered by the same invariant. Skips for callbacks that a surface's `ApplicationController` never defines (e.g. `enforce_withdrawal_gate!` on org, which has no staff withdrawal concept) are intentionally surface-specific and are not a parity violation. |
+
+## Concurrent refresh replay grace
+
+One page load can send several requests carrying the same preference refresh cookie. When a request
+presents a parent token that another request rotated within
+`SingleUseToken::PREFERENCE_REFRESH_GRACE_WINDOW` (30 seconds), it is a benign sibling, not a
+compromise:
+
+- The grace path adopts the replacement read-only and MUST NOT write or clear cookies. Only the
+  rotating request holds the raw replacement token, and its `Set-Cookie` decides the browser state.
+- Rotation is detected with `replaced_by_id != id`, because a new record's `replaced_by_id` points
+  to itself.
+- Reuse after the window is still treated as compromise.
 
 ## Sign-out credential rotation
 
@@ -334,7 +348,8 @@ concerns/services or model-level contracts, not copied into surface controllers.
 should remain HTTP-oriented.
 
 When a surface's `before_action`/`skip_before_action` set on a shared concern-including controller
-(e.g. `edge/v0/cookies`) differs from its sibling surfaces, the difference must be explained by a
+(for example a non-Core `web/v0`/`edge/v0/cookies` controller or Core's
+`api/v0/preferences/cookies` controller) differs from its sibling surfaces, the difference must be explained by a
 callback that genuinely does not exist on that surface's `ApplicationController` (verify before
 assuming parity — `skip_before_action` on an undefined callback raises `ArgumentError` at boot).
 Otherwise treat the divergence as a defect and bring the surfaces back in line.

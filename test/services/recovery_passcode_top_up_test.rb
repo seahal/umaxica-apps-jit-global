@@ -104,6 +104,20 @@ class RecoveryPasscodeTopUpTest < ActiveSupport::TestCase
     assert_equal 0, result.active_usable_count_after
   end
 
+  test "preloads visitor recovery identities before issuing multiple passcodes" do
+    visitor = create_verified_visitor_with_email
+
+    Prosopite.scan do
+      result = RecoveryPasscodeTopUp.call(
+        actor: visitor,
+        credential_class: VisitorSecretCredential,
+      )
+
+      assert_equal 10, result.issued_count
+      assert_equal 10, result.active_usable_count_after
+    end
+  end
+
   test "an unknown credential class is refused by name rather than silently skipped" do
     top_up = RecoveryPasscodeTopUp.new(
       actor: @client, credential_class: ClientEmail, target_count: 1, now: Time.current,

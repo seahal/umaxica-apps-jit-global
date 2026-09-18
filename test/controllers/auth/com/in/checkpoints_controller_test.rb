@@ -97,7 +97,7 @@ class Auth::Com::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
 
   def start_checkpoint_sequence
     @checkpoint_headers = as_visitor_headers(@visitor, host: @host)
-    get(auth_com_dashboard_url(ri: "jp"), headers: checkpoint_headers)
+    get(auth_com_root_url(ri: "jp"), headers: checkpoint_headers)
 
     SignInSequenceCarrier.new(session, surface: :com).start!(
       surface: :com,

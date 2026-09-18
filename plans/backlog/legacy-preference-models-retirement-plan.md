@@ -188,8 +188,7 @@ tracked as a follow-up.
 - `plans/archive/customer-preferences-move-to-com-preference-db.md` — superseded com TLD bubble
   closure note
 - `plans/archive/staff-preference-move-to-operator-db.md` — org TLD bubble closure
-- `plans/backlog/gh578-preference-consolidation.md` — `Actor::Preference` runtime consolidation
-  status
+- GH issue #578 — `Actor::Preference` runtime consolidation status
 - `plans/archive/actor-support-integration-test-coverage.md` — `ActorSupport` request-lifecycle test
   coverage
 - `plans/archive/gh628-move-preferences-to-setting-db.md` — rejected predecessor (kept for

@@ -5,7 +5,13 @@ class OidcLogoutTokenCodec
   JWT_ALGORITHM = "ES384"
   TOKEN_TYPE = "logout+jwt"
   EVENT_CLAIM = "http://schemas.openid.net/event/backchannel-logout"
-  UUID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
+  # The OIDC Back-Channel Logout `sid` is an opaque session identifier. This
+  # repository issues URL-safe Nanoids for RP Sessions and UUIDs for legacy
+  # browser-session bindings, so the protocol value must not be restricted to
+  # UUIDs. Keep the accepted alphabet bounded because the value is later used
+  # only as an exact identifier lookup.
+  LEGACY_UUID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
+  SID_PATTERN = /\A[A-Za-z0-9_-]{1,64}\z/
   REPLAY_TTL = 10.minutes
 
   Result =
@@ -27,7 +33,7 @@ class OidcLogoutTokenCodec
       payload["sub"] = subject.to_s if subject.present?
       payload["sid"] = sid.to_s
       raise ArgumentError, "logout token requires sid" if payload["sid"].blank?
-      raise ArgumentError, "logout token sid must be UUID" unless UUID_PATTERN.match?(payload["sid"])
+      raise ArgumentError, "logout token sid has invalid format" unless SID_PATTERN.match?(payload["sid"])
 
       JitSecurityJwtKeyring.encode(
         payload,
@@ -84,7 +90,7 @@ class OidcLogoutTokenCodec
       raise JWT::DecodeError, "invalid typ" unless payload["typ"] == TOKEN_TYPE
       raise JWT::DecodeError, "nonce forbidden" if payload.key?("nonce")
       raise JWT::DecodeError, "sid required" if payload["sid"].blank?
-      raise JWT::DecodeError, "sid must be UUID" unless UUID_PATTERN.match?(payload["sid"].to_s)
+      raise JWT::DecodeError, "sid has invalid format" unless SID_PATTERN.match?(payload["sid"].to_s)
 
       events = payload["events"]
       raise JWT::DecodeError, "invalid events" unless events == { EVENT_CLAIM => {} }

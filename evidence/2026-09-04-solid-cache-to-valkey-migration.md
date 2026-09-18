@@ -217,9 +217,8 @@ matches at all outside `.github/workflows/ci.yml` (see Blocked).
   already carry obsolete / superseded status notes. They describe an architecture that existed and
   were not rewritten. `adr/valkey-cache-and-rate-limit-stores.md` records the current decision and
   names them.
-- `adr/identity-db-scope-reduction-and-solid-setup.md`, `notes/oidc-session-model.md`,
-  `plans/audit-all-rails-cache-write-usage-logical-popcorn.md`, and
-  `plans/docker-core-env-compose-async-harp.md` are historical records.
+- `adr/identity-db-scope-reduction-and-solid-setup.md`, and `notes/oidc-session-model.md` are
+  historical records.
 
 ## Blocked
 

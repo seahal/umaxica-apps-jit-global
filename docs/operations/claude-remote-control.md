@@ -83,9 +83,9 @@ per the repository's operating constraints.
    systemctl --user enable --now claude-remote-control.service
    ```
 
-3. If reboot recovery is not already configured for this project (see
-   `plans/umaxica-rails-expressive-dewdrop.md`), also enable lingering and `podman-restart.service`
-   so the container stack itself survives a reboot before this unit tries to use it:
+3. If reboot recovery is not already configured for this project, also enable lingering and
+   `podman-restart.service` so the container stack itself survives a reboot before this unit tries
+   to use it:
 
    ```sh
    loginctl enable-linger "$(whoami)"

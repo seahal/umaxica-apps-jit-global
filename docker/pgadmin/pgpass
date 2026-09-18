@@ -1,5 +1,0 @@
-# pgAdmin passfile for dev. Format: hostname:port:database:username:password
-# Matches the POSTGRESQL_PASSWORD local-only default in compose.yaml.
-# If you override POSTGRESQL_PASSWORD on the host, update the password column here too.
-primary:5432:*:root:development_password
-replica:5432:*:root:development_password

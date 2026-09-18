@@ -88,7 +88,9 @@ Run after secret provisioning and migration, before considering that environment
    raw-SQL/`delete_all` paths they guard).
 5. Recurring jobs `EnforcementExpiryJob` and `EnforcementReconciliationJob` are present in
    `config/recurring.yml` for that environment and the scheduler is actually running them (check the
-   job runner's own operational dashboard, not just the YAML).
+   job runner's own operational dashboard, not just the YAML). `EnforcementReconciliationJob` must
+   be able to rediscover a persisted appeal after a failed Case-ending or Chronicle side effect; a
+   missing queue execution is not evidence that the appeal decision was rolled back.
 6. A smoke test through the org console: create a `cooldown` Case with no approval required, confirm
    it applies immediately; create a `permanent_ban` Case, confirm it requires approval and does not
    apply until a second operator approves.

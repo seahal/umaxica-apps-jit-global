@@ -17,7 +17,7 @@ module Base
           title: "Welcome!",
           next_link: {
             label: "Next",
-            href: @welcome_next_path || base_com_dashboard_path(ri: params[:ri]),
+            href: @welcome_next_path || base_com_root_path(ri: params[:ri]),
           },
         }
       end
@@ -25,7 +25,7 @@ module Base
       private
 
       def after_welcome_path
-        base_com_dashboard_path(ri: params[:ri])
+        base_com_root_path(ri: params[:ri])
       end
     end
   end

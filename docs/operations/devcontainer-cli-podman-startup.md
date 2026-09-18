@@ -162,11 +162,13 @@ databases and re-clone the replica afterwards.
 
 ```text
 compose.yaml                        = shared infrastructure and host-native publications
+compose.override.yaml               = UNTRACKED + gitignored (2026-09-14); auto-discovered;
+                                      the opt-in `remote-access` sshd overlay of `core`, plus
+                                      any per-machine settings you add locally
 .devcontainer/compose.yaml          = tracked; the Dev Container's core service overlay
-.devcontainer/compose.override.yml  = tracked compatibility container-name overlay
-compose.override.yaml               = optional, gitignored, per developer/machine
-compose.override.yaml.example       = tracked documentation of the above
-compose.remote-access.yaml          = opt-in, tracked, never in dockerComposeFile
+.devcontainer/compose.override.yml  = UNTRACKED + gitignored (2026-09-14); a compatibility
+                                      container-name overlay that only restates values
+                                      compose.yaml already sets
 ```
 
 A fresh clone needs **no local file**:
@@ -196,9 +198,11 @@ Two rules make that hold, and both are asserted by
    `:-` and `restart: on-failure:3` rather than `${CLOUDFLARED_TOKEN:?}`. The alternative connector
    stays behind `--profile tunnel-edge`.
 
-The same `-f` also suppresses Compose's auto-discovery of `compose.override.yaml`, so a developer's
-local override applies to a bare `docker compose` and to explicit `-f` runs, not to the editor. Copy
-`compose.override.yaml.example` only if you want one of the machine-specific things it documents.
+The same `-f` also suppresses Compose's auto-discovery of `compose.override.yaml`, so that file
+applies to a bare `docker compose` and to explicit `-f` runs, not to the editor. Because it *is*
+auto-discovered on the bare path, every service in it must carry a `profiles:` entry — an unprofiled
+overlay there would change `core` on every plain `up`. `ComposeLocalOverrideOptionalTest` enforces
+this.
 
 ### Migrating from `compose.custom.yaml`
 
@@ -211,5 +215,5 @@ podman compose -f compose.yaml up -d cloudflare-tunnel
 ```
 
 If you kept host devices or personal tooling in your own copy, move them to `compose.override.yaml`
-(see `compose.override.yaml.example`) and delete the old file. It was tracked, so `git pull` removes
-it for you unless you have local modifications.
+and delete the old file. It was tracked, so `git pull` removes it for you unless you have local
+modifications.

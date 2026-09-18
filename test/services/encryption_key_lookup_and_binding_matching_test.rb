@@ -62,7 +62,7 @@ class EncryptionKeyLookupAndBindingMatchingTest < ActiveSupport::TestCase
   # subject of the wrong type during the backfill.
   test "a binding only matches a subject of its own kind" do
     auditor = AvatarBackfill::AuditLegacyClientBindings.new
-    persona = Persona.new(id: 1)
+    persona = ClientPersona.new(id: 1)
     agent = Agent.new(id: 1)
     individual = Individual.new(id: 1)
 

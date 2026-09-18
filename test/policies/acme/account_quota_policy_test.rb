@@ -12,7 +12,7 @@ class Acme::AccountQuotaPolicyTest < ActiveSupport::TestCase
   end
 
   test "allows when there are no accounts" do
-    policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: client, scope: Persona.none)
+    policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: client, scope: ClientPersona.none)
 
     assert_predicate policy, :allowed?
     assert_not_predicate policy, :exceeded?
@@ -39,8 +39,28 @@ class Acme::AccountQuotaPolicyTest < ActiveSupport::TestCase
     assert_equal 0, policy.remaining
   end
 
+  test "counts only resources owned by the principal when no scope is supplied" do
+    create_personas(1)
+    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_persona = ClientPersona.create!(client_identity: client_identity_for(other_client), title: "Other")
+    ClientPersonaOwnership.create!(client_persona: other_persona, client: other_client)
+    unowned_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    unowned_persona = ClientPersona.create!(client_identity: client_identity_for(unowned_client), title: "Unowned")
+
+    policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: client)
+    scoped_policy = Acme::AccountQuotaPolicy.new(
+      surface: :app,
+      principal: client,
+      scope: ClientPersona.where(id: [other_persona.id, unowned_persona.id]),
+    )
+
+    assert_equal 1, policy.current_count
+    assert_equal 9, policy.remaining
+    assert_equal 0, scoped_policy.current_count
+  end
+
   test "behaves the same across surfaces" do
-    assert_surface_policy(:app, Persona, -> { create_personas(1) }, client)
+    assert_surface_policy(:app, ClientPersona, -> { create_personas(1) }, client)
     assert_surface_policy(:org, Agent, -> { create_agents(1) }, operator)
     assert_surface_policy(:com, Individual, -> { create_individuals(1) }, visitor)
   end
@@ -75,31 +95,47 @@ class Acme::AccountQuotaPolicyTest < ActiveSupport::TestCase
   def create_personas(count)
     @created_account_ids = []
     count.times do |index|
-      @created_account_ids << Persona.create!(
+      persona = ClientPersona.create!(
         client_identity: client_identity("client-#{index}"),
         title: "P#{index}",
-      ).id
+      )
+      ClientPersonaOwnership.create!(client_persona: persona, client: client)
+      @created_account_ids << persona.id
     end
   end
 
+  def client_identity_for(owner)
+    ClientIdentity.create!(
+      issuer: "https://id.example.test",
+      subject: "client-quota-other-#{SecureRandom.hex(6)}",
+      audience: "acme_app",
+      source_record_id: owner.id,
+      status_id: ClientIdentityState::ACTIVE,
+    )
+  end
+
   def personas_for_client
-    Persona.where(id: @created_account_ids)
+    ClientPersona.where(id: @created_account_ids)
   end
 
   def create_agents(count)
     @created_account_ids = []
     count.times {
-      @created_account_ids << Agent.create!(operator_identity: operator_identity, title: "A#{SecureRandom.hex(2)}").id
+      agent = Agent.create!(operator_identity: operator_identity, title: "A#{SecureRandom.hex(2)}")
+      AgentOwnership.create!(agent:, operator: operator)
+      @created_account_ids << agent.id
     }
   end
 
   def create_individuals(count)
     @created_account_ids = []
     count.times do
-      @created_account_ids << Individual.create!(
+      individual = Individual.create!(
         visitor_identity: visitor_identity,
         title: "I#{SecureRandom.hex(2)}",
-      ).id
+      )
+      IndividualOwnership.create!(individual:, visitor: visitor)
+      @created_account_ids << individual.id
     end
   end
 

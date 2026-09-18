@@ -50,8 +50,6 @@ class SignOutNoticeTest < ActiveSupport::TestCase
 
     def auth_app_sign_out_url(**options) = [__method__, options]
 
-    def auth_app_sign_out_completion_url(**options) = [__method__, options]
-
     def auth_app_root_url(**options) = [__method__, options]
   end
 
@@ -68,7 +66,7 @@ class SignOutNoticeTest < ActiveSupport::TestCase
     assert_nil harness.send(:consume_sign_out_notice)
   end
 
-  test "rejects expired notices" do
+  test "rejects non-string session markers without restoring them" do
     harness = Harness.new(
       SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY => {
         "expires_at" => 1.minute.ago.iso8601,
@@ -78,11 +76,11 @@ class SignOutNoticeTest < ActiveSupport::TestCase
     )
 
     assert_nil harness.send(:consume_sign_out_notice)
-    assert_predicate harness.session, :present?
+    assert_nil harness.session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY]
   end
 
-  test "reports completion notice presence when session data is present" do
-    harness = Harness.new(SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY => { "expires_at" => 5.minutes.from_now.iso8601 })
+  test "reports completion notice presence when an opaque notice id is present" do
+    harness = Harness.new(SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY => "opaque-notice-id")
 
     assert_predicate harness, :sign_out_completion_notice_present?
     assert_not_predicate harness, :sign_out_active_context_present?
@@ -102,7 +100,7 @@ class SignOutNoticeTest < ActiveSupport::TestCase
                  harness.send(:sign_out_post_path, host: "app.example.test", ignored: nil)
     assert_equal [:auth_app_sign_out_url, expected_options],
                  harness.send(:sign_out_post_url, host: "app.example.test", ignored: nil)
-    assert_equal [:auth_app_sign_out_completion_url, expected_options],
+    assert_equal [:auth_app_sign_out_url, expected_options],
                  harness.send(:sign_out_complete_url, host: "app.example.test", ignored: nil)
     assert_equal [:auth_app_root_url, expected_options],
                  harness.send(:sign_out_home_url, host: "app.example.test", ignored: nil)

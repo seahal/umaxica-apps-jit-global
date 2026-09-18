@@ -2,7 +2,7 @@
 
 ## Context
 
-- Original plan: `plans/apple-google-external-authentication-architecture-audit.md`
+- Original plan: `plans/analysis/apple-google-external-authentication-architecture-audit.md`
 - Phase 1 contract evidence: `notes/implementation/2026-07-24-external-authentication-phase-1.md`
 - Phase 2 contracts: `notes/implementation/2026-07-24-external-authentication-phase-2-values.md`
 - Implementation date: 2026-07-24

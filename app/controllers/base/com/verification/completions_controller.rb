@@ -18,7 +18,7 @@ module Base
             surface: "com",
             actor: current_visitor,
             token: current_session_token,
-            fallback: base_com_dashboard_path(ri: params[:ri]),
+            fallback: base_com_root_path(ri: params[:ri]),
           )
         end
 

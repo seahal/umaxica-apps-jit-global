@@ -66,7 +66,7 @@ class Base::App::SwitchersControllerTest < ActionDispatch::IntegrationTest
       session_public_id: @token.public_id,
     ), params: candidate.fetch(:public)
 
-    assert_redirected_to base_app_dashboard_path(ri: "jp")
+    assert_redirected_to base_app_root_path(ri: "jp")
     assert_predicate @token.reload, :selected_actor_context?
   end
 
@@ -113,6 +113,8 @@ class Base::App::SwitchersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/switchers/show", inertia_component
     assert_equal "Switcher", inertia_props.fetch("title")
+    assert_equal I18n.t("actions.up", locale: :ja), inertia_props.dig("up_link", "label")
+    assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   private

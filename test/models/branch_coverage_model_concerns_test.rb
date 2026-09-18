@@ -38,10 +38,10 @@ class BranchCoverageModelConcernsTest < ActiveSupport::TestCase
     assert_includes invalid.errors[:completed_steps].join, "invalid"
   end
 
-  test "OidcTokenUsage covers inactive authenticate and previous digest arms" do
-    skip "ClientTokenUsage unavailable" unless defined?(ClientTokenUsage)
+  test "RpSession covers inactive authenticate and previous digest arms" do
+    skip "ClientRpSession unavailable" unless defined?(ClientRpSession)
 
-    usage = ClientTokenUsage.new(
+    usage = ClientRpSession.new(
       public_id: Nanoid.generate(size: 21),
       oidc_client_id: "base-rails-rp",
       revoked_at: Time.current,

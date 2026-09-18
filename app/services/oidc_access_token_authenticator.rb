@@ -78,14 +78,14 @@ class OidcAccessTokenAuthenticator < ApplicationService
     ).call.valid?
   end
 
+  # Normal Access JWT authentication is cryptographic (RFC 9068) plus Base Browser
+  # Session binding. It must not query the RP Session row for revocation; child
+  # revoke stops refresh/new issuance only and does not invalidate an already-issued JWT.
   def find_token(payload)
     sid = payload["sid"].to_s
     return if sid.blank?
 
     token_context.connected_to(role: :reading) do
-      usage = usage_class_for_resource_type&.find_by(public_id: sid)
-      return usage if usage.present?
-
       token_class_for_resource_type.find_by(oidc_sid: sid) || token_class_for_resource_type.find_by(public_id: sid)
     end
   end
@@ -137,14 +137,6 @@ class OidcAccessTokenAuthenticator < ApplicationService
     when "operator" then OperatorToken
     when "visitor" then VisitorToken
     else ClientToken
-    end
-  end
-
-  def usage_class_for_resource_type
-    case resource_type
-    when "operator" then OperatorTokenUsage
-    when "visitor" then VisitorTokenUsage
-    else ClientTokenUsage
     end
   end
 

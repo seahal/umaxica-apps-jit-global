@@ -93,6 +93,20 @@ class OidcIdTokenVerifierTest < ActiveSupport::TestCase
     assert_invalid token_with_claims("nbf" => 10.minutes.from_now.to_i)
   end
 
+  test "rejects an authentication time beyond the configured clock leeway" do
+    future_auth_time = Time.current.to_i + AuthenticationJwtConfiguration.leeway_seconds + 1
+
+    assert_invalid token_with_claims("auth_time" => future_auth_time)
+  end
+
+  test "enforces expected max_age against the ID Token authentication event" do
+    stale = 5.minutes.ago
+
+    assert_predicate verify(token_with_claims("auth_time" => Time.current.to_i), expected_max_age: 60), :success?
+    assert_not verify(token_with_claims("auth_time" => stale.to_i), expected_max_age: 1).success?
+    assert_not verify(token_with_claims_without("auth_time"), expected_max_age: 60).success?
+  end
+
   private
 
   def id_token(issuer: @issuer, issued_at: Time.current.utc, expires_at: 5.minutes.from_now)
@@ -141,12 +155,13 @@ class OidcIdTokenVerifierTest < ActiveSupport::TestCase
     }
   end
 
-  def verify(token, expected_nonce: @nonce)
+  def verify(token, expected_nonce: @nonce, expected_max_age: nil)
     OidcIdTokenVerifier.call(
       id_token: token,
       client_id: @client.client_id,
       resource_type: "client",
       expected_nonce: expected_nonce,
+      expected_max_age: expected_max_age,
       issuer: @issuer,
       jwt_issuer_id: @jwt_issuer_id,
     )

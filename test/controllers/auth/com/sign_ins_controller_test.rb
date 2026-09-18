@@ -9,25 +9,24 @@ module Auth
     class AuthInsControllerTest < ActionDispatch::IntegrationTest
       setup do
         @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+        host! @host
       end
 
       test "direct entry without a login challenge lists the sign-in methods" do
         get auth_com_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
-        assert_response :success
+        assert_response :see_other
         assert_includes response.headers["Cache-Control"], "no-store"
         assert_nil session[:oidc_authorization_login_challenge]
-        assert_equal "auth/com/sign_ins/new", inertia_component
-
-        hrefs = inertia_props.fetch("methods").map { |method| method.fetch("href") }
-
-        assert_includes hrefs, new_auth_com_sign_in_email_path(ri: "jp")
-        assert_includes hrefs, new_auth_com_sign_in_passkey_path(ri: "jp")
-        assert_includes hrefs, new_auth_com_sign_in_secret_path(ri: "jp")
+        assert_equal "/", URI.parse(response.location).path
       end
 
       test "valid login challenge renders local ceremony" do
-        get auth_com_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_com_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+
+        follow_redirect!
 
         assert_response :success
         assert_equal "auth/com/sign_ins/new", inertia_component
@@ -37,8 +36,12 @@ module Auth
       test "authentication links carry pt" do
         pt = Base64.urlsafe_encode64("https://log.umaxica.com/settings/sessions?ri=jp", padding: false)
 
-        get auth_com_sign_in_url(ri: "jp", pt: pt, login_challenge: login_challenge),
+        get auth_com_sign_in_url(ri: "jp", pt: pt, admission: login_challenge),
             headers: { "Host" => @host }
+
+        assert_response :see_other
+
+        follow_redirect!
 
         assert_response :success
         assert_equal "auth/com/sign_ins/new", inertia_component
@@ -51,7 +54,11 @@ module Auth
       end
 
       test "does not show social login buttons" do
-        get auth_com_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host }
+        get auth_com_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+
+        assert_response :see_other
+
+        follow_redirect!
 
         assert_response :success
         assert_equal "auth/com/sign_ins/new", inertia_component
@@ -60,9 +67,13 @@ module Auth
 
       test "does not show temporary google signin button when legacy flag is set" do
         with_env("COM_#{"GOOGLE"}_SIGNIN_ENABLED" => "true") do
-          get auth_com_sign_in_url(ri: "jp", login_challenge: login_challenge),
+          get auth_com_sign_in_url(ri: "jp", admission: login_challenge),
               headers: { "Host" => @host }
         end
+
+        assert_response :see_other
+
+        follow_redirect!
 
         assert_response :success
         assert_equal "auth/com/sign_ins/new", inertia_component
@@ -87,11 +98,12 @@ module Auth
       private
 
       def login_challenge
-        OidcAuthorizationTransactionCoordinator.issue!(
+        transaction = OidcAuthorizationTransactionCoordinator.issue!(
           surface: "com",
           intent: "sign_in",
           params: authorize_params,
-        ).transaction.login_challenge
+        ).transaction
+        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
       end
 
       def authorize_params

@@ -26,6 +26,15 @@ authorization, token, or freshness decision.
 - authorization and policy decisions;
 - downstream token issuance.
 
+## Object-level authorization
+
+OmniAuth callback controllers do not call Action Policy `authorize!` or `authorized_scope`. They are
+authentication and state-verification endpoints: login and sign-up have no authenticated actor or
+record to authorize, and `link` always binds to the signed-in `current_resource`. Protection comes
+from the authentication mode, callback state (CSRF/replay) validation, provider assertion
+verification, and session binding of the intent. A future screen where an operator manages another
+staff member's links MUST design object-level authorization in its own controller.
+
 ## Related
 
 - `docs/security/social-login-provider-scope.md`

@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 class TotpCeremonyTransactionPurgeJob < ApplicationJob
-  queue_as :default
+  queue_as :retention
 
   def perform
     IdentityTotpCeremonyTransactionPurger.new.call

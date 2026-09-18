@@ -29,14 +29,14 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   end
 
   test "a normal session renders no restricted mode indicator" do
-    get auth_org_dashboard_url(ri: "jp"), headers: headers_for(nil)
+    get auth_org_settings_passkeys_url(ri: "jp"), headers: headers_for(nil)
 
     assert_response :success
     assert_nil inertia_props.fetch("chrome").fetch("restricted_mode")
   end
 
   test "an emergency session renders the restricted mode indicator in the shared chrome" do
-    get auth_org_dashboard_url(ri: "jp"), headers: headers_for("emergency")
+    get auth_org_settings_passkeys_url(ri: "jp"), headers: headers_for("emergency")
 
     assert_response :success
     restricted = inertia_props.fetch("chrome").fetch("restricted_mode")
@@ -49,7 +49,7 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   # no "leave restricted mode" operation, because there is no in-session
   # transition for such a control to perform.
   test "the indicator offers sign-out and nothing that claims to switch mode in place" do
-    get auth_org_dashboard_url(ri: "jp"), headers: headers_for("emergency")
+    get auth_org_settings_passkeys_url(ri: "jp"), headers: headers_for("emergency")
 
     restricted = inertia_props.fetch("chrome").fetch("restricted_mode")
 

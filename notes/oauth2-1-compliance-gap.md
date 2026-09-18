@@ -94,12 +94,10 @@ Items below are known gaps or items that still need verification against current
 - `notes/oidc-session-model.md` — overall OIDC and session direction
 - `adr/oidc-authn-hardening-implementation-decisions.md` — OIDC hardening decisions
 - `notes/gh611-harden-token-endpoints-csrf.md` — token endpoint hardening
-- `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` — refresh and revoke hardening
-- `plans/active/identity-zenith-foundation-distributor-implementation-plan.md` — Identity engine
-  scope that owns AS responsibilities
-- `plans/backlog/gh558-refresh-token-rotation.md`
-- `plans/backlog/gh573-dpop-proof-of-possession.md`
-- `plans/backlog/gh610-decouple-session-id-from-token.md`
+- `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` — refresh and revoke hardening scope
+  that owns AS responsibilities
+- GH issue #558
+- GH issue #610
 
 ## Status
 

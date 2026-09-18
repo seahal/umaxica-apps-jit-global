@@ -31,7 +31,7 @@
     <nav aria-label="Footer">
       <ul>
         <% if logged_in? %>
-          <li><%= link_to t("sign.org.preferences.footer.dashboard"), base_org_dashboard_url(ri: current_region_identifier, host: base_authority_host) %></li>
+          <li><%= link_to t("sign.org.preferences.footer.dashboard"), base_org_root_url(ri: current_region_identifier, host: base_authority_host) %></li>
         <% else %>
           <li><%= link_to t("sign.org.preferences.footer.home"), auth_org_root_url %></li>
         <% end %>

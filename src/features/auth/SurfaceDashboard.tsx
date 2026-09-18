@@ -1,5 +1,5 @@
 import Card from "@/components/ui/Card";
-import Page from "@/components/ui/Page";
+import Page, { type PageUpLink } from "@/components/ui/Page";
 // The signed-in landing of an auth surface.
 //
 // It is a directory of the ceremonies the surface owns. Every entry arrives resolved from the
@@ -27,10 +27,12 @@ export type DashboardSection = {
 
 export type SurfaceDashboardProps = {
   title: string;
-  description: string;
+  description?: string;
   sections: DashboardSection[];
   /** Absent unless the server decided this actor should be prompted to add a credential. */
   credential_warning?: CredentialWarningProps | null;
+  /** Absent on the dashboard itself; identity and similar screens send the parent dashboard. */
+  up_link?: PageUpLink | null;
 };
 
 function linkList(items: DashboardItem[]) {
@@ -62,11 +64,14 @@ export default function SurfaceDashboard({
   description,
   sections,
   credential_warning: credentialWarning = null,
+  up_link: upLink = null,
 }: SurfaceDashboardProps) {
   return (
     <Page
       title={title}
-      description={description}
+      {...(description ? { description } : {})}
+      up={upLink}
+      upVisit="inertia"
     >
       {credentialWarning ? <CredentialWarning {...credentialWarning} /> : null}
 

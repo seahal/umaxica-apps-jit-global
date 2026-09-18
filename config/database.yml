@@ -1,5 +1,15 @@
 <%
-  test_host = ENV.fetch("POSTGRESQL_TEST_HOST", ENV.fetch("POSTGRESQL_HOST", "localhost"))
+  # Test databases are a separate safety boundary. Reusing the development host when the
+  # test host is absent can point a destructive test preparation task at the wrong server.
+  # `db:prepare` in development also prepares the test database, so this file is
+  # rendered for `test` from a development process. Resolving to nil there left
+  # every test host blank and sent the connection to a local Unix socket, so read
+  # the variable in every environment; require it only when test itself boots.
+  # The boundary that matters is preserved: this never falls back to a
+  # development host.
+  test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : ENV["POSTGRESQL_TEST_HOST"]
+  # Rendered in every environment; require the test port only when test boots.
+  test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : ENV["POSTGRESQL_PORT"]
 
   # Every `development:` host is required configuration: a missing name used to
   # fall back to a shared default, which silently pointed a database at the
@@ -39,6 +49,7 @@ default: &default
 test_default: &test_default
   !!merge <<: *default
   pool: 2
+  port: <%= test_port %>
   timeout: 20000
   prepared_statements: false
   advisory_locks: true
@@ -488,6 +499,9 @@ test:
     schema_dump: com_signal_structure.sql
   queue:
     !!merge <<: *test_default
+    # A manually started isolated Solid Queue worker needs one execution
+    # connection plus its polling and heartbeat connections.
+    pool: 5
     database: test_queue_db
     host: <%= test_host %>
     migrations_paths: db/queues_migrate

@@ -43,8 +43,21 @@ The current access log pipeline is:
 - `config.lograge.formatter = Lograge::Formatters::Json.new`
 - `config.lograge.logger` writes one JSON object per line to stdout
 
-Access logs should contain request-level fields such as method, path, status, duration, request id,
-and host. Do not add domain behavior to Lograge.
+Access logs should contain request-level fields such as method, path, status, duration,
+`request_id`, and host. When a valid current OpenTelemetry span exists, the same JSON access-log
+record also contains `trace_id` and `span_id`. Do not add domain behavior to Lograge.
+
+The identifiers have distinct meanings and sources:
+
+- `request_id` is the HTTP request correlation identifier managed by Rails
+  `ActionDispatch::RequestId` and may originate from `X-Request-ID`.
+- `trace_id` is the OpenTelemetry/W3C Trace ID from a valid current `SpanContext`.
+- `span_id` is the OpenTelemetry Span ID from that valid current `SpanContext`.
+
+`request_id` must never be substituted for `trace_id` or `span_id`. If OpenTelemetry is disabled or
+the current span context is invalid, `request_id` remains available while `trace_id` and `span_id`
+are absent or null. These identifiers are correlation metadata only; they are not authentication,
+authorization, rate-limit, user-identity, or audit-integrity inputs.
 
 ## Application Logs
 
@@ -63,6 +76,11 @@ Rails.logger.warn(LogEvent.format("auth.policy.missing", controller: self.class.
 
 Use `LogEvent.format` only for event-shaped application log messages that need an event name and
 structured payload. Plain operational messages can go directly to `Rails.logger`.
+
+`JitLogEvent` applies `ObservabilityRedactor` to structured values. The redactor also removes
+token-shaped JWT, Bearer, and named credential values when they appear inside free-form diagnostic
+strings, including exception messages. Logging an exception is not permission to retain its raw
+credentials or token material.
 
 Do not add new uses of:
 
@@ -153,6 +171,10 @@ Primary audience:
 - incident responders
 
 OTEL should remain focused on technical observability.
+
+Technical OpenTelemetry correlation is independent of product analytics consent. The optional
+`performant` preference may govern a separately defined analytics layer, but it must not replace,
+remove, or fabricate a `trace_id` or `span_id` supplied by a valid OpenTelemetry context.
 
 ## Layer 2: Audit And Security Events
 

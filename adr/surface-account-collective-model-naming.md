@@ -1,83 +1,65 @@
-# Surface Account and Collective Model Naming
+# Persona and Organization Interface Naming
 
-**Status:** Accepted (2026-05-20)
+**Status:** Accepted, amended 2026-09-17
 
 ## Context
 
-`Account` and `Collective` are shared domain interfaces, not surface-specific model names.
+The three user-facing surfaces have independent authority databases and independent concrete
+resource models. A shared Ruby protocol is useful, but a shared Active Record model, table, STI
+hierarchy, or polymorphic authority relation would blur the `app`, `com`, and `org` trust
+boundaries.
 
-The runtime actor names are already accepted as `Client`, `Visitor`, and `Operator`. Those names
-must remain the authentication, current-context, authorization, and token actor vocabulary.
-
-The hierarchy cleanup also accepted `Collective` as the common interface for recursive nodes that
-can contain child nodes and receive account placements. Concrete surface models may use
-surface-specific names while implementing that common interface.
+The runtime principals remain `Client`, `Visitor`, and `Operator`. The RP/IdP binding records
+(`ClientIdentity`, `VisitorIdentity`, and `OperatorIdentity`) are not RBAC principals or resource
+owners.
 
 ## Decision
 
-Keep these shared concerns as the common contracts:
+`Persona` and `Organization` are Ruby interface concerns only. The concrete implementations and
+physical tables are surface-local:
 
-- `Account` for account / placement-like records that can be attached to a collective.
-- `Collective` for recursive organization/team/unit/personal hierarchy nodes.
+| Surface | Runtime principal | Persona implementation | Persona table | Organization implementation | Organization table |
+| ------- | ----------------- | ---------------------- | ------------- | --------------------------- | ------------------ |
+| `app`   | `Client`          | `ClientPersona`        | `personas`    | `Enterprise`                | `enterprises`      |
+| `com`   | `Visitor`         | `Individual`           | `individuals` | `Company`                   | `companies`        |
+| `org`   | `Operator`        | `Agent`                | `agents`      | `Bureau`                    | `bureaus`          |
 
-Use these surface-specific model names as the target vocabulary:
+The legacy org-principal `Organization` concrete model is represented by `OperatorOrganization`,
+mapped explicitly to the existing `organizations` table. It is not the new Organization interface
+and is not an authority resource.
 
-| Surface | Runtime actor | Account implementation | Collective implementation |
-| ------- | ------------- | ---------------------- | ------------------------- |
-| `app`   | `Client`      | `Persona`              | `Enterprise`              |
-| `com`   | `Visitor`     | `Individual`           | `Company`                 |
-| `org`   | `Operator`    | `Agent`                | `Bureau`                  |
+No compatibility constants such as `Persona = ClientPersona` or
+`Organization = OperatorOrganization` are provided. Existing persisted column names, protocol field
+names, URLs, and unrelated RP-account names remain unchanged unless a later migration explicitly
+adopts a compatible wire transition.
 
-The conceptual flows are:
+## Authority boundary
 
-```text
-Client   -> Persona    -> Enterprise
-Visitor  -> Individual -> Company
-Operator -> Agent      -> Bureau
-```
+Ownership, administration, delegation, usage, view, and ownership-transfer state are stored in
+surface-local concrete tables. Their principal foreign keys are `client_id`, `visitor_id`, or
+`operator_id`; an RP binding ID is never substituted for a runtime principal ID. There is no shared
+authority table, `resource_type`/`resource_id` pair, STI authority hierarchy, or cross-surface
+foreign key.
 
-RP/IdP boundary records use `Identity` naming and remain separate from both runtime actors and
-Account implementations:
-
-```text
-Client   -> ClientIdentity   -> Persona
-Visitor  -> VisitorIdentity  -> Individual
-Operator -> OperatorIdentity -> Agent
-```
-
-The concrete models should include the appropriate shared concern instead of being named after the
-concern:
-
-```ruby
-class Persona
-  include Account
-end
-
-class Enterprise
-  include Collective
-end
-```
+Each resource has at most one ownership row. Explicit grants are independent rows and are not
+materialized automatically for owners. The current implementation uses one surface-local principal
+lock row per principal to serialize quota-affecting authority writes because the legacy principal
+and RP abstract bases have separate connection specifications even when they point at the same
+physical database. The lock row is a synchronization primitive, not an authorization grant.
 
 ## Consequences
 
-- `Collective` remains the interface / concern name, not the required concrete model name.
-- `Enterprise`, `Company`, and `Bureau` are surface-specific collective implementations.
-- `Persona`, `Individual`, and `Agent` are surface-specific account implementations.
-- `Client`, `Visitor`, and `Operator` remain runtime actor names and must not be repurposed as the
-  account implementation names.
-- `ClientIdentity`, `VisitorIdentity`, and `OperatorIdentity` are RP/IdP identity-binding records,
-  not Account implementations.
-- `Staff`, `User`, and `Customer` must not be reintroduced as runtime actor compatibility names.
-- Existing `Workspace`, `Organization`, `Department`, `Division`, `Member`, and
-  `OperatorWorkspaceAccount` names are transitional until a deliberate rename plan is accepted.
-- Database table, column, index, foreign-key, fixture, policy, and route renames require a separate
-  rename matrix and migration plan.
+- Model and association references must use explicit concrete class names after the rename.
+- GlobalID, policy dispatch, fixtures, serializers, and persisted class-name references must be
+  reviewed as part of any future rename.
+- A naming migration does not switch authorization from the existing assignment/membership graph.
+  The old path remains transitional until a validated owner inventory, connection proof, policy
+  cutover, and rollback plan are complete.
+- Avatar behavior and Avatar authority remain outside this decision.
 
 ## Related
 
-- `adr/collective-hierarchy-model.md`
-- `adr/actor-db-naming-policy.md`
-- `adr/app-actor-client-naming.md`
-- `adr/com-actor-visitor-naming.md`
-- `adr/org-actor-operator-naming.md`
-- `docs/architecture/actor-naming.md`
+- `docs/architecture/persona-organization-authority.md`
+- `docs/architecture/database-authority-placement.md`
+- `adr/umaxica-v1-core-resource-architecture.md`
+- `adr/authority-lifecycle-table-policy.md`

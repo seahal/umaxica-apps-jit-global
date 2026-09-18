@@ -119,6 +119,19 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
     assert_nil identity, "Identity should not be created on state mismatch"
   end
 
+  test "link Google fails when flow context is missing" do
+    uid = "google_state_mismatch_#{SecureRandom.hex(4)}"
+    setup_google_mock_auth(uid: uid)
+
+    get auth_app_social_google_callback_url(ri: "jp"),
+        headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
+          .merge("X-STRICT-SOCIAL-STATE" => "1")
+
+    assert_response :conflict
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_nil ClientGoogleIdentity.find_by(uid: uid)
+  end
+
   test "link Apple fails when intent TTL exceeded" do
     uid = "apple_state_expired_#{SecureRandom.hex(4)}"
 

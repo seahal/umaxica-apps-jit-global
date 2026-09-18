@@ -177,15 +177,6 @@ node_modules
 # https://vitejs.dev/guide/env-and-mode.html#env-files
 *.local
 
-# Optional developer-local Compose override. `compose.yaml` alone is a complete
-# standard environment, so this file is never required and is never created
-# automatically -- a fresh clone must start without it. Documented by the
-# tracked `compose.override.yaml.example`, which nobody has to copy.
-#
-# Not to be confused with `.devcontainer/compose.override.yml`, which IS tracked
-# and IS part of the standard Dev Container configuration.
-/compose.override.yaml
-
 # Merge residue. `git mergetool` and a conflicted `git checkout --merge` write these
 # beside the file they back up, and three `.orig` backups reached a commit that way.
 *.orig
@@ -193,3 +184,12 @@ node_modules
 
 # Vitest Browser Mode / local attachments cache
 .vitest/
+
+# Local Compose overrides. Untracked as of 2026-09-14 so per-machine settings --
+# host device mounts, extra published ports, container runtime sockets -- stay on
+# the machine that needs them instead of shipping to every clone. Neither file is
+# required: `devcontainer.json` names its Compose files explicitly and includes
+# neither, and a bare `podman compose` simply skips an override that is absent.
+/compose.override.yaml
+/.devcontainer/compose.override.yml
+

@@ -14,9 +14,6 @@ require "test_helper"
 # This compiles every template with the same Erubi engine ActionView uses at
 # runtime, so a structural break fails here instead of in production.
 class TemplateCompilationTest < ActiveSupport::TestCase
-  self.use_transactional_tests = false
-  self.fixture_table_names = []
-
   test "every ERB template compiles" do
     engine = ActionView::Template::Handlers::ERB::Erubi
     template_paths = Rails.root.glob("app/views/**/*.erb")
@@ -38,6 +35,20 @@ class TemplateCompilationTest < ActiveSupport::TestCase
     assert_empty failures,
                  "ERB templates that do not compile (they raise SyntaxError when rendered, " \
                  "and Brakeman skips them entirely):\n  #{failures.join("\n  ")}"
+  end
+  private
+
+  # Pure static analysis test - no database/fixtures needed. `use_transactional_tests = false`
+  # was the wrong tool for that: it makes Rails clear the process-wide fixture cache
+  # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
+  # class to reload all ~200 fixture tables (~600 extra queries) on its next example. Overriding
+  # these two hooks as no-ops opts this class out of the fixtures machinery entirely, without that
+  # side effect, while keeping every other `ActiveSupport::TestCase` behavior (assertions, the
+  # `test` DSL) intact. See docs/guides/test-profiling.md.
+  def setup_fixtures(*)
+  end
+
+  def teardown_fixtures(*)
   end
 end
 

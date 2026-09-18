@@ -105,7 +105,7 @@ module PreferenceResourceSync
     attrs = {}
     attrs[type] = direct_value if direct_value.present? && resource_pref.respond_to?(:"#{type}=")
 
-    preference_connection_class(resource_pref.class).connected_to(role: :writing) do
+    with_resource_preference_writing_connection(resource_pref) do
       if resource_option_id.present?
         child = load_or_create_resource_preference_child!(resource_pref, resource_prefix, type)
         child&.update!(option_id: resource_option_id)
@@ -128,7 +128,7 @@ module PreferenceResourceSync
     )
     return if allowed.blank?
 
-    preference_connection_class(resource_pref.class).connected_to(role: :writing) do
+    with_resource_preference_writing_connection(resource_pref) do
       resource_pref.update!(allowed)
     end
   end
@@ -139,7 +139,7 @@ module PreferenceResourceSync
     resource_prefix = resource_preference_registry_prefix(resource_pref)
     association_prefix = resource_preference_association_prefix(resource_pref)
 
-    preference_connection_class(resource_pref.class).connected_to(role: :writing) do
+    with_resource_preference_writing_connection(resource_pref) do
       PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
         PreferenceClassRegistry.option_class(resource_prefix, type).ensure_defaults!
         default_id = PreferenceClassRegistry.default_option_id(resource_prefix, type)
@@ -236,11 +236,17 @@ module PreferenceResourceSync
     end
   end
 
+  def with_resource_preference_writing_connection(resource_pref, &)
+    connection_class = preference_connection_class(resource_pref.class)
+    return yield unless connection_class
+
+    connection_class.connected_to(role: :writing, &)
+  end
+
   def preference_connection_class(model_or_class)
     model_class = model_or_class.is_a?(Class) ? model_or_class : model_or_class.class
-    model_class.ancestors.find do |ancestor|
-      ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-    end || ActiveRecord::Base
+    # Only Active Record classes own a connection; plain objects are written directly.
+    model_class.connection_class_for_self if model_class < ActiveRecord::Base
   end
 
   # Best-effort atomic boundary for the dual write that spans two databases:
@@ -277,7 +283,7 @@ module PreferenceResourceSync
     attrs = snapshot.merge(cookie).compact
     return if attrs.blank?
 
-    preference_connection_class(resource_pref.class).connected_to(role: :writing) { resource_pref.update!(attrs) }
+    with_resource_preference_writing_connection(resource_pref) { resource_pref.update!(attrs) }
   end
 
   def resolved_preference_snapshot(preference)

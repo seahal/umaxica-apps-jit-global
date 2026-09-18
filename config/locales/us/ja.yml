@@ -533,6 +533,8 @@ ja:
         operation: 操作
       client_identity:
         source_record_id: ソースレコードID
+      client_persona:
+        client_identity_id: ClientIdentity
       client_telephone:
         number: 電話番号
         number_digest: 電話番号ダイジェスト
@@ -949,7 +951,10 @@ ja:
             disabled_description: このアドレス宛のプロモーションメールはすでに停止されています。
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         description: アカウントの設定を管理します。
         regions:
           back_link: もどる
@@ -1004,7 +1009,10 @@ ja:
           title: 設定のリセット
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1021,6 +1029,9 @@ ja:
         up_link: うえへ
         update_settings: 設定を更新
         update_success: 設定を更新しました
+      roots:
+        message: Thin landing endpoint.
+    dev:
       roots:
         message: Thin landing endpoint.
     org:
@@ -1165,7 +1176,10 @@ ja:
             timezone_label: タイムゾーン
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
@@ -1185,6 +1199,11 @@ ja:
       roots:
         message: Thin landing endpoint.
     shared:
+      lobby:
+        title: ロビー
+        heading: ロビー
+        description: 続けるにはサインインしてください。
+        sign_in: サインイン
       dashboard:
         title: ダッシュボード
         description: サインイン済み
@@ -1197,16 +1216,87 @@ ja:
           authorize_sign_in: 認可（サインイン）
           authorize_sign_up: 認可（サインアップ）
           avatar: アバター
+          billings: 請求
           dashboard: ダッシュボード
+          groups: グループ
           identity: 本人情報
           jwks: JWKS
           logout: ログアウト
+          offline: オフライン
           oidc_discovery: OIDC ディスカバリー
           organization: 組織
+          preference: 設定
           root: トップ
           selector: セレクター
           switcher: スイッチャー
           userinfo: UserInfo
+      identity:
+        up_link: うえへ
+        activities:
+          title: アクティビティ履歴
+          description: アカウントに関する最近のセキュリティ関連アクティビティです。
+          empty: 表示できるアクティビティはありません。
+          unknown_device: 不明なデバイス
+          unknown_location: 場所を確認できません
+          columns:
+            occurred_at: 発生日時
+            activity: アクティビティ
+            device: デバイス
+            source: 場所
+            risk: リスク
+          events:
+            sign_in: サインイン
+            google_sign_in: Googleでサインイン
+            apple_sign_in: Appleでサインイン
+            google_account_created: Googleでアカウントを作成
+            apple_account_created: Appleでアカウントを作成
+            email_account_created: メールアドレスでアカウントを作成
+            telephone_account_created: 電話番号でアカウントを作成
+            sign_out: サインアウト
+            sign_in_failed: サインインに失敗
+            step_up_completed: 追加認証を完了
+            step_up_failed: 追加認証に失敗
+            session_revoked: セッションを終了
+            security_change: セキュリティ設定を変更
+            session_security_alert: セキュリティ上の理由でセッションを終了
+          risks:
+            none: なし
+            low: 低
+            medium: 中
+            high: 高
+            critical: 重大
+        sessions:
+          title: セッション
+          empty: 有効なセッションはありません。
+          unknown_device: 不明なデバイス
+          expires_at_description: このセッションはこの時刻に終了します。この期限は延長されません。
+          current_session: 現在のセッション
+          active: 有効
+          normal: 通常
+          emergency: 緊急アクセス
+          unknown_mode: 不明
+          revoke: 終了
+          columns:
+            device: デバイス
+            last_activity: 最終アクティビティ
+            created: 作成日時
+            expires_at: 有効期限
+            status: 状態
+            mode: モード
+            action: 操作
+        sections:
+          account: アカウント
+          profile: プロフィール
+          security: セキュリティ
+        links:
+          activities: アクティビティ
+          birthdate: 生年月日
+          emails: メール
+          secrets: シークレット
+          sessions: セッション
+          standing: アカウント状態
+          telephones: 電話番号
+          withdrawal: 退会
   billings:
     signed_in_required: サインインが必要です。
   com_document_categories:
@@ -1597,6 +1687,9 @@ ja:
       preferences:
         footer:
           preference: 設定
+    dev:
+      roots:
+        message: Thin landing endpoint.
     org:
       preference:
         emails:
@@ -2097,6 +2190,9 @@ ja:
             ignore_instruction: 心当たりがない場合は、このメールを無視してください。
             instruction: 以下の確認コードを使用して、登録を完了してください：
             subject: 確認コードのお知らせ
+            subjects:
+              sign_in: UMAXICA - サインインを確認してください
+              sign_up: UMAXICA - メールアドレスを確認してください
             title: メールアドレスの確認
             verify_link: メールアドレスを確認する
       com:
@@ -2106,6 +2202,9 @@ ja:
             ignore_instruction: 心当たりがない場合は、このメールを無視してください。
             instruction: 以下の確認コードを使用して、手続きを続行してください：
             subject: 確認コードのお知らせ
+            subjects:
+              sign_in: UMAXICA - サインインを確認してください
+              sign_up: UMAXICA - メールアドレスを確認してください
             title: メールアドレスの確認
             verify_link: メールアドレスを確認する
       org:
