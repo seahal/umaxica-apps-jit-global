@@ -201,3 +201,13 @@ design hid what should have been an input.
   feature's component is imported. When a class is used across features (a shared link treatment),
   its rules belong in the global stylesheet. Otherwise a route that never mounts the owning feature
   silently loses them.
+
+# Native React Compiler
+
+Production Vite uses `@vitejs/plugin-react`'s experimental native React Compiler
+(`oxc-transform-react`). Babel, `babel-plugin-react-compiler`, and `@rolldown/plugin-babel` are not
+part of this path.
+
+Keep existing `useMemo` / `useCallback` / `React.memo`. Do not delete them because the compiler is
+on. Add new manual memoization only when the need can be explained. `"use no memo"` is not a way to
+hide compiler problems.

@@ -339,7 +339,7 @@ services:
       # GRAFANA_ADMIN_PASSWORD in the gitignored `.env` on any machine where the
       # default is not wanted.
       GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-pass}"
       GF_PATHS_PROVISIONING: "/etc/grafana/provisioning"
     # Loopback-only publication so the developer's own browser can open the UI.
     # 13000 rather than 3000/3001: those belong to host-native Rails and Dev

@@ -199,6 +199,8 @@ group :development, :test do
   gem "rubocop-rubycw", require: false
   # RuboCop Rails rules.
   gem "rubocop-rails", require: false
+  # ERB linter. A CI gate alongside RuboCop, so it installs with the test group.
+  gem "erb_lint", require: false
   # Type for ruby.
   gem "sorbet"
 end
@@ -268,8 +270,6 @@ group :development do
   gem "rswag-ui", require: false
   # Package boundary enforcement.
   gem "packwerk", require: false
-  # ERB linter.
-  gem "erb_lint", require: false
   # Model and route annotation tool.
   gem "annotaterb", require: false
   # Ruby language server.
@@ -280,8 +280,12 @@ group :development do
   gem "flay", require: false
 end
 
+# config/initializers/flipper.rb requires "flipper/ui" in every environment, so the test suite needs
+# it installed too; a development/production-only group hid that while CI installed every group.
+gem "flipper-ui", github: "flippercloud/flipper", branch: "main"
+
 group :development, :production do
-  # Solid Queue operations UI.
+  # Solid Queue operations UI. Deliberately not loaded in test: config/routes/mission.rb mounts it
+  # only when the constant is defined.
   gem "mission_control-jobs"
-  gem "flipper-ui", github: "flippercloud/flipper", branch: "main"
 end

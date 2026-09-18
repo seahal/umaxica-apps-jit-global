@@ -146,7 +146,7 @@ ja:
         timezones:
           invalid: 無効なタイムゾーンが選択されました
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       settings:
@@ -302,7 +302,7 @@ ja:
         timezones:
           invalid: 無効なタイムゾーンが選択されました
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
     org:
@@ -472,11 +472,11 @@ ja:
         timezones:
           invalid: 無効なタイムゾーンが選択されました
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       privacy:
-        up_link: うえへ
+        up_link: もどる
       settings:
         description: 組織向けの設定を確認・調整できます。
         email_settings: メール設定
@@ -491,7 +491,7 @@ ja:
     delete: 削除
     save: 保存
     submit: 送信
-    up: 上へ
+    up: もどる
     update: 更新
   activemodel:
     errors:
@@ -960,7 +960,7 @@ ja:
           back_link: もどる
         submitting: 送信中...
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
@@ -1026,7 +1026,7 @@ ja:
         theme_settings: テーマ設定
         timezone_settings: タイムゾーン設定
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
@@ -1193,7 +1193,7 @@ ja:
         theme_settings: テーマ設定
         timezone_settings: タイムゾーン設定
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
@@ -1231,7 +1231,7 @@ ja:
           switcher: スイッチャー
           userinfo: UserInfo
       identity:
-        up_link: うえへ
+        up_link: もどる
         activities:
           title: アクティビティ履歴
           description: アカウントに関する最近のセキュリティ関連アクティビティです。
@@ -2658,7 +2658,7 @@ ja:
         new:
           back: 他の方法を選びますか？
           back_link: もどる
-          back_to_root: うえへ
+          back_to_root: もどる
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
             apple: Appleで続行
@@ -3764,7 +3764,7 @@ ja:
             title: operator 招待を受諾
       ups:
         new:
-          back_to_root: うえへ
+          back_to_root: もどる
           description: お客様専用の管理操作をはじめるにはアカウントを作成してください。
           heading: アカウントを作成
           recruit_link_text: 採用に関するお問い合わせ
