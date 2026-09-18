@@ -121,6 +121,37 @@ describe("destructive identity forms", () => {
     expect(submitted).toHaveBeenCalledTimes(1);
   });
 
+  it("still confirms revocation when the CSRF field is absent from the form", () => {
+    mount(
+      <SessionIndex
+        title="Sessions"
+        back_link={{ label: "Back", href: "/identity" }}
+        empty_message="No active sessions were found."
+        expires_at_description="This session ends at its expiry and cannot be extended."
+        columns={{
+          device: "Device",
+          mode: "Mode",
+          last_activity: "Last activity",
+          created: "Created",
+          expires_at: "Expires at",
+          status: "Status",
+          action: "Action",
+        }}
+        bulk_revocations={{
+          others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
+        }}
+        sessions={[]}
+      />,
+    );
+
+    const form = container.querySelector("form");
+    form?.querySelector('input[name="authenticity_token"]')?.remove();
+
+    expect(submitFirstForm().defaultPrevented).toBe(true);
+    answerConfirmation(true);
+    expect(submitted).toHaveBeenCalledTimes(1);
+  });
+
   it("guards a secret credential deletion", () => {
     mount(
       <SecretCredentialIndex

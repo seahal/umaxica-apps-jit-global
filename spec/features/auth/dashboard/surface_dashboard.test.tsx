@@ -99,6 +99,15 @@ describe("SurfaceDashboard", () => {
 
     expect(markup).not.toContain('href="/dashboard?ri=jp"');
   });
+
+  it("omits the page description when the server sent none", () => {
+    const { description: unusedDescription, ...withoutDescription } = props;
+    void unusedDescription;
+    const markup = renderToStaticMarkup(<SurfaceDashboard {...withoutDescription} />);
+
+    expect(markup).toMatch(/<h1[^>]*>Dashboard<\/h1>/u);
+    expect(markup).not.toContain("Sign app signed-in landing.");
+  });
 });
 
 describe("auth/app pages", () => {
