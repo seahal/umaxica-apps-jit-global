@@ -14,7 +14,7 @@ module Valkey
       FIELDS = %w(
         version state client_id redirect_uri subject base_session_ref code_challenge
         code_challenge_method nonce scope auth_time resource_type rp_session_ref
-        refresh_family_ref acr amr issued_at expires_at consumed_at
+        refresh_family_ref acr amr issued_at expires_at consumed_at replay_detected_at
       ).freeze
 
       ConsumeResult =
@@ -79,6 +79,9 @@ module Valkey
         local current_family = tostring(payload["refresh_family_ref"] or "")
         local requested_rp = ARGV[1]
         local requested_family = ARGV[2]
+        if payload["replay_detected_at"] then
+          return {"replay_detected", current}
+        end
         if current_rp ~= "" or current_family ~= "" then
           if current_rp == requested_rp and current_family == requested_family then
             return {"linked", current}
@@ -92,6 +95,29 @@ module Valkey
         local ttl = tonumber(ARGV[3])
         redis.call("SET", KEYS[1], cjson.encode(payload), "XX", "EX", ttl)
         return {"linked", cjson.encode(payload)}
+      LUA
+
+      # Marks a verified replay on the consumed tombstone. Running atomically against
+      # LINK_FAMILY_SCRIPT closes the consume-to-link gap: a mark that lands first makes
+      # the winning exchange's link fail, and a link that lands first is returned here so
+      # the caller can revoke the family it names.
+      MARK_REPLAY_SCRIPT = <<~LUA.freeze
+        local current = redis.call("GET", KEYS[1])
+        if not current then
+          return {"missing", ""}
+        end
+        local ok, payload = pcall(cjson.decode, current)
+        if not ok or type(payload) ~= "table" then
+          return {"corrupt", ""}
+        end
+        if payload["state"] ~= "consumed" then
+          return {"invalid_state", current}
+        end
+        if not payload["replay_detected_at"] then
+          payload["replay_detected_at"] = ARGV[1]
+        end
+        redis.call("SET", KEYS[1], cjson.encode(payload), "XX", "KEEPTTL")
+        return {"marked", cjson.encode(payload)}
       LUA
 
       public
@@ -190,13 +216,28 @@ module Valkey
         status = result.is_a?(Array) ? result[0].to_s : "corrupt"
         payload = parse_payload(result.is_a?(Array) ? result[1] : nil)
         return ConsumeResult.new(status: status.to_sym, payload: payload) if %w(linked already_linked missing
-                                                                                invalid_state).include?(status)
+                                                                                invalid_state
+                                                                                replay_detected).include?(status)
 
         raise Umaxica::Valkey::SerializationError, "authorization code payload is corrupt" if status == "corrupt"
 
         raise Umaxica::Valkey::OperationError, "unexpected authorization code link status"
       rescue Redis::BaseError, IOError, SystemCallError => e
         raise Umaxica::Valkey::Unavailable, "Valkey authorization code link unavailable", cause: e
+      end
+
+      def mark_replay!(raw_code:, now: Time.current)
+        result = @connection.call("EVAL", MARK_REPLAY_SCRIPT, 1, storage_key(raw_code), now.iso8601)
+        status = result.is_a?(Array) ? result[0].to_s : "corrupt"
+        payload = parse_payload(result.is_a?(Array) ? result[1] : nil)
+        return ConsumeResult.new(status: status.to_sym, payload: payload) if %w(marked missing
+                                                                                invalid_state).include?(status)
+
+        raise Umaxica::Valkey::SerializationError, "authorization code payload is corrupt" if status == "corrupt"
+
+        raise Umaxica::Valkey::OperationError, "unexpected authorization code replay mark status"
+      rescue Redis::BaseError, IOError, SystemCallError => e
+        raise Umaxica::Valkey::Unavailable, "Valkey authorization code replay mark unavailable", cause: e
       end
 
       def storage_key(raw_code)

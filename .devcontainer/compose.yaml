@@ -226,6 +226,17 @@ services:
         condition: service_started
       valkey:
         condition: service_healthy
+networks:
+  # Only `core` attaches to `outer`, and only in this Dev Container layer, so the
+  # declaration lives here: declaring it in the shared `../compose.yaml` left a
+  # network no base service used and made a plain `podman compose up` warn
+  # `unused networks: outer`.
+  outer:
+    name: "${OUTER_DOCKER_NETWORK:-umaxica-apps-global_outer}"
+    # Keep this network Compose-managed. Interpolating `external` produces a
+    # string, which podman-compose cannot safely treat as the boolean required
+    # by the Compose model and causes `up` to fail while building network args.
+    external: false
 volumes:
   umaxica-home-cache: {}
   umaxica-home-share: {}

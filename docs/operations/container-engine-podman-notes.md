@@ -42,7 +42,10 @@ If an interrupted start leaves `global-devcontainer-core` in Created or Exited s
 Containers: Rebuild and Reopen in Container**. The CLI equivalent is the same `devcontainer up`
 command with `--remove-existing-container`.
 
-Compose networks are repository-managed rootless Podman networks. In particular, `outer.external` is
+Compose networks are repository-managed rootless Podman networks. `outer` is declared in
+`.devcontainer/compose.yaml` rather than `compose.yaml`, because `core` is its only member: declaring
+it in the shared file left a network no base service joined, and podman-compose reported
+`WARNING: unused networks: outer` on every plain `up`. In particular, `outer.external` is
 a YAML boolean and is not environment-variable interpolated. Interpolation turns this field into a
 string; affected podman-compose releases then fail in network argument construction with
 `AttributeError: 'str' object has no attribute 'get'`.

@@ -169,6 +169,9 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
                   payload: payload,
                 )
               end
+              store.define_singleton_method(:mark_replay!) do |**|
+                Valkey::AuthState::AuthorizationCodeStore::ConsumeResult.new(status: :marked, payload: payload)
+              end
 
               result = service(code_store: store).call
 

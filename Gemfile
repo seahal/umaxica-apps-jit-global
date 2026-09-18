@@ -2,7 +2,7 @@
 
 source "https://rubygems.org", cooldown: 3
 
-ruby "4.0.6"
+ruby "4.0.7"
 
 # Type signatures for Ruby libraries.
 gem "rbs", "~> 4.0", require: false

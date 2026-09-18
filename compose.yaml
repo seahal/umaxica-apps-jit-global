@@ -272,9 +272,14 @@ services:
     # opt-in observability services as container root keeps their data
     # directories writable without changing host ownership.
     user: root
-    command: "-config.file=/etc/loki/local-config.yaml"
+    # The image default (`local-config.yaml`) keeps every chunk forever, which
+    # adr/traces-and-metrics-routing-via-alloy.md treats as a misconfiguration
+    # for a development volume. The repository config carries the 24h retention
+    # that matches Tempo and Prometheus, so it replaces the packaged one.
+    command: "-config.file=/etc/loki/loki.yaml"
     volumes:
-      - loki-volume:/tmp/loki
+      - "./podman/loki/loki.yaml:/etc/loki/loki.yaml:ro,z"
+      - loki-volume:/loki
     networks:
       - observability
     # Runs every session now that the observability group is no longer
@@ -328,11 +333,24 @@ services:
     user: root
     environment:
       # Development-only, and read from the environment rather than committed as
-      # a literal, per adr/traces-and-metrics-routing-via-alloy.md. Grafana
-      # publishes no host port, so this guards a container-only UI.
+      # a literal, per adr/traces-and-metrics-routing-via-alloy.md. Since the
+      # loopback publication below, this guards a UI reachable from the
+      # developer's own browser rather than a container-only one; set
+      # GRAFANA_ADMIN_PASSWORD in the gitignored `.env` on any machine where the
+      # default is not wanted.
       GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
       GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
       GF_PATHS_PROVISIONING: "/etc/grafana/provisioning"
+    # Loopback-only publication so the developer's own browser can open the UI.
+    # 13000 rather than 3000/3001: those belong to host-native Rails and Dev
+    # Container Rails respectively (docs/operations/development-host-port-exposure.md).
+    # The container port stays Grafana's upstream 3000; only the host side moves.
+    # 127.0.0.1 is written explicitly — a bare "13000:3000" binds 0.0.0.0, which
+    # would put a credentialed UI over development telemetry on every LAN, Wi-Fi
+    # and Tailscale interface. Grafana stays off `frontend`, so no Cloudflare
+    # Tunnel ingress can reach it either.
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-13000}:3000"
     volumes:
       - grafana-volume:/var/lib/grafana
       - "./podman/grafana/provisioning:/etc/grafana/provisioning:z"
@@ -373,11 +391,28 @@ services:
     volumes:
       - "./podman/alloy/config.alloy:/etc/alloy/config.alloy:ro,z"
       - alloy-volume:/var/lib/alloy/data
+      # Read-only view of the repository log directory. Host-native Rails writes
+      # its files here, and the Compose network cannot read a host terminal's
+      # stdout, so tailing these files is the only transport that works for both
+      # host-native and Dev Container Rails. Read-only because Alloy has no
+      # reason to write into the workspace; its own tail positions live in
+      # alloy-volume.
+      - "./log:/var/log/umaxica:ro,z"
     networks:
       - observability
+    # Loopback-only OTLP/HTTP ingress for host-native Rails, which resolves no
+    # Compose DNS name and therefore cannot reach `alloy:4318`. Only 4318 is
+    # published: OTLP/gRPC (4317) has no host-side client, and the Alloy
+    # management UI (12345) is an unauthenticated control surface that must stay
+    # on the `observability` network. The 0.0.0.0 binds inside the container are
+    # a separate decision from this publication
+    # (docs/operations/development-host-port-exposure.md).
+    ports:
+      - "127.0.0.1:${ALLOY_OTLP_HTTP_HOST_PORT:-4318}:4318"
     depends_on:
       - tempo
       - prometheus
+      - loki
     # Runs every session now that the observability group is no longer
     # profile-gated, so it recovers like the other always-on services. Bounded
     # because Podman applies no backoff; see compose_restart_policy_test.rb.
@@ -537,12 +572,6 @@ networks:
   backend: {}
   frontend: {}
   observability: {}
-  outer:
-    name: "${OUTER_DOCKER_NETWORK:-umaxica-apps-global_outer}"
-    # Keep this network Compose-managed. Interpolating `external` produces a
-    # string, which podman-compose cannot safely treat as the boolean required
-    # by the Compose model and causes `up` to fail while building network args.
-    external: false
   # `cloudflare-tunnel` attaches to `frontend`; see the service definition.
   # See docs/operations/cloudflare-private-origin.md.
 volumes:

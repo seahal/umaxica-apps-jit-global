@@ -10,7 +10,7 @@ document; where an accepted ADR governs a behavior, the ADR remains authoritativ
 
 ## Authentication architecture
 
-Rails 8.2.0.alpha on Ruby 4.0.6. There is no Devise, Warden, Pundit, or Rodauth. Authentication is
+Rails 8.2.0.alpha on Ruby 4.0.7. There is no Devise, Warden, Pundit, or Rodauth. Authentication is
 implemented in-repository in `app/controllers/concerns/authentication_base.rb`; authorization is
 Action Policy.
 

@@ -1,24 +1,56 @@
 apiVersion: 1
 
+# Every datasource declares an explicit `uid`. Grafana otherwise generates one
+# per installation, and a generated UID is what `tracesToLogsV2.datasourceUid`
+# below would have to name — a reference that resolves on the machine it was
+# written on and silently breaks on every other clone. The UIDs are pinned by
+# test/tooling/observability_gateway_contract_test.rb.
+#
+# All three are read through the `observability` network. They are never written
+# to from Rails: Alloy is the single ingestion gateway
+# (adr/traces-and-metrics-routing-via-alloy.md).
+# Grafana matches a provisioned datasource to an existing row by UID, not by
+# name. A `grafana-volume` created before the UIDs above already holds Loki,
+# Tempo and Prometheus rows carrying generated UIDs, and provisioning then fails
+# the whole startup with "Datasource provisioning error: data source not found"
+# — observed on 2026-09-18, and fatal: Grafana exits 1 rather than starting
+# without its datasources. Deleting by name first makes provisioning converge
+# from either state, and is a no-op on a fresh volume. The rows are
+# configuration, not data: nothing is stored in them.
+deleteDatasources:
+  - name: Loki
+    orgId: 1
+  - name: Tempo
+    orgId: 1
+  - name: Prometheus
+    orgId: 1
+
 datasources:
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100
     isDefault: false
 
   - name: Tempo
+    uid: tempo
     type: tempo
     access: proxy
     url: http://tempo:3200
     isDefault: false
     jsonData:
+      # Trace -> logs only. A `tracesToMetricsV2` block would need Rails
+      # application metrics to point at, and there is no Ruby MeterProvider in
+      # config/initializers/opentelemetry.rb yet; adding the correlation now
+      # would render a panel that can only ever be empty.
       tracesToLogsV2:
         datasourceUid: loki
       nodeGraph:
         enabled: true
 
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090

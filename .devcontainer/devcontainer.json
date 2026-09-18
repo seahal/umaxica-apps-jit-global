@@ -16,7 +16,10 @@
   "containerUser": "global",
   "workspaceFolder": "/home/global/workspace",
   "overrideCommand": false,
-  "postCreateCommand": "bundle install && bun install --frozen-lockfile && bin/rails db:prepare",
+  // No `postCreateCommand`. Dependency installation and database preparation are
+  // run explicitly from inside the container (`bin/setup`), so container creation
+  // never blocks on a network fetch or mutates a database as a side effect of
+  // `devcontainer up`.
   "remoteEnv": {
     // The image sets the same value; this repeats it so a container built
     // before that change still gets bash instead of the /bin/sh fallback.

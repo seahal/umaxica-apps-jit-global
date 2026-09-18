@@ -30,7 +30,7 @@ module Base
             if logged_in? && current_operator.present? && authorization_authentication_satisfied?
               issue_authorization_code!(current_operator)
             elsif prompt_none_requested?
-              render json: { error: "login_required" }, status: :bad_request
+              redirect_login_required!
             else
               start_authorization_ceremony!
             end
@@ -160,6 +160,19 @@ module Base
             prompt: authorize_params[:prompt],
             max_age: authorize_params[:max_age],
             authenticated_at: current_authentication_event_at,
+          )
+        end
+
+        # The client and redirect_uri were validated above, so the protocol error is returned
+        # to the RP callback (OIDC Core 1.0 section 3.1.2.6) instead of being rendered here.
+        def redirect_login_required!
+          redirect_to_jump_url(
+            ::OidcAuthorizeCoordinator.error_redirect_url(
+              redirect_uri: authorize_params[:redirect_uri].to_s,
+              resource_type: resource_type,
+              error: "login_required",
+              state: authorize_params[:state],
+            ),
           )
         end
 

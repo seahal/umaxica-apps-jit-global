@@ -195,6 +195,73 @@ This narrows the "development: OpenTelemetry SDK enabled" line in "Phased enviro
 the SDK is available in development and off until asked for, because the agent it exports to is
 itself opt-in. Turning both on is one command.
 
+## Amendment: the gateway is completed, and host-native Rails is its first client
+
+Amended: 2026-09-18
+
+The original decision named Alloy the single agent but left three gaps that together meant no
+signal ever reached storage from the repository's primary development topology — host-native Rails
+with `podman compose` infrastructure.
+
+**1. Alloy had no host ingress.** Its OTLP receivers existed only on the `observability` network, so
+`alloy:4318` was unresolvable from a host `bin/dev`. The OTLP/HTTP receiver is now published as
+`127.0.0.1:4318`, and nothing else is: OTLP/gRPC (4317) has no host-side client and the Alloy
+management UI (12345) is an unauthenticated control surface. The endpoints are therefore:
+
+```text
+Compose `core`      OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+host-native Rails   OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318   (the exporter default)
+```
+
+Neither is written into `config/initializers/opentelemetry.rb`. The endpoint is deployment
+configuration read by the exporter from the environment; hardcoding a development address there
+would also decide it for production, which this ADR does not authorize.
+
+**2. Grafana had no host publication**, so the stack could not be read at all from a host browser.
+Grafana is published on `127.0.0.1:13000` — the upstream container port `3000` is unchanged; only
+the host side moves, because 3000 and 3001 belong to host-native and Dev Container Rails. Grafana
+stays on the `observability` network alone, so it is reachable from this machine's browser and from
+nowhere else: not the LAN, not Cloudflare Tunnel, not Tailscale. Its admin credentials remain
+development-only environment values and assume exactly that boundary.
+
+**3. Tempo was not actually receiving.** `podman/tempo/tempo.yaml` declared `otlp: protocols: grpc:`
+with no endpoint. The embedded OpenTelemetry Collector receiver defaults to `localhost:4317`, which
+binds the Tempo container's loopback, so Alloy's exports failed with `connection refused` and every
+trace was dropped after its retry budget. The endpoints are now explicit `0.0.0.0` binds. The Jaeger
+and Zipkin receivers are removed with the same change: nothing sent to them, and each was an
+ingestion path into storage that bypassed the agent-side redaction stage this ADR requires.
+
+The Grafana datasources now declare deterministic UIDs (`loki`, `tempo`, `prometheus`). Grafana
+otherwise generates one per installation, and `tracesToLogsV2.datasourceUid: loki` then names a UID
+that resolves only on the machine the reference was written on. Provisioning also deletes the three
+datasources by name before recreating them, because Grafana matches an existing row by UID and exits
+`1` — taking the whole service down — when a provisioned UID does not match the row it finds.
+
+Logs are no longer out of scope; see the amendment to `adr/application-logging-boundary.md`. Alloy
+tails development log files into Loki, which makes Alloy the single gateway for all three signals
+rather than for two of them.
+
+Retention is bounded for all three backends: Tempo 24h (`block_retention`), Prometheus 24h
+(`--storage.tsdb.retention.time`), and now Loki 24h (`podman/loki/loki.yaml`, with
+`compactor.retention_enabled: true` — without that flag the retention period is advisory and chunks
+are kept forever, which is what the packaged `local-config.yaml` did).
+
+**Metrics remain limited to agent and backend self-monitoring.** Alloy scrapes its own metrics and
+Prometheus scrapes its own; there is no Ruby `MeterProvider` in the initializer, so there are no
+Rails application metrics. Verified rather than assumed on 2026-09-18: `alloy_build_info` and
+`up{job="prometheus"}` return series; nothing Rails-shaped does. A Ruby metrics SDK is not adopted
+here on the strength of the traces path alone, and no `tracesToMetricsV2` correlation is provisioned
+because it could only ever render an empty panel. Rails application metrics stay a follow-up.
+
+The completed development topology:
+
+```text
+host-native Rails --OTLP/HTTP--> 127.0.0.1:4318 --> alloy --> tempo       (traces)
+repository ./log  --file tail (read-only bind)---> alloy --> loki        (logs)
+                                                   alloy --> prometheus  (metrics: agent self only)
+browser --> 127.0.0.1:13000 --> grafana --> tempo / loki / prometheus
+```
+
 ## Related
 
 - `adr/application-logging-boundary.md` — log path is owned separately and is not changed by this

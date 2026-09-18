@@ -4,16 +4,20 @@
 require "test_helper"
 
 class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
+  include OidcAuthorizationResponseHelper
+
   setup { Rails.configuration.x.rate_limit.fetch(:store).clear }
 
-  test "anonymous prompt=none returns login_required without starting a ceremony" do
+  test "anonymous prompt=none returns login_required to the RP without starting a ceremony" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
 
     get base_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "none")),
         headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "login_required", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(
+      error: "login_required",
+      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+    )
   end
 
   test "prompt=login with an existing session starts reauthentication instead of issuing a code" do
@@ -59,8 +63,10 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
       prompt: "none",
     ), headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "login_required", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(
+      error: "login_required",
+      redirect_uri: client.redirect_uris_by_realm.fetch("visitor").first,
+    )
   end
 
   test "org anonymous prompt=none returns login_required" do
@@ -80,8 +86,10 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
       prompt: "none",
     ), headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "login_required", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(
+      error: "login_required",
+      redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
+    )
   end
 
   test "shared freshness decision treats login and stale max_age as unsatisfied" do

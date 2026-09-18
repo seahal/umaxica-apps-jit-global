@@ -6,7 +6,7 @@ the relevant contract tests together.
 
 The inventory was rechecked on 2026-09-18 against the local `feature` worktree at the implementation
 slice `0e9062de085e2d4ceba90199a03360d15fa7b7d2`. The installed versions are Rails `8.2.0.alpha`,
-Solid Queue `1.7.0`, and Ruby `4.0.6`. The Solid Queue source and README in the installed gem were
+Solid Queue `1.7.0`, and Ruby `4.0.7`. The Solid Queue source and README in the installed gem were
 used for configuration semantics and validation commands.
 
 ## Runtime boundary

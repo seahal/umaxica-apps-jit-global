@@ -17,14 +17,9 @@ module Security
       setup do
         ensure_client_token_reference_records!
         ensure_visitor_token_reference_records!
-        ClientToken.skip_callback(:validation, :before, :ensure_device_session_record)
         @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
         @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
         host! @host
-      end
-
-      teardown do
-        ClientToken.set_callback(:validation, :before, :ensure_device_session_record)
       end
 
       test "closing resource is redirected away from protected html routes" do

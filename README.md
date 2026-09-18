@@ -108,7 +108,9 @@ bin/setup
 ```
 
 `compose.yaml` owns shared infrastructure for both development modes. In Dev Container mode,
-`.devcontainer/compose.yaml` adds `core`; in host-native mode, Rails runs directly on the VM and
+`.devcontainer/compose.yaml` adds `core`, and the same three commands above are run by hand inside
+`core` — `devcontainer.json` declares no `postCreateCommand`, so creating the container neither
+fetches dependencies nor touches a database; in host-native mode, Rails runs directly on the VM and
 `podman compose up -d` starts only PostgreSQL, Valkey, FakeCloud, and observability services.
 `compose.override.yaml` is the only other root Compose file. It is **untracked and gitignored**
 (since 2026-09-14), auto-discovered by a bare `podman compose`, and everything in it is

@@ -45,18 +45,44 @@ changing nothing about host exposure.
 | `primary` (writer)                     | `127.0.0.1:5432`           | Host-native Rails writer; containers use `primary:5432`.                                                               |
 | `replica` (reader)                     | `127.0.0.1:5433`           | Host-native Rails reader; containers use `replica:5432`.                                                               |
 | `valkey`                               | `127.0.0.1:6379`           | One nonprod Valkey; logical DBs 0/1/2 (dev) and 3/4/5 (test) via responsibility URLs.                                  |
-| `loki`, `tempo`, `prometheus`, `alloy` | none                       | Reached only by each other and by Grafana on the `observability` network.                                              |
-| `grafana`                              | none                       | See "Grafana has no host publication" below.                                                                           |
+| `loki`, `tempo`, `prometheus`          | none                       | Storage backends behind the Alloy gateway. Reached only by Alloy and Grafana on the `observability` network.            |
+| `alloy` (OTLP/HTTP, 4318)              | `127.0.0.1:4318`           | Host-native Rails exports telemetry here; it resolves no Compose DNS name. See "The two observability listeners" below. |
+| `alloy` (12345, OTLP/gRPC 4317)        | none                       | The management UI is an unauthenticated control surface; nothing on the host speaks OTLP/gRPC.                          |
+| `grafana`                              | `127.0.0.1:13000`          | The developer's own browser. 3000/3001 belong to Rails, so the UI takes 13000.                                          |
 | `cloudflare-tunnel`                    | none, and none is possible | The connector is outbound-only.                                                                                        |
 
-### Grafana has no host publication
+### The two observability listeners
 
-The observability group runs on every `up` since 2026-08-31, but Grafana still publishes no host
-port, so `http://localhost:3000` does not reach it. Host port `3000` is reserved for host-native
-Rails, while Dev Container Rails is published on `127.0.0.1:3001`. Reach the Grafana UI through the
-container instead, or add a loopback publication if it is wanted day to day. Grafana is not a
-datastore, so a `127.0.0.1`-bound publication would not violate the never-publish rule above; it
-simply has not been added.
+Development observability publishes exactly two host ports, both loopback:
+
+```text
+127.0.0.1:13000 -> Grafana        (browser UI for this machine only)
+127.0.0.1:4318  -> Alloy OTLP/HTTP (telemetry ingress for host-native Rails)
+```
+
+Nothing else in the observability group is reachable from the host. Tempo (3200/4317/4318),
+Prometheus (9090), Loki (3100) and the Alloy management UI (12345) are consumed over the
+`observability` network by service name, and adding a publication for any of them creates an
+ingestion or query path that bypasses the single Alloy gateway
+(`adr/traces-and-metrics-routing-via-alloy.md`).
+
+Grafana keeps its upstream container port `3000`; only the host side is 13000, because host `3000`
+is host-native Rails and `3001` is Dev Container Rails. Grafana attaches to `observability` alone —
+never to `frontend` — so no Cloudflare Tunnel ingress and no Tailscale route can reach it. It is a
+local-only UI, and its admin credentials (`GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`, default
+`admin`/`admin`) are development-only values that assume exactly this loopback boundary. Overriding
+them in the gitignored `.env` is supported; publishing Grafana anywhere else is not.
+
+Host-native Rails reaches the ingress with:
+
+```text
+OPEN_TELEMETRY=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+```
+
+Compose `core` keeps the container-network form instead: `http://alloy:4318`. The two are not
+interchangeable — `alloy` does not resolve on the host, and `127.0.0.1` inside a container is the
+container itself.
 
 IPv6: rootless Podman publishes these as IPv4 only, so no `::`-bound listener is created. The
 loopback form pins the IPv4 side explicitly. If a future service needs IPv6 loopback, write
@@ -102,13 +128,19 @@ Run on the **host**, not inside a container:
 
 ```sh
 podman ps --format 'table {{.Names}}\t{{.Ports}}'
-sudo ss -lntup | grep -E ':(3000|3001|3036|9092|5432|5433|6379)\b'
+sudo ss -lntup | grep -E ':(3000|3001|3036|9092|5432|5433|6379|13000|4318)\b'
 ```
 
 Expected: `core` shows `127.0.0.1:3001->3000/tcp`, `primary` shows `127.0.0.1:5432->5432/tcp`,
 `replica` shows `127.0.0.1:5433->5432/tcp`, `valkey` shows `127.0.0.1:6379->6379/tcp`. The Dev
 Container `core` service shows loopback-only Rails publications when the combined config is used. No
-line anywhere contains `0.0.0.0`, `*`, or a LAN address for these services.
+line anywhere contains `0.0.0.0`, `*`, or a LAN address for these services. `grafana` shows
+`127.0.0.1:13000->3000/tcp` and `alloy` shows `127.0.0.1:4318->4318/tcp`; `tempo`, `prometheus` and
+`loki` show no host mapping at all.
+
+```sh
+curl -f http://127.0.0.1:13000/api/health   # Grafana answers; the LAN address must not
+```
 
 From a second machine on the same LAN, both of these must fail to connect:
 

@@ -181,4 +181,62 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     assert_equal "rp-session-a", @store.read(raw).fetch("rp_session_ref")
     assert_equal "family-a", @store.read(raw).fetch("refresh_family_ref")
   end
+
+  test "a replay marked before the family link makes the link fail" do
+    raw = consumed_code
+
+    marked = @store.mark_replay!(raw_code: raw)
+    link = @store.link_family!(raw_code: raw, rp_session_ref: "rp-session-a", refresh_family_ref: "family-a")
+
+    assert_equal :marked, marked.status
+    assert_equal :replay_detected, link.status
+    assert_nil @store.read(raw)["rp_session_ref"]
+  end
+
+  test "a replay marked after the family link returns the linked family for revocation" do
+    raw = consumed_code
+    @store.link_family!(raw_code: raw, rp_session_ref: "rp-session-a", refresh_family_ref: "family-a")
+
+    marked = @store.mark_replay!(raw_code: raw)
+
+    assert_equal :marked, marked.status
+    assert_equal "rp-session-a", marked.payload.fetch("rp_session_ref")
+    assert_equal "family-a", marked.payload.fetch("refresh_family_ref")
+    assert_predicate marked.payload.fetch("replay_detected_at"), :present?
+  end
+
+  test "marking a replay keeps the tombstone expiry and refuses an unconsumed code" do
+    raw = consumed_code
+    key_ttl = -> { @connection.call("TTL", @store.send(:storage_key, raw)) }
+    before = key_ttl.call
+
+    @store.mark_replay!(raw_code: raw)
+
+    assert_operator key_ttl.call, :<=, before
+    assert_operator key_ttl.call, :>, 0
+    assert_equal :invalid_state, @store.mark_replay!(raw_code: issued_code).status
+    assert_equal :missing, @store.mark_replay!(raw_code: "unknown-code").status
+  end
+
+  private
+
+  def issued_code
+    @store.issue!(
+      client_id: "core-app-rp",
+      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      subject: "sub-1",
+      code_challenge: "challenge",
+      code_challenge_method: "S256",
+      resource_type: "client",
+    )
+  end
+
+  def consumed_code
+    raw = issued_code
+    @store.consume!(
+      raw_code: raw,
+      expected: { client_id: "core-app-rp", redirect_uri: "https://core.umaxica.app/sign/in/callback" },
+    )
+    raw
+  end
 end

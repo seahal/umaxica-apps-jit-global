@@ -15,13 +15,8 @@ module Security
       setup do
         ensure_user_token_reference_records!
         ensure_visitor_token_reference_records!
-        ClientToken.skip_callback(:validation, :before, :ensure_device_session_record)
         @app_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
         @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-      end
-
-      teardown do
-        ClientToken.set_callback(:validation, :before, :ensure_device_session_record)
       end
 
       test "active client refresh token is refreshable" do

@@ -43,7 +43,7 @@ Rule paths are relative to `.agents/harnesses/rules/`; documentation paths are r
 - Security-sensitive work or broad refactors: `generic/absolute-rules.mdc`, `generic/no-silent-fallback.mdc`, `project/regression-guards.mdc`
 - Configuration or environment variables: `generic/no-silent-fallback.mdc`
 - Compose files, container ports, or devcontainer configuration: `docs/operations/development-host-port-exposure.md`
-- Routing or authentication workflows: `project/surfaces.mdc`, `generic/routing.mdc`, `generic/no-workflow-drift.mdc`, `docs/architecture/controller-lifecycle.md`
+- Routing or authentication workflows: `project/surfaces.mdc`, `generic/routing.mdc`, `generic/no-workflow-drift.mdc`, `generic/no-silent-fallback.mdc`, `docs/architecture/controller-lifecycle.md`
 - User-facing notices, alerts, or feedback: `generic/no-flash-messages.mdc`
 - Google, Apple, or Microsoft Entra ID sign-in buttons and provider branding: `docs/reference/third-party-sign-in-button-requirements.md`
 - External technical sources: `generic/source-policy.mdc`
