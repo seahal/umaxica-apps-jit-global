@@ -43,11 +43,11 @@ Containers: Rebuild and Reopen in Container**. The CLI equivalent is the same `d
 command with `--remove-existing-container`.
 
 Compose networks are repository-managed rootless Podman networks. `outer` is declared in
-`.devcontainer/compose.yaml` rather than `compose.yaml`, because `core` is its only member: declaring
-it in the shared file left a network no base service joined, and podman-compose reported
-`WARNING: unused networks: outer` on every plain `up`. In particular, `outer.external` is
-a YAML boolean and is not environment-variable interpolated. Interpolation turns this field into a
-string; affected podman-compose releases then fail in network argument construction with
+`.devcontainer/compose.yaml` rather than `compose.yaml`, because `core` is its only member:
+declaring it in the shared file left a network no base service joined, and podman-compose reported
+`WARNING: unused networks: outer` on every plain `up`. In particular, `outer.external` is a YAML
+boolean and is not environment-variable interpolated. Interpolation turns this field into a string;
+affected podman-compose releases then fail in network argument construction with
 `AttributeError: 'str' object has no attribute 'get'`.
 
 The compose stack at `compose.yaml` is exercised with rootless Podman. Some Compose-compatible

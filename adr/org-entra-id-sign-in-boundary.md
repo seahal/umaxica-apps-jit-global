@@ -145,8 +145,8 @@ not treated as equivalent to local strong evidence of presence. An operator who 
 ID and has TOTP enrolled is still required to complete the TOTP step-up before the session is
 established. Since 2026-09-09 the callback establishes no session at all, so the question is settled
 a stage earlier: the session is established by the passkey or secret stage that follows, through the
-same `establish_signed_in_session!` path, with the same MFA gate. This keeps Entra ID at AAL1 unless and
-until an explicit trust policy is introduced for it.
+same `establish_signed_in_session!` path, with the same MFA gate. This keeps Entra ID at AAL1 unless
+and until an explicit trust policy is introduced for it.
 
 ### Scope of this ADR
 

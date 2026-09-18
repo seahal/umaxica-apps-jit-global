@@ -33,9 +33,9 @@ return-policy checks, JWKS fetch/cache behavior, and one-time replay caching sta
 services.
 
 Inbound Jump-gateway return tokens are verified only with the Jump public JWKS derived as
-`{PUBLIC_JUMP_GATEWAY_URL}/.well-known/jwks.json`. The lifetime cap is 30 seconds. Clock leeway is
-5 seconds. A JWKS fetch failure fails closed; Rails does not keep a stale JWKS fallback and does
-not store the Jump gateway private key.
+`{PUBLIC_JUMP_GATEWAY_URL}/.well-known/jwks.json`. The lifetime cap is 30 seconds. Clock leeway is 5
+seconds. A JWKS fetch failure fails closed; Rails does not keep a stale JWKS fallback and does not
+store the Jump gateway private key.
 
 ## Key States
 

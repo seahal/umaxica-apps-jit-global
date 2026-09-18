@@ -311,9 +311,9 @@ schemas:
   Page:
     type: object
     description: >-
-      Offset page coordinates for a collection (adr/api-collection-offset-pagination.md).
-      `previous` and `next` are null when there is no adjacent page. The page size is not part of
-      the envelope: it is a server-side constant.
+      Offset page coordinates for a collection (adr/api-collection-offset-pagination.md). `previous`
+      and `next` are null when there is no adjacent page. The page size is not part of the envelope:
+      it is a server-side constant.
     required: [current, previous, next, last]
     properties:
       current:

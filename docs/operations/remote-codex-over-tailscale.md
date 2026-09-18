@@ -6,9 +6,9 @@ same toolchain.
 
     client ---- tailnet tcp/22 ----> tailscaled in core ---- 127.0.0.1:2222 ----> sshd
 
-Opt-in. The overlay lives in `compose.override.yaml` behind `profiles: [remote-access]`, so
-nothing starts it implicitly: a bare `podman compose up` resolves `core` out of the merged
-configuration entirely, and the Dev Containers CLI never loads that file.
+Opt-in. The overlay lives in `compose.override.yaml` behind `profiles: [remote-access]`, so nothing
+starts it implicitly: a bare `podman compose up` resolves `core` out of the merged configuration
+entirely, and the Dev Containers CLI never loads that file.
 
 This document is one of three. `umaxica-apps-global`, `umaxica-apps-edge` and `portal` share one
 contract, described in `plans/global-portal-edge-dreamy-spring.md`; only the account name, the
@@ -216,6 +216,5 @@ volumes, which deregisters the node and forces a fresh enrolment.
   second project that collides with the Dev Container over the `global-devcontainer-*` container
   names and the published ports. Volume names are prefixed with the project name, which is why the
   preflight looks for `umaxicaappsglobaldc_tailscale-state`. A bare
-  `podman compose -f compose.yaml -f compose.override.yaml` without `.devcontainer/compose.yaml`
-  has no `core` to overlay at all. Include all three files, or expect the profile to select
-  nothing.
+  `podman compose -f compose.yaml -f compose.override.yaml` without `.devcontainer/compose.yaml` has
+  no `core` to overlay at all. Include all three files, or expect the profile to select nothing.

@@ -10,9 +10,11 @@
 ## Decisions Made During Implementation
 
 - Decision: include `Pagy::Method` on `PublishingContentRendering`, not `ApplicationController`.
-  - Why: the twelve cells inherit `BareController`, which does not go through `ApplicationController`.
+  - Why: the twelve cells inherit `BareController`, which does not go through
+    `ApplicationController`.
   - Alternatives considered: ApplicationController include (would miss these endpoints).
-- Decision: parse `page` in the application and pass it to `pagy(:offset, ..., page:, raise_range_error: true)`.
+- Decision: parse `page` in the application and pass it to
+  `pagy(:offset, ..., page:, raise_range_error: true)`.
   - Why: Pagy 43 `Request#resolve_page` coerces invalid values to 1.
   - Follow-up needed: none.
 - Decision: no index added on `(effective_from, public_id)`.

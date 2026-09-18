@@ -10,8 +10,8 @@
 
 ## Decisions Made During Implementation
 
-- Decision: replace the `platform` connection with Rails-standard `primary`, owning `db/migrate`
-  and dumping to `db/structure.sql` (no custom `schema_dump`).
+- Decision: replace the `platform` connection with Rails-standard `primary`, owning `db/migrate` and
+  dumping to `db/structure.sql` (no custom `schema_dump`).
   - Why: nothing is deployed; Flipper is durable application-wide configuration, not a domain that
     needs a specially named database.
   - Alternatives considered: keep `schema_dump: platform_structure.sql` or `primary_structure.sql`.

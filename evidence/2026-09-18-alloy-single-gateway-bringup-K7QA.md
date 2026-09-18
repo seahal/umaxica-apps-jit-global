@@ -1,7 +1,6 @@
 # Alloy Single-Gateway Observability Bring-Up
 
-Date: 2026-09-18
-Scope: root `compose.yaml` observability group, host-native topology.
+Date: 2026-09-18 Scope: root `compose.yaml` observability group, host-native topology.
 
 Everything below was executed in this session on the development host (rootless Podman, Compose
 project `umaxicaappsglobaldc`). Only the observability services were started; the datastore services
@@ -35,11 +34,11 @@ appears for any observability port; `tempo`, `prometheus` and `loki` show no hos
 
 `GET /api/datasources` → three datasources with the provisioned UIDs, each `/health` `200`:
 
-| name       | uid          | url                     | health                                    |
-| ---------- | ------------ | ----------------------- | ----------------------------------------- |
-| Loki       | `loki`       | http://loki:3100        | `Data source successfully connected.`     |
-| Prometheus | `prometheus` | http://prometheus:9090  | `Successfully queried the Prometheus API.` |
-| Tempo      | `tempo`      | http://tempo:3200       | `Data source is working`                  |
+| name       | uid          | url                    | health                                     |
+| ---------- | ------------ | ---------------------- | ------------------------------------------ |
+| Loki       | `loki`       | http://loki:3100       | `Data source successfully connected.`      |
+| Prometheus | `prometheus` | http://prometheus:9090 | `Successfully queried the Prometheus API.` |
+| Tempo      | `tempo`      | http://tempo:3200      | `Data source is working`                   |
 
 ## Traces
 
@@ -71,8 +70,8 @@ back through Grafana's Loki proxy:
 {job="rails-access"}      -> 1 stream, labels {job, service_name, layer=access, filename, method=GET, status=200}
 ```
 
-Both layers arrive, separately labelled, with the access line's `method`/`status` lifted by the
-JSON stage. The lines themselves are forwarded unmodified.
+Both layers arrive, separately labelled, with the access line's `method`/`status` lifted by the JSON
+stage. The lines themselves are forwarded unmodified.
 
 ## Metrics
 
@@ -108,9 +107,8 @@ fabricated to make a panel look populated.
 ## Not verified
 
 Host-native Rails was **not** started: `bundle exec` fails on this host (the bundle is deliberately
-incomplete here — the host does not run Rails). The host-side OTLP endpoint, the Loki file
-transport and the Grafana path were therefore exercised with synthetic payloads written to the same
-endpoints and the same files Rails writes. What remains unverified is only the Rails-side half:
-that the SDK initialises under `OPEN_TELEMETRY=true` and that Lograge writes
-`log/development.access.jsonl`. Neither the Compose topology nor the ingestion path depends on the
-machine it is checked from.
+incomplete here — the host does not run Rails). The host-side OTLP endpoint, the Loki file transport
+and the Grafana path were therefore exercised with synthetic payloads written to the same endpoints
+and the same files Rails writes. What remains unverified is only the Rails-side half: that the SDK
+initialises under `OPEN_TELEMETRY=true` and that Lograge writes `log/development.access.jsonl`.
+Neither the Compose topology nor the ingestion path depends on the machine it is checked from.

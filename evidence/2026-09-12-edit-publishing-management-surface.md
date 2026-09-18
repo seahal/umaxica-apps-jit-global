@@ -10,9 +10,9 @@ Date: 2026-09-12
 - `git diff --check` completed successfully.
 - Static inventory searches found no active `Base::Org::Publishing`, `base_org_publishing`, or
   `base/org/publishing` references outside historical implementation notes.
-- The Dev Container `core` service now declares both `edit.org.localhost` and
-  `edit.umaxica.org` aliases on `frontend`, the private origin required by the remotely managed
-  Cloudflare Tunnel ingress.
+- The Dev Container `core` service now declares both `edit.org.localhost` and `edit.umaxica.org`
+  aliases on `frontend`, the private origin required by the remotely managed Cloudflare Tunnel
+  ingress.
 
 ## Blocked
 
@@ -21,8 +21,8 @@ Date: 2026-09-12
   current `Gemfile.lock` is absent from `vendor/bundle`. No install or lockfile mutation was made.
 - `bun run lint` could not run because `bun` is not installed in this environment.
 - `podman compose -f compose.yaml -f .devcontainer/compose.yaml config` could not initialize the
-  rootless Podman runtime because `/run/user/1000/libpod` is read-only. No Compose service or
-  remote Tunnel state was changed by that failed check.
+  rootless Podman runtime because `/run/user/1000/libpod` is read-only. No Compose service or remote
+  Tunnel state was changed by that failed check.
 - The Tunnel ingress, DNS, and Access application are remotely managed in Cloudflare and this
   session has no authenticated Cloudflare browser or API connection. They remain unverified until
   the current Tunnel configuration is read, merged with the `edit.umaxica.org` rule targeting

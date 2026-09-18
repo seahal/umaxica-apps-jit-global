@@ -15,9 +15,9 @@ both `["ES384"]`. The OpenID Connect Core conformance profiles expect `RS256` su
 First-party JWT access tokens (`auth_access` and preference access) follow RFC 9068 in token
 structure, claims, semantics, and validation requirements. ES384 is the sole supported signing
 algorithm. UMAXICA intentionally does not implement the RFC 9068 §2.1 requirement that conforming
-authorization servers and resource servers include RS256 among their supported signature
-algorithms. ES384 itself is permitted by RFC 9068; the deviation is the absence of RS256 support.
-See `adr/rfc9068-access-token-profile.md`.
+authorization servers and resource servers include RS256 among their supported signature algorithms.
+ES384 itself is permitted by RFC 9068; the deviation is the absence of RS256 support. See
+`adr/rfc9068-access-token-profile.md`.
 
 This is a deliberate private profile:
 

@@ -1,8 +1,7 @@
 # Method Visibility and Concern Inclusion Hooks
 
-Two architecture rules are enforced statically by custom RuboCop cops in
-`lib/rubocop/cop/umaxica/`. Both are normative for new and modified application code under `app/`
-and `lib/`.
+Two architecture rules are enforced statically by custom RuboCop cops in `lib/rubocop/cop/umaxica/`.
+Both are normative for new and modified application code under `app/` and `lib/`.
 
 ## Rule 1 — no concern inclusion hooks (`Umaxica/NoConcernInclusionHooks`)
 
@@ -42,8 +41,8 @@ end
 ```
 
 Existing hooks are legacy debt recorded in the baseline. Do not migrate one mechanically: the hook
-body may depend on inclusion order, on the host's table, or on being evaluated in the host's context.
-Migrate only with tests that cover the behavior being moved.
+body may depend on inclusion order, on the host's table, or on being evaluated in the host's
+context. Migrate only with tests that cover the behavior being moved.
 
 ## Rule 2 — explicit method visibility (`Umaxica/ExplicitMethodVisibility`)
 
@@ -77,16 +76,16 @@ out of scope. Their visibility cannot be expressed with a lexical modifier, so t
 inside blocks at all.
 
 A test is never a reason to widen visibility. Do not make a method public, keep it public, or
-promote `private` to `protected` because a test calls it, and do not add a test-only wrapper or reach
-in with `send`. If reducing visibility breaks a test, the test is coupled to an implementation
+promote `private` to `protected` because a test calls it, and do not add a test-only wrapper or
+reach in with `send`. If reducing visibility breaks a test, the test is coupled to an implementation
 detail; move it to the public behavior. See `.agents/harnesses/rules/generic/no-test-only-code.mdc`.
 
 ## Baseline and ratchet
 
 Existing violations are technical debt, not permission.
 
-- `.rubocop_todo.yml` — per-cop `Exclude` lists, so `bin/rubocop` (CI step "Style: Ruby") stays green
-  while rejecting any violation in a file that is not already in debt.
+- `.rubocop_todo.yml` — per-cop `Exclude` lists, so `bin/rubocop` (CI step "Style: Ruby") stays
+  green while rejecting any violation in a file that is not already in debt.
 - `.rubocop/architecture_baseline.yml` — per-file offense counts.
   `test/tooling/architecture_baseline_test.rb` (CI step "Tests: Rails") re-measures the repository
   with the excludes ignored and fails if any file exceeds its recorded count, or if the baseline

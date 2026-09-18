@@ -5,8 +5,8 @@ Incident report and improvement-plan seed:
 
 ## Status
 
-Backlog. Immediate cookie-detach recovery is implemented; this note is the remaining
-fundamental work.
+Backlog. Immediate cookie-detach recovery is implemented; this note is the remaining fundamental
+work.
 
 ## Context
 
@@ -14,12 +14,12 @@ Refresh tokens rotate with one-time consume semantics. A second presentation of 
 verifier is treated as compromise (`refresh_token_reuse_detected`) and the whole token family is
 revoked.
 
-During development and ordinary browsing, two close HTML GETs (Inertia navigation, a second tab,
-or a retry) often present the same refresh cookie because the first response has not yet replaced
-it. That is classified as reuse. The family is revoked while a later `Set-Cookie` from the first
-request can still leave a discarded access JWT in the browser. `/oauth/authorize` is `:open`, so
-those leftover credentials are "invalid credentials" and used to return 401
-`auth.session_expired` instead of starting sign-in. The user cannot continue.
+During development and ordinary browsing, two close HTML GETs (Inertia navigation, a second tab, or
+a retry) often present the same refresh cookie because the first response has not yet replaced it.
+That is classified as reuse. The family is revoked while a later `Set-Cookie` from the first request
+can still leave a discarded access JWT in the browser. `/oauth/authorize` is `:open`, so those
+leftover credentials are "invalid credentials" and used to return 401 `auth.session_expired` instead
+of starting sign-in. The user cannot continue.
 
 ## Immediate recovery (done)
 
@@ -32,8 +32,8 @@ On reuse detection:
   (`token_session_not_found`, `token_decode_failed`), detach cookies and continue as anonymous so
   the authorization ceremony can start.
 
-This does not weaken replay detection. It only removes browser artifacts after the family is
-already dead.
+This does not weaken replay detection. It only removes browser artifacts after the family is already
+dead.
 
 ## Fundamental work
 
@@ -45,8 +45,8 @@ Implement the DB-only overlap window described in
   device inside a short overlap window;
 - use PostgreSQL row locks only (no Redis / Valkey for this path).
 
-Until that ships, development will still see reuse events. The English warning is the signal to
-look for overlapping HTML refreshes rather than a wall-clock session TTL.
+Until that ships, development will still see reuse events. The English warning is the signal to look
+for overlapping HTML refreshes rather than a wall-clock session TTL.
 
 ## Non-goals
 
@@ -56,5 +56,5 @@ look for overlapping HTML refreshes rather than a wall-clock session TTL.
 
 ## Tests required for the overlap window
 
-Covered in `plans/backlog/db-backed-token-refresh-overlap-window.md`. Add an HTML
-`/oauth/authorize` case: after overlap-or-reuse recovery, the ceremony starts instead of 401.
+Covered in `plans/backlog/db-backed-token-refresh-overlap-window.md`. Add an HTML `/oauth/authorize`
+case: after overlap-or-reuse recovery, the ceremony starts instead of 401.

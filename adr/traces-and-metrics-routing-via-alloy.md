@@ -199,9 +199,9 @@ itself opt-in. Turning both on is one command.
 
 Amended: 2026-09-18
 
-The original decision named Alloy the single agent but left three gaps that together meant no
-signal ever reached storage from the repository's primary development topology — host-native Rails
-with `podman compose` infrastructure.
+The original decision named Alloy the single agent but left three gaps that together meant no signal
+ever reached storage from the repository's primary development topology — host-native Rails with
+`podman compose` infrastructure.
 
 **1. Alloy had no host ingress.** Its OTLP receivers existed only on the `observability` network, so
 `alloy:4318` was unresolvable from a host `bin/dev`. The OTLP/HTTP receiver is now published as

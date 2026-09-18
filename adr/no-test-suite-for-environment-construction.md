@@ -24,14 +24,14 @@ look like coverage, and they are not evidence about the environment anyone was w
 The suite's value comes from being readable as a description of this application's behaviour. A
 developer opening `test/security/invariants/` is asking what the authorization model guarantees.
 Answering that question now means sorting genuine invariants — refresh-token reuse, CSRF strategy,
-cookie security, controller lifecycle order — from assertions that a gem landed in the right
-Bundler group. The signal degrades in proportion to how much setup accumulates, and setup
-accumulates every time the environment is touched.
+cookie security, controller lifecycle order — from assertions that a gem landed in the right Bundler
+group. The signal degrades in proportion to how much setup accumulates, and setup accumulates every
+time the environment is touched.
 
 The cost profile is also inverted. Environment construction is a one-time activity; a test case runs
-on every commit forever. The route-list comparison reaches into a gem's internal
-`config/routes.rb` — it is guaranteed to break on an upgrade, and the breakage will be
-indistinguishable from a real problem until somebody reads it closely.
+on every commit forever. The route-list comparison reaches into a gem's internal `config/routes.rb`
+— it is guaranteed to break on an upgrade, and the breakage will be indistinguishable from a real
+problem until somebody reads it closely.
 
 What would actually have caught a failure in any of this is reaching the host and watching what it
 answers.
@@ -47,8 +47,8 @@ devcontainer, and Procfile configuration; build, bundling, lint, and format tool
 environment variables that plumb any of it.
 
 Results are established by running the thing and recorded in `evidence/` under the rules AGENTS.md
-already sets: the commands, identifiers, status codes, and excerpts actually observed, with
-anything that could not be completed recorded as not completed and why.
+already sets: the commands, identifiers, status codes, and excerpts actually observed, with anything
+that could not be completed recorded as not completed and why.
 
 Reasoning goes where the next reader will be standing — a comment at the configuration site, and an
 ADR when the decision is architectural. Where a gem internal has been copied into this repository,
@@ -72,20 +72,19 @@ deliberately not extended for the three new surfaces: it already fails on any mo
 is not in its reviewed list, and the three new gems do not load under `RAILS_ENV=test`, so there is
 nothing for it to see.
 
-A tool is covered through the application's dependency on its output, never through the tool
-itself. The OpenAPI descriptions are contract-tested because the JSON API must conform to them, not
-because Redocly is configured correctly.
+A tool is covered through the application's dependency on its output, never through the tool itself.
+The OpenAPI descriptions are contract-tested because the JSON API must conform to them, not because
+Redocly is configured correctly.
 
 ## Consequences
 
 Accepted, and stated plainly rather than minimised:
 
-- Regressions in environment construction are not caught automatically. If someone moves
-  `coverband` out of `group :development`, or drops the `paths["config/routes.rb"] = []` line that
-  suppresses `rails_performance`'s unconstrained self-mount, no test fails. Those specific hazards
-  are documented at their sites and in
-  `adr/diagnostic-surfaces-performance-coverband-swagger.md`; they now rely on review and on the
-  comments being read.
+- Regressions in environment construction are not caught automatically. If someone moves `coverband`
+  out of `group :development`, or drops the `paths["config/routes.rb"] = []` line that suppresses
+  `rails_performance`'s unconstrained self-mount, no test fails. Those specific hazards are
+  documented at their sites and in `adr/diagnostic-surfaces-performance-coverband-swagger.md`; they
+  now rely on review and on the comments being read.
 - The `rails_performance` route-list copy will drift on upgrade with nothing to flag it.
 - In exchange, the suite stays a description of the product, upgrades stop breaking tests that were
   never about the product, and the evidence for environment work is an actual observation of the

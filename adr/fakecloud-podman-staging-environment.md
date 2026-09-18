@@ -15,8 +15,8 @@ Several decisions are already expressed in that code but were never recorded as 
 as inline comments and as an amendment banner on
 `notes/implementation/fakecloud-aws-development-baseline.md`:
 
-- OpenTofu was the original intent for the HCL under `terraform/`; it was not adopted, and
-  Terraform is used instead, installed in the dev container through
+- OpenTofu was the original intent for the HCL under `terraform/`; it was not adopted, and Terraform
+  is used instead, installed in the dev container through
   `ghcr.io/devcontainers/features/terraform`.
 - `terraform/environments/staging-development/` exists with its own bucket defaults
   (`umaxica-avatar-staging`, `umaxica-publishing-staging`) deliberately distinct from the local
@@ -43,7 +43,7 @@ against an emulator.
    staging.
 
    This scope is deliberate and was narrowed on 2026-09-14. An earlier wording claimed no real AWS
-   participates in staging *at all*, which is not achievable: FakeCloud does not emulate a
+   participates in staging _at all_, which is not achievable: FakeCloud does not emulate a
    relational database (see decision 9), and the application requires PostgreSQL.
 
 2. **Terraform is the provisioning tool.** Not OpenTofu, not shell scripts, not console clicks. This
@@ -59,10 +59,10 @@ against an emulator.
    `terraform/environments/<env>/providers.tf` and `variables.tf`. A future real-cloud environment
    is added as a new directory under `terraform/environments/`, reusing the same modules unchanged.
 
-4. **Staging owns its own bucket namespace.** `terraform/environments/staging-development`
-   defaults to `umaxica-avatar-staging` and `umaxica-publishing-staging`. Staging and local
-   development must never address the same bucket, so a staging run cannot read or overwrite a
-   developer's objects and vice versa.
+4. **Staging owns its own bucket namespace.** `terraform/environments/staging-development` defaults
+   to `umaxica-avatar-staging` and `umaxica-publishing-staging`. Staging and local development must
+   never address the same bucket, so a staging run cannot read or overwrite a developer's objects
+   and vice versa.
 
 5. **`DEPLOYMENT_TIER=staging` means production Rails configuration against an S3-compatible
    emulator.** That is the tier's purpose: exercise the production code path without production
@@ -88,11 +88,11 @@ against an emulator.
    not weaken the never-publish rule for PostgreSQL and Valkey in
    `docs/operations/development-host-port-exposure.md`.
 
-9. **Staging's unit of deployment is the OCI container, run by Podman, with no host-OS
-   assumption.** An earlier intent to build staging on a RHEL host is dropped as of 2026-09-14,
-   because a Kubernetes platform is now likely to be available. Committing to containers rather than
-   to a host build keeps both substrates open: the same images Podman runs locally are what a
-   Kubernetes cluster would run later.
+9. **Staging's unit of deployment is the OCI container, run by Podman, with no host-OS assumption.**
+   An earlier intent to build staging on a RHEL host is dropped as of 2026-09-14, because a
+   Kubernetes platform is now likely to be available. Committing to containers rather than to a host
+   build keeps both substrates open: the same images Podman runs locally are what a Kubernetes
+   cluster would run later.
 
    No ADR or document in this repository ever recorded the RHEL plan — `rhel` appears only in
    SELinux bind-mount labeling notes (`compose.yaml`, `.devcontainer/compose.yaml`,
@@ -149,10 +149,9 @@ against an emulator.
 13. **Valkey is outside the emulation question regardless of FakeCloud's `elasticache` surface.**
     FakeCloud does list `elasticache` and `memorydb` (corrected 2026-09-14; an earlier version of
     this decision said it listed neither). They are not used. ElastiCache is a managed Valkey
-    speaking the same protocol, so the plain container
-    `adr/valkey-nonprod-logical-db-topology.md` already runs *is* the real thing — there is nothing
-    an emulator would add. Staging points `CACHE_REDIS_URL`, `RATE_LIMIT_REDIS_URL`, and
-    `AUTH_STATE_REDIS_URL` at a Valkey container.
+    speaking the same protocol, so the plain container `adr/valkey-nonprod-logical-db-topology.md`
+    already runs _is_ the real thing — there is nothing an emulator would add. Staging points
+    `CACHE_REDIS_URL`, `RATE_LIMIT_REDIS_URL`, and `AUTH_STATE_REDIS_URL` at a Valkey container.
 
 14. **Observability does not use FakeCloud's `monitoring`, `logs`, `events`, or `xray` surfaces.**
     `adr/traces-and-metrics-routing-via-alloy.md` makes Alloy the only observability agent, with
@@ -181,10 +180,10 @@ OpenSearch, and the remaining AWS services (SQS, SNS, SES, KMS).
 
 ## Consequences
 
-- FakeCloud's justification is narrower than its advertised surface suggests, though not because
-  the surface is small: version 0.44.10 lists roughly 105 services. S3 is simply its only live
-  consumer here. The repository has no Kafka client at all, so the MSK control plane serves nothing;
-  email bypasses FakeCloud over SMTP; SMS cannot reach it; observability is committed to Alloy. What
+- FakeCloud's justification is narrower than its advertised surface suggests, though not because the
+  surface is small: version 0.44.10 lists roughly 105 services. S3 is simply its only live consumer
+  here. The repository has no Kafka client at all, so the MSK control plane serves nothing; email
+  bypasses FakeCloud over SMTP; SMS cannot reach it; observability is committed to Alloy. What
   FakeCloud supplies today is object storage plus a local target the Terraform AWS provider can
   apply against — which is exactly what decisions 2 and 3 depend on. Dropping Terraform would leave
   little that a plain MinIO could not do.

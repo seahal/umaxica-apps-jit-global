@@ -21,7 +21,8 @@ Result: exit 1. Duration 396.61s. Seed 26752. 16 processes. 13231 tests loaded.
 
 `13231 runs, 80451 assertions, 0 failures, 2 errors, 3 skips`.
 
-Both errors are `ObservabilityGatewayContractTest` (`Minitest::Test`, not `ActiveSupport::TestCase`):
+Both errors are `ObservabilityGatewayContractTest` (`Minitest::Test`, not
+`ActiveSupport::TestCase`):
 
 - `undefined method 'assert_not_empty'` at `test/tooling/observability_gateway_contract_test.rb:68`
 - `undefined method 'assert_not_includes'` at the same file line 84

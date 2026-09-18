@@ -6,10 +6,9 @@ reached from inside the development container over `*.core.dev.localhost:3001` (
 
 ## Changes verified
 
-- Development HTTP Basic credentials set to `admin` / `pass`:
-  `.env`, `.env.example`, `.env.devcontainer.example`, `.env.local` for
-  `FLIPPER_UI_*`, `BLAZER_*`, `PGHERO_*`; `mission_control.http_basic_auth_{user,password}` in
-  `config/credentials/development.yml.enc`.
+- Development HTTP Basic credentials set to `admin` / `pass`: `.env`, `.env.example`,
+  `.env.devcontainer.example`, `.env.local` for `FLIPPER_UI_*`, `BLAZER_*`, `PGHERO_*`;
+  `mission_control.http_basic_auth_{user,password}` in `config/credentials/development.yml.enc`.
 - `PGHERO_USER` / `BLAZER_USER` renamed to `PGHERO_USERNAME` / `BLAZER_USERNAME`: both gems read
   those exact names for their own built-in Basic Auth filter, and `PGHERO_PASSWORD` set without
   `PGHERO_USERNAME` made `http_basic_authenticate_with name: nil` raise
@@ -25,8 +24,7 @@ reached from inside the development container over `*.core.dev.localhost:3001` (
   `mount`, which broke its PATH_INFO handling.
 - `config.solid_queue.connects_to` gained `reading: :queue` in development and production; Mission
   Control Jobs reads through the `reading` role and raised
-  `ActiveRecord::ConnectionNotDefined (No database connection defined for SolidQueue::Record with
-  'reading' role)`.
+  `ActiveRecord::ConnectionNotDefined (No database connection defined for SolidQueue::Record with 'reading' role)`.
 - `bin/rails assets:precompile` re-run: this application resolves assets through Propshaft's static
   manifest, so `pghero/favicon.png` (and the other engine assets) had to enter
   `public/assets/.manifest.json`; the manifest is read at boot, so the server needed a restart.
@@ -36,17 +34,17 @@ reached from inside the development container over `*.core.dev.localhost:3001` (
 
 ## Results (curl, `*.core.dev.localhost:3001`)
 
-| host | no credentials | wrong credentials | `admin:pass` |
-| --- | --- | --- | --- |
-| mission | 401 | 401 | 200 |
-| flipper | 401 | 401 | 302 (to `/features`) |
-| pghero | 401 | 401 | 302 `/` → 200 `/publishing`, 200 `/primary` |
-| blazer | 401 | 401 | 500 |
+| host    | no credentials | wrong credentials | `admin:pass`                                |
+| ------- | -------------- | ----------------- | ------------------------------------------- |
+| mission | 401            | 401               | 200                                         |
+| flipper | 401            | 401               | 302 (to `/features`)                        |
+| pghero  | 401            | 401               | 302 `/` → 200 `/publishing`, 200 `/primary` |
+| blazer  | 401            | 401               | 500                                         |
 
 Blazer remains broken, and not because of routing or credentials: its UI needs the `blazer_queries`
 / `blazer_dashboards` tables, and the request fails with
-`ActiveRecord::StatementInvalid (PG::UndefinedTable: relation "blazer_queries" does not exist)`.
-No migration was added — the existing `config/initializers/blazer.rb` comment records a deliberate
+`ActiveRecord::StatementInvalid (PG::UndefinedTable: relation "blazer_queries" does not exist)`. No
+migration was added — the existing `config/initializers/blazer.rb` comment records a deliberate
 decision to keep Blazer table-free, so resolving this needs a decision, not a silent schema change.
 
 ## Prosopite exemption for Mission Control Jobs
@@ -64,9 +62,10 @@ Verified after a server restart, with `admin:pass`:
 - `/applications/jit/finished/jobs?server_id=solid_queue` — 200 (was 500).
 - `/finished/jobs`, `/failed/jobs`, `/in_progress/jobs`, `/applications/jit/queues`, `/` — 200.
 - `log/prosopite.log` stayed at 6493 lines across all of those requests: nothing reported.
-- Detection elsewhere is intact: `Prosopite.scan { 3.times { SolidQueue::Job.where(id: _1).first } }`
-  in `bin/rails runner` still raises `Prosopite::NPlusOneQueriesError`, and
-  `Prosopite.allow_stack_paths` holds only the one regex with `Prosopite.raise?` still true.
+- Detection elsewhere is intact:
+  `Prosopite.scan { 3.times { SolidQueue::Job.where(id: _1).first } }` in `bin/rails runner` still
+  raises `Prosopite::NPlusOneQueriesError`, and `Prosopite.allow_stack_paths` holds only the one
+  regex with `Prosopite.raise?` still true.
 - `bin/rubocop config/initializers/prosopite.rb` — no offenses.
 
 ## Tests

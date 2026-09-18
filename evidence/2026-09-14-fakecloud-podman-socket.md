@@ -1,9 +1,9 @@
 # 2026-09-14 Podman socket mounted into fakecloud (accepted exception)
 
-A container runtime socket is now mounted into the `fakecloud` service via
-`compose.override.yaml`, to obtain a real MSK data plane. This reverses a boundary the repository
-had previously chosen and guarded. The risk was raised, restated, and **explicitly accepted by the
-user** before the change was made.
+A container runtime socket is now mounted into the `fakecloud` service via `compose.override.yaml`,
+to obtain a real MSK data plane. This reverses a boundary the repository had previously chosen and
+guarded. The risk was raised, restated, and **explicitly accepted by the user** before the change
+was made.
 
 ## What was added
 
@@ -26,9 +26,9 @@ Only the differing keys are set. `image`, `ports`, `command`, and the rest are i
 
 `compose.override.yaml` carried a rule that everything in it be profile-gated. That rule existed
 because the file was **tracked** and therefore shipped to every clone; an unprofiled entry there
-would have changed every developer's `podman compose up`. Untracking the file removes the reason,
-so the socket mount is left unprofiled and applies to every bare `podman compose up` on this
-machine — which is the intent.
+would have changed every developer's `podman compose up`. Untracking the file removes the reason, so
+the socket mount is left unprofiled and applies to every bare `podman compose up` on this machine —
+which is the intent.
 
 A `profiles:` key could not have expressed "socket optional" in any case. **Profiles gate an entire
 service, not individual keys**, and Compose resolves `profiles:` to the value in the last file that
@@ -72,20 +72,20 @@ precisely to stop a future change from reversing this silently.
 
 - **`compose.yaml` is unchanged.** It still mounts no container socket anywhere.
 - **The Dev Container is unaffected.** `.devcontainer/devcontainer.json` sets
-  `dockerComposeFile: ["../compose.yaml", "./compose.yaml"]`, and those explicit `-f` flags
-  suppress Compose's auto-discovery of `compose.override.yaml`. `devcontainer up` therefore starts
-  a fakecloud **without** the socket. Only a bare `podman compose up` picks the mount up. The two
+  `dockerComposeFile: ["../compose.yaml", "./compose.yaml"]`, and those explicit `-f` flags suppress
+  Compose's auto-discovery of `compose.override.yaml`. `devcontainer up` therefore starts a
+  fakecloud **without** the socket. Only a bare `podman compose up` picks the mount up. The two
   paths now differ in privilege, which is worth remembering when a result cannot be reproduced.
-- **Not portable.** `${XDG_RUNTIME_DIR}` is UID-dependent, so the path is correct only for this user.
-  `notes/implementation/fakecloud-aws-development-baseline.md` gives this as one original reason the
-  mount was never put in `compose.yaml`.
+- **Not portable.** `${XDG_RUNTIME_DIR}` is UID-dependent, so the path is correct only for this
+  user. `notes/implementation/fakecloud-aws-development-baseline.md` gives this as one original
+  reason the mount was never put in `compose.yaml`.
 
 ## Committing
 
 `compose.override.yaml` **was** a tracked file when this block was first written there, which would
-have shipped the socket mount to every developer and to CI. It was untracked with
-`git rm --cached` and gitignored the same day, along with `.devcontainer/compose.override.yml`.
-Nothing carrying the socket mount is tracked.
+have shipped the socket mount to every developer and to CI. It was untracked with `git rm --cached`
+and gitignored the same day, along with `.devcontainer/compose.override.yml`. Nothing carrying the
+socket mount is tracked.
 
 ## Not verified
 

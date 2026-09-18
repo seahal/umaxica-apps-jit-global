@@ -2,8 +2,8 @@
 
 ## Context
 
-- Request: rename Side's private development and Tunnel origin hosts from
-  `side.*.localhost` to `wide.*.localhost`.
+- Request: rename Side's private development and Tunnel origin hosts from `side.*.localhost` to
+  `wide.*.localhost`.
 - Related decision: `notes/implementation/2026-09-11-side-public-host-www-jp.md` established
   `www-jp.umaxica.{app,com,org}` as Side's public host family while retaining the former private
   names.
@@ -23,10 +23,10 @@
   port `3000` for Tunnel and inter-container traffic.
   - Why: host port `3000` must remain available for future host-native Rails runs without changing
     the private origin contract inside the Compose network.
-- Decision: admit both ports `3000` and `3001` for the `wide.*.localhost` family in development
-  Host Authorization.
-  - Why: Tunnel requests use the container port while host-browser requests carry the published
-    host port in the `Host` header.
+- Decision: admit both ports `3000` and `3001` for the `wide.*.localhost` family in development Host
+  Authorization.
+  - Why: Tunnel requests use the container port while host-browser requests carry the published host
+    port in the `Host` header.
 
 ## Review Notes
 

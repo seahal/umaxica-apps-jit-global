@@ -4,8 +4,8 @@
 
 Accepted, amended 2026-09-18.
 
-This amendment replaces the former concrete `Persona`/`Organization` and retired `Account`
-concern assumptions in this record. The current naming and authority decisions are defined by
+This amendment replaces the former concrete `Persona`/`Organization` and retired `Account` concern
+assumptions in this record. The current naming and authority decisions are defined by
 [`adr/surface-account-collective-model-naming.md`](surface-account-collective-model-naming.md) and
 [`docs/architecture/persona-organization-authority.md`](../docs/architecture/persona-organization-authority.md).
 
@@ -18,17 +18,17 @@ STI roots, or polymorphic authority relations.
 
 The `Member`, `ClientMembership`, and legacy organization rows remain mixed transitional or
 operational data. Their current storage does not prove ownership or RBAC authority. Moving those
-models wholesale would either promote compatibility state into authority or cross a surface
-boundary without a verified data mapping.
+models wholesale would either promote compatibility state into authority or cross a surface boundary
+without a verified data mapping.
 
 ## Decision
 
 1. Keep the six adopted resource implementations and their authority relations surface-local:
-   `ClientPersona`/`Enterprise` for `app`, `Individual`/`Company` for `com`, and
-   `Agent`/`Bureau` for `org`. Their authority tables remain in the matching `*_zenith` database.
-2. Keep `Persona` and `Organization` as behavior-only interface concerns. Do not introduce a
-   shared concrete base, common table, STI hierarchy, polymorphic authority relation, or
-   cross-surface foreign key.
+   `ClientPersona`/`Enterprise` for `app`, `Individual`/`Company` for `com`, and `Agent`/`Bureau`
+   for `org`. Their authority tables remain in the matching `*_zenith` database.
+2. Keep `Persona` and `Organization` as behavior-only interface concerns. Do not introduce a shared
+   concrete base, common table, STI hierarchy, polymorphic authority relation, or cross-surface
+   foreign key.
 3. Treat `Member` and `ClientMembership` as transitional app-surface models. `Member` remains an
    Avatar/legacy bridge and does not include the retired `Account` concern. `ClientMembership` is a
    membership/bridge relation whose `workspace_id` meaning is not authority ownership.
@@ -63,9 +63,9 @@ boundary without a verified data mapping.
 
 ## Alternatives Considered
 
-1. Move `Member`, `ClientMembership`, or `OperatorOrganization` wholesale into the adopted
-   authority model. Rejected because their current rows mix bridge, operational, hierarchy, and
-   lifecycle responsibilities that are not equivalent to ownership or RBAC.
+1. Move `Member`, `ClientMembership`, or `OperatorOrganization` wholesale into the adopted authority
+   model. Rejected because their current rows mix bridge, operational, hierarchy, and lifecycle
+   responsibilities that are not equivalent to ownership or RBAC.
 2. Treat `Member` membership or an operator reference as resource ownership. Rejected because
    membership and legacy operator linkage do not establish the adopted single-owner contract.
 3. Restore `Persona = ClientPersona` or `Organization = OperatorOrganization` aliases. Rejected

@@ -9,8 +9,8 @@
 
 ## Decisions Made During Implementation
 
-- Decision: rename the public Side host family to `www-jp.umaxica.{app,com,org}`. Keep the
-  private ingress as the existing `PRIVATE_*` / `*.localhost` names; this change is only the
+- Decision: rename the public Side host family to `www-jp.umaxica.{app,com,org}`. Keep the private
+  ingress as the existing `PRIVATE_*` / `*.localhost` names; this change is only the
   Cloudflare-facing `Host`.
   - Why: the operator wants the Side entrypoint reached as the `www-` hyphen-region form, matching
     other regional public names (`palm-jp`, `jp`).
@@ -32,12 +32,12 @@
 
 ## Review Notes
 
-- Tests run: `bin/rails test test/lib/config_values/host_family_values_test.rb
-  test/config/host_authorization_contract_test.rb`. Host Family passed. Host Authorization
-  failed until `.devcontainer/compose.yaml` frontend aliases replace `side-jp.umaxica.*`
-  with `www-jp.umaxica.*`. That file is mounted read-only in this workspace
-  (`tank/Projects on .../.devcontainer type zfs (ro,...)`), so the alias rename is blocked
+- Tests run:
+  `bin/rails test test/lib/config_values/host_family_values_test.rb test/config/host_authorization_contract_test.rb`.
+  Host Family passed. Host Authorization failed until `.devcontainer/compose.yaml` frontend aliases
+  replace `side-jp.umaxica.*` with `www-jp.umaxica.*`. That file is mounted read-only in this
+  workspace (`tank/Projects on .../.devcontainer type zfs (ro,...)`), so the alias rename is blocked
   here.
 - Tests not run: full suite; Cloudflare dashboard verification (out of repo).
-- Documentation promotion needed: operations docs that still quote `side-jp` as the live public
-  name should follow once the tunnel hostname is cut over.
+- Documentation promotion needed: operations docs that still quote `side-jp` as the live public name
+  should follow once the tunnel hostname is cut over.

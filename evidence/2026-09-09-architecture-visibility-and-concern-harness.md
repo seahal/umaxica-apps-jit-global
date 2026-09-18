@@ -26,8 +26,8 @@ Baseline recorded at the end of the work:
 - A new file with an implicitly public `def call` and a new concern with `included do` were both
   reported by `bundle exec rubocop --only Umaxica` (2 offenses, 2 files). Probe files were deleted.
 - An extra implicitly public method added to an already-baselined file
-  (`app/services/operator_secret_credentials_create.rb`) failed the ratchet test:
-  "3 offenses, baseline allows 2". The edit was reverted.
+  (`app/services/operator_secret_credentials_create.rb`) failed the ratchet test: "3 offenses,
+  baseline allows 2". The edit was reverted.
 
 ## Production code migrated
 
@@ -40,6 +40,6 @@ accordingly (100 -> 99 hooks, 3701 -> 3700 implicit-public).
 
 The Rails test suite (model tests for `Client`/`Operator`/`Visitor`, and `bin/ci`) could not run in
 this environment: booting the application requires environment variables and a reachable PostgreSQL
-instance provided by compose (`config/initializers/omniauth.rb` raised `KeyError:
-PUBLIC_AUTH_SERVICE_URL`, and with `compose.env` loaded the adapter could not reach host `primary`).
-The tooling tests above run without a database and did execute.
+instance provided by compose (`config/initializers/omniauth.rb` raised
+`KeyError: PUBLIC_AUTH_SERVICE_URL`, and with `compose.env` loaded the adapter could not reach host
+`primary`). The tooling tests above run without a database and did execute.

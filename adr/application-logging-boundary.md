@@ -66,16 +66,16 @@ audit / security records -> database rows                       (unchanged, neve
 ```
 
 Audit, security, compliance and purchase records stay database rows. Loki holds a 24h development
-copy of diagnostic output and is not a record of fact; moving an authoritative record there would
-be the exact mixing this ADR exists to prevent.
+copy of diagnostic output and is not a record of fact; moving an authoritative record there would be
+the exact mixing this ADR exists to prevent.
 
 ### Why file tail
 
 Five transports were compared:
 
 1. **Dedicated file + `loki.source.file`** — chosen.
-2. **Reuse of the existing file logger alone** — would merge access logs into
-   `log/development.log`, collapsing two layers into one Loki stream.
+2. **Reuse of the existing file logger alone** — would merge access logs into `log/development.log`,
+   collapsing two layers into one Loki stream.
 3. **stdout tee** — host-native Rails' stdout is a terminal on the host. A container cannot read it,
    so this works in the Dev Container and fails in the repository's primary topology.
 4. **journald** — host-native Rails under `bin/dev` is not a systemd unit, and mounting the host

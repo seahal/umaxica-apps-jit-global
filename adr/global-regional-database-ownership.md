@@ -161,8 +161,8 @@ Global and Regional each have their own Rails `primary` database. This is the co
 database (`db/migrate`) for durable, low-frequency, application-wide configuration or metadata that
 does not justify a dedicated domain database. Flipper currently stores feature flags here. Flag
 state is independent: the same feature name may exist on both sides with different state. Global
-flag state is not Regional flag state. `primary` is not a catch-all for domain data that already
-has a dedicated database.
+flag state is not Regional flag state. `primary` is not a catch-all for domain data that already has
+a dedicated database.
 
 #### 7.4 Queue (Solid Queue)
 

@@ -42,9 +42,9 @@ The semantic principal abstract bases remain as compatibility and domain-languag
 - `ComPrincipalRecord` connects to `com_zenith`.
 
 The physical `*_principal` connection keys remain configured for compatibility, but they are not a
-regional application-data store. The matching `*_principal` migration paths are empty reserved
-paths where the current repository defines them. Regional-ready application data belongs in the
-future Regional repository's own application database under a separate placement decision.
+regional application-data store. The matching `*_principal` migration paths are empty reserved paths
+where the current repository defines them. Regional-ready application data belongs in the future
+Regional repository's own application database under a separate placement decision.
 
 ## Consequences
 

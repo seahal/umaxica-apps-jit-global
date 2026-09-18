@@ -28,19 +28,19 @@ The bundles move to `openapi/bundled/openapi.{app,com,org}.yml`, beside the sour
 generated from and outside `public/`.
 
 This is not un-publishing something that was meant to be public. `redocly.yaml` already recorded the
-intent, in the rationale for disabling its `info-license` rule: *"This is a first-party internal API
-description, not a published artifact. The repository is private and ships no licence."* `public/`
+intent, in the rationale for disabling its `info-license` rule: _"This is a first-party internal API
+description, not a published artifact. The repository is private and ships no licence."_ `public/`
 was where the build artifact happened to land, not a publishing decision. No intentionally public
 API specification was made private by this change.
 
 One directory stays the single source of truth for every consumer:
 
-| Consumer | How it reads them |
-| --- | --- |
-| Committee / Minitest | `OpenapiContract.schema_path`, the one resolver in the suite |
-| Redocly | `output:` in `redocly.yaml` |
-| CI | `openapi:verify` in `package.json` |
-| Swagger UI | `rswag-api`, with `openapi_root` set to the same directory, behind the swagger host's Basic Auth |
+| Consumer             | How it reads them                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| Committee / Minitest | `OpenapiContract.schema_path`, the one resolver in the suite                                     |
+| Redocly              | `output:` in `redocly.yaml`                                                                      |
+| CI                   | `openapi:verify` in `package.json`                                                               |
+| Swagger UI           | `rswag-api`, with `openapi_root` set to the same directory, behind the swagger host's Basic Auth |
 
 No Swagger-specific copy is made. `OpenapiContract::BUNDLE_DIRECTORY` is the constant the others
 refer to.

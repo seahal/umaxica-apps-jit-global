@@ -33,9 +33,10 @@ Rules:
 
 Current content-model references:
 
-- `docs/architecture/umaxica-v1-architecture-lock.md` records the v1 Identity / Persona / Organization
-  / Unit / Avatar / Group resource model, Avatar DB vs content DB boundary, actor snapshot
-  exclusion, Avatar lifecycle states, known violations, and guard-rail scope before implementation.
+- `docs/architecture/umaxica-v1-architecture-lock.md` records the v1 Identity / Persona /
+  Organization / Unit / Avatar / Group resource model, Avatar DB vs content DB boundary, actor
+  snapshot exclusion, Avatar lifecycle states, known violations, and guard-rail scope before
+  implementation.
 - `docs/architecture/avatar-social-graph.md` records the Avatar-to-Avatar follow, block, and mute
   boundary and the current implementation gaps.
 - `docs/architecture/model-database-inventory.md` is the current-state model/database placement map
@@ -44,8 +45,8 @@ Current content-model references:
   `*_principal` migration history into matching `*_zenith` databases. The retained `*_principal`
   connection keys are compatibility seams, not a regional-ready application store.
 - `docs/architecture/principal-zenith-membership-organization-placement.md` audits the ambiguous
-  `Member` / `ClientMembership` / `OperatorOrganization` cluster and the related runtime actor and OIDC
-  connection rows.
+  `Member` / `ClientMembership` / `OperatorOrganization` cluster and the related runtime actor and
+  OIDC connection rows.
 - `adr/member-client-membership-organization-decomposition-before-placement.md` establishes the
   decomposition-first rule before any placement migration for that cluster.
 - `docs/architecture/acme-sign-core-base-port.md`

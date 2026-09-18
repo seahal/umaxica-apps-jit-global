@@ -38,18 +38,18 @@ changing nothing about host exposure.
 
 ## Current Publications
 
-| Service                                | Host publication           | Why                                                                                                                    |
-| -------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `core` (Rails, 3000)                   | `127.0.0.1:3001`           | Keeps host port `3000` available for host-native Rails while forwarding host browser traffic to container port `3000`. |
-| `core` (Vite, 3036)                    | `127.0.0.1:3036`           | `@vite/client` opens its HMR socket to the dev server from the browser.                                                |
-| `primary` (writer)                     | `127.0.0.1:5432`           | Host-native Rails writer; containers use `primary:5432`.                                                               |
-| `replica` (reader)                     | `127.0.0.1:5433`           | Host-native Rails reader; containers use `replica:5432`.                                                               |
-| `valkey`                               | `127.0.0.1:6379`           | One nonprod Valkey; logical DBs 0/1/2 (dev) and 3/4/5 (test) via responsibility URLs.                                  |
-| `loki`, `tempo`, `prometheus`          | none                       | Storage backends behind the Alloy gateway. Reached only by Alloy and Grafana on the `observability` network.            |
-| `alloy` (OTLP/HTTP, 4318)              | `127.0.0.1:4318`           | Host-native Rails exports telemetry here; it resolves no Compose DNS name. See "The two observability listeners" below. |
-| `alloy` (12345, OTLP/gRPC 4317)        | none                       | The management UI is an unauthenticated control surface; nothing on the host speaks OTLP/gRPC.                          |
-| `grafana`                              | `127.0.0.1:13000`          | The developer's own browser. 3000/3001 belong to Rails, so the UI takes 13000.                                          |
-| `cloudflare-tunnel`                    | none, and none is possible | The connector is outbound-only.                                                                                        |
+| Service                         | Host publication           | Why                                                                                                                     |
+| ------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `core` (Rails, 3000)            | `127.0.0.1:3001`           | Keeps host port `3000` available for host-native Rails while forwarding host browser traffic to container port `3000`.  |
+| `core` (Vite, 3036)             | `127.0.0.1:3036`           | `@vite/client` opens its HMR socket to the dev server from the browser.                                                 |
+| `primary` (writer)              | `127.0.0.1:5432`           | Host-native Rails writer; containers use `primary:5432`.                                                                |
+| `replica` (reader)              | `127.0.0.1:5433`           | Host-native Rails reader; containers use `replica:5432`.                                                                |
+| `valkey`                        | `127.0.0.1:6379`           | One nonprod Valkey; logical DBs 0/1/2 (dev) and 3/4/5 (test) via responsibility URLs.                                   |
+| `loki`, `tempo`, `prometheus`   | none                       | Storage backends behind the Alloy gateway. Reached only by Alloy and Grafana on the `observability` network.            |
+| `alloy` (OTLP/HTTP, 4318)       | `127.0.0.1:4318`           | Host-native Rails exports telemetry here; it resolves no Compose DNS name. See "The two observability listeners" below. |
+| `alloy` (12345, OTLP/gRPC 4317) | none                       | The management UI is an unauthenticated control surface; nothing on the host speaks OTLP/gRPC.                          |
+| `grafana`                       | `127.0.0.1:13000`          | The developer's own browser. 3000/3001 belong to Rails, so the UI takes 13000.                                          |
+| `cloudflare-tunnel`             | none, and none is possible | The connector is outbound-only.                                                                                         |
 
 ### The two observability listeners
 

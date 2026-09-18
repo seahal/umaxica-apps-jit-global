@@ -11,9 +11,9 @@ nothing here is evidence of feasibility.
 
 The PoC was then overtaken by its own premise. It queried RustFS, and RustFS has since been retired
 in favour of `fakecloud` (`notes/implementation/fakecloud-aws-development-baseline.md`); the
-overlay's `depends_on: rustfs` pointed at a service `compose.yaml` no longer defines, so it could not
-have started. The Cleanup Manifest below was executed on 2026-09-14 and the disposable artifacts are
-gone. The reproduction steps and artifact paths that follow are retained as a record of what was
+overlay's `depends_on: rustfs` pointed at a service `compose.yaml` no longer defines, so it could
+not have started. The Cleanup Manifest below was executed on 2026-09-14 and the disposable artifacts
+are gone. The reproduction steps and artifact paths that follow are retained as a record of what was
 built, not as instructions — the files they name no longer exist.
 
 ## Question

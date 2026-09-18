@@ -10,24 +10,25 @@ of the OpenAPI descriptions it already maintains under `openapi/`.
 This adds three more diagnostic surfaces using the **same four-part pattern** the existing four use,
 so no new host/auth mechanism enters the codebase:
 
-| Surface | Public host | Development alias | Purpose |
-| --- | --- | --- | --- |
+| Surface           | Public host               | Development alias                | Purpose                                                                    |
+| ----------------- | ------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
 | rails_performance | `performance.umaxica.dev` | `performance.core.dev.localhost` | request latency, per-controller percentiles, throughput, DB/view breakdown |
-| Coverband | `coverband.umaxica.dev` | `coverband.core.dev.localhost` | which Ruby code actually executed |
-| Swagger UI | `swagger.umaxica.dev` | `swagger.core.dev.localhost` | renders the existing per-surface OpenAPI descriptions |
+| Coverband         | `coverband.umaxica.dev`   | `coverband.core.dev.localhost`   | which Ruby code actually executed                                          |
+| Swagger UI        | `swagger.umaxica.dev`     | `swagger.core.dev.localhost`     | renders the existing per-surface OpenAPI descriptions                      |
 
 Cloudflare Tunnel/DNS/Access changes are **out of scope**; this plan only makes Rails able to serve
 these hosts correctly.
 
 ### Two user decisions already taken
 
-1. **`performance.umaxica.dev`** — the request said `performace.umaxica.dev`; confirmed as a typo and
-   corrected. The Cloudflare DNS record must be created with the corrected spelling.
-2. **`group :development` only** — same as `pghero` / `blazer` / `rails_db`. Consequence to record in
-   the ADR: **Coverband will only observe development code execution, not production.** That is a
-   deliberate departure from Coverband's usual purpose. Section 6 of the request ("production相当環境
-   で") is therefore *not* satisfied; promoting to `group :development, :production` is a separate,
-   later decision that must also revisit `mounted_engine_invariant_test.rb`.
+1. **`performance.umaxica.dev`** — the request said `performace.umaxica.dev`; confirmed as a typo
+   and corrected. The Cloudflare DNS record must be created with the corrected spelling.
+2. **`group :development` only** — same as `pghero` / `blazer` / `rails_db`. Consequence to record
+   in the ADR: **Coverband will only observe development code execution, not production.** That is a
+   deliberate departure from Coverband's usual purpose. Section 6 of the request
+   ("production相当環境で") is therefore _not_ satisfied; promoting to
+   `group :development, :production` is a separate, later decision that must also revisit
+   `mounted_engine_invariant_test.rb`.
 
 ### Execution constraint for this session
 
@@ -43,19 +44,28 @@ The completion report must list every check as unverified rather than claim it p
 Established by `config/routes/pghero.rb` + `config/initializers/pghero.rb`. Adding a tool host is
 exactly five edits:
 
-1. `config/routes/<tool>.rb` — `constraints host: [ENV["PUBLIC_<TOOL>_URL"], ENV["PRIVATE_<TOOL>_URL"], "<tool>.core.dev.localhost"].compact` wrapping a `mount`, guarded by `if defined?(...)`.
-2. `config/initializers/<tool>.rb` — `if Rails.env.development?` + fail-closed `Rack::Auth::Basic` on the engine's own middleware stack, credentials via `Rails.app.creds.option(:<TOOL>_USERNAME/_PASSWORD)`, compared with non-short-circuiting `&` + `ActiveSupport::SecurityUtils.secure_compare`.
-3. `config/application.rb` — explicit `require` inside the existing `if Rails.env.development?` block (engines contribute routes through `add_routing_paths`, which runs before `config/initializers/*`).
-4. `app/values/fqdn_availability_registry.rb` — a `SLOT_SOURCES` entry (an invariant test fails on drift).
-5. `config/environments/development.rb` — `PUBLIC_/PRIVATE_<TOOL>_URL` in `env_host_keys`, and `<tool>.core.dev.localhost:3000` / `:3001` in `localhost_tunnel_hosts`.
+1. `config/routes/<tool>.rb` —
+   `constraints host: [ENV["PUBLIC_<TOOL>_URL"], ENV["PRIVATE_<TOOL>_URL"], "<tool>.core.dev.localhost"].compact`
+   wrapping a `mount`, guarded by `if defined?(...)`.
+2. `config/initializers/<tool>.rb` — `if Rails.env.development?` + fail-closed `Rack::Auth::Basic`
+   on the engine's own middleware stack, credentials via
+   `Rails.app.creds.option(:<TOOL>_USERNAME/_PASSWORD)`, compared with non-short-circuiting `&` +
+   `ActiveSupport::SecurityUtils.secure_compare`.
+3. `config/application.rb` — explicit `require` inside the existing `if Rails.env.development?`
+   block (engines contribute routes through `add_routing_paths`, which runs before
+   `config/initializers/*`).
+4. `app/values/fqdn_availability_registry.rb` — a `SLOT_SOURCES` entry (an invariant test fails on
+   drift).
+5. `config/environments/development.rb` — `PUBLIC_/PRIVATE_<TOOL>_URL` in `env_host_keys`, and
+   `<tool>.core.dev.localhost:3000` / `:3001` in `localhost_tunnel_hosts`.
 
 Plus `.devcontainer/compose.yaml` `networks.frontend.aliases` on the `core` service (both the
 `.core.dev.localhost` and `.umaxica.dev` forms, as `mission|flipper|blazer|pghero` already do), and
 `.env.example` / `.env.devcontainer.example`.
 
 `config/environments/production.rb` is **not** touched: no `*.umaxica.dev` host is in the production
-`config.hosts` literal today, and these gems are development-only. This satisfies "3 FQDN が必要な環境で
-のみ許可される" and never widens to `*.umaxica.dev`.
+`config.hosts` literal today, and these gems are development-only. This satisfies "3
+FQDN が必要な環境でのみ許可される" and never widens to `*.umaxica.dev`.
 
 ---
 
@@ -97,9 +107,9 @@ DEV_DBS  = { cache: 0, rate_limit: 1, auth_state: 2, observability: 6 }.freeze
 TEST_DBS = { cache: 3, rate_limit: 4, auth_state: 5, observability: 7 }.freeze
 ```
 
-`OBSERVABILITY_REDIS_URL` is the ENV name (follows `<RESPONSIBILITY>_REDIS_URL`). Deliberately **not**
-added to `Umaxica::Valkey::TestTarget::URL_NAMES`: test never connects (gems absent from the test
-group), so requiring the variable at test boot would be configuration that fails for no reason.
+`OBSERVABILITY_REDIS_URL` is the ENV name (follows `<RESPONSIBILITY>_REDIS_URL`). Deliberately
+**not** added to `Umaxica::Valkey::TestTarget::URL_NAMES`: test never connects (gems absent from the
+test group), so requiring the variable at test boot would be configuration that fails for no reason.
 
 Logical separation within DB 6 is by namespace:
 
@@ -124,8 +134,8 @@ Today `public/openapi.{app,com,org}.yml` is the bundle every consumer reads. In 
 admitted dev host. (In production `public_file_server.enabled = false`, so there is no production
 exposure — state this plainly in the report.)
 
-`redocly.yaml` already records the intent: *"This is a first-party internal API description, not a
-published artifact."* Moving it out of `public/` follows that stated intent rather than reversing a
+`redocly.yaml` already records the intent: _"This is a first-party internal API description, not a
+published artifact."_ Moving it out of `public/` follows that stated intent rather than reversing a
 publishing decision, so the "do not un-publish without investigating intent" caveat is satisfied.
 
 Move to `openapi/bundled/openapi.{app,com,org}.yml` and update every reference in one commit:
@@ -137,8 +147,8 @@ Move to `openapi/bundled/openapi.{app,com,org}.yml` and update every reference i
   `Rails.root.join("openapi/bundled/openapi.#{surface}.yml")`
 - grep for any other `public/openapi` reference (CI workflow, docs, ADRs) and update it
 
-`git mv` the three files so history follows. This keeps Committee, Minitest, Redocly, CI, and Swagger
-UI on one source of truth — no Swagger-specific copy.
+`git mv` the three files so history follows. This keeps Committee, Minitest, Redocly, CI, and
+Swagger UI on one source of truth — no Swagger-specific copy.
 
 ### 3b. rswag-api
 
@@ -176,13 +186,14 @@ Rswag::Ui.configure do |c|
 end
 ```
 
-Do **not** use rswag-ui's own `basic_auth_enabled` / `basic_auth_credentials`: those put the password
-into `config_object`, which is rendered into the page. Use the repository's `Rack::Auth::Basic`
-pattern on `Rswag::Ui::Engine.middleware` instead, exactly as PgHero and Blazer do.
+Do **not** use rswag-ui's own `basic_auth_enabled` / `basic_auth_credentials`: those put the
+password into `config_object`, which is rendered into the page. Use the repository's
+`Rack::Auth::Basic` pattern on `Rswag::Ui::Engine.middleware` instead, exactly as PgHero and Blazer
+do.
 
 No change to `config/initializers/cors.rb`, `content_security_policy.rb`, CSRF settings, or any API
-authorization. If the Swagger UI page needs a CSP allowance, add it scoped to the swagger host only —
-never by relaxing a shared policy.
+authorization. If the Swagger UI page needs a CSP allowance, add it scoped to the swagger host only
+— never by relaxing a shared policy.
 
 ### 3d. Routes
 
@@ -219,8 +230,8 @@ rescue ArgumentError
 end
 ```
 
-There is no disable flag. Left alone, `/rails/performance` is reachable on **every** host — the exact
-leak section 2 of the request forbids, and an unreviewed mount that
+There is no disable flag. Left alone, `/rails/performance` is reachable on **every** host — the
+exact leak section 2 of the request forbids, and an unreviewed mount that
 `mounted_engine_invariant_test.rb` would fail on.
 
 **Approach:** clear the engine's routing path before `add_routing_paths` collects it, then draw both
@@ -239,8 +250,8 @@ RailsPerformance::Engine.paths["config/routes.rb"] = []
 
 **This duplicates a gem-internal route list, which will drift on upgrade.** Guard it: a test that
 reads the gem's shipped `config/routes.rb` off disk
-(`Gem.loaded_specs["rails_performance"].gem_dir`) and asserts the set of paths it declares equals the
-set this repository draws, failing on any upgrade that adds or renames a route.
+(`Gem.loaded_specs["rails_performance"].gem_dir`) and asserts the set of paths it declares equals
+the set this repository draws, failing on any upgrade that adds or renames a route.
 
 If clearing `paths["config/routes.rb"]` turns out not to work against Rails main, the fallback is to
 accept the gem's mount and pin `RailsPerformance.mount_at`, with `verify_access_proc` failing closed
@@ -257,17 +268,17 @@ reviewed. Decide in the container; report which path was taken.
 - `config.enabled = ENV.fetch("RAILS_PERFORMANCE_ENABLED", "true") == "true"` — the repo's
   established boolean-toggle idiom (`ENV.fetch("OPEN_TELEMETRY", "false") == "true"`)
 - `config.mount_at` — set, but inert once the self-mount is suppressed
-- `config.include_rake_tasks = false`; leave Sidekiq/Delayed Job/Grape off. Solid Queue is explicitly
-  out of scope
+- `config.include_rake_tasks = false`; leave Sidekiq/Delayed Job/Grape off. Solid Queue is
+  explicitly out of scope
 - `config.custom_data_proc` — **do not set.** Its documented example reads the current user's email
 - `config.ignored_paths` — add the three tool hosts' own paths so the dashboards do not measure
   themselves
 
 **Secret handling.** `filter_parameters` alone is not assumed sufficient. Explicitly audit, in the
-container, what the gem persists per request: path, query string, controller/action, format,
-status, durations, and `custom_data`. If the raw query string is stored, add a redaction step
-reusing `ObservabilityRedactor` (`lib/observability_redactor.rb`), which the Sentry initializer
-already uses for exactly this. Back the audit with a test that drives a request carrying
+container, what the gem persists per request: path, query string, controller/action, format, status,
+durations, and `custom_data`. If the raw query string is stored, add a redaction step reusing
+`ObservabilityRedactor` (`lib/observability_redactor.rb`), which the Sentry initializer already uses
+for exactly this. Back the audit with a test that drives a request carrying
 `?access_token=…&password=…` and asserts neither value appears in any key under the
 `rails_performance:` namespace. **Do not ship without running that test.**
 
@@ -298,7 +309,7 @@ end
   `coverband` is absent from the test group, so no Coverband measurement or reporting thread starts
   under Minitest. The two tools keep distinct jobs — SimpleCov measures test coverage, Coverband
   measures runtime execution.
-- **One-shot.** Prefer `use_oneshot_lines_coverage` if the version supports it. It records *whether*
+- **One-shot.** Prefer `use_oneshot_lines_coverage` if the version supports it. It records _whether_
   a line ran and **not how many times** — record that property explicitly in the ADR, since it
   changes what the dashboard can answer.
 - **Processes.** Enable under Puma (including `on_worker_boot` re-establishment after fork, which
@@ -308,14 +319,14 @@ end
   (`config.web_enable_clear = false`) so the initial surface is read-only; Basic Auth is the second
   layer, not the only one. No mechanism that deletes "unused" code is built — not now, not later.
 
-`config/routes/coverband.rb` mounts `Coverband::Reporters::Web.new` (a Rack app, so the Flipper-style
-inline mount is the closer model) behind the host constraint, with the fail-closed `Rack::Auth::Basic`
-wrapper.
+`config/routes/coverband.rb` mounts `Coverband::Reporters::Web.new` (a Rack app, so the
+Flipper-style inline mount is the closer model) behind the host constraint, with the fail-closed
+`Rack::Auth::Basic` wrapper.
 
 ## Step 6 — Registry, hosts, invariant test
 
-- `app/values/fqdn_availability_registry.rb`: three new slots (`performance`, `coverband`, `swagger`)
-  following the `pghero:` lambda shape exactly.
+- `app/values/fqdn_availability_registry.rb`: three new slots (`performance`, `coverband`,
+  `swagger`) following the `pghero:` lambda shape exactly.
 - `config/environments/development.rb`: six new `env_host_keys` entries and six new
   `localhost_tunnel_hosts` entries (`:3000` and `:3001` for each).
 - `test/security/invariants/mounted_engine_invariant_test.rb`:
@@ -343,11 +354,11 @@ Because these gems are development-only, an integration test cannot drive the re
   is admitted and that `config.hosts` entries are exact strings; `FqdnAvailabilityRegistry` drift;
   the rails_performance route-list drift guard; and a test that `Coverband` is not defined under
   `RAILS_ENV=test`.
-- **Runs in the container against a booted development app, recorded as manual evidence:** Swagger UI
-  renders; the OpenAPI document is fetched from the swagger host with credentials and 401s without;
-  `supportedSubmitMethods: []` and `validatorUrl: null` are present in the served HTML; no request
-  leaves for `validator.swagger.io` (check via the browser network panel); the rails_performance
-  secret-leak test above; Valkey-down behaviour for both tools.
+- **Runs in the container against a booted development app, recorded as manual evidence:** Swagger
+  UI renders; the OpenAPI document is fetched from the swagger host with credentials and 401s
+  without; `supportedSubmitMethods: []` and `validatorUrl: null` are present in the served HTML; no
+  request leaves for `validator.swagger.io` (check via the browser network panel); the
+  rails_performance secret-leak test above; Valkey-down behaviour for both tools.
 
 Also add a forbidden-pattern style check that `public/openapi` appears nowhere after the move.
 
@@ -409,11 +420,11 @@ argument, not a measurement — report it as such, and take the development-side
 
 ## Rollback / disable
 
-| Scope | How |
-| --- | --- |
-| One feature, no deploy | `RAILS_PERFORMANCE_ENABLED=false`, `COVERBAND_ENABLED=false`, or unset `PUBLIC_/PRIVATE_SWAGGER_URL` |
-| One feature, code | Delete its `config/routes/<tool>.rb`, its initializer, its `draw` line, its registry slot, and its `Gemfile` entry |
-| Everything | Revert commits 3–7; commits 1–2 are independent and can stay |
+| Scope                  | How                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| One feature, no deploy | `RAILS_PERFORMANCE_ENABLED=false`, `COVERBAND_ENABLED=false`, or unset `PUBLIC_/PRIVATE_SWAGGER_URL`               |
+| One feature, code      | Delete its `config/routes/<tool>.rb`, its initializer, its `draw` line, its registry slot, and its `Gemfile` entry |
+| Everything             | Revert commits 3–7; commits 1–2 are independent and can stay                                                       |
 
 Unsetting a host's `PUBLIC_*`/`PRIVATE_*` pair drops it from both the route constraint and
 `config.hosts`, leaving only the `.core.dev.localhost` alias — so a partial disable degrades toward

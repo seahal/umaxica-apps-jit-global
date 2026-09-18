@@ -33,16 +33,16 @@ Emergency Access uses the Operator's **existing registered passkeys**. There is 
 emergency passkey registration, and no separate emergency credential of any kind. Secret/SecretKey
 is **not** available in Emergency Access: Emergency Access is passkey-only.
 
-| | Normal | Emergency |
-| --- | --- | --- |
-| Entry | `GET /sign/in` -> Entra | `GET /sign/in/emergency/passkey/new` |
-| First stage | Entra ID | none |
-| Credential | Passkey, or Secret/SecretKey if the passkey is lost | Passkey only |
-| Actor selected by | the pending Entra transaction | the submitted identifier |
-| Challenge purpose | `authentication` | `emergency_sign_in` |
-| Session context | `normal` | `emergency` |
-| Step-Up | available | **unavailable** |
-| Sign-out | `/sign/out` | `/sign/out` (the same ceremony) |
+|                   | Normal                                              | Emergency                            |
+| ----------------- | --------------------------------------------------- | ------------------------------------ |
+| Entry             | `GET /sign/in` -> Entra                             | `GET /sign/in/emergency/passkey/new` |
+| First stage       | Entra ID                                            | none                                 |
+| Credential        | Passkey, or Secret/SecretKey if the passkey is lost | Passkey only                         |
+| Actor selected by | the pending Entra transaction                       | the submitted identifier             |
+| Challenge purpose | `authentication`                                    | `emergency_sign_in`                  |
+| Session context   | `normal`                                            | `emergency`                          |
+| Step-Up           | available                                           | **unavailable**                      |
+| Sign-out          | `/sign/out`                                         | `/sign/out` (the same ceremony)      |
 
 ## Routes
 
@@ -93,12 +93,12 @@ WebAuthn exception handling.
 
 The differences are narrow hooks:
 
-| Hook | Normal | Emergency |
-| --- | --- | --- |
-| `passkey_ceremony_purpose` | `:authentication` | `:emergency_sign_in` |
+| Hook                        | Normal                           | Emergency                   |
+| --------------------------- | -------------------------------- | --------------------------- |
+| `passkey_ceremony_purpose`  | `:authentication`                | `:emergency_sign_in`        |
 | `find_active_passkey_actor` | the Entra transaction's Operator | the identifier, if eligible |
-| `allow_passkey_sign_in?` | must match the Entra transaction | must still be eligible |
-| `perform_passkey_sign_in` | Normal context | Emergency context |
+| `allow_passkey_sign_in?`    | must match the Entra transaction | must still be eligible      |
+| `perform_passkey_sign_in`   | Normal context                   | Emergency context           |
 
 `EmergencyPasskeyVerifier`, `EmergencyWebauthnVerifier`, and `EmergencyChallengeStore` must not
 exist. `test/unit/security/org_emergency_access_invariants_test.rb` enforces both the shared-seam
@@ -123,15 +123,15 @@ session-backed, in the same place and with the same shape as the pending-MFA sta
 gates a second factor, because the ceremony spans two requests of one browser session rather than
 the sign/base boundary.
 
-It binds the Operator, the Entra identity, the ceremony purpose, its issue and expiry times
-(10 minutes), and it is one-shot: it is consumed before the session-establishing call, so a replayed
+It binds the Operator, the Entra identity, the ceremony purpose, its issue and expiry times (10
+minutes), and it is one-shot: it is consumed before the session-establishing call, so a replayed
 second stage has nothing to continue.
 
 The second stage reads the Operator **only** from this transaction. The identifier parameter is not
 consulted at all, and the passkey and secret pages no longer render a field for one. An attacker who
 completes Entra as Operator A therefore cannot authenticate as Operator B: the challenge is issued
-against A, the challenge store returns A at consumption, and credential ownership is checked
-against A a second time.
+against A, the challenge store returns A at consumption, and credential ownership is checked against
+A a second time.
 
 Without a valid transaction, `/sign/in/passkey/*` and `/sign/in/secret/*` refuse to run. The generic
 failure responses of both ceremonies are unchanged, so enumeration resistance is preserved.
@@ -146,9 +146,10 @@ failure responses of both ceremonies are unchanged, so enumeration resistance is
 - **Claim:** `authn_ctx`, present on every access token. `acr`, `amr`, `scp`, `sid` and the rest of
   the token keep their existing meanings.
 
-This is deliberately **not** the existing restricted-session state. `Actor::Authentication#restricted?`
-marks a session awaiting session-limit remediation; a session can be Normal and session-limit
-restricted at the same time. The two axes never collapse into one flag.
+This is deliberately **not** the existing restricted-session state.
+`Actor::Authentication#restricted?` marks a session awaiting session-limit remediation; a session
+can be Normal and session-limit restricted at the same time. The two axes never collapse into one
+flag.
 
 Authentication context and DBSC binding are independent session properties. Session inventory may
 label a session Emergency only from the persisted authentication context. `dbsc_enabled?`, binding
@@ -192,8 +193,8 @@ separate Emergency step-up mechanism, and normal step-up behaviour is unchanged.
 
 Four independent layers enforce it:
 
-1. `VerificationBase#require_step_up!` and `#enforce_step_up_prereqs!` refuse the ceremony entry with
-   403 before any credential is requested.
+1. `VerificationBase#require_step_up!` and `#enforce_step_up_prereqs!` refuse the ceremony entry
+   with 403 before any credential is requested.
 2. `StepUpResolver` never reports a requirement as satisfied for an Emergency session, so a session
    that somehow held freshness columns still cannot authorize a sensitive action.
 3. `IdentityStepUpCeremonyFreshnessCommitter` refuses to write freshness onto an Emergency session,

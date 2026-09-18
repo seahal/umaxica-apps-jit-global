@@ -73,8 +73,7 @@ The workspace target is an explicit, per-developer opt-in with two steps.
    ```
 
 2. Give `core` the FUSE device locally in `compose.override.yaml`. Do not commit it: not every host
-   exposes `/dev/fuse`,
-   and a device Compose cannot resolve makes the whole project fail to start:
+   exposes `/dev/fuse`, and a device Compose cannot resolve makes the whole project fail to start:
 
    ```yaml
    services:

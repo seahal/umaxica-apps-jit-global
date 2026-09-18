@@ -20,12 +20,12 @@ nor `.tool-versions` exists.
 
 ## The four incorrect claims
 
-| Location                                                     | Claim                                              |
-| ------------------------------------------------------------ | -------------------------------------------------- |
+| Location                                                     | Claim                                                    |
+| ------------------------------------------------------------ | -------------------------------------------------------- |
 | `notes/implementation/fakecloud-aws-development-baseline.md` | installed via `ghcr.io/devcontainers/features/terraform` |
-| `docs/operations/fakecloud-migration-verification.md`        | "present since 2026-08-31" via that feature        |
-| `terraform/environments/development/providers.tf`            | "now also installed inside `core`"                 |
-| `adr/fakecloud-podman-staging-environment.md`                | that feature is the supported installation path    |
+| `docs/operations/fakecloud-migration-verification.md`        | "present since 2026-08-31" via that feature              |
+| `terraform/environments/development/providers.tf`            | "now also installed inside `core`"                       |
+| `adr/fakecloud-podman-staging-environment.md`                | that feature is the supported installation path          |
 
 The first three predate this session. The fourth was written by the assistant earlier the same day,
 carrying the existing documents forward without checking the file — the same mistake the other three

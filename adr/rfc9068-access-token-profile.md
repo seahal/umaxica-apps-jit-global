@@ -7,9 +7,8 @@ Accepted (2026-09-10)
 ## Context
 
 First-party `auth_access` and `preference_access` JWTs used a private header `typ`, duplicated
-payload typing, a numeric `sub`, a private `scp` array, optional `client_id`, and a registered
-`act` claim whose meaning collided with RFC 8693. Resource-type suffixes were also folded into
-`iss`.
+payload typing, a numeric `sub`, a private `scp` array, optional `client_id`, and a registered `act`
+claim whose meaning collided with RFC 8693. Resource-type suffixes were also folded into `iss`.
 
 UMAXICA needs a stable access-token contract that matches RFC 9068 as closely as possible while
 keeping the existing ES384-only key policy.
@@ -22,9 +21,9 @@ implement the RFC 9068 §2.1 requirement that conforming authorization servers a
 include RS256 among their supported signature algorithms.
 
 This is an RFC 9068 profile with one documented interoperability deviation. ES384 itself is
-permitted by RFC 9068; the deviation is the absence of RS256 support. `alg=none` and every
-algorithm other than ES384 are rejected. The verifier does not treat the token-provided `alg` as
-authorization to select an arbitrary algorithm.
+permitted by RFC 9068; the deviation is the absence of RS256 support. `alg=none` and every algorithm
+other than ES384 are rejected. The verifier does not treat the token-provided `alg` as authorization
+to select an arbitrary algorithm.
 
 Both `auth_access` and preference access tokens use JOSE:
 
@@ -46,10 +45,10 @@ Required claims: `iss`, `exp`, `aud`, `sub`, `client_id`, `iat`, `jti`.
 - `client_id` identifies the first-party OAuth client that obtained the token
   (`AUTH_JWT_{CLIENT,OPERATOR,VISITOR}_CLIENT_ID`, `PREFERENCE_JWT_CLIENT_ID`). It is not copied
   from `aud`.
-- `sub` is a string. For first-party cookie `auth_access` it is the resource owner's durable
-  numeric id as a decimal string. For preference tokens it is the preference record `public_id`
-  (the preference document identity; guests have no account subject). OIDC access tokens continue
-  to use `OidcSubject`.
+- `sub` is a string. For first-party cookie `auth_access` it is the resource owner's durable numeric
+  id as a decimal string. For preference tokens it is the preference record `public_id` (the
+  preference document identity; guests have no account subject). OIDC access tokens continue to use
+  `OidcSubject`.
 - `scope` is the RFC 8693 space-delimited string. Actor domain is `domain:client|operator|visitor`
   rather than a registered `act` claim. Preference tokens use `scope=preference`.
 - `acr`, `nbf`, `sid`, `authn_ctx`, `amr`, `cnf`, and preference application data remain as
@@ -61,9 +60,9 @@ not reintroduced.
 
 ### Keyring selection
 
-The verification keyring is chosen by the caller (`jwt_issuer_id:`), never inferred from the
-request host. When no keyring is named, the `auth` keyring is used; a token signed by any other
-keyring then fails as an unknown kid.
+The verification keyring is chosen by the caller (`jwt_issuer_id:`), never inferred from the request
+host. When no keyring is named, the `auth` keyring is used; a token signed by any other keyring then
+fails as an unknown kid.
 
 ### Validation
 
@@ -84,12 +83,12 @@ Development, test, and production use non-overlapping issuer and key namespaces:
 
 - Local issuers default to `urn:umaxica:<rails-env>:auth` and `urn:umaxica:<rails-env>:preference`,
   and local kids are prefixed with the Rails environment, so a development token never verifies
-  under test and vice versa. Local audience names (`umaxica-api-*`) name resource servers and may
-  be shared between development and test; isolation there rests on issuer and key.
+  under test and vice versa. Local audience names (`umaxica-api-*`) name resource servers and may be
+  shared between development and test; isolation there rests on issuer and key.
 - Production must set every issuer, audience, and client identifier explicitly (one-argument
-  `ENV.fetch`). `AuthenticationJwtConfiguration.validate!` and `PreferenceJwtConfiguration.validate!`
-  run at boot and refuse to start when an issuer or audience contains a development/test marker,
-  a loopback host, or the reserved `.test` TLD.
+  `ENV.fetch`). `AuthenticationJwtConfiguration.validate!` and
+  `PreferenceJwtConfiguration.validate!` run at boot and refuse to start when an issuer or audience
+  contains a development/test marker, a loopback host, or the reserved `.test` TLD.
 - Development/test kids are not publishable outside local Rails environments.
 - No audience list falls back to defaults: auth keyring audiences are the union of the per-resource
   `AUTH_JWT_*_AUDIENCES`, preference audiences come only from the boot base hosts, and the jump

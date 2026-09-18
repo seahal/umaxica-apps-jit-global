@@ -135,15 +135,15 @@ The following reviewed migration slice is now implemented on the `feature` branc
 - Core app, com, and org preference cookie and theme endpoints remain at their established
   `/api/v0/preferences/{cookie,theme}` paths, but their controllers now live under the matching
   `Core::<surface>::Api::V0::Preferences` namespace.
-- Core DBSC registration remains the protocol endpoint
-  `POST /api/v0/preferences/dbsc` and now uses the same canonical API namespace.
+- Core DBSC registration remains the protocol endpoint `POST /api/v0/preferences/dbsc` and now uses
+  the same canonical API namespace.
 - The old Core `Web::V0` and `Edge::V0` controller files for these endpoints were removed after
   route and source searches showed no remaining application caller.
 - The cookie/theme routes intentionally remain explicit `GET` + `PATCH` declarations. Rails'
   resource update mapping also exposes `PUT`, while the existing OpenAPI documents and route
-  contract intentionally allow only `PATCH`; changing that verb contract would be an unrelated
-  API change. The DBSC endpoint uses ordinary resource routing because its protocol contract is
-  `POST` only.
+  contract intentionally allow only `PATCH`; changing that verb contract would be an unrelated API
+  change. The DBSC endpoint uses ordinary resource routing because its protocol contract is `POST`
+  only.
 
 This amendment does not migrate Auth, Base, Side, Docs, Help, News, or other protocol/ceremony
 endpoints. Their legacy route vocabulary remains subject to endpoint-specific compatibility review.

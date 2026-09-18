@@ -57,10 +57,10 @@ from the other.
 The legacy Client and Operator Chronicle catalogs have event and log-level references, but no
 risk-level reference or user-visibility field. Their `level_id` is Chronicle logging severity, not
 security risk. Until a persistent catalog is justified, the shared Base Identity presenter owns the
-explicit event-ID to risk-and-visibility mapping. Risk uses a stable numeric rank; it is never sorted
-alphabetically. User-facing reads filter `internal` event IDs in SQL and serialize a normalized
-projection rather than exposing Chronicle IDs, raw context, provider metadata, or source IP
-addresses.
+explicit event-ID to risk-and-visibility mapping. Risk uses a stable numeric rank; it is never
+sorted alphabetically. User-facing reads filter `internal` event IDs in SQL and serialize a
+normalized projection rather than exposing Chronicle IDs, raw context, provider metadata, or source
+IP addresses.
 
 Successful refresh rotation is a durable internal authentication audit event because it is useful
 for investigation but too frequent for the user activity list. Refresh-token replay and failed
