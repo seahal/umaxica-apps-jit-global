@@ -85,14 +85,16 @@ Separate databases, not just namespaces, because `rails_performance` reads with
 dashboard query cannot stall the cache, the rate-limit counters, or auth state. It also keeps a
 development `FLUSHDB` scoped to the dashboard being triaged.
 
-Both resolve through `ResponsibilityUrls.require_url`, which uses one-argument `ENV.fetch`. This is
-load-bearing: handed no URL, both gems default to `redis://127.0.0.1:6379/0` — logical database 0,
-the application cache. A missing variable would therefore not fail, it would quietly write
-observability data into `Rails.cache`, and nothing downstream would report it.
+Both resolve through `Umaxica::Valkey::Settings` from `config/valkey.yml` (diagnostic host keys,
+logical DBs 12/13). This is load-bearing: handed no URL, both gems default to
+`redis://127.0.0.1:6379/0` — historically the application cache. A missing host would therefore not
+fail, it would quietly write observability data into `Rails.cache`, and nothing downstream would
+report it.
 
 The test databases are declared even though nothing connects to them under `RAILS_ENV=test`:
 `assert_nonprod_db!` refuses to validate a responsibility it has no expected database for. They are
-deliberately absent from `Umaxica::Valkey::TestTarget::URL_NAMES`, so test boot does not demand
+deliberately absent from the test Valkey boot contract (`config/valkey.yml` test
+section has no performance/coverband keys), so test boot does not demand
 variables it will never use.
 
 ### Retention

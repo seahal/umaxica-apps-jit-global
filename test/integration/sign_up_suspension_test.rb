@@ -29,8 +29,6 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
 
   SURFACES.each do |surface, config|
     test "#{surface} sign-up entry is open while the switch is off" do
-      skip "AUTH_STATE_REDIS_URL unset" if ENV["AUTH_STATE_REDIS_URL"].blank?
-
       visit_admitted_ceremony!(surface: surface, intent: "sign_up")
 
       assert_response :success
@@ -49,8 +47,6 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
     end
 
     test "#{surface} sign-in entry is unaffected by the sign-up switch" do
-      skip "AUTH_STATE_REDIS_URL unset" if ENV["AUTH_STATE_REDIS_URL"].blank?
-
       Flipper.enable(config.fetch(:feature))
       visit_admitted_ceremony!(surface: surface, intent: "sign_in")
 
@@ -59,8 +55,6 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
   end
 
   test "suspending one surface leaves the others open" do
-    skip "AUTH_STATE_REDIS_URL unset" if ENV["AUTH_STATE_REDIS_URL"].blank?
-
     Flipper.enable(:sign_up_suspended_app)
 
     visit_admitted_ceremony!(surface: :com, intent: "sign_up")

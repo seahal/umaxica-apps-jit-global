@@ -70,17 +70,18 @@ class CacheBoundaryInvariantTest < ActiveSupport::TestCase
   end
 
   test "cache and rate limit URLs have no fallback value" do
-    content = Rails.root.glob("config/environments/*.rb").map(&:read).join("\n")
+    content = Rails.root.join("lib/umaxica/valkey/settings.rb").read
 
-    # A two-argument ENV.fetch would boot with a default instead of reporting the
-    # gap, which for these two means silently running per-process stores that
-    # neither share counters nor share cache entries across the fleet.
-    %w(CACHE_REDIS_URL RATE_LIMIT_REDIS_URL).each do |name|
-      assert_no_match(
-        /#{name}["']\s*,/, content,
-        "#{name} must use one-argument ENV.fetch so a missing URL stops the boot",
-      )
-    end
+    assert_match(
+      /environment\.fetch\(name\)/,
+      content,
+      "Valkey Settings must fetch required keys without a default",
+    )
+    assert_no_match(
+      /ENV\.fetch\("[A-Z_]+",/,
+      content,
+      "Valkey Settings must not supply default environment values",
+    )
   end
 
   test "development and production resolve both Valkey stores" do
@@ -88,12 +89,19 @@ class CacheBoundaryInvariantTest < ActiveSupport::TestCase
       content = Rails.root.join("config/environments/#{environment}.rb").read
 
       assert_match(
-        /ENV\.fetch\("CACHE_REDIS_URL"\)/, content,
-        "#{environment} must back Rails.cache with the Valkey cache store",
+        /Umaxica::Valkey::Settings\.load/,
+        content,
+        "#{environment} must resolve Valkey through Settings",
       )
       assert_match(
-        /ENV\.fetch\("RATE_LIMIT_REDIS_URL"\)/, content,
-        "#{environment} must back rate limiting with the Valkey rate-limit store",
+        /valkey\.cache\.url/,
+        content,
+        "#{environment} must back Rails.cache with the configured cache URL",
+      )
+      assert_match(
+        /valkey\.rate_limit\.url/,
+        content,
+        "#{environment} must back rate limiting with the configured rate-limit URL",
       )
     end
   end

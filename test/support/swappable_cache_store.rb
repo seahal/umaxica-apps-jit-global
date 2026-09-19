@@ -23,7 +23,7 @@ module TestSupport
       super(default_backend)
     end
 
-    attr_reader :default_backend
+    attr_accessor :default_backend
 
     def backend
       __getobj__

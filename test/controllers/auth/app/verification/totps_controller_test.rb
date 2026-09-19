@@ -194,6 +194,49 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     assert_equal 1, ClientStepUpSession.where(user_token: @token).count
   end
 
+  # Step-Up TOTP shares the PostgreSQL lockout with sign-in: once an account's TOTP is locked,
+  # a correct code must not complete a step-up either.
+  test "rejects a correct code while the account's TOTP lockout is in force" do
+    private_key = "JBSWY3DPEHPK3PXP"
+    credential = ClientTotpCredential.create!(
+      user: @user,
+      private_key: private_key,
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+      last_otp_at: Time.zone.at(0),
+    )
+    return_to = "/settings/emails?ri=jp"
+    pt = signed_step_up_pt(return_to)
+    grant = signed_step_up_grant_for(
+      actor: @user, token: @token, scope: "settings_email", return_to: return_to, surface: "app",
+    )
+
+    with_prosopite_paused do
+      get auth_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", step_up_ceremony_grant: grant),
+          headers: @headers
+    end
+
+    assert_response :success
+
+    freeze_time do
+      # Lock the account through the shared verifier, as failed sign-in attempts would.
+      credentials = ClientTotpCredential.where(id: credential.id)
+      ClientTotpCredential::MAX_TOTP_ATTEMPTS.times do
+        TotpWindowConsumer.call(credentials: credentials, token: wrong_totp_code(private_key))
+      end
+
+      with_prosopite_paused do
+        post auth_app_verification_totp_url(ri: "jp"),
+             params: { verification: { code: ROTP::TOTP.new(private_key).at(Time.current.to_i) } },
+             headers: @headers
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_not_includes response.body, "step-up-completion-form"
+    assert_equal ClientTotpCredential::MAX_TOTP_ATTEMPTS, credential.reload.otp_attempts_count
+    assert_equal 0, credential.last_otp_at.to_i
+  end
+
   test "renders new on failure" do
     private_key = "JBSWY3DPEHPK3PXP"
     ClientTotpCredential.create!(
@@ -391,6 +434,12 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
   end
 
   private
+
+  def wrong_totp_code(private_key)
+    totp = ROTP::TOTP.new(private_key)
+    valid = [-30, 0, 30].map { |offset| totp.at(Time.current.to_i + offset) }
+    ("000000".."999999").find { |candidate| valid.exclude?(candidate) }
+  end
 
   def inertia_form
     inertia_props.fetch("form")

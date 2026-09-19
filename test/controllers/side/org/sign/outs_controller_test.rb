@@ -18,7 +18,8 @@ class Side::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     get edit_side_org_sign_out_url(ri: "jp"), headers: session_headers(user, token)
 
     assert_response :success
-    assert_select "form[action*=?][method=?]", side_org_sign_out_path, "post"
+    assert_equal "side/org/sign/outs/edit", inertia_component
+    assert_equal side_org_sign_out_path, URI.parse(inertia_props.dig("form", "action")).path
     assert_predicate token.reload, :currently_usable?
   end
 

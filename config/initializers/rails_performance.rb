@@ -10,7 +10,7 @@ if Rails.env.development?
   require_relative "../../lib/rails_performance_store_resilience"
   require_relative "../../lib/umaxica/valkey/error"
   require_relative "../../lib/umaxica/valkey/configuration_error"
-  require_relative "../../lib/umaxica/valkey/responsibility_urls"
+  require_relative "../../lib/umaxica/valkey/settings"
 
   # Independently switchable, as the three diagnostic surfaces must be. Disabled, the gem records
   # nothing, opens no Valkey connection, and its middleware returns immediately; the route stays
@@ -18,12 +18,11 @@ if Rails.env.development?
   RailsPerformance.enabled = ENV.fetch("RAILS_PERFORMANCE_ENABLED", "true") == "true"
 
   if RailsPerformance.enabled
-    # Fails the boot when PERFORMANCE_REDIS_URL is unset or points at the wrong logical database.
-    # The gem's default is `Redis.new` with no arguments -- redis://127.0.0.1:6379/0, which is the
-    # application cache -- so without this a missing variable would not fail, it would quietly
-    # write request records into Rails.cache. See lib/umaxica/valkey/responsibility_urls.rb.
-    performance_valkey =
-      Umaxica::Valkey::ResponsibilityUrls.require_url(:performance, "PERFORMANCE_REDIS_URL")
+    # Fails the boot when diagnostic Valkey settings are missing. The gem's default is
+    # `Redis.new` with no arguments -- redis://127.0.0.1:6379/0, which is the application
+    # cache -- so without this a missing host would not fail, it would quietly write
+    # request records into Rails.cache.
+    performance_valkey = Umaxica::Valkey::Settings.current.performance
     RailsPerformance.redis = Redis.new(url: performance_valkey.url, driver: :hiredis)
 
     # Retention. RailsPerformance::Utils.save_to_redis writes every record with

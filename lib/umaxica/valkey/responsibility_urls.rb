@@ -5,39 +5,10 @@ require "uri"
 
 module Umaxica
   module Valkey
-    # Parses and validates responsibility Redis/Valkey URLs for nonprod logical DB layout.
+    # Parses Redis/Valkey URLs. Expected nonprod DB indexes come from config/valkey.yml
+    # via Settings.logical_db — they are not duplicated here.
     module ResponsibilityUrls
-      # `performance` and `coverband` back the development-only diagnostic dashboards
-      # (config/initializers/rails_performance.rb, config/coverband.rb). They get their own logical
-      # databases rather than sharing one behind key prefixes for two reasons beyond tidiness:
-      #
-      #   - rails_performance reads with `redis.keys("performance|*")`
-      #     (RailsPerformance::Utils.fetch_from_redis), an O(keyspace) blocking scan. Confined to
-      #     its own database it can only stall its own data, never the cache, the rate-limit
-      #     counters, or auth state.
-      #   - each writes one key per observed event with its own expiry policy, so a FLUSHDB during
-      #     development triage stays scoped to the dashboard being triaged.
-      #
-      # Nothing authoritative lives in either: both hold derived observability data that is
-      # reconstructed by the next request.
-      DEV_DBS = {
-        cache: 0,
-        rate_limit: 1,
-        auth_state: 2,
-        performance: 12,
-        coverband: 13,
-      }.freeze
-      # The diagnostic gems are `group :development` only, so nothing connects to these two in
-      # test. They are declared anyway: `assert_nonprod_db!` refuses to validate a responsibility
-      # it has no expected database for, and a silently unvalidated URL is exactly the failure this
-      # module exists to prevent.
-      TEST_DBS = {
-        cache: 3,
-        rate_limit: 4,
-        auth_state: 5,
-        performance: 14,
-        coverband: 15,
-      }.freeze
+      KNOWN = %i(cache rate_limit auth_state performance coverband).freeze
 
       Parsed =
         Data.define(:responsibility, :url, :db, :host, :port) do
@@ -51,11 +22,13 @@ module Umaxica
       def parse(url, responsibility:)
         responsibility = responsibility.to_sym
         raise ConfigurationError,
-              "unknown Valkey responsibility: #{responsibility.inspect}" unless DEV_DBS.key?(responsibility)
+              "unknown Valkey responsibility: #{responsibility.inspect}" unless KNOWN.include?(responsibility)
         raise ConfigurationError, "Valkey URL is blank" if url.to_s.blank?
 
         uri = URI.parse(url.to_s)
-        raise ConfigurationError, "Valkey URL must use redis or rediss" unless uri.scheme.in?(%w(redis rediss))
+        unless %w(redis rediss).include?(uri.scheme)
+          raise ConfigurationError, "Valkey URL must use redis or rediss"
+        end
         raise ConfigurationError, "Valkey URL host is blank" if uri.host.blank?
 
         db = extract_db(uri)
@@ -70,14 +43,6 @@ module Umaxica
         raise ConfigurationError, "invalid Valkey URL", cause: e
       end
 
-      # Resolves a responsibility's URL from the environment, fails closed, and proves it points at
-      # the logical database that responsibility owns.
-      #
-      # One-argument `ENV.fetch` on purpose. Both diagnostic gems default to
-      # `redis://127.0.0.1:6379/0` when handed no URL -- that is logical database 0, the cache --
-      # so a missing variable would not fail, it would quietly write observability data into the
-      # application cache. Nothing downstream would report that; the first symptom would be cache
-      # keys nobody wrote. Aborting the boot with the variable's name is the only honest outcome.
       def require_url(responsibility, variable, environment: ENV, env: Rails.env)
         url = environment.fetch(variable)
         raise ConfigurationError, "#{variable} is required" if url.to_s.strip.empty?
@@ -90,12 +55,11 @@ module Umaxica
       end
 
       def expected_db(responsibility, env: Rails.env)
-        table = (env.to_s == "test") ? TEST_DBS : DEV_DBS
-        table.fetch(responsibility.to_sym)
+        Settings.logical_db(responsibility, rails_env: env)
       end
 
       def assert_nonprod_db!(parsed, env: Rails.env)
-        return unless env.to_s.in?(%w(development test))
+        return unless %w(development test).include?(env.to_s)
 
         expected = expected_db(parsed.responsibility, env: env)
         return if parsed.db == expected

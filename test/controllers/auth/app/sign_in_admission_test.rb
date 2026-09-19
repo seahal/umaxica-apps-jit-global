@@ -5,8 +5,6 @@ require "test_helper"
 
 class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   setup do
-    skip "AUTH_STATE_REDIS_URL unset" if ENV["AUTH_STATE_REDIS_URL"].blank?
-
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     host! @host
   end

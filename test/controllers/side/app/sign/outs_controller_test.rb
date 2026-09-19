@@ -18,8 +18,29 @@ class Side::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     get edit_side_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
     assert_response :success
-    assert_select "form[action*=?][method=?]", side_app_sign_out_path, "post"
+    assert_equal "side/app/sign/outs/edit", inertia_component
+    assert_equal side_app_sign_out_path, URI.parse(inertia_props.dig("form", "action")).path
     assert_predicate token.reload, :currently_usable?
+  end
+
+  # Side renders its sign-out pages through Inertia, so the completion page clears the encrypted
+  # Inertia history itself; the Clear-Site-Data response used by the ERB surfaces is not needed
+  # here and would also unregister Side's offline service worker.
+  test "sign-out completion is an Inertia page that clears history" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+
+    post side_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    state = Rack::Utils.parse_nested_query(URI.parse(handoff_form["action"]).query.to_s).fetch("state")
+
+    get side_app_sign_out_url(ri: "jp", state: state)
+
+    assert_response :success
+    assert_equal "side/app/sign/outs/complete", inertia_component
+    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert inertia_page.fetch("clearHistory")
+    assert_nil response.headers["Clear-Site-Data"]
   end
 
   test "post sign out redirects to base oidc logout with completion state" do

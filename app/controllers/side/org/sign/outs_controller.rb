@@ -9,11 +9,12 @@ module Side
         include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
+        include ::SurfaceInertiaPage
+        include ::SignOutInertiaPages
 
         AUTHENTICATION_MODE = :open
-        # Bare on purpose, but the sign-out pages are full HTML documents shown to a
-        # person, so they need a layout to carry <head> and its title.
-        layout "side/org/application"
+        # Bare on purpose. The sign-out pages are Inertia pages (SignOutInertiaPages), so the
+        # completion page clears the encrypted Inertia history; SurfaceInertiaPage supplies the layout.
 
         before_action :authenticate!, only: :create
         helper_method :sign_out_completed_description
@@ -30,7 +31,7 @@ module Side
         end
 
         def edit
-          render "auth/shared/sign_outs/edit"
+          render_sign_out_confirmation_page
         end
 
         def create

@@ -2,7 +2,13 @@
 
 ## Status
 
-Accepted (2026-09-13).
+Accepted (2026-09-13). Partially superseded (2026-09-19) for **physical service
+topology** and **application configuration**: nonprod runs `valkey-cache` and
+`valkey-kvs` as separate Compose services (plus a compatibility `valkey` for
+rails_performance / Coverband). Development vs test isolation remains logical
+DBs on those shared instances; this ADR is not authorization to create
+per-environment or per-worker Valkey services. Canonical logical DB indexes
+live in Rails `config/valkey.yml` and must not be re-canonicalized in Compose.
 
 Supersedes the **development/test physical-service isolation** claims in
 `adr/valkey-cache-and-rate-limit-stores.md` and
@@ -53,6 +59,36 @@ Driver selection is verified in tests.
 
 **Production** keeps independently configured responsibility URLs and may still use separate hosts;
 this ADR does not force logical DBs in production.
+
+## Amendment (2026-09-19)
+
+Application configuration is `config/valkey.yml`, loaded by
+`Umaxica::Valkey::Settings`. Consumers read cache / rate-limit / auth-state;
+they do not branch on `Rails.env` to pick a host.
+
+The nonprod application DB pairs are now adjacent odd/even indexes:
+
+| Responsibility | Development | Test                         |
+| -------------- | ----------- | ---------------------------- |
+| cache          | DB 1        | DB 2 reserved; MemoryStore   |
+| rate-limit     | DB 3        | DB 4                         |
+| auth-state     | DB 5        | DB 6                         |
+
+`valkey-cache` serves development cache. The ordinary test suite does not
+connect to cache Valkey. Rate-limit and auth-state use `valkey-kvs`.
+
+`VALKEY_TEST_HOST` / `VALKEY_TEST_PORT` and hand-exported
+`CACHE_REDIS_URL` / `RATE_LIMIT_REDIS_URL` / `AUTH_STATE_REDIS_URL` are no
+longer part of the test boot contract. Production still uses those URL names
+as `url_key` values and fails fast when they are missing.
+
+Parallel Minitest workers share the test logical DBs. Isolation is
+`<run-id>:<worker-id>` key namespaces, not extra DBs or extra services.
+`scripts/test-isolated` is optional; `bundle exec rails test` is the entry
+point.
+
+The 2026-09-13 table above remains the historical mapping (cache 0/3,
+rate-limit 1/4, auth-state 2/5).
 
 ## Consequences
 

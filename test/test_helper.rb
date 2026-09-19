@@ -310,20 +310,14 @@ module ActiveSupport
     ParallelTestDatabaseCloner.install!(workers: parallel_workers)
     parallelize(workers: parallel_workers, parallelize_databases: false)
 
-    # The rate-limit store is a NullStore by default in test, so ordinary
-    # controller and request tests accumulate no counters and never receive a
-    # surprise 429 from an unrelated test's traffic. Tests whose subject is rate
-    # limiting call `with_rate_limit_counters` to swap in a deterministic
-    # MemoryStore for the duration of the test.
-    #
-    # The swap goes through TestSupport::SwappableCacheStore rather than reassigning
-    # config.x.rate_limit[:store], because `rate_limit ..., store:
-    # rate_limit_store` in a controller class body captures the object once at
-    # class-load time; only mutating that captured object reaches it.
-    #
-    # Reset (not just clear) before each test: a test that raised before its
-    # ensure ran must not leave a MemoryStore installed for the next one.
-    setup { Rails.configuration.x.rate_limit.fetch(:store).reset! }
+    # Rate-limit uses KVS Valkey namespaced by run and worker. Reset any
+    # with_rate_limit_counters swap, then delete this worker's keys so counters
+    # do not leak into the next case. Application cache is MemoryStore.
+    setup do
+      Rails.configuration.x.rate_limit.fetch(:store).reset!
+      Rails.cache.clear
+      ValkeyTestIsolation.cleanup_worker_keys!
+    end
 
     # Social ceremony availability is a Flipper kill switch that fails closed, so the suite's
     # baseline is every provider enabled; tests that exercise a disabled provider turn it off
@@ -360,10 +354,9 @@ module ActiveSupport
       end
     end
 
-    # Opt a rate-limit-focused test into real, retained counters. The default
-    # store is a NullStore (see config/environments/test.rb), which increments
-    # to nothing; a test that asserts thresholds, 429s, independent buckets or
-    # window expiry must wrap its exercise in this.
+    # Opt a rate-limit-focused test into a deterministic in-process MemoryStore.
+    # The default test store is namespaced Valkey; MemoryStore is still used when
+    # a case needs time-travelled windows without talking to KVS.
     #
     # MemoryStore honors expires_in against Time.current, so window resets are
     # asserted by travelling time rather than sleeping.
@@ -371,9 +364,8 @@ module ActiveSupport
       Rails.configuration.x.rate_limit.fetch(:store).with(store, &)
     end
 
-    # Same idea for Rails.cache, which is a NullStore in test. Cache-behavior
-    # tests opt into a deterministic MemoryStore and get the previous store back
-    # even if the block raises, so cache state never leaks between tests.
+    # Rails.cache is already MemoryStore in test. This helper still swaps a
+    # fresh store for cache-behavior tests that need an empty isolated instance.
     def with_application_cache(store = ActiveSupport::Cache::MemoryStore.new)
       previous = Rails.cache
       Rails.cache = store

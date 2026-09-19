@@ -58,8 +58,12 @@ class HostAuthorizationContractTest < Minitest::Test
   DEVELOPMENT_BOOT_ENV = {
     "RAILS_ENV" => "development",
     "UMAXICA_ENV_FILE" => File.expand_path("../../.env.example", __dir__),
-    "CACHE_REDIS_URL" => "redis://valkey-cache.invalid:6379/0",
-    "RATE_LIMIT_REDIS_URL" => "redis://valkey-rate-limit.invalid:6379/0",
+    "VALKEY_CACHE_HOST" => "valkey-cache.invalid",
+    "VALKEY_CACHE_PORT" => "6379",
+    "VALKEY_KVS_HOST" => "valkey-kvs.invalid",
+    "VALKEY_KVS_PORT" => "6379",
+    "VALKEY_DIAGNOSTIC_HOST" => "valkey.invalid",
+    "VALKEY_DIAGNOSTIC_PORT" => "6379",
   }.freeze
 
   def test_effective_development_middleware_accepts_private_origins_and_rejects_an_unknown_host
@@ -178,8 +182,12 @@ class HostAuthorizationContractTest < Minitest::Test
     "OBJECT_STORAGE_ACCESS_KEY_ID" => "test",
     "OBJECT_STORAGE_SECRET_ACCESS_KEY" => "test",
     "OBJECT_STORAGE_FORCE_PATH_STYLE" => "true",
-    "CACHE_REDIS_URL" => "redis://127.0.0.1:6379/0",
-    "RATE_LIMIT_REDIS_URL" => "redis://127.0.0.1:6380/0",
+    "VALKEY_CACHE_HOST" => "127.0.0.1",
+    "VALKEY_CACHE_PORT" => "6379",
+    "VALKEY_KVS_HOST" => "127.0.0.1",
+    "VALKEY_KVS_PORT" => "6381",
+    "VALKEY_DIAGNOSTIC_HOST" => "127.0.0.1",
+    "VALKEY_DIAGNOSTIC_PORT" => "6379",
     # The _FILE variants take precedence over the plain names when set, so unset
     # them (nil) rather than leaving an inherited secret mount to win.
     "OBJECT_STORAGE_ACCESS_KEY_ID_FILE" => nil,

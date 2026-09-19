@@ -5,11 +5,11 @@
 
 CI.run do
   step "Setup: create test databases",
-       "scripts/test-isolated env RAILS_ENV=test bin/rails db:create"
+       "env RAILS_ENV=test bin/rails db:create"
   step "Setup: test database",
        "POSTGRESQL_TEST_PREPARE_DATABASES=" \
        "test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db " \
-       "scripts/test-isolated env RAILS_ENV=test bin/rails db:test:prepare"
+       "env RAILS_ENV=test bin/rails db:test:prepare"
 
   step "Style: JavaScript", "bun run check"
   step "Style: Ruby", "bin/rubocop"
@@ -76,9 +76,9 @@ CI.run do
   step "Tests: JavaScript", "bun run test:coverage"
 
   if ENV["COVERAGE"] == "true"
-    step "Tests: Rails with coverage", "scripts/test-isolated env COVERAGE=true bin/rails test test/"
+    step "Tests: Rails with coverage", "env COVERAGE=true bin/rails test test/"
   else
-    step "Tests: Rails", "scripts/test-isolated bin/rails test"
+    step "Tests: Rails", "bin/rails test"
   end
 
   # Enable this after db/seeds.rb is intentionally valid as a CI contract.

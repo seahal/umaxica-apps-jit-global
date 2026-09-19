@@ -27,7 +27,7 @@ GIT
 
 GIT
   remote: https://github.com/rails/rails.git
-  revision: 6848556f777416f10279b7d6ceb371d56058214a
+  revision: bd836d158153a1f8781c26e838e7113a2edc8e9d
   branch: main
   specs:
     actioncable (8.2.0.alpha)
@@ -295,7 +295,7 @@ GEM
     erubi (1.13.1)
     et-orbi (1.4.2)
       tzinfo
-    faraday (2.14.3)
+    faraday (2.14.4)
       faraday-net_http (>= 2.0, < 3.5)
       json
       logger
@@ -733,7 +733,7 @@ GEM
       opentelemetry-helpers-sql
       opentelemetry-helpers-sql-processor
       opentelemetry-instrumentation-base (~> 0.25)
-    opentelemetry-instrumentation-net_http (0.29.0)
+    opentelemetry-instrumentation-net_http (0.29.1)
       opentelemetry-instrumentation-base (~> 0.25)
     opentelemetry-instrumentation-pg (0.37.0)
       opentelemetry-helpers-sql
@@ -1049,15 +1049,15 @@ GEM
       fugit (~> 1.11)
       railties (>= 7.1)
       thor (>= 1.3.1)
-    sorbet (0.6.13502)
-      sorbet-static (= 0.6.13502)
-    sorbet-runtime (0.6.13502)
-    sorbet-static (0.6.13502-aarch64-linux)
-    sorbet-static (0.6.13502-universal-darwin)
-    sorbet-static (0.6.13502-x86_64-linux)
-    sorbet-static-and-runtime (0.6.13502)
-      sorbet (= 0.6.13502)
-      sorbet-runtime (= 0.6.13502)
+    sorbet (0.6.13504)
+      sorbet-static (= 0.6.13504)
+    sorbet-runtime (0.6.13504)
+    sorbet-static (0.6.13504-aarch64-linux)
+    sorbet-static (0.6.13504-universal-darwin)
+    sorbet-static (0.6.13504-x86_64-linux)
+    sorbet-static-and-runtime (0.6.13504)
+      sorbet (= 0.6.13504)
+      sorbet-runtime (= 0.6.13504)
     spoom (1.8.7)
       erubi (>= 1.10.0)
       prism (>= 0.28.0)
@@ -1087,12 +1087,12 @@ GEM
       attr_required (>= 0.0.5)
       faraday (~> 2.0)
       faraday-follow_redirects
-    tapioca (0.19.2)
+    tapioca (0.20.0)
       benchmark
       bundler (>= 2.2.25)
       netrc (>= 0.11.0)
       parallel (>= 1.21.0)
-      rbi (>= 0.3.7)
+      rbi (>= 0.4.1)
       require-hooks (>= 0.2.2)
       rubydex (>= 0.1.0.beta10)
       sorbet-static-and-runtime (>= 0.6.12698)
@@ -1340,7 +1340,7 @@ CHECKSUMS
   brakeman (8.0.6) sha256=759cc69341115e6c2dcd47b6fd8649a0b9bd540e3585ac8a0a94e31c66fee386
   browser (6.2.0) sha256=281d5295788825c9396427c292c2d2be0a5c91875c93c390fde6e5d61a5ace2d
   builder (3.3.0) sha256=497918d2f9dca528fdca4b88d84e4ef4387256d984b8154e9d5d3fe5a9c8835f
-  bundler (4.0.17) sha256=214e21431b5665dd2f99df8a5511c6b151d7a72e8015c8b38f8b775b61cbb6c1
+  bundler (4.0.21) sha256=7cbf5499b426076aa16c8d28a59e4c2c3aad5a438402abcd961f0119f29f1dd0
   bundler-audit (0.9.3) sha256=81c8766c71e47d0d28a0f98c7eed028539f21a6ea3cd8f685eb6f42333c9b4e9
   capybara (3.40.0) sha256=42dba720578ea1ca65fd7a41d163dd368502c191804558f6e0f71b391054aeef
   capybara-playwright-driver (0.5.10) sha256=e48e572d72bc1043c644fab44985be0a1e75d7d6917dc298355581848982a2c3
@@ -1371,7 +1371,7 @@ CHECKSUMS
   erb_lint (0.9.0) sha256=dfb5e40ad839e8d1f0d56ca85ec9a7ac4c9cd966ec281138282f35b323ca7c31
   erubi (1.13.1) sha256=a082103b0885dbc5ecf1172fede897f9ebdb745a4b97a5e8dc63953db1ee4ad9
   et-orbi (1.4.2) sha256=bb555dae668419cb24caa2a293a170e58be6d4df1e017c51f5030bdc133cd20c
-  faraday (2.14.3) sha256=1882247e6766615c8220b4392bf1d27f6ebb63d8e28267587cef1fb0bf37f278
+  faraday (2.14.4) sha256=9bb4408c44621b0dbaaaa39e5dbfc4dbe58cc6751b6eb94d16ae9e1f2f2fab6e
   faraday-follow_redirects (0.5.0) sha256=5cde93c894b30943a5d2b93c2fe9284216a6b756f7af406a1e55f211d97d10ad
   faraday-net_http (3.4.4) sha256=0e78af151747ed1b00f33e25973b4bc220d7f16c00c39676817c8b12331eb588
   ffi (1.17.4-aarch64-linux-gnu) sha256=b208f06f91ffd8f5e1193da3cae3d2ccfc27fc36fba577baf698d26d91c080df
@@ -1527,7 +1527,7 @@ CHECKSUMS
   opentelemetry-instrumentation-lmdb (0.26.1) sha256=a1a3274624ce520e7fa64e2b20635cca4b51bc9466ddaddddb1323a47da794b0
   opentelemetry-instrumentation-mongo (0.26.0) sha256=511407dd4fe06cb11be54b40b0a38f684aba1fc0569a5f6982c013e07e370ffd
   opentelemetry-instrumentation-mysql2 (0.34.0) sha256=3c38c7ac7251d2ac3f7fc744f0f0efb05459635b74232d264727874e9e8552b8
-  opentelemetry-instrumentation-net_http (0.29.0) sha256=fae5eb6a794bbf87fb15752343b74d5cfd2bb830353f42cab3483fd2f3f84fe7
+  opentelemetry-instrumentation-net_http (0.29.1) sha256=d42120e83e6b04a3d0b3bb2e4fc04f62ef79c7110dbe291861a6609380daea2e
   opentelemetry-instrumentation-pg (0.37.0) sha256=90b29a772bcd2e19f6baf31f2b8741ffaa001c9a5523853896bebf4cbfc3dbc0
   opentelemetry-instrumentation-que (0.13.0) sha256=95e04b8c17e89eaa446f5dff7975cf72c2e74f7e1e84717be47facf510613112
   opentelemetry-instrumentation-racecar (0.7.0) sha256=93a991917687aa0a6e785ccd8d0de5746af110122552b2bf1e3abe12ab04584a
@@ -1652,12 +1652,12 @@ CHECKSUMS
   smart_properties (1.17.0) sha256=f9323f8122e932341756ddec8e0ac9ec6e238408a7661508be99439ca6d6384b
   snaky_hash (2.0.7) sha256=7d02c70012a3f932e48860cd024577908300c9aa615e0cb9b450aaa749cbcb4d
   solid_queue (1.7.0) sha256=6566b70b801d1c317c81bba7bcdd5677c019afac584a30374b4164002ca356d3
-  sorbet (0.6.13502) sha256=860912f301dc5f8ac639ad92a5d3885569e9dd14cd6a21f334cf0caa53eaec40
-  sorbet-runtime (0.6.13502) sha256=f3df17de3e7fd1a0678242b35f2089f9b1db85f314927a50d718ce80a5638b23
-  sorbet-static (0.6.13502-aarch64-linux) sha256=1e73689c8e4db309c79fb7bff924de06661c598dbff1cac8ef91b3f56240d4c8
-  sorbet-static (0.6.13502-universal-darwin) sha256=1422723b493d4eb52a1d0f1a1edc0fdacb9c943a117c2993bc42896b925e266f
-  sorbet-static (0.6.13502-x86_64-linux) sha256=adafa05e122d227b8dc71b63c73d95f396058abec10e33415d3f8ce5a2de999b
-  sorbet-static-and-runtime (0.6.13502) sha256=233acaa5ea0abca1dd70cecf1b851e669c1e31432cbbb6a65dad286adda58c77
+  sorbet (0.6.13504) sha256=6dfaadc806216889f15c414c556cc3b3495a3fbeff4e7d79a05f85dd32ea0a71
+  sorbet-runtime (0.6.13504) sha256=1912bf411bd6e5cc73ba10c2aab71e1513f952b3e4af9dd223a559f2226eafe2
+  sorbet-static (0.6.13504-aarch64-linux) sha256=797bfc2e0fd1346fdcc0ded2da66bd6718fd1fd607818c5550283c3a8698618c
+  sorbet-static (0.6.13504-universal-darwin) sha256=67a3f6d1f15581f1bcca2dc8cafa4c32da0021aad103e43ef572e190dfdc5d05
+  sorbet-static (0.6.13504-x86_64-linux) sha256=f270e7c9d192a0fca27ad3c5bccf12c880efb5524ed5ac595f430d87df6242c3
+  sorbet-static-and-runtime (0.6.13504) sha256=d2db477799f650bc1aed466c83c5e3bb7f6da6d9ffae9858b61c3898d50d6bbb
   spoom (1.8.7) sha256=81960502cdf23aa991f015988aa5dd43325e23ae4318b8e00d541299cbdb70f6
   stackprof (0.2.28) sha256=4ec2ace02f386012b40ca20ef80c030ad711831f59511da12e83b34efb0f9a04
   stimulus-rails (1.3.4) sha256=765676ffa1f33af64ce026d26b48e8ffb2e0b94e0f50e9119e11d6107d67cb06
@@ -1668,7 +1668,7 @@ CHECKSUMS
   strong_migrations (2.8.0) sha256=cb9c0f8160e60f3e9c0e76098d57a6f61825b9618e8eb41cebbd1c1079874439
   svix (2.5.0) sha256=9b49ed05f30b91b0fe3736d203be78686de258d8b29e30f3d11ba55cb85de872
   swd (2.0.3) sha256=4cdbe2a4246c19f093fce22e967ec3ebdd4657d37673672e621bf0c7eb770655
-  tapioca (0.19.2) sha256=938731b07811aee8d23871b1aee8861d464fbaf2cfffbf79a62b0c869a5120ec
+  tapioca (0.20.0) sha256=b375ed7bf51d2c86c09543eafedd0de85513634187c0f7a062615af8bb9347a0
   terminal-table (4.0.0) sha256=f504793203f8251b2ea7c7068333053f0beeea26093ec9962e62ea79f94301d2
   test-prof (1.6.3) sha256=027aea17612b2776069820e4209f6b446ece7ad6dc693f4aed0b742bcb3817a1
   thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
@@ -1700,4 +1700,4 @@ RUBY VERSION
   ruby 4.0.7
 
 BUNDLED WITH
-  4.0.17
+  4.0.21

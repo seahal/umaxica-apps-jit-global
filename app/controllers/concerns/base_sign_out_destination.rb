@@ -40,7 +40,9 @@ module BaseSignOutDestination
     render inertia: "#{controller_path}/edit",
            props: props,
            status: :ok,
-           clear_history: @sign_out_notice.present?
+           # The notice is a presentation-only message and can be missing (for example when its
+           # Valkey store is unavailable); the session-termination flag still decides the clear.
+           clear_history: @sign_out_notice.present? || session[:inertia_clear_history] == true
   end
 
   def render_oidc_logout_completion

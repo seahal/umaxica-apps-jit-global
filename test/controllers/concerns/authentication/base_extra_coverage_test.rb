@@ -429,7 +429,9 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
     @harness.session["user_id"] = 1
     @harness.log_out
 
-    assert_empty @harness.session
+    # Nothing of the signed-out principal survives; the only entry is the instruction for the
+    # next page on this origin to clear the encrypted Inertia history.
+    assert_equal({ inertia_clear_history: true }, @harness.session.to_h.symbolize_keys)
   end
 
   test "login_cooldown reads the configured window" do

@@ -306,7 +306,7 @@ module SignOidcLogout
     ensure
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
       Actor.clear if defined?(Actor)
-      reset_session
+      reset_session_and_clear_inertia_history!
     end
   end
 

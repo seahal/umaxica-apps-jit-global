@@ -198,6 +198,71 @@ module Auth::App::In
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     end
 
+    # The Valkey-backed rate_limit rules fail open when the store is unreachable (RedisCacheStore
+    # swallows the error and `increment` returns nil). The PostgreSQL lockout must still stop the
+    # guessing, and it must reject even a correct code while it is in force.
+    test "create locks the account in PostgreSQL even when the rate-limit store is unreachable" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_secret_credential!
+      end
+
+      freeze_time do
+        rate_limit_store.with(unreachable_rate_limit_store) do
+          ClientTotpCredential::MAX_TOTP_ATTEMPTS.times do
+            post_totp(wrong_totp_code)
+
+            assert_response :unprocessable_content
+          end
+
+          post_totp(ROTP::TOTP.new(@totp.private_key).now)
+        end
+
+        assert_response :too_many_requests
+        assert_equal ClientTotpCredential::TOTP_LOCKOUT_DURATION.to_i.to_s, response.headers["Retry-After"]
+        assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+        assert_equal ClientTotpCredential::MAX_TOTP_ATTEMPTS, @totp.reload.otp_attempts_count
+      end
+    end
+
+    test "the PostgreSQL lockout survives a rate-limit store flush" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_secret_credential!
+      end
+
+      freeze_time do
+        rate_limit_store.with(unreachable_rate_limit_store) do
+          ClientTotpCredential::MAX_TOTP_ATTEMPTS.times { post_totp(wrong_totp_code) }
+        end
+
+        # A recovered-but-empty store: every Valkey counter is gone.
+        rate_limit_store.with(ActiveSupport::Cache::MemoryStore.new) do
+          post_totp(ROTP::TOTP.new(@totp.private_key).now)
+        end
+
+        assert_response :too_many_requests
+        assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      end
+    end
+
+    test "a successful TOTP verification clears the recorded failures" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_secret_credential!
+      end
+
+      freeze_time do
+        rate_limit_store.with(ActiveSupport::Cache::MemoryStore.new) do
+          2.times { post_totp(wrong_totp_code) }
+
+          assert_equal 2, @totp.reload.otp_attempts_count
+
+          post_totp(ROTP::TOTP.new(@totp.private_key).now)
+        end
+      end
+
+      assert_response :redirect
+      assert_equal 0, @totp.reload.otp_attempts_count
+    end
+
     test "create without pending_mfa redirects to sign in" do
       with_prosopite_paused do
         post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
@@ -210,6 +275,32 @@ module Auth::App::In
     end
 
     private
+
+    def post_totp(token)
+      with_prosopite_paused do
+        post(auth_app_sign_in_challenge_totp_path(ri: "jp"), params: { totp_challenge_form: { token: token } })
+      end
+    end
+
+    def rate_limit_store
+      Rails.configuration.x.rate_limit.fetch(:store)
+    end
+
+    # Loopback port 1 has no listener, so every operation fails the way a Valkey outage does.
+    def unreachable_rate_limit_store
+      ActiveSupport::Cache::RedisCacheStore.new(
+        url: "redis://127.0.0.1:1/0",
+        reconnect_attempts: 0,
+        connect_timeout: 0.1,
+        error_handler: ->(**) { },
+      )
+    end
+
+    def wrong_totp_code
+      totp = ROTP::TOTP.new(@totp.private_key)
+      valid = [-30, 0, 30].map { |offset| totp.at(Time.current.to_i + offset) }
+      ("000000".."999999").find { |candidate| valid.exclude?(candidate) }
+    end
 
     def establish_pending_mfa_via_secret_credential!
       with_prosopite_paused do

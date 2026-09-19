@@ -9,6 +9,7 @@ module Edit
         include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
+        include ::SignOutClearSiteData
 
         AUTHENTICATION_MODE = :open
         layout "edit/org/application"

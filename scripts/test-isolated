@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Optional helper. The supported test entry point is `bundle exec rails test`.
+# This wrapper can still claim a run id and delete that run's namespaced keys
+# after the child exits. It is not required to boot the suite.
+
 : "${POSTGRESQL_TEST_HOST:?POSTGRESQL_TEST_HOST is required; do not reuse POSTGRESQL_HOST implicitly}"
 : "${POSTGRESQL_PORT:?POSTGRESQL_PORT is required}"
 : "${POSTGRESQL_USER:?POSTGRESQL_USER is required}"
 : "${POSTGRESQL_PASSWORD:?POSTGRESQL_PASSWORD is required}"
 : "${POSTGRESQL_DATABASE:?POSTGRESQL_DATABASE is required}"
-: "${CACHE_REDIS_URL:?CACHE_REDIS_URL is required and must use test logical DB 3}"
-: "${RATE_LIMIT_REDIS_URL:?RATE_LIMIT_REDIS_URL is required and must use test logical DB 4}"
-: "${AUTH_STATE_REDIS_URL:?AUTH_STATE_REDIS_URL is required and must use test logical DB 5}"
-: "${VALKEY_TEST_HOST:?VALKEY_TEST_HOST is required}"
-: "${VALKEY_TEST_PORT:?VALKEY_TEST_PORT is required}"
+: "${VALKEY_KVS_HOST:?VALKEY_KVS_HOST is required}"
+: "${VALKEY_KVS_PORT:?VALKEY_KVS_PORT is required}"
 
 export RAILS_ENV=test
 export RACK_ENV=test

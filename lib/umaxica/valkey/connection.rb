@@ -3,6 +3,7 @@
 
 require "redis"
 require "hiredis-client"
+require "active_support/core_ext/object/blank"
 
 module Umaxica
   module Valkey
@@ -11,14 +12,14 @@ module Umaxica
     class Connection
       public
 
-      def initialize(url: ENV.fetch("AUTH_STATE_REDIS_URL"), namespace:, client: nil)
+      def initialize(url: nil, namespace:, client: nil)
         raise ConfigurationError, "Valkey namespace is required" if namespace.to_s.blank?
 
         @namespace = namespace.to_s
-        @url = url.to_s
+        @url = (url.presence || Settings.current.auth_state.url).to_s
+        raise ConfigurationError, "auth-state Valkey URL is required" if @url.blank?
+
         @client = client || build_client(@url)
-      rescue KeyError => e
-        raise ConfigurationError, "AUTH_STATE_REDIS_URL is required", cause: e
       rescue ArgumentError, URI::InvalidURIError => e
         raise ConfigurationError, "invalid Valkey configuration", cause: e
       end

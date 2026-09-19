@@ -90,49 +90,17 @@ Rails.application.configure do
   # Require --no-sandbox flag to run destructive console operations
   config.sandbox_by_default = true
 
-  # Rails.cache and the rate-limit store are separate application contracts even
-  # though both speak the Redis protocol. CACHE_REDIS_URL and
-  # RATE_LIMIT_REDIS_URL are resolved independently so a deployment can point
-  # them at separate services, separate managed databases, or the same provider,
-  # without the application knowing which. Both use one-argument ENV.fetch: a
-  # missing URL must stop the boot rather than silently degrade to an in-process
-  # store that makes cache and rate-limit state per-process.
-  #
-  # Nothing authoritative lives in either. Cache entries are reconstructible and
-  # carry an explicit TTL; rate-limit counters expire with their window.
+  # Production URLs are explicit credentials in config/valkey.yml (`url_key`).
+  # A missing URL stops the boot. The nonprod logical DB map is not consulted.
+  require_relative "../../lib/umaxica/valkey/settings"
+  require_relative "../../lib/umaxica/valkey/store_error_handler"
 
-  # `RedisCacheStore` swallows a connection error and returns nil. For the cache
-  # that is correct -- a miss reconstructs from source. For rate limiting it is
-  # not: Rails' `rate_limit` reads `count = store.increment(...)` and acts only
-  # `if count && count > to`, so a nil turns every limit off. A Valkey outage
-  # therefore drops abuse protection fleet-wide and, without this, does it
-  # silently -- indistinguishable from ordinary traffic under the limit.
-  #
-  # Whether rate limiting should instead fail closed is a real question, but it
-  # is an availability decision and not one to make implicitly here. What is not
-  # in question is that the degradation must be visible. The exception message is
-  # omitted on purpose: it can carry the store URL, and these URLs may embed
-  # credentials.
-  valkey_store_error_handler =
-    lambda do |store|
-      lambda do |method:, exception:, returning:|
-        Rails.logger.error(
-          JitLogEvent.format(
-            "valkey.store.unavailable",
-            store: store,
-            op: method.to_s,
-            error_class: exception.class.name,
-            degraded_to: returning.inspect,
-          ),
-        )
-      end
-    end
-
+  valkey = Umaxica::Valkey::Settings.load
   cache_namespace = ["cache", Rails.env, ENV["CACHE_NAMESPACE_SUFFIX"].presence].compact.join(":")
   config.cache_store = :redis_cache_store, {
-    url: ENV.fetch("CACHE_REDIS_URL"),
+    url: valkey.cache.url,
     namespace: cache_namespace,
-    error_handler: valkey_store_error_handler.call("cache"),
+    error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("cache"),
   }
   rate_limit_namespace = [
     "rate_limit",
@@ -141,9 +109,9 @@ Rails.application.configure do
   ].compact.join(":")
   config.x.rate_limit.store =
     ActiveSupport::Cache::RedisCacheStore.new(
-      url: ENV.fetch("RATE_LIMIT_REDIS_URL"),
+      url: valkey.rate_limit.url,
       namespace: rate_limit_namespace,
-      error_handler: valkey_store_error_handler.call("rate_limit"),
+      error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("rate_limit"),
     )
 
   # Replace the default in-process and non-durable queuing backend for Active Job.

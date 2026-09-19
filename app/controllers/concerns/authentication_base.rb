@@ -31,6 +31,7 @@ module AuthenticationBase
 
   included do
     after_action :verify_private_action_authorized! if respond_to?(:after_action)
+    after_action :apply_authenticated_page_cache_policy! if respond_to?(:after_action)
   end
 
   # ==========================================================================
@@ -1298,7 +1299,7 @@ module AuthenticationBase
         destroy_refresh_token_from_cookie
       ensure
         clear_auth_cookies!
-        reset_session if respond_to?(:reset_session)
+        reset_session_and_clear_inertia_history!
       end
     end
 
@@ -1344,7 +1345,7 @@ module AuthenticationBase
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
     destroy_refresh_token_from_cookie
     clear_auth_cookies!
-    reset_session if @refresh_dbsc_reason.present? && respond_to?(:reset_session)
+    reset_session_and_clear_inertia_history! if @refresh_dbsc_reason.present?
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -1879,6 +1880,30 @@ module AuthenticationBase
     verify_authorized
   end
 
+  # An authenticated page must not outlive its session in the browser. Rails' default
+  # `max-age=0, private, must-revalidate` still lets the HTTP cache and the back/forward cache keep
+  # the page after sign-out, so authenticated HTML and Inertia responses are `no-store`. A page is
+  # authenticated when its action requires a session, or when an :open action answered a
+  # signed-in request (it may then render signed-in content, as the Base root does). JSON and
+  # other non-page responses, bare token-authenticated endpoints, and pages served anonymously
+  # keep their existing cache headers.
+  def apply_authenticated_page_cache_policy!
+    return unless authenticated_page_response?
+    return if response.headers["Cache-Control"].to_s.split(",").map(&:strip).include?("no-store")
+
+    no_store
+  end
+
+  def authenticated_page_response?
+    return false unless response.media_type == "text/html" || response.headers["X-Inertia"] == "true"
+
+    mode = self.class.authentication_mode_for(action_name)
+    return true if mode == :private
+    return false if mode == :bare
+
+    logged_in?
+  end
+
   def enforce_access_policy!
     mode = self.class.authentication_mode_for(action_name)
     policy = policy_for_authentication_mode(mode)
@@ -2019,7 +2044,7 @@ module AuthenticationBase
       destroy_refresh_token_from_cookie if respond_to?(:destroy_refresh_token_from_cookie, true)
     ensure
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
-      reset_session if respond_to?(:reset_session)
+      reset_session_and_clear_inertia_history!
       @current_authentication_credentials_present = false
       @current_authentication_failure_reason = nil
     end

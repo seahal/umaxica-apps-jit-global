@@ -8,6 +8,7 @@ module Core
         include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
+        include ::SignOutClearSiteData
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open

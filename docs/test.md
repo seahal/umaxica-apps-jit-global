@@ -68,16 +68,15 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
 
 ## 4. Test Approach
 
-- **Unit tests (Ruby)**: `scripts/test-isolated bin/rails test` covers models (e.g.,
+- **Unit tests (Ruby)**: `bundle exec rails test` covers models (e.g.,
   `ServiceSiteContact`, `UserIdentityEmail`, `TimeBasedOneTimePassword`), controllers, concerns,
   services, consumers. Fixtures stored under `test/fixtures`; multi-database fixtures split by
-  context. The test database configuration uses Rails' standard process parallelization with a
-  conservative default of 1 worker for low-shared-memory local containers, overridable via
-  `PARALLEL_WORKERS`, disables PostgreSQL query/maintenance parallelism for test connections, and
-  prepares separate writer/reader database names for each configured connection. The wrapper
-  requires explicit test-only PostgreSQL and Valkey endpoints, verifies the Valkey responsibility
-  DBs (3/4/5), and removes only its run-scoped auth-state prefixes after the run.
-- **Unit tests (JS/TS)**: `pnpm test` runs the JavaScript test baseline directly through Vitest.
+  context. The test database configuration uses Rails' standard process parallelization,
+  overridable via `PARALLEL_WORKERS`, disables PostgreSQL query/maintenance parallelism for test
+  connections, and prepares separate writer/reader database names for each configured connection.
+  Valkey rate-limit and auth-state use KVS logical DBs 4 and 6 with run/worker key namespaces.
+  Test cache is `MemoryStore`.
+- **Unit tests (JS/TS)**: `bun vitest run` runs the JavaScript test baseline directly through Vitest.
 - **Integration/system tests**: Rails integration and system tests remain the automated baseline.
   Browser-level Playwright scenarios are deferred until a concrete release flow requires them.
 - **API/contract tests**: Rails controller/integration tests cover API behavior, with
@@ -85,15 +84,16 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
   adopted dependency.
 - **Security tests**: RSpec/Minitest cases for rate limiting, JWT signature validation, redirect
   sanitization, Turnstile failure handling, PII encryption.
-- **Cache and rate-limit stores in test**: both default to `ActiveSupport::Cache::NullStore`, so no
-  test inherits state it did not ask for. A test that passes only because an earlier test warmed the
+- **Cache and rate-limit stores in test**: Rails.cache is `MemoryStore`. Rate-limit uses namespaced
+  Valkey on KVS DB 4. Worker setup deletes that worker's keys so no test inherits counters it did
+  not ask for. A test that passes only because an earlier test warmed the
   cache does not describe the behaviour it claims to, and rate-limit counters are keyed by request
   IP -- identical for every test -- so a shared counting store makes unrelated tests 429 depending
   on suite order. Cache tests stub `Rails.cache` with a `MemoryStore`; rate-limit tests declare
   `rate_limit_counters!` (or wrap an exercise in `with_rate_limit_counters`, both in
   `test/test_helper.rb`), which points `TestSupport::SwappableCacheStore` at a `MemoryStore` behind
-  the store controllers captured at class-load time. Neither store reaches an external Valkey in
-  test or CI.
+  the store controllers captured at class-load time when a case needs time-travelled windows
+  without using KVS.
 - **Performance tests**: Dedicated k6/wrk scenarios are deferred. Add them only when a concrete load
   target and environment are defined.
 - **Observability verification**: OTEL traces appear in Tempo; Loki logs capture Turnstile failures;

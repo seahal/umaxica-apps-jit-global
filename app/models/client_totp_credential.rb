@@ -10,6 +10,9 @@
 #
 #  id                                      :bigint           not null, primary key
 #  last_otp_at                             :datetime         default(-Infinity), not null
+#  locked_at                               :datetime         default(-Infinity), not null
+#  otp_attempt_window_started_at           :datetime         default(-Infinity), not null
+#  otp_attempts_count                      :integer          default(0), not null
 #  private_key                             :string(1024)     default(""), not null
 #  title                                   :string(32)
 #  created_at                              :datetime         not null
@@ -39,6 +42,16 @@ class ClientTotpCredential < AppPrincipalRecord
   alias_attribute :user_totp_credential_status_id, :user_identity_totp_credential_status_id
   MAX_TOTPS_PER_USER = 2
 
+  # Retry protection for TOTP verification. PostgreSQL is the source of truth so that a
+  # rate-limit store outage or flush cannot reset it. The values are the per-account limit the
+  # sign-in challenge already enforced through `rate_limit` (10 per 15 minutes, retry after 900
+  # seconds); that rule remains as an auxiliary throttle. Column semantics follow OtpLockable:
+  # `locked_at` is the instant the lockout ends, and the "-infinity" sentinel means not locked.
+  MAX_TOTP_ATTEMPTS = 10
+  TOTP_ATTEMPT_WINDOW = 15.minutes
+  TOTP_LOCKOUT_DURATION = 15.minutes
+  TOTP_UNLOCKED_SENTINEL = -Float::INFINITY
+
   attr_accessor :first_token
 
   belongs_to :user, class_name: "Client", inverse_of: :client_totp_credentials
@@ -64,7 +77,49 @@ class ClientTotpCredential < AppPrincipalRecord
   after_initialize :generate_private_key_if_blank
   after_initialize :generate_public_id_if_blank
 
+  public
+
+  # The instant the lockout ends, or nil when the credential is not locked at `now`.
+  def totp_locked_until(now)
+    value = locked_at
+    return nil if value.blank? || (value.respond_to?(:infinite?) && value.infinite?)
+
+    (value > now) ? value : nil
+  end
+
+  # Records one failed verification. The caller must hold this row's lock (see
+  # TotpWindowConsumer), so the read-modify-write below cannot lose a concurrent update. Uses
+  # save!(validate: false) for the same reason as OtpLockable#increment_attempts!: an internal
+  # counter bump must not be blocked by unrelated validations.
+  def record_totp_failure!(now)
+    return if totp_locked_until(now)
+
+    unless totp_attempt_window_active?(now)
+      self.otp_attempts_count = 0
+      self.otp_attempt_window_started_at = now
+    end
+
+    self.otp_attempts_count = otp_attempts_count.to_i + 1
+    self.locked_at = now + TOTP_LOCKOUT_DURATION if otp_attempts_count >= MAX_TOTP_ATTEMPTS
+    save!(validate: false)
+  end
+
+  # Clears the failure state after a successful verification. The caller holds the row lock.
+  def reset_totp_attempts!
+    self.otp_attempts_count = 0
+    self.otp_attempt_window_started_at = TOTP_UNLOCKED_SENTINEL
+    self.locked_at = TOTP_UNLOCKED_SENTINEL
+    save!(validate: false)
+  end
+
   private
+
+  def totp_attempt_window_active?(now)
+    started = otp_attempt_window_started_at
+    return false if started.blank? || (started.respond_to?(:infinite?) && started.infinite?)
+
+    started > now - TOTP_ATTEMPT_WINDOW
+  end
 
   def generate_public_id_if_blank
     return unless has_attribute?(:public_id)

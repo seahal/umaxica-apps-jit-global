@@ -64,7 +64,7 @@ is the only bound Compose can express, so every long-running service declares `o
 
 | Service                                                                                   | Policy         |
 | ----------------------------------------------------------------------------------------- | -------------- |
-| `core`, `primary`, `replica`, `valkey`, `alloy`, `loki`, `tempo`, `prometheus`, `grafana` | `on-failure:5` |
+| `core`, `primary`, `replica`, `valkey`, `valkey-cache`, `valkey-kvs`, `alloy`, `loki`, `tempo`, `prometheus`, `grafana` | `on-failure:5` |
 | `fakecloud`, `cloudflare-tunnel`                                                          | `on-failure:3` |
 
 Two consequences of that choice:
@@ -80,7 +80,7 @@ A failing _healthcheck_ does not trigger a restart. Podman's `--health-on-failur
 Compose-file equivalent, so a container that is alive but unhealthy — a replica that has stopped
 streaming, for instance — is reported by `podman ps` and repaired by hand.
 
-`core`, `primary`, `replica`, `valkey` log through a size-capped `json-file` driver
+`core`, `primary`, `replica`, `valkey`, `valkey-cache`, `valkey-kvs` log through a size-capped `json-file` driver
 (`max-size: 10m`, `max-file: 3`) because journald enforces no per-container cap. Their output does
 not reach `journalctl`; use `podman logs`, which serves either driver.
 

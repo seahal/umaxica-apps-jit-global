@@ -43,7 +43,7 @@ module AuthenticationLogoutable
       rotate_preference_after_sign_out! if respond_to?(:rotate_preference_after_sign_out!, true)
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
       Actor.clear if defined?(Actor)
-      reset_session
+      reset_session_and_clear_inertia_history!
     end
     LogoutResult.success
   end
@@ -80,9 +80,20 @@ module AuthenticationLogoutable
       rotate_preference_after_sign_out! if respond_to?(:rotate_preference_after_sign_out!, true)
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
       Actor.clear if defined?(Actor)
-      reset_session
+      reset_session_and_clear_inertia_history!
     end
     LogoutResult.success
+  end
+
+  # Ends the browser's Rails session and asks Inertia to clear its history on the next page this
+  # origin renders. `encrypt_history` only encrypts history entries; the key lives in the tab's
+  # sessionStorage, which `reset_session` cannot reach, so without the clear a same-document Back
+  # restores the signed-in page from history without asking the server. The flag is written
+  # after the reset, so it is the only thing the new session carries; inertia_rails keeps it
+  # across redirects and drops it once a page is rendered.
+  def reset_session_and_clear_inertia_history!
+    reset_session
+    session[:inertia_clear_history] = true
   end
 
   def safe_current_resource_for_logout

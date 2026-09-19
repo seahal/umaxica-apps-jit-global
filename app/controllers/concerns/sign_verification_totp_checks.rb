@@ -14,7 +14,14 @@ module SignVerificationTotpChecks
     end
 
     result = TotpWindowConsumer.call(credentials: active_totp_credentials, token: code)
-    @verification_errors = ["確認コードが正しくありません"] unless result.accepted?
+    unless result.accepted?
+      @verification_errors =
+        if result.locked?
+          ["確認コードの試行回数が上限に達しました。しばらくしてから再度お試しください"]
+        else
+          ["確認コードが正しくありません"]
+        end
+    end
     result.accepted?
   end
 

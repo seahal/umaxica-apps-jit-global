@@ -266,14 +266,12 @@ Use `rubocop -a`, `erb_lint -a .`, and `bun run fix` to apply auto-fixes where a
 ### Rails Tests
 
 ```bash
-scripts/test-isolated bin/rails test
-COVERAGE=true scripts/test-isolated bin/rails test test/
+bundle exec rails test
+COVERAGE=true bundle exec rails test test/
 ```
 
-The isolated wrapper requires an explicit PostgreSQL test host and the test Valkey logical DBs
-before Rails boots; it performs a read-only identity check and cleans only its run-scoped auth-state
-keys. Coverage reports are written to `coverage/`. Set `PARALLEL_WORKERS=1` for a focused run when
-diagnosing a failure.
+Rails generates a Valkey test-run namespace when one is not supplied. Coverage reports are written
+to `coverage/`. Set `PARALLEL_WORKERS=1` for a focused run when diagnosing a failure.
 
 ### JavaScript Tests
 

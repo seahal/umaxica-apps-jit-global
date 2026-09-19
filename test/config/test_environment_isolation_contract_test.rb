@@ -11,17 +11,11 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
     assert_match(/test_host\s*=\s*Rails\.env\.test\?\s*\?\s*ENV\.fetch\("POSTGRESQL_TEST_HOST"\)/, database_config)
     assert_no_match(/ENV\.fetch\("POSTGRESQL_TEST_HOST",/, database_config)
 
-    %i(cache rate_limit auth_state).each do |responsibility|
-      parsed = Umaxica::Valkey::ResponsibilityUrls.parse(
-        ENV.fetch("#{responsibility.to_s.upcase}_REDIS_URL"),
-        responsibility: responsibility,
-      )
+    settings = Umaxica::Valkey::Settings.current
 
-      assert_equal(
-        Umaxica::Valkey::ResponsibilityUrls.expected_db(responsibility, env: "test"),
-        parsed.db,
-      )
-    end
+    assert_predicate settings.cache, :memory?
+    assert_equal 4, settings.rate_limit.db
+    assert_equal 6, settings.auth_state.db
   end
 
   test "application auth-state namespaces include the isolated run and worker" do
@@ -43,11 +37,11 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
       worker_id: worker_id,
     )
     connection = Umaxica::Valkey::Connection.new(
-      url: ENV.fetch("AUTH_STATE_REDIS_URL"),
+      url: Umaxica::Valkey::Settings.current.auth_state.url,
       namespace: "e0_contract_probe",
     )
     foreign_connection = Umaxica::Valkey::Connection.new(
-      url: ENV.fetch("AUTH_STATE_REDIS_URL"),
+      url: Umaxica::Valkey::Settings.current.auth_state.url,
       namespace: Umaxica::Valkey::Namespaces.authorization_codes(
         suite_run_id: run_id,
         worker_id: "foreign",
@@ -203,8 +197,9 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
 
     assert_includes ci, "POSTGRESQL_TEST_PREPARE_DATABASES="
     assert_includes ci, "test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db "
-    assert_includes ci, "scripts/test-isolated env RAILS_ENV=test bin/rails db:test:prepare"
+    assert_includes ci, "env RAILS_ENV=test bin/rails db:test:prepare"
     assert_no_match(/bin\/rails db:prepare/, ci)
+    assert_no_match(/scripts\/test-isolated/, ci)
   end
 
   test "database safety runs before Active Record initializes the database" do
@@ -296,13 +291,14 @@ class TestEnvironmentIsolationContractTest < ActiveSupport::TestCase
     assert_match(/cannot inspect PostgreSQL test catalog/, error.message)
   end
 
-  test "Valkey test target rejects a wrong logical database before cleanup" do
-    environment = ENV.to_h.merge(
-      "AUTH_STATE_REDIS_URL" => ENV.fetch("AUTH_STATE_REDIS_URL").sub(%r{/5\z}, "/2"),
+  test "Valkey settings reject a wrong logical database for a constructed nonprod URL" do
+    parsed = Umaxica::Valkey::ResponsibilityUrls.parse(
+      "redis://valkey-kvs:6379/5",
+      responsibility: :auth_state,
     )
 
     assert_raises(Umaxica::Valkey::ConfigurationError) do
-      Umaxica::Valkey::TestTarget.parse!(environment:)
+      Umaxica::Valkey::ResponsibilityUrls.assert_nonprod_db!(parsed, env: "test")
     end
   end
 

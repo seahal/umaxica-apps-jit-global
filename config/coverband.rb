@@ -16,14 +16,12 @@
 
 require_relative "../lib/umaxica/valkey/error"
 require_relative "../lib/umaxica/valkey/configuration_error"
-require_relative "../lib/umaxica/valkey/responsibility_urls"
+require_relative "../lib/umaxica/valkey/settings"
 
 Coverband.configure do |config|
-  # Fails the boot when COVERBAND_REDIS_URL is unset or names the wrong logical database. Coverband
-  # otherwise falls back to redis://127.0.0.1:6379/0 -- the application cache -- and would write
-  # coverage hashes there without a word. See lib/umaxica/valkey/responsibility_urls.rb.
-  coverband_valkey =
-    Umaxica::Valkey::ResponsibilityUrls.require_url(:coverband, "COVERBAND_REDIS_URL")
+  # Fails the boot when diagnostic Valkey settings are missing. Coverband otherwise
+  # falls back to redis://127.0.0.1:6379/0 -- the application cache.
+  coverband_valkey = Umaxica::Valkey::Settings.current.coverband
 
   # HashRedisStore keeps one hash per file rather than one key per line, which is what makes the
   # key count a function of the repository rather than of traffic. The namespace is belt and braces:

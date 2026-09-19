@@ -134,24 +134,19 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "Valkey target rejects missing, malformed, and wrong-host configuration" do
+  test "Valkey settings reject missing and malformed KVS endpoints" do
     base = valkey_environment
 
     assert_raises(Umaxica::Valkey::ConfigurationError) do
-      Umaxica::Valkey::TestTarget.parse!(environment: base.except("VALKEY_TEST_HOST"))
+      Umaxica::Valkey::Settings.load(rails_env: "test", environment: base.except("VALKEY_KVS_HOST"))
     end
 
     assert_raises(Umaxica::Valkey::ConfigurationError) do
-      Umaxica::Valkey::TestTarget.parse!(environment: base.merge("VALKEY_TEST_PORT" => "not-a-port"))
+      Umaxica::Valkey::Settings.load(
+        rails_env: "test",
+        environment: base.merge("VALKEY_KVS_PORT" => "not-a-port"),
+      )
     end
-
-    error =
-      assert_raises(Umaxica::Valkey::ConfigurationError) do
-        Umaxica::Valkey::TestTarget.parse!(
-          environment: base.merge("CACHE_REDIS_URL" => "redis://other-valkey:6379/3"),
-        )
-      end
-    assert_match(/outside VALKEY_TEST_HOST\/PORT/, error.message)
   end
 
   test "Valkey namespace scope is empty without a run and rejects unsafe run ids" do
@@ -240,11 +235,8 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
 
   def valkey_environment
     {
-      "VALKEY_TEST_HOST" => "valkey",
-      "VALKEY_TEST_PORT" => "6379",
-      "CACHE_REDIS_URL" => "redis://valkey:6379/3",
-      "RATE_LIMIT_REDIS_URL" => "redis://valkey:6379/4",
-      "AUTH_STATE_REDIS_URL" => "redis://valkey:6379/5",
+      "VALKEY_KVS_HOST" => "valkey-kvs",
+      "VALKEY_KVS_PORT" => "6379",
     }
   end
 end

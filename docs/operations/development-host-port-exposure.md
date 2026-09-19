@@ -10,14 +10,14 @@ particular service, and a host firewall is not an acceptable substitute for it.
 
 1. **Prefer no publication at all.** If a service is only consumed by other containers, it gets no
    `ports:` entry. Containers reach it by Compose service name over the shared network
-   (`primary:5432`, `valkey:6379`, `kafka:29092`, `tempo:3200`).
+   (`primary:5432`, `valkey-cache:6379`, `valkey-kvs:6379`, `tempo:3200`).
 2. **If the host genuinely needs it, publish to loopback only.** Write the bind address explicitly:
    `127.0.0.1:3001:3000`, never `3001:3000`. A `ports:` entry with no host address makes Podman bind
    `0.0.0.0`, which places the service on every host interface — LAN, Wi-Fi, Ethernet, and Tailscale
    included.
 3. **Host-native datastore access is loopback-only.** PostgreSQL (`primary`, `replica`) and Valkey
-   publish only explicit `127.0.0.1` mappings for host-native Rails (`5432`/`5433`, `6379`, and
-   `6380`). Containers continue to use Compose DNS names; Kafka remains container-only.
+   publish only explicit `127.0.0.1` mappings for host-native Rails (`5432`/`5433`, `6379`,
+   `6380`, and `6381`). Containers continue to use Compose DNS names.
 
 ## Container Bind and Host Publication Are Separate Decisions
 
@@ -44,7 +44,9 @@ changing nothing about host exposure.
 | `core` (Vite, 3036)             | `127.0.0.1:3036`           | `@vite/client` opens its HMR socket to the dev server from the browser.                                                 |
 | `primary` (writer)              | `127.0.0.1:5432`           | Host-native Rails writer; containers use `primary:5432`.                                                                |
 | `replica` (reader)              | `127.0.0.1:5433`           | Host-native Rails reader; containers use `replica:5432`.                                                                |
-| `valkey`                        | `127.0.0.1:6379`           | One nonprod Valkey; logical DBs 0/1/2 (dev) and 3/4/5 (test) via responsibility URLs.                                   |
+| `valkey-cache`                  | `127.0.0.1:6380`           | Rails.cache. Dev Container uses Compose DNS `valkey-cache:6379`.                                                        |
+| `valkey-kvs`                    | `127.0.0.1:6381`           | Rate-limit and auth-state. Dev Container uses Compose DNS `valkey-kvs:6379`.                                            |
+| `valkey`                        | `127.0.0.1:6379`           | Compatibility + diagnostic dashboards. Not a canonical cache or KVS endpoint.                                           |
 | `loki`, `tempo`, `prometheus`   | none                       | Storage backends behind the Alloy gateway. Reached only by Alloy and Grafana on the `observability` network.            |
 | `alloy` (OTLP/HTTP, 4318)       | `127.0.0.1:4318`           | Host-native Rails exports telemetry here; it resolves no Compose DNS name. See "The two observability listeners" below. |
 | `alloy` (12345, OTLP/gRPC 4317) | none                       | The management UI is an unauthenticated control surface; nothing on the host speaks OTLP/gRPC.                          |
@@ -128,11 +130,12 @@ Run on the **host**, not inside a container:
 
 ```sh
 podman ps --format 'table {{.Names}}\t{{.Ports}}'
-sudo ss -lntup | grep -E ':(3000|3001|3036|9092|5432|5433|6379|13000|4318)\b'
+sudo ss -lntup | grep -E ':(3000|3001|3036|9092|5432|5433|6379|6380|6381|13000|4318)\b'
 ```
 
 Expected: `core` shows `127.0.0.1:3001->3000/tcp`, `primary` shows `127.0.0.1:5432->5432/tcp`,
-`replica` shows `127.0.0.1:5433->5432/tcp`, `valkey` shows `127.0.0.1:6379->6379/tcp`. The Dev
+`replica` shows `127.0.0.1:5433->5432/tcp`, `valkey` shows `127.0.0.1:6379->6379/tcp`,
+`valkey-cache` shows `127.0.0.1:6380->6379/tcp`, `valkey-kvs` shows `127.0.0.1:6381->6379/tcp`. The Dev
 Container `core` service shows loopback-only Rails publications when the combined config is used. No
 line anywhere contains `0.0.0.0`, `*`, or a LAN address for these services. `grafana` shows
 `127.0.0.1:13000->3000/tcp` and `alloy` shows `127.0.0.1:4318->4318/tcp`; `tempo`, `prometheus` and

@@ -22,6 +22,34 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
+  # Core keeps its sign-out pages in ERB, which cannot carry Inertia's clearHistory. The completion
+  # response instead tells the browser to drop this origin's cache and storage; storage includes
+  # the sessionStorage key that decrypts Core's Inertia history.
+  test "sign-out completion clears this origin's cache and storage" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+
+    post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    state = Rack::Utils.parse_nested_query(URI.parse(handoff_form["action"]).query.to_s).fetch("state")
+
+    get core_app_sign_out_url(ri: "jp", state: state)
+
+    assert_response :success
+    assert_includes response.body, I18n.t("sign.shared.sign_out.completed_title")
+    assert_equal '"cache", "storage"', response.headers["Clear-Site-Data"]
+  end
+
+  test "the sign-out confirmation page does not clear site data" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    get edit_core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+
+    assert_response :success
+    assert_nil response.headers["Clear-Site-Data"]
+  end
+
   test "post sign out redirects to base oidc logout with completion state" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)

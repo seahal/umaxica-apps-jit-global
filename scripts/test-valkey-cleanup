@@ -10,26 +10,29 @@ require_relative "../lib/umaxica/valkey/operation_error"
 require_relative "../lib/umaxica/valkey/unavailable"
 require_relative "../lib/umaxica/valkey/connection"
 require_relative "../lib/umaxica/valkey/cleanup"
-require_relative "../lib/umaxica/valkey/responsibility_urls"
-require_relative "../lib/umaxica/valkey/test_target"
+require_relative "../lib/umaxica/valkey/settings"
 require_relative "../lib/umaxica/valkey/test_run_scope"
+require_relative "../lib/umaxica/valkey/test_namespace"
 
 run_id = ENV.fetch("VALKEY_NAMESPACE_RUN_ID")
 Umaxica::Valkey::TestRunScope.validate!(run_id)
 Umaxica::Valkey::TestRunScope.ensure_cleanup_allowed!(run_id)
 
-parsed_urls = Umaxica::Valkey::TestTarget.parse!
-url = parsed_urls.fetch(:auth_state).url
-connection = Umaxica::Valkey::Connection.new(url: url, namespace: "e0_cleanup")
-prefixes =
+settings = Umaxica::Valkey::Settings.load(rails_env: "test")
+auth = Umaxica::Valkey::Connection.new(url: settings.auth_state.url, namespace: "e0_cleanup")
+rate = Umaxica::Valkey::Connection.new(url: settings.rate_limit.url, namespace: "e0_cleanup")
+
+auth_prefixes =
   %w(authorization_code admission sign_out_notice).map do |kind|
     "auth_state:#{kind}:#{run_id}:"
   end
+rate_prefix = "rate_limit:test:#{run_id}:"
 
 deleted =
-  prefixes.sum do |prefix|
-    Umaxica::Valkey::Cleanup.delete_by_prefix(connection, prefix: prefix)
-  end
-prefixes.each { |prefix| Umaxica::Valkey::Cleanup.ensure_empty!(connection, prefix: prefix) }
-puts "Valkey scoped cleanup: run_id=#{run_id} deleted=#{deleted} prefixes=#{prefixes.length}"
-connection.close
+  auth_prefixes.sum { |prefix| Umaxica::Valkey::Cleanup.delete_by_prefix(auth, prefix: prefix) } +
+  Umaxica::Valkey::Cleanup.delete_by_prefix(rate, prefix: rate_prefix)
+auth_prefixes.each { |prefix| Umaxica::Valkey::Cleanup.ensure_empty!(auth, prefix: prefix) }
+Umaxica::Valkey::Cleanup.ensure_empty!(rate, prefix: rate_prefix)
+puts "Valkey scoped cleanup: run_id=#{run_id} deleted=#{deleted} prefixes=#{auth_prefixes.length + 1}"
+auth.close
+rate.close

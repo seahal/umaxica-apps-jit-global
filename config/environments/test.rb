@@ -2,31 +2,22 @@
 # frozen_string_literal: true
 
 require_relative "../../test/support/swappable_cache_store"
-
-# Test boot must be explicit about the Valkey topology. The application cache and rate-limit
-# stores remain deterministic in-memory stores below; these URLs are still required so auth-state
-# tests and request paths cannot silently inherit development logical databases.
 require_relative "../../lib/umaxica/valkey/error"
 require_relative "../../lib/umaxica/valkey/configuration_error"
-require_relative "../../lib/umaxica/valkey/responsibility_urls"
-require_relative "../../lib/umaxica/valkey/test_target"
+require_relative "../../lib/umaxica/valkey/settings"
+require_relative "../../lib/umaxica/valkey/test_namespace"
+require_relative "../../lib/umaxica/valkey/store_error_handler"
 
 if Rails.env.test?
-  Umaxica::Valkey::TestTarget.parse!
-
-  run_id = ENV.fetch("VALKEY_NAMESPACE_RUN_ID")
-  unless run_id.match?(/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/)
-    raise Umaxica::Valkey::ConfigurationError,
-          "VALKEY_NAMESPACE_RUN_ID must contain only letters, digits, dot, underscore, or hyphen"
-  end
+  Umaxica::Valkey::TestNamespace.ensure!
+  Umaxica::Valkey::Settings.reset_current!
+  Umaxica::Valkey::Settings.current
 end
 
 # The test environment is used exclusively to run your application's
 # test suite. You never need to work with it otherwise. Remember that
 # your test database is "scratch space" for the test suite and is wiped
 # and recreated between test runs. Don't rely on the data there!
-
-require Rails.root.join("test/support/swappable_cache_store")
 
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb.
@@ -55,17 +46,19 @@ Rails.application.configure do
   # Show full error reports.
   config.consider_all_requests_local = true
 
-  # Tests persist neither application cache nor rate-limit state by default, and
-  # CI never depends on an external Redis/Valkey service. Ordinary tests must not
-  # accidentally depend on cached state, and must not accumulate rate-limit
-  # counters and receive surprise 429s.
-  #
-  # Tests whose subject *is* cache or rate-limit behavior opt into a
-  # deterministic ActiveSupport::Cache::MemoryStore explicitly, and restore the
-  # previous store in teardown.
-  config.cache_store = :null_store
+  # Application cache in test is an in-process MemoryStore. Test cache DB 2 is
+  # reserved in valkey.yml and is never connected. Rate-limit and auth-state use
+  # the KVS instance (logical DBs 4 and 6) with a run/worker key namespace.
+  valkey = Umaxica::Valkey::Settings.current
+  config.cache_store = :memory_store
   config.x.rate_limit.store =
-    TestSupport::SwappableCacheStore.new(ActiveSupport::Cache::NullStore.new)
+    TestSupport::SwappableCacheStore.new(
+      ActiveSupport::Cache::RedisCacheStore.new(
+        url: valkey.rate_limit.url,
+        namespace: Umaxica::Valkey::TestNamespace.rate_limit_namespace,
+        error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("rate_limit"),
+      ),
+    )
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable

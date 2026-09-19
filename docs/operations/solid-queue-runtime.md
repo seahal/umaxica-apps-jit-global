@@ -161,9 +161,9 @@ running it and recording the result in `evidence/`. The job tests cover the rete
 assignment and the sign-up expiry operation. `bin/jobs check` is the installed Solid Queue 1.7.0
 validation command and should be run for each deploy environment.
 
-In the current worktree, bundled Ruby can load the PostgreSQL driver (`pg 1.6.3`), but isolated
-Rails tests cannot boot without the required `VALKEY_TEST_HOST`/`VALKEY_TEST_PORT` and isolated
-PostgreSQL services. No development or production datastore was used as a fallback. Real worker
+In the current worktree, bundled Ruby can load the PostgreSQL driver (`pg 1.6.3`). Rails tests
+require `POSTGRESQL_TEST_HOST` and `VALKEY_KVS_HOST` from the environment contract, not
+hand-exported `VALKEY_TEST_*` URLs. No development or production datastore was used as a fallback. Real worker
 pickup, dispatcher movement, recurring scheduler enqueue, and external provider delivery therefore
 remain unverified in this session; the evidence record names the exact failed preflight commands.
 

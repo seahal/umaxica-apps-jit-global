@@ -42,8 +42,11 @@ module Auth
             )
             # Per-account limit. The two rules above are keyed by source IP, so a
             # distributed attacker gets unbounded guesses against one account's
-            # 6-digit TOTP. The email and SMS OTP channels already have a
-            # per-account lock (OtpLockable); this is its equivalent for TOTP.
+            # 6-digit TOTP. This rule is an auxiliary throttle only: it lives in the
+            # rate-limit store, which fails open when Valkey is unreachable. The
+            # authoritative per-account lockout is the PostgreSQL state that
+            # TotpWindowConsumer maintains on ClientTotpCredential, the TOTP
+            # equivalent of the email/SMS OTP lock (OtpLockable).
             rate_limit(
               to: 10,
               within: 15.minutes,
@@ -95,7 +98,10 @@ module Auth
               user = pending_mfa_user
               result = consume_totp_for(user, @totp_form.token)
 
-              if result.accepted?
+              if result.locked?
+                SignRiskEmitter.emit("auth_failed", user_id: user&.id, ip: request.remote_ip, reason: "totp_locked")
+                render_rate_limited(retry_after: (result.locked_until - Time.current).ceil)
+              elsif result.accepted?
                 handle_totp_success(user)
               else
                 reason = result.replay? ? "totp_replay" : "totp_mismatch"

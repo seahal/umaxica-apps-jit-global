@@ -224,6 +224,13 @@ services:
         condition: service_healthy
       replica:
         condition: service_started
+      valkey-cache:
+        condition: service_healthy
+      valkey-kvs:
+        condition: service_healthy
+      # Diagnostic / compatibility instance (rails_performance, Coverband, and
+      # any remaining `redis://valkey:6379/...` URLs). Canonical application
+      # traffic uses valkey-cache and valkey-kvs.
       valkey:
         condition: service_healthy
 networks:

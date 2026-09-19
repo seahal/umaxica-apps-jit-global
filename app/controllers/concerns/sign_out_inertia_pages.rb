@@ -81,10 +81,11 @@ module SignOutInertiaPages
   # `clear_history` is what actually ends the signed-in session's presence in the browser.
   # `encrypt_history` is on globally, but it only encrypts each history entry; the key that decrypts
   # them lives in the tab's own sessionStorage and `reset_session` does not reach it, so without this
-  # Back after signing out decrypts and restores the privileged page. It is passed at the render
-  # rather than through `session[:inertia_clear_history]` because the session must be empty after
-  # logout - `Authentication::LogoutableTest` asserts exactly that - and every sign-out completion
-  # page sets it for itself. The other surfaces' completion renders carry the same option.
+  # Back after signing out decrypts and restores the privileged page. Ending a session also sets
+  # `session[:inertia_clear_history]` (AuthenticationLogoutable#reset_session_and_clear_inertia_history!),
+  # but this completion page can be reached in a later request on a session that no longer
+  # carries that flag, so it states the clear itself. The other surfaces' completion renders carry
+  # the same option.
   def render_oidc_rp_logout_completion
     @sign_out_notice = consume_sign_out_notice
     render inertia: sign_out_page_component("complete"),

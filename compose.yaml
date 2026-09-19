@@ -43,6 +43,29 @@
 # that fight over the hardcoded `global-devcontainer-*` container names and the
 # same host ports, so whichever entry point starts second fails.
 name: umaxicaappsglobaldc
+
+# Shared Valkey process settings. Not a service; referenced by valkey-cache,
+# valkey-kvs, and the compatibility `valkey` instance below.
+x-valkey-common: &valkey-common
+  image: docker.io/valkey/valkey:8.0-alpine3.22
+  networks:
+    - backend
+  restart: on-failure:5
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  healthcheck:
+    test:
+      - CMD
+      - valkey-cli
+      - ping
+    interval: 3s
+    timeout: 2s
+    retries: 20
+    start_period: 3s
+
 services:
   fakecloud:
     # Pinned by digest, not by version: the upstream registry publishes only
@@ -225,46 +248,58 @@ services:
       timeout: 3s
       retries: 30
       start_period: 10s
-  # Disposable, reconstructible application cache (Rails.cache). Every entry
-  # One nonprod Valkey -- still one service, one volume, one port. Valkey's
-  # default `databases 16` gives indexes 0-15, allocated as:
-  #   0/1/2   dev  cache / rate-limit / auth-state
-  #   3/4/5   test cache / rate-limit / auth-state
-  #   6-11    unallocated, reserved for further application responsibilities
-  #   12/13   dev  performance / coverband (diagnostic dashboards)
-  #   14/15   test performance / coverband -- declared for validation only;
-  #           nothing connects, both gems are `group :development`
-  # The diagnostic pair is flush against the top of the range deliberately, so
-  # adding an application responsibility takes the next free index from 6 and
-  # never has to renumber a dashboard. Note there is now no room above 15: a
-  # third diagnostic responsibility takes from the 6-11 block, or the service
-  # needs `--databases` raised, which would be a change to this file.
-  # Responsibility URLs remain mandatory; logical DBs are not a security
-  # boundary (see adr/valkey-nonprod-logical-db-topology.md).
+  # Nonprod Valkey topology (physical isolation of cache vs KVS).
+  #
+  # Compose owns *endpoints* (service names, loopback publications). It does
+  # not own responsibility -> logical-DB mapping; that belongs to Rails
+  # `config/valkey.yml` (forthcoming). Development and test share each
+  # instance; they are not split into `-development` / `-test` services, and
+  # parallel test workers do not get their own instance or DB here.
+  #
+  #   valkey-cache  — reconstructible Rails.cache. Eviction is allowed.
+  #   valkey-kvs    — rate-limit and auth-state. noeviction: memory pressure
+  #                   must error, not drop arbitrary keys.
+  #   valkey        — compatibility + diagnostic dashboards
+  #                   (PERFORMANCE_REDIS_URL / COVERBAND_REDIS_URL). Not a
+  #                   canonical application endpoint. Do not point cache or
+  #                   KVS at this service. Remove once Rails no longer
+  #                   resolves those gems (or cache/KVS) through `valkey`.
+  #
+  # Persistence is the image default (RDB snapshots under /data), unchanged
+  # from the previous single-service volume.
+  valkey-cache:
+    <<: *valkey-common
+    container_name: global-devcontainer-valkey-cache
+    command:
+      - valkey-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "127.0.0.1:${VALKEY_CACHE_HOST_PORT:-6380}:6379"
+    volumes:
+      - valkey-cache-volume:/data
+  valkey-kvs:
+    <<: *valkey-common
+    container_name: global-devcontainer-valkey-kvs
+    command:
+      - valkey-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+    ports:
+      - "127.0.0.1:${VALKEY_KVS_HOST_PORT:-6381}:6379"
+    volumes:
+      - valkey-kvs-volume:/data
   valkey:
+    <<: *valkey-common
     container_name: global-devcontainer-valkey
-    image: docker.io/valkey/valkey:8.0-alpine3.22
-    networks:
-      - backend
     ports:
       - "127.0.0.1:${VALKEY_HOST_PORT:-6379}:6379"
     volumes:
       - valkey-volume:/data
-    restart: on-failure:5
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test:
-        - CMD
-        - valkey-cli
-        - ping
-      interval: 3s
-      timeout: 2s
-      retries: 20
-      start_period: 3s
   loki:
     container_name: global-devcontainer-loki
     image: docker.io/grafana/loki:3.7.7
@@ -579,6 +614,8 @@ volumes:
   primary-data: {}
   replica-data: {}
   valkey-volume: {}
+  valkey-cache-volume: {}
+  valkey-kvs-volume: {}
   alloy-volume: {}
   loki-volume: {}
   tempo-volume: {}

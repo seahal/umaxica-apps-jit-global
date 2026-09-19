@@ -5,8 +5,6 @@ require "test_helper"
 
 class UmaxicaValkeyConnectionAndCleanupTest < ActiveSupport::TestCase
   setup do
-    skip "AUTH_STATE_REDIS_URL unset" if ENV["AUTH_STATE_REDIS_URL"].blank?
-
     @suite = "suite-#{SecureRandom.hex(4)}"
     @namespace = Umaxica::Valkey::Namespaces.authorization_codes(
       suite_run_id: @suite,
@@ -14,7 +12,7 @@ class UmaxicaValkeyConnectionAndCleanupTest < ActiveSupport::TestCase
       test_id: "connection",
     )
     @connection = Umaxica::Valkey::Connection.new(
-      url: ENV.fetch("AUTH_STATE_REDIS_URL"),
+      url: Umaxica::Valkey::Settings.current.auth_state.url,
       namespace: @namespace,
     )
   end
