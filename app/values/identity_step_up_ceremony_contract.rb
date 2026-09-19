@@ -149,6 +149,8 @@ module IdentityStepUpCeremonyContract
 
   def decode_unverified_payload(token)
     payload, = JWT.decode(token, nil, false)
+    raise IdentityStepUpCeremonyContract::Error, "token payload must be a JSON object" unless payload.is_a?(Hash)
+
     payload
   rescue JWT::DecodeError => e
     raise IdentityStepUpCeremonyContract::Error, "token is invalid: #{e.message}"

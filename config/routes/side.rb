@@ -13,7 +13,8 @@ scope module: :side, as: :side do
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
       # whole endpoint.
-      resource :mcp, only: :create
+      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
+      # resource :mcp, only: :create
 
       # Deployment identifier endpoint.
       resource :revision, only: :show, format: false
@@ -104,7 +105,8 @@ scope module: :side, as: :side do
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
       # whole endpoint.
-      resource :mcp, only: :create
+      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
+      # resource :mcp, only: :create
 
       # Deployment identifier endpoint.
       resource :revision, only: :show, format: false
@@ -194,7 +196,8 @@ scope module: :side, as: :side do
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
       # whole endpoint.
-      resource :mcp, only: :create
+      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
+      # resource :mcp, only: :create
 
       # Deployment identifier endpoint.
       resource :revision, only: :show, format: false

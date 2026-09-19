@@ -30,6 +30,36 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_select "script[src*=?]", "base_app"
   end
 
+  test "index lists the selected account's groups, archived included, and nothing else" do
+    account_public_id = @bootstrap.account.public_id
+    AvatarGroup.create!(
+      account_surface: "app", account_public_id: account_public_id, name: "Own active",
+      state: "active",
+    )
+    AvatarGroup.create!(
+      account_surface: "app", account_public_id: account_public_id, name: "Own archived",
+      state: "archived", archived_at: Time.current,
+    )
+    other = BaseSelectorBootstrapAuthority.call(
+      surface: :app, principal: Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER),
+    )
+    AvatarGroup.create!(
+      account_surface: "app", account_public_id: other.account.public_id, name: "Other account", state: "active",
+    )
+    AvatarGroup.create!(
+      account_surface: "com", account_public_id: account_public_id, name: "Other surface",
+      state: "active",
+    )
+
+    get base_app_groups_url(ri: "jp", host: @host), headers: as_user_headers(@user, host: @host)
+
+    assert_response :success
+    page = JSON.parse(css_select("script[data-page='app']").first.text)
+    names = page.fetch("props").fetch("groups").map { |group| group.fetch("name") }
+
+    assert_equal ["Own active", "Own archived"], names.sort
+  end
+
   test "unauthenticated cannot access groups" do
     get base_app_groups_url(ri: "jp", host: @host), headers: host_headers(@host)
 

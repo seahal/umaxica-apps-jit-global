@@ -12,11 +12,12 @@ module Base
 
       before_action :authenticate_client!
       before_action :set_group, only: %i(show update destroy)
+      # Collection visibility comes from AvatarGroupPolicy's relation scope; fail if index stops using it.
+      verify_authorized_scoped only: :index
 
       def index
         authorize!(AvatarGroup, to: :index?)
-        groups = AvatarGroup.where(account_surface: "app", account_public_id: Actor.selection.account_public_id)
-          .order(:created_at, :id)
+        groups = authorized_scope(AvatarGroup.all).order(:created_at, :id)
         render inertia: true, props: {
           title: "Groups",
           groups: groups.map { |group| serialize_group(group) },

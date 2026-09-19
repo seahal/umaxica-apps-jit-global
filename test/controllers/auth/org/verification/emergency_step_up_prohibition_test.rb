@@ -138,6 +138,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
           expected_aal: "aal1",
           expected_method: "passkey",
           audience: "org",
+          surface: "org",
         )
       end
 
