@@ -12,6 +12,8 @@ module Base
           declare_authentication_mode! :private
 
           before_action :authenticate_client!
+          step_up only: :create, scope: "settings_mfa"
+
           def show
             authorize!(current_client, to: :show?)
             render inertia: true, props: {

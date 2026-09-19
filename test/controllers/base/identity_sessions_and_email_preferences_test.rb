@@ -98,7 +98,11 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      last_step_up_at: Time.current, last_step_up_scope: "settings_email",
+      last_step_up_aal: "aal2", last_step_up_method: "passkey",
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
     )
+    token.update_columns(last_step_up_session_public_id: token.public_id)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
     access_token = AuthenticationToken.encode(
@@ -131,7 +135,11 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      last_step_up_at: Time.current, last_step_up_scope: "settings_email",
+      last_step_up_aal: "aal2", last_step_up_method: "passkey",
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
     )
+    token.update_columns(last_step_up_session_public_id: token.public_id)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
     access_token = AuthenticationToken.encode(

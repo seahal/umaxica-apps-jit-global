@@ -527,13 +527,13 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
                    session_public_id: stale_token.public_id,
           )
 
-      assert_response :success
-      # The destination page is a base/app Inertia page; its form action is the same contract the
-      # assert_select above checked, read from the props instead of the markup.
-      assert_equal(
-        base_app_identity_email_path(email.public_id, ri: "jp"),
-        inertia_props.fetch("form").fetch("action"),
-      )
+      # The edit page carries the delete action, so a session without fresh step-up is sent to the
+      # settings_email step-up ceremony instead of being shown the page.
+      assert_response :found
+      redirect = URI.parse(response.location)
+
+      assert_equal "/verification", redirect.path
+      assert_equal "settings_email", Rack::Utils.parse_query(redirect.query).fetch("scope")
     end
   end
 

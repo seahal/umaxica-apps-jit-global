@@ -171,19 +171,25 @@ DB-backed roles remain the authority for role membership. The session capability
 narrow what those roles already allow; Emergency authentication never expands DB authorization and
 never introduces a second role system.
 
-Two mechanisms carry it:
+An Emergency session is fully authenticated, so it answers to the same policy rules as a Normal
+session. What it cannot do is Step-Up (next section). An operation is withheld from Restricted Mode
+by giving it a Step-Up gate, not by listing it in the capability layer.
+
+Two mechanisms carry the capability layer:
 
 1. **Scopes.** `AuthenticationContextValue#constrain_scopes` filters the token's `scp` claim. An
    Emergency operator token carries `read:org` but not `write:org`. Structural scopes
-   (`authenticated`, `domain:operator`) are untouched.
+   (`authenticated`, `domain:operator`) are untouched. No policy currently reads `write:org`, so
+   this filter has no authorization effect today.
 2. **An Action Policy pre-check.** `ApplicationPolicy` runs `deny_capability_restricted_context`
-   before every rule. A Normal context is unconstrained. Every other context is an **allowlist**:
-   `AuthenticationContextValue::EMERGENCY_PERMITTED_RULES` is `index?` and `show?`, and a rule that
-   is not named is denied.
+   before every rule. Normal and Emergency contexts pass it and meet the ordinary rule; it never
+   widens a rule that denies. An unrecognised context fails it for every rule instead of falling
+   through to Normal.
 
-The allowlist is the point. A sensitive action added next year is unavailable to a Restricted Mode
-session by default, rather than by a developer remembering an `if emergency?` guard. Widening the
-list is a security decision, and it belongs in this document.
+The pre-check reads the context from the verified access-token claims that
+`AuthenticationBase#load_from_token` records and `ActorSupport#resolved_current_token` returns.
+Before 2026-09-19, `resolved_current_token` read the preference token loader instead. That left the
+pre-check with no claims, so it treated every session as Normal.
 
 ## Step-Up is unavailable in Restricted Mode
 
@@ -191,18 +197,18 @@ This is not "step-up has not happened yet". The authentication context is not el
 step-up-protected operations at all, however valid the Operator's step-up passkey is. There is no
 separate Emergency step-up mechanism, and normal step-up behaviour is unchanged.
 
-Four independent layers enforce it:
+Three independent layers enforce it:
 
 1. `VerificationBase#require_step_up!` and `#enforce_step_up_prereqs!` refuse the ceremony entry
    with 403 before any credential is requested.
 2. `StepUpResolver` never reports a requirement as satisfied for an Emergency session, so a session
    that somehow held freshness columns still cannot authorize a sensitive action.
 3. `IdentityStepUpCeremonyFreshnessCommitter` refuses to write freshness onto an Emergency session,
-   which is where acme commits it (`docs/security/step-up-ceremony-delegation.md`).
-4. The Action Policy pre-check denies the mutating rules those operations run under.
-
-Operator retirement, destructive lifecycle actions, credential management, and role or permission
-modification therefore remain unavailable.
+   which is where acme commits it (`docs/security/step-up-ceremony-delegation.md`). An operation is
+   unavailable to an Emergency session exactly when it carries a Step-Up gate (`step_up only:` or a
+   `require_*_step_up!` callback). A sensitive operation without one is reachable from Restricted
+   Mode, so adding a sensitive operation means adding its gate. The inventory of write actions that
+   still lack one is tracked in GitHub issue #884.
 
 ## No in-session mode transitions
 

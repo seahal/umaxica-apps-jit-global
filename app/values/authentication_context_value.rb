@@ -35,12 +35,6 @@ class AuthenticationContextValue
   CAPABILITY_ORG_READ = "read:org"
   CAPABILITY_ORG_WRITE = "write:org"
 
-  # The only policy rules a Restricted Mode session may reach. Read rules only:
-  # Emergency Access exists to see operational state while the Entra path is
-  # unavailable, not to act. Widening this list is a security decision and
-  # belongs in docs/security/org-emergency-access.md.
-  EMERGENCY_PERMITTED_RULES = %i(index? show?).freeze
-
   attr_reader :key, :capabilities
 
   def initialize(key, capabilities:)
@@ -62,17 +56,15 @@ class AuthenticationContextValue
 
   def to_s = key
 
-  # Default-deny capability gate consumed by ApplicationPolicy's pre-check.
+  # Capability gate consumed by ApplicationPolicy's pre-check.
   #
-  # A Normal session is unconstrained here and answers to its DB roles alone.
-  # Every other context is an allowlist: a rule that is not named is denied, so
-  # a sensitive action added later is unavailable to a Restricted Mode session
-  # by default rather than by a developer remembering to guard it.
-  def permits_rule?(rule)
-    return true if normal?
-    return false unless emergency?
-
-    EMERGENCY_PERMITTED_RULES.include?(rule.to_sym)
+  # An Emergency session is fully authenticated, so it answers to the same
+  # policy rules as a Normal one. Its restriction is that Step-Up is unavailable
+  # (step_up_permitted?), so an operation is withheld from it by giving that
+  # operation a Step-Up gate. An unrecognised context still denies every rule
+  # rather than falling through to Normal.
+  def permits_rule?(_rule)
+    normal? || emergency?
   end
 
   REGISTRY = {

@@ -13,11 +13,10 @@ class ApplicationPolicy < ActionPolicy::Base
 
   # Session capability layer. Authorization is DB role AND session capability
   # AND the ordinary policy rule; an authentication context can only ever
-  # narrow what the actor's roles already allow, never widen it.
-  #
-  # The check is a pre-check rather than a condition inside each rule so that a
-  # newly added sensitive action is covered without anyone remembering to guard
-  # it (docs/security/org-emergency-access.md).
+  # narrow what the actor's roles already allow, never widen it. Normal and
+  # Emergency contexts pass it; an unrecognised context fails every rule.
+  # Emergency sessions are kept from sensitive actions by Step-Up gates, not
+  # here (docs/security/org-emergency-access.md).
   pre_check :deny_capability_restricted_context
 
   def edit? = update?

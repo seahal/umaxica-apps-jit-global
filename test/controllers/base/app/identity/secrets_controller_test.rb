@@ -90,6 +90,38 @@ class Base::App::Identity::SecretsControllerTest < ActionDispatch::IntegrationTe
     assert_equal 1, @client.client_secret_credentials.reload.count
   end
 
+  test "update with fresh step-up renames the secret" do
+    secret = create_secret_credential
+
+    patch base_app_identity_secret_url(secret.public_id, ri: "jp", host: @host),
+          params: { user_secret_credential: { name: "Renamed" } }, headers: step_up_headers
+
+    assert_response :see_other
+    assert_equal "Renamed", secret.reload.name
+  end
+
+  test "update without fresh step-up is refused and keeps the secret unchanged" do
+    secret = create_secret_credential
+    original_name = secret.name
+
+    patch base_app_identity_secret_url(secret.public_id, ri: "jp", host: @host),
+          params: { user_secret_credential: { name: "Renamed", enabled: "0" } },
+          headers: as_user_headers(@client, host: @host)
+
+    assert_response :unauthorized
+    assert_equal original_name, secret.reload.name
+  end
+
+  test "destroy without fresh step-up is refused and keeps the secret" do
+    secret = create_secret_credential
+
+    delete base_app_identity_secret_url(secret.public_id, ri: "jp", host: @host),
+           headers: as_user_headers(@client, host: @host)
+
+    assert_response :unauthorized
+    assert_equal ClientSecretCredentialStatus::ACTIVE, secret.reload.user_identity_secret_status_id
+  end
+
   private
 
   def create_client_with_verified_email

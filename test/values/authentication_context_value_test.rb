@@ -42,16 +42,13 @@ class AuthenticationContextValueTest < ActiveSupport::TestCase
     end
   end
 
-  # The allowlist is the point: a sensitive action added tomorrow is denied to a
-  # Restricted Mode session without anyone remembering to guard it.
-  test "an emergency context permits read rules only, and never step-up" do
+  # An Emergency session answers to ordinary policy rules; what it loses is Step-Up.
+  test "an emergency context permits every policy rule, and never step-up" do
     context = AuthenticationContextValue.emergency
 
     assert_not context.step_up_permitted?
-    assert context.permits_rule?(:index?)
-    assert context.permits_rule?(:show?)
-    %i(create? update? destroy? retire? approve?).each do |rule|
-      assert_not context.permits_rule?(rule), "#{rule} must be unavailable in Restricted Mode by default"
+    %i(index? show? create? update? destroy? retire? approve?).each do |rule|
+      assert context.permits_rule?(rule), "#{rule} must follow the ordinary policy rule in an emergency session"
     end
   end
 

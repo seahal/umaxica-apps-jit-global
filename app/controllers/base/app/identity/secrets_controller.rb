@@ -26,6 +26,7 @@ module Base
         before_action :set_no_store_for_secret_credential_pages
         before_action :authorize_secret_credentials!, only: %i(index show new edit create update destroy)
         step_up only: %i(new create), bootstrap: true
+        step_up only: %i(edit update destroy)
         def index
           secret_credentials = current_client.client_secret_credentials.order(created_at: :asc)
           render inertia: true, props: secrets_index_props(secret_credentials)
