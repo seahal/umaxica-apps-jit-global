@@ -12,6 +12,14 @@ module Base
       before_action :authenticate_visitor!
       before_action :continue_welcome_sequence_without_content!
 
+      # TODO: Action Policy authorization is not yet enforced here.
+
+      # This sign-in ceremony step gates with allowed_to?, which does not satisfy
+
+      # verify_authorized, so its render path is expected to raise UnauthorizedAction.
+
+      # Audit the sign-in sequence boundary before choosing the authorize! rule.
+
       def show
         render inertia: true, props: {
           title: "Welcome!",
