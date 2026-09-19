@@ -123,7 +123,7 @@ class ApplicationHelperTest < ActionView::TestCase
     travel_to Time.zone.parse("2026-03-18 00:00:00 UTC") do
       roles = []
 
-      AppPrincipalRecord.stub(
+      AppZenithRecord.stub(
         :connected_to, ->(role:, &block) do
                          roles << role
                          block.call
@@ -171,7 +171,7 @@ class ApplicationHelperTest < ActionView::TestCase
 
   test "current_banner_for returns nil when the connection is unavailable" do
     travel_to Time.zone.parse("2026-03-18 00:00:00 UTC") do
-      AppPrincipalRecord.stub(
+      AppZenithRecord.stub(
         :connected_to,
         ->(*) {
           raise ActiveRecord::ConnectionNotEstablished

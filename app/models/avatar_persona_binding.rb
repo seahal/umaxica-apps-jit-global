@@ -33,7 +33,7 @@ class AvatarPersonaBinding < AvatarRecord
   scope :active, -> { where(revoked_at: nil) }
 
   belongs_to :avatar, inverse_of: :avatar_persona_binding
-  belongs_to :persona, inverse_of: :avatar_persona_binding
+  belongs_to :persona, class_name: "ClientPersona", inverse_of: :avatar_persona_binding
 
   validates :assigned_at, presence: true
   validates :revoked_at,

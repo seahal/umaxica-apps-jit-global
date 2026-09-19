@@ -437,6 +437,19 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
     assert_includes back.fetch("href"), "scope=settings_email"
     assert_includes back.fetch("href"), "pt="
     assert_predicate inertia_form.fetch("pt"), :present?
+
+    failed_step_up =
+      ChronicleRecord.connected_to(role: :writing) do
+        ClientChronicle.where(
+          event_id: ClientChronicleEvent::STEP_UP_FAILED,
+          subject_id: @user.id.to_s,
+          subject_type: "Client",
+        ).order(occurred_at: :desc).first
+      end
+
+    assert_predicate failed_step_up, :present?
+    assert_empty failed_step_up.context
+    assert_not_includes failed_step_up.context.to_s, "000000"
   end
 
   test "resend sends a new otp and returns to edit page" do
@@ -514,13 +527,13 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
                    session_public_id: stale_token.public_id,
           )
 
-      assert_response :success
-      # The destination page is a base/app Inertia page; its form action is the same contract the
-      # assert_select above checked, read from the props instead of the markup.
-      assert_equal(
-        base_app_identity_email_path(email.public_id, ri: "jp"),
-        inertia_props.fetch("form").fetch("action"),
-      )
+      # The edit page carries the delete action, so a session without fresh step-up is sent to the
+      # settings_email step-up ceremony instead of being shown the page.
+      assert_response :found
+      redirect = URI.parse(response.location)
+
+      assert_equal "/verification", redirect.path
+      assert_equal "settings_email", Rack::Utils.parse_query(redirect.query).fetch("scope")
     end
   end
 

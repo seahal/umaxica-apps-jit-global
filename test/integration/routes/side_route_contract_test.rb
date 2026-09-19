@@ -50,6 +50,59 @@ class SideRouteContractTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
+  # The Side chrome renders theme and cookie-consent controls, so Side must own the web preference
+  # authority those controls POST to -- otherwise the request 404s and the choice is never
+  # persisted (it only changes the current page).
+  test "side owns a web preference authority for its chrome theme and cookie controls" do
+    with_boot_config(
+      side_service_host: "side-jp.example.test",
+      side_corporate_host: "side-com.example.test",
+      side_staff_host: "side-org.example.test",
+    ) do
+      {
+        "http://side-jp.example.test/web/v0/theme" => "side/app/web/v0/themes",
+        "http://side-jp.example.test/web/v0/cookie" => "side/app/web/v0/cookies",
+        "http://side-com.example.test/web/v0/theme" => "side/com/web/v0/themes",
+        "http://side-org.example.test/web/v0/theme" => "side/org/web/v0/themes",
+      }.each do |url, controller|
+        recognized = Rails.application.routes.recognize_path(url, method: :patch)
+
+        assert_equal controller, recognized[:controller], url
+        assert_equal "update", recognized[:action], url
+      end
+    end
+  ensure
+    Rails.application.reload_routes!
+  end
+
+  test "side leftover oidc authorize and callback paths are unroutable" do
+    with_boot_config(
+      side_service_host: "side-jp.example.test",
+      side_corporate_host: "side-com.example.test",
+      side_staff_host: "side-org.example.test",
+    ) do
+      {
+        "http://side-jp.example.test" => "side/app",
+        "http://side-com.example.test" => "side/com",
+        "http://side-org.example.test" => "side/org",
+      }.each do |origin, prefix|
+        recognized = Rails.application.routes.recognize_path("#{origin}/sign/in", method: :get)
+
+        assert_equal "#{prefix}/oidc/authorizations", recognized[:controller], origin
+        recognized = Rails.application.routes.recognize_path("#{origin}/sign/in/callback", method: :get)
+
+        assert_equal "#{prefix}/oidc/callbacks", recognized[:controller], origin
+        ["/oidc/authorization", "/oidc/callback"].each do |path|
+          assert_raises(ActionController::RoutingError) do
+            Rails.application.routes.recognize_path("#{origin}#{path}", method: :get)
+          end
+        end
+      end
+    end
+  ensure
+    Rails.application.reload_routes!
+  end
+
   private
 
   class BootConfig
@@ -100,6 +153,22 @@ class SideRouteContractTest < ActionDispatch::IntegrationTest
 
   def side_route_product_hosts(side_service_host, side_corporate_host, side_staff_host)
     {
+      **side_route_shared_product_hosts,
+      side_service: OpenStruct.new(host: side_service_host),
+      side_corporate: OpenStruct.new(host: side_corporate_host),
+      side_staff: OpenStruct.new(host: side_staff_host),
+    }
+  end
+
+  def side_route_shared_product_hosts
+    {
+      **side_route_core_and_base_hosts,
+      **side_route_supporting_product_hosts,
+    }
+  end
+
+  def side_route_core_and_base_hosts
+    {
       core_service: OpenStruct.new(
         host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")),
       ),
@@ -112,18 +181,22 @@ class SideRouteContractTest < ActionDispatch::IntegrationTest
       base_service: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
       base_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")),
       base_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")),
+    }
+  end
+
+  def side_route_supporting_product_hosts
+    boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+    {
       palm_service: OpenStruct.new(host: ENV.fetch("PUBLIC_PALM_SERVICE_URL")),
-      palm_corporate: OpenStruct.new(host: Rails.configuration.x.boot_config.fetch(:hosts).palm_corporate.host),
-      palm_staff: OpenStruct.new(host: Rails.configuration.x.boot_config.fetch(:hosts).palm_staff.host),
+      palm_corporate: OpenStruct.new(host: boot_hosts.palm_corporate.host),
+      palm_staff: OpenStruct.new(host: boot_hosts.palm_staff.host),
+      edit_staff: OpenStruct.new(host: boot_hosts.edit_staff.host),
       help_service: OpenStruct.new(host: ENV.fetch("PRIVATE_HELP_SERVICE_URL")),
       help_corporate: OpenStruct.new(host: ENV.fetch("PRIVATE_HELP_CORPORATE_URL")),
       help_staff: OpenStruct.new(host: ENV.fetch("PRIVATE_HELP_STAFF_URL")),
       info_service: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_SERVICE_URL")),
       info_corporate: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_CORPORATE_URL")),
       info_staff: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_STAFF_URL")),
-      side_service: OpenStruct.new(host: side_service_host),
-      side_corporate: OpenStruct.new(host: side_corporate_host),
-      side_staff: OpenStruct.new(host: side_staff_host),
     }
   end
 end

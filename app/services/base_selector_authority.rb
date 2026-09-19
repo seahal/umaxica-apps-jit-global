@@ -48,7 +48,7 @@ class BaseSelectorAuthority
   attr_reader :config, :principal, :session
 
   def selected
-    { status: "selected", next: "/dashboard" }
+    { status: "selected", next: "/" }
   end
 
   def selection_required(candidates)

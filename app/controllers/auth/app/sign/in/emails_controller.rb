@@ -7,6 +7,7 @@ module Auth
       module In
         class EmailsController < ::Auth::App::ApplicationController
           include ::SurfaceInertiaPage
+          include ::AuthenticationModeSwitchGuard
 
           include ::TurnstilePageProps
 
@@ -122,6 +123,17 @@ module Auth
           def update
             start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
+            unless cloudflare_turnstile_validation["success"]
+              error = t("turnstile_error")
+              @user_email.errors.add(:base, error)
+              ensure_min_elapsed(start_time)
+
+              return respond_to do |format|
+                format.html { render_email_edit(status: :unprocessable_content) }
+                format.json { render json: { error: error }, status: :unprocessable_content }
+              end
+            end
+
             @user_email.pass_code = update_pass_code_params[:pass_code]
 
             unless @user_email.valid?
@@ -235,16 +247,6 @@ module Auth
             record&.errors&.map(&:full_message) || []
           end
 
-          def handle_guest_only_with_status_checks(options)
-            if options[:no_redirect]
-              status = options[:status] || :forbidden
-              message = options[:message] || I18n.t("errors.messages.already_authenticated")
-              return render plain: message, status: status
-            end
-
-            super
-          end
-
           def load_user_email
             state = email_authentication_state
             return redirect_to_email_session_expired if state.nil?
@@ -253,10 +255,14 @@ module Auth
               @user_email = find_existing_email_for_verification(state.id)
               return redirect_to_email_session_expired if @user_email.nil?
 
-              @otp_resend_state = SignInOtpResendState.issue(kind: :email, target: @user_email.address)
+              @otp_resend_state = SignInOtpResendState.issue(
+                kind: :email, target: @user_email.address, surface: :app,
+              )
             else
               @user_email = ClientEmail.new(address: state.address)
-              @otp_resend_state = SignInOtpResendState.issue(kind: :email, target: state.address)
+              @otp_resend_state = SignInOtpResendState.issue(
+                kind: :email, target: state.address, surface: :app,
+              )
             end
           end
 
@@ -299,6 +305,7 @@ module Auth
               OtpAdapter.for(surface: :app, channel: :email).deliver(
                 record: existing_email,
                 otp_code: otp_code,
+                purpose: :sign_in,
               )
             else
               # Dummy work to simulate OTP generation for timing attack protection
@@ -320,15 +327,14 @@ module Auth
           end
 
           def verify_existing_email_otp(user_email)
-            result = verify_otp_code(user_email, user_email.pass_code)
-
-            if result[:success]
-              user = user_from_user_email(user_email)
-              unless user&.login_allowed?
-                return { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
+            user = nil
+            result =
+              verify_otp_code_and_consume(user_email, user_email.pass_code) do |record|
+                user = user_from_user_email(record)
+                user&.login_allowed?
               end
 
-              clear_otp(user_email)
+            if result[:success]
               SignAppInEmailAuthenticationState.clear!(session)
               pt = peek_pt
               result = AuthenticationSessionCommitter.call(
@@ -349,9 +355,9 @@ module Auth
               else
                 { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
               end
+            elsif result[:error] == :consumption_rejected
+              { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
             else
-              user = user_from_user_email(user_email)
-              increment_otp_attempts!(user_email)
               handle_failed_otp_attempt(user_email, user)
             end
           end

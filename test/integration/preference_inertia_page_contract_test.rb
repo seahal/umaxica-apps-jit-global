@@ -20,7 +20,7 @@ class PreferenceInertiaPageContractTest < ActionDispatch::IntegrationTest
   ].freeze
 
   SCREEN_KEYS = %w(
-    region timezone language motion density pagination theme cookie customization
+    region timezone language motion density pagination theme cookie customization calendar clock currency
   ).freeze
 
   # Every screen under /preference and the component shape it renders. The four shapes are the four

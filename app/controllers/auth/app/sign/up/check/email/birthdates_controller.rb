@@ -13,7 +13,6 @@ module Auth
               include AppSignUpCheckpointPage
 
               AUTHENTICATION_MODE = :open
-              before_action :hide_sign_up_auth_navigation
 
               def show
                 return unless load_gate_context!(gate_for_show)

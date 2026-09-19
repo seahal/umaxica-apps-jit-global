@@ -9,40 +9,56 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host! @host
   end
 
   test "direct entry without a login challenge lists the sign-in methods" do
     get auth_org_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
-    assert_response :success
+    assert_response :see_other
+    assert_includes response.headers["Cache-Control"], "no-store"
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_equal "auth/org/sign/ins/show", inertia_component
-    assert_includes method_hrefs, new_auth_org_sign_in_passkey_path(ri: "jp")
-    assert_includes method_hrefs, new_auth_org_sign_in_secret_path(ri: "jp")
+    assert_equal "/", URI.parse(response.location).path
   end
 
-  test "direct entry lists every sign-in method as a sibling in one list" do
-    get auth_org_sign_in_url(ri: "jp"), headers: { "Host" => @host }
+  # Normal sign-in has one entry, Entra, because the passkey and secret
+  # ceremonies are its second stage and refuse to run on their own. Emergency
+  # Access is the other entry, and it is a different ceremony, not another way
+  # to sign in normally.
+  test "direct entry lists entra and emergency access as siblings in one list" do
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org",
+      intent: "sign_in",
+      params: authorize_params,
+    )
+    get auth_org_sign_in_url(
+      ri: "jp",
+      admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
+    ), headers: { "Host" => @host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     methods = inertia_props.fetch("methods")
 
-    # One list, one entry per method: the Entra button is a sibling of the two links, not a
-    # separate block below them.
-    assert_equal 3, methods.length
-    assert_equal "link", method_for("passkey").fetch("kind")
-    assert_equal new_auth_org_sign_in_passkey_path(ri: "jp"), method_for("passkey").fetch("href")
-    assert_equal "link", method_for("secret_credential").fetch("kind")
-    assert_equal new_auth_org_sign_in_secret_path(ri: "jp"), method_for("secret_credential").fetch("href")
+    assert_equal 2, methods.length
     assert_equal "provider", method_for("entra").fetch("kind")
     assert_equal auth_org_social_entra_session_path(ri: "jp"), method_for("entra").fetch("href")
+    assert_equal "link", method_for("emergency").fetch("kind")
+    assert_equal new_auth_org_sign_in_emergency_passkey_path(ri: "jp"), method_for("emergency").fetch("href")
+
+    # The second stage is not offered as an entry point of its own.
+    assert_not_includes method_hrefs, new_auth_org_sign_in_passkey_path(ri: "jp")
+    assert_not_includes method_hrefs, new_auth_org_sign_in_secret_path(ri: "jp")
   end
 
   test "direct entry offers the reciprocal sign up link" do
     get auth_org_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
-    assert_response :success
-    assert_equal auth_org_sign_up_path(ri: "jp"), inertia_props.fetch("registration_link").fetch("href")
+    assert_response :see_other
+    assert_equal "/", URI.parse(response.location).path
+    assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "valid login challenge renders local ceremony" do
@@ -52,8 +68,12 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+
+    follow_redirect!
 
     assert_response :success
     assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
@@ -66,15 +86,19 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+
+    follow_redirect!
 
     assert_response :success
 
     query = { ri: "jp" }
 
-    assert_includes method_hrefs, new_auth_org_sign_in_passkey_path(query)
-    assert_includes method_hrefs, new_auth_org_sign_in_secret_path(query)
+    assert_includes method_hrefs, auth_org_social_entra_session_path(query)
+    assert_includes method_hrefs, new_auth_org_sign_in_emergency_passkey_path(query)
     # The org surface offers no consumer social providers.
     assert_empty method_hrefs.grep(%r{/social/auth/|/auth/google|/auth/apple})
   end
@@ -89,12 +113,16 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     get auth_org_sign_in_url(
       ri: "jp",
       pt: Base64.urlsafe_encode64("https://log.umaxica.org/settings/sessions?ri=jp", padding: false),
-      login_challenge: issuance.transaction.login_challenge,
+      admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
     ), headers: { "Host" => @host }
 
+    assert_response :see_other
+
+    follow_redirect!
+
     assert_response :success
-    assert_includes method_hrefs, new_auth_org_sign_in_passkey_path(ri: "jp")
-    assert_includes method_hrefs, new_auth_org_sign_in_secret_path(ri: "jp")
+    assert_includes method_hrefs, auth_org_social_entra_session_path(ri: "jp")
+    assert_includes method_hrefs, new_auth_org_sign_in_emergency_passkey_path(ri: "jp")
   end
 
   test "local ceremony does not render sign up link on sign in page" do
@@ -104,8 +132,12 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+
+    follow_redirect!
 
     assert_response :success
     assert_nil inertia_props["registration_link"]
@@ -118,8 +150,12 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+
+    follow_redirect!
 
     assert_response :success
 
@@ -129,13 +165,15 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
                  inertia_props.fetch("back_to_root").fetch("href")
   end
 
-  test "rejects direct entry when logged in" do
+  test "rejects direct entry when logged in without account-switching guidance" do
     staff = operators(:one)
 
     get auth_org_sign_in_url(ri: "jp"), headers: as_staff_headers(staff, host: @host)
 
-    assert_response :forbidden
-    assert_equal I18n.t("errors.messages.already_authenticated"), response.body
+    assert_response :conflict
+    assert_equal "text/plain; charset=utf-8", response.headers["Content-Type"]
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_includes response.headers["Cache-Control"], "no-store"
   end
 
   private
@@ -146,6 +184,10 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
 
   def method_for(key)
     inertia_props.fetch("methods").find { |method| method.fetch("key") == key }
+  end
+
+  def admission_code(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
   end
 
   def authorize_params

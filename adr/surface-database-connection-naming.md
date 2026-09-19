@@ -81,6 +81,7 @@ decision:
 - `occurrence`
 - `chronicle`
 - `avatar`
+- `primary`
 
 ## Consequences
 

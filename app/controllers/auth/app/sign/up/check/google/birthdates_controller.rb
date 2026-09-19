@@ -19,8 +19,6 @@ module Auth
 
               AUTHENTICATION_MODE = :open
 
-              before_action :hide_sign_up_auth_navigation
-
               private
 
               def sign_up_family = "google"

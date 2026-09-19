@@ -5,8 +5,19 @@ module Auth
   module Org
     module Sign
       module In
+        # Second stage of Normal org sign-in, for an Operator whose Passkey is
+        # lost. Entra ID has already identified them, so this ceremony never
+        # asks who is signing in: the pending Entra transaction names the
+        # Operator and the secret is verified against that Operator alone.
+        #
+        # The secret verification itself is unchanged -- the same
+        # `staff_secret_credentials` scopes and the same SignSecretVerify /
+        # `verify_for_secret_credential_sign_in!` path as before. Only the
+        # actor's source moved.
         class SecretsController < ::Auth::Org::ApplicationController
           include ::CloudflareTurnstile
+          include ::OrgNormalSignInTransaction
+          include ::AuthenticationModeSwitchGuard
 
           include ::TurnstilePageProps
           include ::SurfaceInertiaPage
@@ -49,41 +60,32 @@ module Auth
             by: -> {
               AuthenticationRateLimitKey.for(
                 surface: :org,
-                identifier: request.request_parameters.dig("secret_credential_login_form", "identifier"),
+                identifier: org_normal_sign_in_transaction&.dig(:operator_id),
               )
             },
             scope: "auth_org_sign_in",
-            name: "secret_credential_create_identifier",
+            name: "secret_credential_create_actor",
             store: rate_limit_store,
             only: :create,
             with: -> {
               render_rate_limited(retry_after: 900)
             },
           )
+          before_action :require_org_normal_sign_in_transaction!
           before_action :start_minimum_response_budget
           after_action :enforce_minimum_response_budget
 
+          # No identifier: the Operator is the one the Entra transaction
+          # selected, and a submitted identifier must not be able to change it.
           class SecretLoginForm
             include ActiveModel::Model
 
-            attr_accessor :identifier, :secret_credential_value
+            attr_accessor :secret_credential_value
 
-            validates :identifier, presence: true
-            validate :identifier_matches_staff_public_id_format
             validates :secret_credential_value, presence: true
 
             def self.model_name
               ActiveModel::Name.new(self, nil, "secret_credential_login_form")
-            end
-
-            private
-
-            def identifier_matches_staff_public_id_format
-              normalized_identifier = Operator.normalize_public_id(identifier)
-              return if normalized_identifier.blank?
-              return if Operator::PUBLIC_ID_FORMAT.match?(normalized_identifier)
-
-              errors.add(:identifier, :invalid)
             end
           end
 
@@ -102,7 +104,7 @@ module Auth
               return render_failed_login(:turnstile_failed)
             end
 
-            staff = find_staff_by_public_id(@secret_credential_form.identifier)
+            staff = org_normal_sign_in_operator
             return render_session_limit_hard_reject if session_limit_hard_reject_for?(staff)
 
             verification = verify_secret_credential_for_sign_in(
@@ -131,12 +133,18 @@ module Auth
 
           private
 
-          def find_staff_by_public_id(identifier)
-            normalized_identifier = Operator.normalize_public_id(identifier)
-            return if normalized_identifier.blank?
+          # Entra success alone establishes no session, and the secret stage
+          # alone authenticates nobody. Without the pending transaction there is
+          # no Operator to verify against, so the ceremony is refused.
+          def require_org_normal_sign_in_transaction!
+            return if org_normal_sign_in_operator.present?
 
-            staff = Operator.find_by(public_id: normalized_identifier)
-            staff if staff&.login_allowed?
+            clear_org_normal_sign_in_transaction!
+            if request.get? || request.head?
+              redirect_to(auth_org_sign_in_path(ri: current_region_identifier), status: :see_other)
+            else
+              render plain: I18n.t("errors.messages.invalid_request"), status: :unprocessable_content
+            end
           end
 
           def verify_secret_credential_for_sign_in(staff:, raw_secret_credential:)
@@ -179,9 +187,11 @@ module Auth
           end
 
           def process_standard_login(staff)
-            pt = signed_pt_param
+            transaction = consume_org_normal_sign_in_transaction!
+            pt = transaction&.dig(:pt).presence || signed_pt_param
             result = establish_signed_in_session!(
               staff, pt: pt, ri: current_region_identifier, auth_method: "secret_credential",
+                     authentication_context: AuthenticationContextValue::NORMAL_KEY,
             )
             sign_in_result = sign_in_result_from_session_result(result, actor: staff)
 
@@ -205,14 +215,12 @@ module Auth
             @secret_credential_form ||= SecretLoginForm.new
             @secret_credential_form.errors.add(:base, invalid_secret_credential_message)
 
-            staff = find_staff_by_public_id(@secret_credential_form.identifier)
+            staff = org_normal_sign_in_operator
 
             Rails.logger.info(
               JitLogEvent.format(
                 "sign.org.authentication.secret_credential.failed",
                 reason: reason,
-                identifier_present: @secret_credential_form.identifier.present?,
-                identifier_type: "public_id",
                 staff_id: staff&.id,
                 ip: request.remote_ip,
                 ri: current_region_identifier,
@@ -227,8 +235,6 @@ module Auth
                    status: :unprocessable_content
           end
 
-          # The identifier the operator typed is never echoed back: the form starts empty on a
-          # failed attempt exactly as it did before, and only the generic failure message travels.
           def secret_sign_in_props
             pt = signed_pt_param
             region = current_region_identifier
@@ -240,14 +246,6 @@ module Auth
               hidden_fields: { pt: pt.presence, ri: region.to_s },
               errors_title: t("errors.messages.validation_failed"),
               errors: @secret_credential_form.errors.full_messages,
-              identifier: {
-                name: "secret_credential_login_form[identifier]",
-                label: page_t("#{scope}.pii_label"),
-                placeholder: page_t("#{scope}.pii_placeholder"),
-                min_length: Operator::PUBLIC_ID_LENGTH,
-                max_length: Operator::PUBLIC_ID_LENGTH,
-                pattern: "[0-9A-FGHJKMNPQRSTVWXYZ]{16}",
-              },
               secret: {
                 name: "secret_credential_login_form[secret_credential_value]",
                 label: page_t("#{scope}.secret_credential_label"),
@@ -267,7 +265,7 @@ module Auth
           end
 
           def secret_credential_params
-            params.fetch(:secret_credential_login_form, {}).permit(:identifier, :secret_credential_value)
+            params.fetch(:secret_credential_login_form, {}).permit(:secret_credential_value)
           end
 
           def minimum_response_budget_enabled?

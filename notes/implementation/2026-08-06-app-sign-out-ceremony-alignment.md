@@ -4,19 +4,20 @@
 
 - Original plan/spec: none. Work started from a production report that
   `https://www.umaxica.app/sign/out/new?ri=jp` fails, and from log inspection
-  (`log/development.log`, the `Redirected to https://auth.umaxica.app/sign/out?logout_token=…`
-  line immediately followed by `ActionController::RoutingError (No route matches [GET] "/sign/out")`).
+  (`log/development.log`, the `Redirected to https://auth.umaxica.app/sign/out?logout_token=…` line
+  immediately followed by `ActionController::RoutingError (No route matches [GET] "/sign/out")`).
 - Related decisions/docs/plans:
   - `adr/logout-ceremony-boundary.md` (Accepted 2026-06-21) — the current contract
   - `adr/logout-completion-boundary.md` (superseded by the above)
   - `adr/sign-residual-idp-surface-retirement.md` item 4 — retire auth-side session mutation
   - `docs/security/logout-sequence.md`, `docs/security/logout-session-management.md`
   - `docs/security/redirect-vs-ceremony-result.md`
-  - `docs/mermaid/sign-app-sign-out.mmd` (deprecated; notes `/sign/out` is redirect-only if retained)
+  - `docs/mermaid/sign-app-sign-out.mmd` (deprecated; notes `/sign/out` is redirect-only if
+    retained)
 - Implementation date: 2026-08-06
 
-Naming: the decision documents predate the surface rename. `acme/www` is today's `base`
-(www host), `sign/id` is today's `auth`, and the old `base` surface is today's `side`.
+Naming: the decision documents predate the surface rename. `acme/www` is today's `base` (www host),
+`sign/id` is today's `auth`, and the old `base` surface is today's `side`.
 
 ## Decisions Made During Implementation
 
@@ -49,13 +50,14 @@ Naming: the decision documents predate the surface rename. `acme/www` is today's
     three-step ceremony whose `sign_cleared` hop is posted to this endpoint by
     `SignOidcLogout#handle_oidc_logout_completion_redirect!`. The previous controller served that
     hop incidentally (the absent `logout_token` produced an ignored `:invalid` result and the flow
-    continued). Routing that hop into the RP launcher instead starts a second ceremony and raises
-    in `OidcSubject.for`.
+    continued). Routing that hop into the RP launcher instead starts a second ceremony and raises in
+    `OidcSubject.for`.
   - Alternatives considered: advancing the transaction to `sign_cleared`, finalizing it, and
     redirecting to `transaction.completion_url` through the jump gateway, which is what the state
-    machine implies. Rejected here as out of scope: `test/controllers/palm/app/sign/outs_controller_test.rb`
-    pins the Base completion page as the destination and asserts the finalize URL carries no
-    `logout_challenge` or `state`, which the state-machine-correct behavior would contradict.
+    machine implies. Rejected here as out of scope:
+    `test/controllers/palm/app/sign/outs_controller_test.rb` pins the Base completion page as the
+    destination and asserts the finalize URL carries no `logout_challenge` or `state`, which the
+    state-machine-correct behavior would contradict.
   - Follow-up needed: yes — the coordinated transaction is left with `expected_step: sign_cleared`
     and is never finalized on the auth hop. Reconciling the auth-side continuation with
     `AcmeLogoutTransaction` (and with `adr/sign-residual-idp-surface-retirement.md` item 4, which

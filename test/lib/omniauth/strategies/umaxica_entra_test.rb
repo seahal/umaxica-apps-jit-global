@@ -60,7 +60,7 @@ module OmniAuth
         assert_predicate query.fetch("nonce"), :present?
       end
 
-      test "access_token authenticates with the client secret and consumes the PKCE verifier once" do
+      test "access_token authenticates with client_secret_post and consumes the PKCE verifier once" do
         strategy = build_strategy(
           path: "/social/entra/callback",
           params: {},
@@ -103,7 +103,7 @@ module OmniAuth
 
         verifier_double.verify
 
-        assert_equal :basic, captured.fetch(:client_auth_method)
+        assert_equal :client_secret_post, captured.fetch(:client_auth_method)
         assert_equal "pkce-verifier-value", captured.fetch(:code_verifier)
         assert_nil strategy.send(:session)["omniauth.pkce.verifier"]
         # No certificate assertion is sent: client authentication is the shared

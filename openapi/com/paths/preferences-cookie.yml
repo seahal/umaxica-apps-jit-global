@@ -28,8 +28,8 @@ get:
 patch:
   summary: Record cookie consent
   description: >-
-    Writes cookie-consent flags. Requires the preference access token; absence is 401 with a
-    JSON `error` member (not a problem document). Successful writes have no representation.
+    Writes cookie-consent flags. Requires the preference access token; absence is 401 with a JSON
+    `error` member (not a problem document). Successful writes have no representation.
   operationId: patchPreferencesCookie
   tags: [Preferences]
   security: []

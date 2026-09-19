@@ -345,9 +345,23 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       token.update_columns(created_at: AuthenticationBase.login_cooldown.ago - 1.second)
     end
     email = @user.client_emails.create!(address: "cycle_limit_#{SecureRandom.hex(4)}@example.com")
-    login_challenge = issue_login_challenge
+    transaction = issue_sign_in_transaction
+    login_challenge = transaction.login_challenge
+    # Auth is ceremony-only: a direct `login_challenge` param no longer admits the ceremony (see
+    # AuthCeremonyAdmission#admit_or_render_sign_ceremony!). The entry has to redeem a real
+    # admission code issued by Base, same as AuthOidcEntrancesTest and AuthenticationFlowTest.
+    admission = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
 
-    get(auth_app_sign_in_url(ri: "jp", login_challenge: login_challenge), headers: { "Host" => @host })
+    # `host!` (not just a per-call `Host` header) so the integration session's cookie jar
+    # associates the domain-scoped session cookie with this host and resends it on
+    # `follow_redirect!` -- without it, the redeemed admission's session state (
+    # `oidc_authorization_login_challenge`) is silently dropped and the redirect target bridges
+    # back to Base as if nothing had been admitted.
+    host!(@host)
+    get(auth_app_sign_in_url(ri: "jp", admission: admission), headers: { "Host" => @host })
+
+    assert_response :see_other
+    follow_redirect!(headers: { "Host" => @host })
 
     assert_response :success
 
@@ -384,12 +398,13 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       )
     end
 
+    # P4 ("require opaque Base admission at Auth ceremony entry"): a cycle that started from an
+    # OIDC admission resumes straight to Base's /oauth/authorize with a one-shot result code
+    # (AuthenticationSequenceGate#bind_session_and_register_oidc!), bypassing the general
+    # sign-in sequence's own /sign/in/check step (docs/security/sign-up-sequence.md describes
+    # that step for a sign-in that did not start from an OIDC admission).
     assert_response :redirect
-    assert_match %r{/sign/in/check\?ri=jp}, response.location
-    follow_redirect!(headers: browser_headers.merge("Host" => @host))
-
-    assert_response :redirect
-    assert_match %r{/welcome\?ri=jp}, response.location
+    assert_match %r{\Ahttps://www\.umaxica\.app/oauth/authorize\?result=}, response.location
     assert_predicate response.headers["Set-Cookie"].to_s, :present?
     assert_nil session[:oidc_authorization_login_challenge]
 
@@ -397,12 +412,15 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     issued_session = ClientToken.find(cycle.token_id)
     transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: login_challenge)
 
+    # P4 registers the result inline (OidcAuthorizationTransactionable#register_authentication!),
+    # so the transaction is already authenticated here rather than staying "pending" for a later
+    # step to claim.
     assert_predicate cycle, :sign_in_dashboard_pending?
     assert_predicate issued_session, :active?
-    assert_equal "pending", transaction.status
-    assert_nil transaction.actor_ref
-    assert_nil transaction.session_ref
-    assert_nil transaction.auth_method
+    assert_equal "authenticated", transaction.status
+    assert_equal @user.public_id, transaction.actor_ref
+    assert_equal issued_session.public_id, transaction.session_ref
+    assert_equal "email", transaction.auth_method
     assert_equal 2, ClientToken.not_revoked.where(user_id: @user.id, rotated_at: nil).count
   ensure
     TurnstileVerifierStub.challenge_enabled = false
@@ -657,7 +675,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
     }
 
-    get auth_app_dashboard_url(ri: "jp", host: base_host), headers: headers
+    get base_app_accounts_url(ri: "jp", host: base_host), headers: headers
 
     assert_response :bad_request
   end
@@ -684,7 +702,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     token
   end
 
-  def issue_login_challenge
+  def issue_sign_in_transaction
     OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
       intent: "sign_in",
@@ -698,7 +716,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
         nonce: SecureRandom.urlsafe_base64(16),
         scope: "openid profile",
       },
-    ).transaction.login_challenge
+    ).transaction
   end
 
   def store_otp_and_return_code(email)
@@ -715,6 +733,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       host: host,
       session_public_id: token.public_id,
       expires_at: expires_at,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(host, "client"),
     )
     browser_headers.merge(
       "Host" => host,

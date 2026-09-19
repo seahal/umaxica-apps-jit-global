@@ -29,10 +29,10 @@ drift.
 
 No other database column name may be introduced for retention:
 
-| Column | Meaning | Type | Default | Nullability |
-|---|---|---|---|---|
-| `discarded_at` | Logical-discard time; the row is no longer referenced when `<= now` | datetime | `Float::INFINITY` | NOT NULL |
-| `purged_at` | Physical-deletion eligibility time consumed by `RetentionPurgeJob` when `<= now` | datetime | `Float::INFINITY` | NOT NULL |
+| Column         | Meaning                                                                          | Type     | Default           | Nullability |
+| -------------- | -------------------------------------------------------------------------------- | -------- | ----------------- | ----------- |
+| `discarded_at` | Logical-discard time; the row is no longer referenced when `<= now`              | datetime | `Float::INFINITY` | NOT NULL    |
+| `purged_at`    | Physical-deletion eligibility time consumed by `RetentionPurgeJob` when `<= now` | datetime | `Float::INFINITY` | NOT NULL    |
 
 Enforce `discarded_at <= purged_at` with `chk_<table>_retention_order`. Model validation through
 `Retainable#retention_times_not_before_created_at` enforces that both values are at or after
@@ -42,12 +42,12 @@ Enforce `discarded_at <= purged_at` with `chk_<table>_retention_order`. Model va
 
 These timestamps describe actor lifecycle, not retention:
 
-| Column | Meaning | Relationship to retention |
-|---|---|---|
-| `withdrawn_at` | Withdrawal completed | Withdrawal is not logical deletion; legal retention may leave `discarded_at` at infinity |
-| `withdrawal_started_at` | Withdrawal flow began | Sequencing only; no retention effect |
-| `deactivated_at` | Administratively disabled | Suspension is reversible and is not deletion |
-| `terminated_at` | PII anonymization completed | A row remains until `purged_at <= now` even after anonymization |
+| Column                  | Meaning                     | Relationship to retention                                                                |
+| ----------------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
+| `withdrawn_at`          | Withdrawal completed        | Withdrawal is not logical deletion; legal retention may leave `discarded_at` at infinity |
+| `withdrawal_started_at` | Withdrawal flow began       | Sequencing only; no retention effect                                                     |
+| `deactivated_at`        | Administratively disabled   | Suspension is reversible and is not deletion                                             |
+| `terminated_at`         | PII anonymization completed | A row remains until `purged_at <= now` even after anonymization                          |
 
 New lifecycle columns must name a non-deletion event explicitly. Never implicitly derive
 `discarded_at` or `purged_at` from these timestamps; for example, withdrawal must not automatically
@@ -74,15 +74,15 @@ policy, and bypass the single `Retainable` interface.
 ### 4. Index Policy
 
 - Add a normal b-tree index for `discarded_at`.
-- Add a partial b-tree index for `purged_at` with `WHERE purged_at < 'infinity'`; most rows remain at
-  infinity, making a full index wasteful.
+- Add a partial b-tree index for `purged_at` with `WHERE purged_at < 'infinity'`; most rows remain
+  at infinity, making a full index wasteful.
 - Decide lifecycle-column indexes separately, normally as partial indexes where the column is not
   null.
 
 ### 5. One Physical-Deletion Worker
 
-Only `RetentionPurgeJob` physically deletes rows. Services and controllers may schedule
-`purged_at`; the worker alone selects `where(purged_at: ..now)` and calls `delete_all`.
+Only `RetentionPurgeJob` physically deletes rows. Services and controllers may schedule `purged_at`;
+the worker alone selects `where(purged_at: ..now)` and calls `delete_all`.
 
 Anonymizers such as `Withdrawal::PersonalDataAnonymizer` may be invoked by the worker before
 deletion. This separates PII anonymization from row purging without distributing retention
@@ -108,10 +108,9 @@ Every migration adding a retainable table must include:
 
 - The earlier two-column retention, `Retainable`, and `RetentionPurgeJob` decisions remain in force;
   this ADR defines their boundary and operational rules.
-- `clients.deletable_at` is a dead, noncompliant column tracked for removal in
-  `plans/backlog/retention-vocabulary-drift-cleanup.md`.
-- The defensive `has_attribute?(:deletable_at)` branches in sign-up cleanup are removed by that
-  plan.
+- `clients.deletable_at` was a dead, noncompliant column. The column and the defensive
+  `has_attribute?(:deletable_at)` branches in sign-up cleanup have since been removed (verified
+  against the schema and `app/` on 2026-09-13).
 - `RefreshTokenable#default_lapses_at` remains as the approved domain-alias pattern and must be
   documented as an alias for `discarded_at`.
 - Lifecycle timestamp behavior belongs in separate ADRs or plans; this ADR defines only its

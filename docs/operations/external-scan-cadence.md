@@ -18,13 +18,13 @@ on one surface says nothing about the others.
 
 ### Transport and Headers
 
-| Scanner | URL | Scope | Cadence |
-| --- | --- | --- | --- |
-| Qualys SSL Labs | https://www.ssllabs.com/ssltest/ | TLS protocol, cipher suites, certificate chain, HSTS preload | Quarterly, and after any TLS, certificate, or CDN change |
-| Mozilla HTTP Observatory | https://developer.mozilla.org/en-US/observatory | Security headers, CSP, cookie flags, subresource integrity | Monthly, and after any change under `config/initializers/content_security_policy.rb` or header configuration |
-| Security Headers | https://securityheaders.com/ | Response header presence and values | Monthly, together with the Observatory run |
-| CSP Evaluator | https://csp-evaluator.withgoogle.com/ | Whether the delivered policy is actually bypassable | With every Observatory run, and after any policy change |
-| HSTS Preload | https://hstspreload.org/ | Preload list membership and eligibility of each registrable domain | Quarterly, and before any subdomain or hostname change |
+| Scanner                  | URL                                             | Scope                                                              | Cadence                                                                                                      |
+| ------------------------ | ----------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Qualys SSL Labs          | https://www.ssllabs.com/ssltest/                | TLS protocol, cipher suites, certificate chain, HSTS preload       | Quarterly, and after any TLS, certificate, or CDN change                                                     |
+| Mozilla HTTP Observatory | https://developer.mozilla.org/en-US/observatory | Security headers, CSP, cookie flags, subresource integrity         | Monthly, and after any change under `config/initializers/content_security_policy.rb` or header configuration |
+| Security Headers         | https://securityheaders.com/                    | Response header presence and values                                | Monthly, together with the Observatory run                                                                   |
+| CSP Evaluator            | https://csp-evaluator.withgoogle.com/           | Whether the delivered policy is actually bypassable                | With every Observatory run, and after any policy change                                                      |
+| HSTS Preload             | https://hstspreload.org/                        | Preload list membership and eligibility of each registrable domain | Quarterly, and before any subdomain or hostname change                                                       |
 
 Header scanners report only that a header is present. CSP Evaluator is what determines whether the
 policy is meaningful, so treat `unsafe-inline`, an over-broad host allowlist, or a missing
@@ -45,20 +45,20 @@ them and application tests cannot observe what the edge finally emits.
 The application sends authentication mail, so sender authentication is a security control of the
 same standing as TLS. Domain-level checks apply to the registrable domain, not to a single surface.
 
-| Scanner | Scope | Cadence |
-| --- | --- | --- |
-| MXToolbox, dmarcian, or Hardenize | SPF, DKIM, DMARC, MTA-STS, TLS-RPT | Quarterly, and after any mail provider or DNS change |
-| Same tooling | CAA records, as protection against certificate mis-issuance | Quarterly, and after any certificate authority change |
-| Certificate Transparency search (https://crt.sh/) | Unexpected certificates issued for the domain, and forgotten subdomains that indicate takeover exposure | Monthly |
+| Scanner                                           | Scope                                                                                                   | Cadence                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| MXToolbox, dmarcian, or Hardenize                 | SPF, DKIM, DMARC, MTA-STS, TLS-RPT                                                                      | Quarterly, and after any mail provider or DNS change  |
+| Same tooling                                      | CAA records, as protection against certificate mis-issuance                                             | Quarterly, and after any certificate authority change |
+| Certificate Transparency search (https://crt.sh/) | Unexpected certificates issued for the domain, and forgotten subdomains that indicate takeover exposure | Monthly                                               |
 
 ### Content Delivery and Reachability
 
-| Scanner | Scope | Cadence |
-| --- | --- | --- |
-| PageSpeed Insights (https://pagespeed.web.dev/) | Core Web Vitals, Lighthouse performance, accessibility, SEO | Monthly, and before and after any front-end bundle or asset-delivery change |
-| WebPageTest (https://www.webpagetest.org/) | Field-representative measurement across network conditions and regions | After CDN or asset-delivery configuration changes only |
-| Google Safe Browsing status, via Search Console URL inspection | Whether a public surface is flagged or blocked | Monthly, with the checks in `docs/operations/search-engine-webmaster-tools.md` |
-| Manual external fetch of `.well-known` paths | `openid-configuration`, `security.txt`, `apple-app-site-association`, `assetlinks.json` | Monthly, and after any routing or edge change |
+| Scanner                                                        | Scope                                                                                   | Cadence                                                                        |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| PageSpeed Insights (https://pagespeed.web.dev/)                | Core Web Vitals, Lighthouse performance, accessibility, SEO                             | Monthly, and before and after any front-end bundle or asset-delivery change    |
+| WebPageTest (https://www.webpagetest.org/)                     | Field-representative measurement across network conditions and regions                  | After CDN or asset-delivery configuration changes only                         |
+| Google Safe Browsing status, via Search Console URL inspection | Whether a public surface is flagged or blocked                                          | Monthly, with the checks in `docs/operations/search-engine-webmaster-tools.md` |
+| Manual external fetch of `.well-known` paths                   | `openid-configuration`, `security.txt`, `apple-app-site-association`, `assetlinks.json` | Monthly, and after any routing or edge change                                  |
 
 The `.well-known` check is a reachability check rather than a graded scan, but it must be run from
 outside the network, because a routing or edge rule can break these paths without failing any
@@ -75,19 +75,19 @@ non-production environment.
 
 Treat a result below these levels as a defect to triage, not as informational output.
 
-| Scanner | Minimum accepted result |
-| --- | --- |
-| Qualys SSL Labs | A |
-| Mozilla HTTP Observatory | A |
-| Security Headers | A |
-| PageSpeed Insights | Performance 90, Accessibility 90, Best Practices 90, SEO 90 on mobile |
-| CSP Evaluator | No high-severity finding on any surface |
-| HSTS Preload | Every production registrable domain listed as preloaded |
-| SPF, DKIM, DMARC | All present and passing, with a DMARC policy of `quarantine` or `reject` |
-| MTA-STS, TLS-RPT, CAA | Published and syntactically valid |
-| Certificate Transparency | Every certificate issued for the domain accounted for |
-| Safe Browsing | No flag on any public surface |
-| `.well-known` paths | All expected paths reachable and correctly typed |
+| Scanner                  | Minimum accepted result                                                  |
+| ------------------------ | ------------------------------------------------------------------------ |
+| Qualys SSL Labs          | A                                                                        |
+| Mozilla HTTP Observatory | A                                                                        |
+| Security Headers         | A                                                                        |
+| PageSpeed Insights       | Performance 90, Accessibility 90, Best Practices 90, SEO 90 on mobile    |
+| CSP Evaluator            | No high-severity finding on any surface                                  |
+| HSTS Preload             | Every production registrable domain listed as preloaded                  |
+| SPF, DKIM, DMARC         | All present and passing, with a DMARC policy of `quarantine` or `reject` |
+| MTA-STS, TLS-RPT, CAA    | Published and syntactically valid                                        |
+| Certificate Transparency | Every certificate issued for the domain accounted for                    |
+| Safe Browsing            | No flag on any public surface                                            |
+| `.well-known` paths      | All expected paths reachable and correctly typed                         |
 
 A regression below a previously achieved level is a defect even when the new result still meets the
 minimum.

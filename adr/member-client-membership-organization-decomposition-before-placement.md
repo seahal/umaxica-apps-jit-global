@@ -1,200 +1,91 @@
-# ADR: Decompose Member, ClientMembership, and Organization Before Placement Migration
+# ADR: Surface-local Authority Decomposition
 
 ## Status
 
-Accepted
+Accepted, amended 2026-09-18.
+
+This amendment replaces the former concrete `Persona`/`Organization` and retired `Account` concern
+assumptions in this record. The current naming and authority decisions are defined by
+[`adr/surface-account-collective-model-naming.md`](surface-account-collective-model-naming.md) and
+[`docs/architecture/persona-organization-authority.md`](../docs/architecture/persona-organization-authority.md).
 
 ## Context
 
-`principal` is retained compatibility storage and is not required to become empty. It is no longer
-canonical authority storage merely because of its name, and it may later host regional-ready
-application data before any later regional extraction.
+The `app`, `com`, and `org` surfaces are independent trust boundaries with independent zenith
+databases. `Client`, `Visitor`, and `Operator` are their runtime principals. `Persona` and
+`Organization` are common Ruby interfaces only; they are not shared Active Record models, tables,
+STI roots, or polymorphic authority relations.
 
-`zenith` is the target canonical placement for Principal / Identity / Account / Organization
-authority data.
-
-`Member`, `ClientMembership`, and `Organization` are the highest-risk ambiguous placement cluster in
-the current codebase. Their current storage does not determine semantic ownership. Each model mixes
-authority-like, bridge, transitional, lifecycle, and in some cases regional-ready concerns. Moving
-any of them wholesale would risk moving non-authority operational state into `zenith` or leaving
-authority state incorrectly in `principal`.
-
-### Member
-
-`Member` currently lives in `app_principal`. It includes `Account`, belongs to `Client`, overlaps
-with the `Persona` account direction, and links into legacy Avatar governance and client-member
-history. It therefore contains account-authority, bridge, and retained-principal compatibility
-portions, but those portions are not yet decomposed.
-
-### ClientMembership
-
-`ClientMembership` currently lives in `app_principal`. It joins `Client` to a raw `workspace_id` and
-stores `joined_at` / `left_at`. It overlaps only loosely with `PersonaMembership` and does not equal
-`PersonaAssignment`. Its `workspace_id` meaning must be resolved before any placement decision.
-
-### Organization
-
-`Organization` currently lives in `org_principal`. It has organization-authority shape and legacy
-workspace/container responsibilities. Its authority portion may later map toward `Bureau`, while its
-operational/container portion may remain retained `principal`-side or become future regional
-application state, but that split is not established yet.
-
-### Runtime actors
-
-`Client`, `Visitor`, and `Operator` are mixed runtime actor rows. They own or link
-credential/contact/recovery/lifecycle/session-adjacent state and must not be moved wholesale to
-`zenith`.
-
-### Out of scope
-
-Avatar relocation, Avatar social graph changes, ticket/session/ceremony/logout/OAuth transaction
-migration, preference/settings migration, schema changes, table movement, and any controller,
-service, route, or behavior change are out of scope for this ADR.
+The `Member`, `ClientMembership`, and legacy organization rows remain mixed transitional or
+operational data. Their current storage does not prove ownership or RBAC authority. Moving those
+models wholesale would either promote compatibility state into authority or cross a surface boundary
+without a verified data mapping.
 
 ## Decision
 
-Before any placement migration involving `Member`, `ClientMembership`, or `Organization`:
-
-1. The models must be decomposed by semantic responsibility.
-2. Authority portions must be mapped to `zenith`-side canonical models where appropriate.
-3. Compatibility or operational portions may remain in retained `principal`.
-4. Regional-ready portions may remain in retained `principal` until later regional extraction.
-5. No wholesale table movement is allowed for these models.
-6. Any actual migration requires a later ADR and migration plan.
-
-### Model-specific decisions
-
-#### Member
-
-- Do not move `Member` wholesale to `zenith`.
-- Treat `Member` as transitional.
-- Decide later whether it decomposes, retires, remains as compatibility storage, or maps account
-  authority portions toward `Persona`.
-- Treat Avatar-governance and legacy bridge portions separately from account-authority portions.
-
-#### ClientMembership
-
-- Do not move `ClientMembership` wholesale to `zenith`.
-- Treat `ClientMembership` as transitional membership / bridge state.
-- Resolve `workspace_id` meaning before any migration.
-- Decide later whether it maps to `PersonaMembership`, regional membership, or a compatibility
-  bridge.
-
-#### Organization
-
-- Do not move `Organization` wholesale to `zenith`.
-- Treat `Organization` as organization_authority / regional_ready / transitional.
-- Separate authority hierarchy semantics from operational workspace/container semantics.
-- Decide later whether authority portions map toward `Bureau` or another `zenith` organization
-  model, and whether operational portions remain retained `principal` or future regional data.
-
-#### Runtime actors
-
-- Do not move `Client`, `Visitor`, or `Operator` wholesale to `zenith`.
-- Decompose runtime actor, authority binding, credential/contact/recovery, lifecycle, and
-  session-adjacent responsibilities first.
-
-#### OIDC connection rows
-
-- Audit OIDC connection rows separately from OAuth transaction rows.
-- Do not settle their placement in this ADR.
+1. Keep the six adopted resource implementations and their authority relations surface-local:
+   `ClientPersona`/`Enterprise` for `app`, `Individual`/`Company` for `com`, and `Agent`/`Bureau`
+   for `org`. Their authority tables remain in the matching `*_zenith` database.
+2. Keep `Persona` and `Organization` as behavior-only interface concerns. Do not introduce a shared
+   concrete base, common table, STI hierarchy, polymorphic authority relation, or cross-surface
+   foreign key.
+3. Treat `Member` and `ClientMembership` as transitional app-surface models. `Member` remains an
+   Avatar/legacy bridge and does not include the retired `Account` concern. `ClientMembership` is a
+   membership/bridge relation whose `workspace_id` meaning is not authority ownership.
+4. Treat `OperatorOrganization` as the renamed concrete legacy org-principal model mapped to the
+   existing `organizations` table. It is not the common `Organization` interface and is not the
+   adopted `Bureau` authority resource.
+5. Keep runtime actors, credentials, lifecycle state, session state, OIDC connections, and Avatar
+   bridge state in their existing surface-local boundaries. Decompose them by responsibility before
+   any placement migration.
+6. Derive any future owner backfill only from a documented, verified source path. Missing,
+   ambiguous, cross-surface, or ineligible owner data blocks the migration; no first-row selection,
+   membership promotion, or silent skip is permitted.
 
 ## Consequences
 
 ### Positive
 
-- Avoids unsafe wholesale movement of mixed-responsibility models.
-- Preserves the `zenith` authority target without overloading it with operational state.
-- Preserves retained `principal` as useful compatibility and regional-ready storage.
-- Makes future migrations smaller and more reversible.
-- Forces `workspace_id` and legacy bridge semantics to be resolved explicitly.
+- Authority state remains isolated by surface and principal type.
+- Compatibility and operational rows can be retired or migrated independently from RBAC.
+- The current concrete naming is explicit in models, fixtures, policies, and documentation.
+- Future migrations can be validated table by table without creating a permanent dual authority
+  path.
 
 ### Negative
 
-- Delays table movement.
-- Requires more documentation before implementation.
-- Leaves some ambiguity unresolved temporarily.
-- May require bridge or projection layers during migration.
-
-### Operational consequences
-
-- Future implementation work must be table-by-table or responsibility-by-responsibility.
-- Tests and constraints must be designed after decomposition decisions.
-- Any new models must be classified before placement.
+- `Member`, `ClientMembership`, and `OperatorOrganization` remain transitional until their
+  responsibility-level mappings are separately accepted.
+- Runtime authorization cutover and owner backfill require additional connection, data, and
+  concurrency evidence.
+- Some legacy protocol vocabulary remains in unrelated assignment, membership, and RP-account
+  projection classes where changing it would alter external or persisted contracts.
 
 ## Alternatives Considered
 
-1. Move `Member`, `ClientMembership`, and `Organization` wholesale to `zenith`. Rejected: they
-   contain mixed transitional and operational concerns, and wholesale movement could move
-   non-authority state into canonical authority storage.
+1. Move `Member`, `ClientMembership`, or `OperatorOrganization` wholesale into the adopted authority
+   model. Rejected because their current rows mix bridge, operational, hierarchy, and lifecycle
+   responsibilities that are not equivalent to ownership or RBAC.
+2. Treat `Member` membership or an operator reference as resource ownership. Rejected because
+   membership and legacy operator linkage do not establish the adopted single-owner contract.
+3. Restore `Persona = ClientPersona` or `Organization = OperatorOrganization` aliases. Rejected
+   because aliases hide the interface/concrete boundary and make reflection, policy dispatch, and
+   persisted class-name handling unsafe.
+4. Create a shared authority table or polymorphic principal reference. Rejected because it would
+   collapse independent trust boundaries and weaken surface-local foreign-key guarantees.
 
-2. Leave everything in `principal` permanently. Rejected: `principal` is no longer canonical
-   authority storage, and this would keep authority placement ambiguous while blocking future
-   regional extraction.
+## Non-goals
 
-3. Empty `principal` completely. Rejected: `principal` is retained compatibility storage and may
-   host regional-ready application data. Emptying it is not required and would create unnecessary
-   churn.
-
-4. Immediately create regional databases. Rejected for now: regional extraction should happen after
-   classification and decomposition. `principal` can serve as a retained regional-ready staging
-   boundary first.
-
-5. Treat `ClientMembership` as equivalent to `PersonaMembership`. Rejected: `ClientMembership` uses
-   raw `workspace_id` and lacks `PersonaMembership`'s current account-to-enterprise/unit semantics.
-
-6. Treat `Organization` as directly equivalent to `Bureau`. Rejected or deferred: `Organization` has
-   legacy `org_principal` workspace/container semantics that must be separated before mapping.
-
-## Placement Rules Established by This ADR
-
-| item                                                 | rule                                                                                     |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Member                                               | transitional; no wholesale move; decompose before placement                              |
-| ClientMembership                                     | transitional membership / bridge; resolve `workspace_id` before placement                |
-| Organization                                         | decompose authority hierarchy vs operational container before placement                  |
-| Client / Visitor / Operator                          | decompose runtime actor vs authority / credential / lifecycle / session responsibilities |
-| OIDC connection rows                                 | separate audit; not settled here                                                         |
-| Avatar rows                                          | excluded; stay Avatar in this phase                                                      |
-| Ticket / session / ceremony / OAuth transaction rows | excluded                                                                                 |
-| Preference / settings rows                           | excluded                                                                                 |
-| New global authority models                          | do not place in `principal` merely because of database name                              |
-| New regional-ready models                            | may use retained `principal` only if designed for later regional extraction              |
-
-## Required Follow-up Work
-
-- [ ] Write a Member decomposition plan.
-- [ ] Decide whether Member maps to Persona, retires, or remains as compatibility / regional state.
-- [ ] Map `ClientMembership.workspace_id` to an explicit domain concept or declare it legacy
-      compatibility state.
-- [ ] Decide whether ClientMembership maps to `PersonaMembership`, regional membership, or bridge
-      state.
-- [ ] Write an Organization decomposition plan.
-- [ ] Decide whether Organization authority maps to `Bureau` or another `zenith` organization model.
-- [ ] Identify which Organization operational / container portions remain retained `principal` or
-      future regional.
-- [ ] Audit `Client`, `Visitor`, and `Operator` decomposition separately.
-- [ ] Audit OIDC connection rows separately from OAuth transactions.
-- [ ] Create a migration ADR only after the above classification is accepted.
-
-## Non-Goals
-
-- No schema changes.
-- No migrations.
-- No table moves.
-- No connection changes.
-- No route, controller, or service changes.
-- No policy changes.
-- No test behavior changes.
-- No Avatar relocation.
-- No ticket / session / ceremony / OAuth transaction migration.
-- No preference / settings migration.
-- No immediate regional sharding.
+- No table movement, owner backfill, authorization cutover, or destructive migration is authorized
+  by this ADR.
+- No Avatar relocation or Avatar RBAC change.
+- No organization hierarchy, Position, Unit, Appointment, or Persona–Organization membership
+  redesign.
+- No ticket, session, ceremony, OIDC, preference, or route migration.
 
 ## References
 
-- [docs/architecture/principal-zenith-membership-organization-placement.md](../docs/architecture/principal-zenith-membership-organization-placement.md)
-- [docs/architecture/model-database-inventory.md](../docs/architecture/model-database-inventory.md)
-- [docs/architecture/database-authority-placement.md](../docs/architecture/database-authority-placement.md)
-- [docs/architecture/database-boundaries.md](../docs/architecture/database-boundaries.md)
-- [docs/dictionary/identity-account-organization-avatar.md](../docs/dictionary/identity-account-organization-avatar.md)
+- [Persona and Organization Interface Naming](surface-account-collective-model-naming.md)
+- [Persona and Organization Authority](../docs/architecture/persona-organization-authority.md)
+- [Principal / Zenith Membership and Organization Placement](../docs/architecture/principal-zenith-membership-organization-placement.md)
+- [Database Authority Placement](../docs/architecture/database-authority-placement.md)

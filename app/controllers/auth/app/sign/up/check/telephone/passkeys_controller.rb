@@ -17,7 +17,6 @@ module Auth
 
               AUTHENTICATION_MODE = :guest
 
-              before_action :hide_sign_up_auth_navigation
               before_action :load_sign_up_ticket
               before_action :load_sign_up_actor
               before_action :validate_sign_up_checkpoint_contact!

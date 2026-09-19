@@ -15,7 +15,7 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
     result = BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
 
     assert_equal "selected", result[:status]
-    assert_equal "/dashboard", result[:next]
+    assert_equal "/", result[:next]
     assert_predicate @token.reload, :selected_actor_context?
     assert_predicate @token.selected_avatar_public_id, :present?
   end

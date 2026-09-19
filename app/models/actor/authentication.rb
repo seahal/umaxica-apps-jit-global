@@ -39,6 +39,33 @@ class Actor
       @restricted || acr.to_s == "restricted"
     end
 
+    # Which sign-in ceremony established this session, derived from the signed
+    # access token rather than passed in: every construction site already
+    # carries the claims, and a caller must not be able to assert a context the
+    # token does not.
+    #
+    # Distinct from #restricted?, which is the session-limit remediation state.
+    def authentication_context
+      AuthenticationContextValue.from_claims(access_claims)
+    end
+
+    public
+
+    # The authentication event is a typed claim reader. Token/session persistence timestamps are
+    # not interchangeable with the event that established the authentication context.
+    def authentication_event_at
+      raw = access_claims&.dig("auth_time")
+      return if raw.blank?
+      return raw if raw.is_a?(Time) || raw.is_a?(ActiveSupport::TimeWithZone)
+      return Time.at(raw).utc if raw.is_a?(Numeric)
+
+      Time.at(Integer(raw, 10)).utc
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    delegate :emergency?, to: :authentication_context
+
     def verified?
       amr.present? || acr.present?
     end

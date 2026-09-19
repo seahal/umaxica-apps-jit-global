@@ -45,7 +45,7 @@ module ActorSupport
       authn: Actor::Authentication::NULL,
       authz: Actor::Authz::NULL,
       configuration: Actor::Configuration::NULL,
-      preferences: Actor::Preference::NULL,
+      preferences: Actor::Preference.new,
       selection: Actor::SelectedContext::NULL,
       step_up: Actor::StepUp::NULL,
       trace_id: nil,
@@ -134,13 +134,10 @@ module ActorSupport
     resolved_current_token&.dig("sid")
   end
 
+  # The verified access-token claims recorded by AuthenticationBase#load_from_token. This must
+  # not fall back to another token: ApplicationPolicy reads its Emergency context from here.
   def resolved_current_token
-    payload = nil
-    payload = access_token_payload if respond_to?(:access_token_payload, true)
-    payload ||= load_access_token_payload if respond_to?(:load_access_token_payload, true)
-    payload if payload.is_a?(Hash)
-  rescue StandardError => e
-    raise_actor_resolution_error!(:access_token, e)
+    @current_access_token_payload if defined?(@current_access_token_payload)
   end
 
   def resolved_current_authentication(resource: safe_current_resource,
@@ -256,7 +253,9 @@ module ActorSupport
   # access tokens.
   #
   # Bearer/OIDC requests and the endpoints that skip set_preferences_cookie carry
-  # no Preference JWT cookie, so they fall back to NULL+overlay.
+  # no Preference JWT cookie, so they fall back to the default preference values
+  # (theme sy) plus the request overlay. Actor::Preference::NULL is reserved for
+  # an unbound context, not for "visitor has not chosen a theme yet".
   def resolved_current_preference(resource)
     cookie = resolved_current_cookie(resource, preference_record: nil)
 
@@ -267,7 +266,7 @@ module ActorSupport
       )
     end
 
-    preference_with_request_overlay(Actor::Preference::NULL.with_cookie(cookie))
+    preference_with_request_overlay(Actor::Preference.new(cookie: cookie))
   end
 
   # The decoded Preference JWT `preferences` hash, or nil when absent or when the
@@ -275,6 +274,7 @@ module ActorSupport
   def current_preference_payload_preferences
     return unless respond_to?(:preference_payload_preferences, true)
 
+    load_access_token_payload if respond_to?(:load_access_token_payload, true)
     preferences = preference_payload_preferences
     preferences if preferences.is_a?(Hash) && preferences.present?
   end
@@ -420,21 +420,10 @@ module ActorSupport
   end
 
   def set_current_observability
-    if respond_to?(:request, true) && request.respond_to?(:request_id) && request.request_id.present?
-      Actor.install_context!(trace_id: request.request_id)
-    end
-    return unless defined?(OpenTelemetry::Trace)
-
-    preference_cookie = Actor.preferences.cookie
-    analytics_allowed = preference_cookie.performant?
-
-    span = OpenTelemetry::Trace.current_span
-    context = span.context
-    return unless context.valid?
-
+    observability_context = ObservabilityContextResolver.call
     Actor.install_context!(
-      trace_id: context.hex_trace_id,
-      span_id: analytics_allowed ? context.hex_span_id : nil,
+      trace_id: observability_context.trace_id,
+      span_id: observability_context.span_id,
     )
   end
 end

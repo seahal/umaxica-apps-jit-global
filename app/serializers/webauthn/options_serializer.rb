@@ -72,5 +72,6 @@ module Webauthn
 
       value
     end
+    private_class_method :normalize_credential_list_ids!, :normalize_id
   end
 end

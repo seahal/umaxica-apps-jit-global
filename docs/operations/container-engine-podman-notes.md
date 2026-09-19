@@ -42,9 +42,12 @@ If an interrupted start leaves `global-devcontainer-core` in Created or Exited s
 Containers: Rebuild and Reopen in Container**. The CLI equivalent is the same `devcontainer up`
 command with `--remove-existing-container`.
 
-Compose networks are repository-managed rootless Podman networks. In particular, `outer.external` is
-a YAML boolean and is not environment-variable interpolated. Interpolation turns this field into a
-string; affected podman-compose releases then fail in network argument construction with
+Compose networks are repository-managed rootless Podman networks. `outer` is declared in
+`.devcontainer/compose.yaml` rather than `compose.yaml`, because `core` is its only member:
+declaring it in the shared file left a network no base service joined, and podman-compose reported
+`WARNING: unused networks: outer` on every plain `up`. In particular, `outer.external` is a YAML
+boolean and is not environment-variable interpolated. Interpolation turns this field into a string;
+affected podman-compose releases then fail in network argument construction with
 `AttributeError: 'str' object has no attribute 'get'`.
 
 The compose stack at `compose.yaml` is exercised with rootless Podman. Some Compose-compatible
@@ -61,9 +64,8 @@ is the only bound Compose can express, so every long-running service declares `o
 
 | Service                                                                                   | Policy         |
 | ----------------------------------------------------------------------------------------- | -------------- |
-| `core`, `primary`, `replica`, `valkey-cache`, `valkey-rate-limit`, `alloy`, `loki`, `tempo`, `prometheus`, `grafana` | `on-failure:5` |
+| `core`, `primary`, `replica`, `valkey`, `alloy`, `loki`, `tempo`, `prometheus`, `grafana` | `on-failure:5` |
 | `fakecloud`, `cloudflare-tunnel`                                                          | `on-failure:3` |
-| `fdw-poc*`                                                                                | `"no"`         |
 
 Two consequences of that choice:
 
@@ -78,8 +80,7 @@ A failing _healthcheck_ does not trigger a restart. Podman's `--health-on-failur
 Compose-file equivalent, so a container that is alive but unhealthy — a replica that has stopped
 streaming, for instance — is reported by `podman ps` and repaired by hand.
 
-`core`, `primary`, `replica`, `valkey-cache`, and `valkey-rate-limit` log through a size-capped
-`json-file` driver
+`core`, `primary`, `replica`, `valkey` log through a size-capped `json-file` driver
 (`max-size: 10m`, `max-file: 3`) because journald enforces no per-container cap. Their output does
 not reach `journalctl`; use `podman logs`, which serves either driver.
 

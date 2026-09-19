@@ -21,8 +21,6 @@
 module PublishingManagementCell
   extend ActiveSupport::Concern
 
-  include ::SurfaceInertiaPage
-
   class_methods do
     def publishing_audience
       unless const_defined?(:PUBLISHING_AUDIENCE, false)
@@ -54,9 +52,8 @@ module PublishingManagementCell
     # including drafts that were never published and the bodies of archived
     # entries, so there is no action here that an anonymous request may reach.
     #
-    # The surface web rate limit comes from Base::Org::ApplicationController;
-    # these controllers no longer declare one of their own, which they had to
-    # while they inherited BareController and its empty quota.
+    # The surface web rate limit comes from the staff ApplicationController
+    # these controllers inherit (Edit::Org::ApplicationController).
     before_action :authenticate_operator!
   end
 
@@ -73,6 +70,11 @@ module PublishingManagementCell
   def publishing_entry_class
     self.class.publishing_entry_class
   end
+
+  # Staff CMS Inertia/controller prefix comes from the surface
+  # ApplicationController (Edit::Org::ApplicationController#publishing_management_namespace).
+  # Do not define a stub here: included modules sit ahead of the superclass in
+  # the ancestor chain and would shadow that implementation for every cell.
 
   # Every CMS action asks the same question of the same policy. The record
   # differs -- an entry for the member actions, the operator for the
@@ -103,11 +105,13 @@ module PublishingManagementCell
   # Absolute controller paths, so a nested controller addresses the entries
   # pages of its own cell rather than its own.
   def entries_controller_path
-    "/base/org/publishing/#{publishing_surface}/#{publishing_audience}/entries"
+    "/#{publishing_management_namespace}/#{publishing_surface}/#{publishing_audience}/entries"
   end
 
-  def entries_component(name)
-    "base/org/publishing/#{publishing_surface}/#{publishing_audience}/entries/#{name}"
+  # Every cell (four content families x three audiences) shares the same four ERB templates; the
+  # cell's identity travels as locals (surface/audience-derived hrefs), not as a per-cell view.
+  def entries_template(name)
+    "edit/org/publishing/entries/#{name}"
   end
 
   def entry_path(entry, action:)
@@ -275,8 +279,8 @@ module PublishingManagementCell
   # Publication and archive failures re-render the entry's own show page with
   # the message on it, because that is the page the operator acted from.
   def render_show_failure(entry, errors:)
-    render inertia: entries_component("show"),
-           props: show_entry_props(entry, errors: errors),
+    render entries_template("show"),
+           locals: show_entry_props(entry, errors: errors),
            status: :unprocessable_content
   end
 

@@ -2,8 +2,8 @@
 
 ## Overview
 
-This application implements authorization with **Action Policy** through the `action_policy` gem.
-It does not use Pundit.
+This application implements authorization with **Action Policy** through the `action_policy` gem. It
+does not use Pundit.
 
 Core rules:
 
@@ -55,16 +55,16 @@ authorize :actor, through: :current_actor
 
 `app/policies/application_policy.rb` provides these policy helpers:
 
-| Method | Meaning |
-|---|---|
-| `actor` / `user` | Authorization context and derived concrete resource |
-| `record` | Resource being authorized |
-| `owner?` | Whether `user` owns `record`, using Client `user_id`, Operator `staff_id`, Visitor `visitor_id`, or resource identity |
-| `operator?` / `manager?` / `editor?` / `contributor?` / `viewer?` | Organization-scoped role checks |
-| `operator_or_manager?` / `can_edit?` / `can_view?` / `can_contribute?` | Composite role checks |
-| `has_scope?(scope)` | JWT scope check based on the current token's `scp` claim |
-| `domain_app?` / `domain_org?` / `domain_com?` / `domain_permitted?(*domains)` | Surface checks based on the JWT `aud` claim |
-| `current_token` | `Actor.authz.token_claims` |
+| Method                                                                        | Meaning                                                                                                               |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `actor` / `user`                                                              | Authorization context and derived concrete resource                                                                   |
+| `record`                                                                      | Resource being authorized                                                                                             |
+| `owner?`                                                                      | Whether `user` owns `record`, using Client `user_id`, Operator `staff_id`, Visitor `visitor_id`, or resource identity |
+| `operator?` / `manager?` / `editor?` / `contributor?` / `viewer?`             | Organization-scoped role checks                                                                                       |
+| `operator_or_manager?` / `can_edit?` / `can_view?` / `can_contribute?`        | Composite role checks                                                                                                 |
+| `has_scope?(scope)`                                                           | JWT scope check based on the current token's `scp` claim                                                              |
+| `domain_app?` / `domain_org?` / `domain_com?` / `domain_permitted?(*domains)` | Surface checks based on the JWT `aud` claim                                                                           |
+| `current_token`                                                               | `Actor.authz.token_claims`                                                                                            |
 
 The default `index?`, `show?`, `create?`, `update?`, and `destroy?` predicates all return false.
 `alias_rule` maps `edit?` to `update?` and `new?` to `create?`.
@@ -133,8 +133,7 @@ class Sign::App::Settings::SessionsController < ...
 end
 ```
 
-A concrete record may also be passed directly, such as
-`authorize!(current_client, to: :show?)`.
+A concrete record may also be passed directly, such as `authorize!(current_client, to: :show?)`.
 
 ### Applying a Scope
 

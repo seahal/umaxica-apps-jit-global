@@ -3,8 +3,8 @@ name: browser-testing-with-devtools
 description:
   Verifies browser behavior against live runtime data through the Chrome DevTools MCP server. Use
   when debugging layout, styling, or interaction issues, when diagnosing console errors, when
-  analyzing network requests and API responses, when profiling Core Web Vitals, or when confirming
-  a fix works in the browser. Requires the chrome-devtools MCP server to be configured.
+  analyzing network requests and API responses, when profiling Core Web Vitals, or when confirming a
+  fix works in the browser. Requires the chrome-devtools MCP server to be configured.
 ---
 
 # Browser Testing with DevTools

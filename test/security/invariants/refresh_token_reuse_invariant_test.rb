@@ -16,11 +16,6 @@ module Security
 
       setup do
         ensure_client_token_reference_records!
-        ClientToken.skip_callback(:validation, :before, :ensure_device_session_record)
-      end
-
-      teardown do
-        ClientToken.set_callback(:validation, :before, :ensure_device_session_record)
       end
 
       test "refresh token reuse revokes only the compromised token family" do
@@ -63,14 +58,14 @@ module Security
           discarded_at: 1.day.from_now,
           purged_at: 2.days.from_now,
         )
-        usage = ClientTokenUsage.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
+        usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
         reused_refresh = usage.issue_refresh_token!
 
-        rotation = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh)
+        rotation = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh, resource_type: "client")
 
         assert_predicate rotation, :success?, "The first redemption must rotate normally."
 
-        replay = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh)
+        replay = OidcRefreshTokenIssuer.call(refresh_token: reused_refresh, resource_type: "client")
 
         assert_not replay.success?
         assert_equal :refresh_token_reuse_detected, replay.reason,
@@ -87,13 +82,16 @@ module Security
           discarded_at: 1.day.from_now,
           purged_at: 2.days.from_now,
         )
-        usage = ClientTokenUsage.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
+        usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
         first_refresh = usage.issue_refresh_token!
 
-        first_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_refresh)
+        first_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_refresh, resource_type: "client")
 
         assert_predicate first_rotation, :success?
-        second_rotation = OidcRefreshTokenIssuer.call(refresh_token: first_rotation.refresh_token)
+        second_rotation = OidcRefreshTokenIssuer.call(
+          refresh_token: first_rotation.refresh_token,
+          resource_type: "client",
+        )
 
         assert_predicate second_rotation, :success?,
                          "Reuse detection must not break the legitimate rotation chain."

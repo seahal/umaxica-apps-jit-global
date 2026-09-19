@@ -57,7 +57,11 @@ module PasskeyCeremonyContext
   # Maps the challenge-store purpose to the UV policy purpose when the caller
   # does not name one explicitly (MFA passes uv_purpose: :mfa_challenge, since
   # its challenge purpose is :authentication).
-  DEFAULT_UV_PURPOSES = { authentication: :direct_sign_in, step_up: :ordinary_step_up }.freeze
+  DEFAULT_UV_PURPOSES = {
+    authentication: :direct_sign_in,
+    emergency_sign_in: :emergency_sign_in,
+    step_up: :ordinary_step_up,
+  }.freeze
 
   # @return [Array(String, Hash)] challenge id and JSON-ready request options
   def issue_passkey_authentication_challenge(allow_credentials:, actor:, purpose: :authentication, uv_purpose: nil)

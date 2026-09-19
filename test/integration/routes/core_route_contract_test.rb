@@ -121,27 +121,27 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "core/app/web/v0/cookies", action: "show" },
+      { controller: "core/app/api/v0/preferences/cookies", action: "show" },
       { path: "http://#{CORE_APP_HOST}/api/v0/preferences/cookie", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/app/web/v0/cookies", action: "update" },
+      { controller: "core/app/api/v0/preferences/cookies", action: "update" },
       { path: "http://#{CORE_APP_HOST}/api/v0/preferences/cookie", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "core/app/web/v0/themes", action: "show" },
+      { controller: "core/app/api/v0/preferences/themes", action: "show" },
       { path: "http://#{CORE_APP_HOST}/api/v0/preferences/theme", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/app/web/v0/themes", action: "update" },
+      { controller: "core/app/api/v0/preferences/themes", action: "update" },
       { path: "http://#{CORE_APP_HOST}/api/v0/preferences/theme", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "core/app/edge/v0/dbsc", action: "create" },
+      { controller: "core/app/api/v0/preferences/dbsc", action: "create" },
       { path: "http://#{CORE_APP_HOST}/api/v0/preferences/dbsc", method: :post },
     )
 
@@ -157,13 +157,21 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/app/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_APP_HOST}/oidc/callback", method: :get },
+      { path: "http://#{CORE_APP_HOST}/sign/in/callback", method: :get },
     )
 
     assert_recognizes(
       { controller: "core/app/oidc/authorizations", action: "show" },
-      { path: "http://#{CORE_APP_HOST}/oidc/authorization", method: :get },
+      { path: "http://#{CORE_APP_HOST}/sign/in", method: :get },
     )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/oidc/callback", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "core/app/sign/outs", action: "new" },
@@ -180,10 +188,9 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{CORE_APP_HOST}/sign/out", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "core/app/sign/outs/completions", action: "show" },
-      { path: "http://#{CORE_APP_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/sign/out", method: :delete)
@@ -248,27 +255,27 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "core/com/web/v0/cookies", action: "show" },
+      { controller: "core/com/api/v0/preferences/cookies", action: "show" },
       { path: "http://#{CORE_COM_HOST}/api/v0/preferences/cookie", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/com/web/v0/cookies", action: "update" },
+      { controller: "core/com/api/v0/preferences/cookies", action: "update" },
       { path: "http://#{CORE_COM_HOST}/api/v0/preferences/cookie", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "core/com/web/v0/themes", action: "show" },
+      { controller: "core/com/api/v0/preferences/themes", action: "show" },
       { path: "http://#{CORE_COM_HOST}/api/v0/preferences/theme", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/com/web/v0/themes", action: "update" },
+      { controller: "core/com/api/v0/preferences/themes", action: "update" },
       { path: "http://#{CORE_COM_HOST}/api/v0/preferences/theme", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "core/com/edge/v0/dbsc", action: "create" },
+      { controller: "core/com/api/v0/preferences/dbsc", action: "create" },
       { path: "http://#{CORE_COM_HOST}/api/v0/preferences/dbsc", method: :post },
     )
 
@@ -284,13 +291,21 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/com/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/oidc/callback", method: :get },
+      { path: "http://#{CORE_COM_HOST}/sign/in/callback", method: :get },
     )
 
     assert_recognizes(
       { controller: "core/com/oidc/authorizations", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/oidc/authorization", method: :get },
+      { path: "http://#{CORE_COM_HOST}/sign/in", method: :get },
     )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/oidc/callback", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "core/com/sign/outs", action: "new" },
@@ -307,10 +322,9 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{CORE_COM_HOST}/sign/out", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "core/com/sign/outs/completions", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sign/out", method: :delete)
@@ -376,27 +390,27 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "core/org/web/v0/cookies", action: "show" },
+      { controller: "core/org/api/v0/preferences/cookies", action: "show" },
       { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/cookie", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/org/web/v0/cookies", action: "update" },
+      { controller: "core/org/api/v0/preferences/cookies", action: "update" },
       { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/cookie", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "core/org/web/v0/themes", action: "show" },
+      { controller: "core/org/api/v0/preferences/themes", action: "show" },
       { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/theme", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/org/web/v0/themes", action: "update" },
+      { controller: "core/org/api/v0/preferences/themes", action: "update" },
       { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/theme", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "core/org/edge/v0/dbsc", action: "create" },
+      { controller: "core/org/api/v0/preferences/dbsc", action: "create" },
       { path: "http://#{CORE_ORG_HOST}/api/v0/preferences/dbsc", method: :post },
     )
 
@@ -412,13 +426,21 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/org/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_ORG_HOST}/oidc/callback", method: :get },
+      { path: "http://#{CORE_ORG_HOST}/sign/in/callback", method: :get },
     )
 
     assert_recognizes(
       { controller: "core/org/oidc/authorizations", action: "show" },
-      { path: "http://#{CORE_ORG_HOST}/oidc/authorization", method: :get },
+      { path: "http://#{CORE_ORG_HOST}/sign/in", method: :get },
     )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/oidc/callback", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_recognizes(
       { controller: "core/org/sign/outs", action: "new" },
@@ -435,10 +457,9 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{CORE_ORG_HOST}/sign/out", method: :post },
     )
 
-    assert_recognizes(
-      { controller: "core/org/sign/outs/completions", action: "show" },
-      { path: "http://#{CORE_ORG_HOST}/sign/out/complete", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/sign/out/complete", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/sign/out", method: :delete)

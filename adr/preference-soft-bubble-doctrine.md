@@ -62,7 +62,7 @@ planning documents disagree:
 
 - `adr/setting-preference-remove-polymorphic-owner.md` describes a `settings_preferences`
   polymorphic-owner table that does not exist.
-- `plans/backlog/gh628-move-preferences-to-setting-db.md` planned to move all session-side
+- `plans/archive/gh628-move-preferences-to-setting-db.md` planned to move all session-side
   preferences to one database; this was abandoned. Each surface now has its own setting database.
 - `Preference::StorageAdapter`, the dual-read / dual-write layer that GH-628 introduced, has been
   removed.
@@ -210,7 +210,6 @@ The following are explicitly out of scope of this ADR and will be addressed in s
 - `plans/archive/customer-preferences-move-to-com-preference-db.md` — superseded com TLD bubble
   closure note
 - `plans/archive/staff-preference-move-to-operator-db.md` — historical org TLD bubble closure note
-- `plans/backlog/gh578-preference-consolidation.md` — `Actor::Preference` runtime consolidation
-  (still relevant)
+- GH issue #578 — `Actor::Preference` runtime consolidation (still relevant)
 - `plans/archive/actor-support-integration-test-coverage.md` — `ActorSupport` request-lifecycle test
   coverage gap

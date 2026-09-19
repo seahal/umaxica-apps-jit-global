@@ -55,9 +55,8 @@ module SignOperatorTelephoneRegistrable
       return :session_expired
     end
 
-    result = verify_otp_code(@staff_telephone, submitted_code)
+    result = verify_otp_code_and_consume(@staff_telephone, submitted_code)
     unless result[:success]
-      increment_otp_attempts!(@staff_telephone)
       if @staff_telephone.locked?
         @staff_telephone.destroy!
         return :locked
@@ -68,8 +67,6 @@ module SignOperatorTelephoneRegistrable
     end
 
     # sign/id verifies the OTP; acme/www performs the final account commit.
-    clear_otp(@staff_telephone)
-    @staff_telephone.save! if @staff_telephone.changed?
     :success
   end
 

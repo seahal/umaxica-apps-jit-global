@@ -39,6 +39,25 @@ class Acme::OrganizationQuotaPolicyTest < ActiveSupport::TestCase
     assert_equal 0, policy.remaining
   end
 
+  test "counts only resources owned by the principal when no scope is supplied" do
+    create_enterprises(1)
+    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_enterprise = Enterprise.create!(name: "Other", title: "Other")
+    EnterpriseOwnership.create!(enterprise: other_enterprise, client: other_client)
+    unowned_enterprise = Enterprise.create!(name: "Unowned", title: "Unowned")
+
+    policy = Acme::OrganizationQuotaPolicy.new(surface: :app, principal: client)
+    scoped_policy = Acme::OrganizationQuotaPolicy.new(
+      surface: :app,
+      principal: client,
+      scope: Enterprise.where(id: [other_enterprise.id, unowned_enterprise.id]),
+    )
+
+    assert_equal 1, policy.current_count
+    assert_equal 1, policy.remaining
+    assert_equal 0, scoped_policy.current_count
+  end
+
   test "behaves the same across surfaces" do
     assert_surface_policy(:app, Enterprise, -> { create_enterprises(1) }, client)
     assert_surface_policy(:org, Bureau, -> { create_bureaus(1) }, operator)
@@ -74,16 +93,28 @@ class Acme::OrganizationQuotaPolicyTest < ActiveSupport::TestCase
 
   def create_enterprises(count)
     @created_organization_ids = []
-    count.times { @created_organization_ids << Enterprise.create!(name: "Enterprise", title: "Enterpris").id }
+    count.times do
+      enterprise = Enterprise.create!(name: "Enterprise", title: "Enterpris")
+      EnterpriseOwnership.create!(enterprise:, client: client)
+      @created_organization_ids << enterprise.id
+    end
   end
 
   def create_bureaus(count)
     @created_organization_ids = []
-    count.times { @created_organization_ids << Bureau.create!(name: "Bureau", title: "Bureau").id }
+    count.times do
+      bureau = Bureau.create!(name: "Bureau", title: "Bureau")
+      BureauOwnership.create!(bureau:, operator: operator)
+      @created_organization_ids << bureau.id
+    end
   end
 
   def create_companies(count)
     @created_organization_ids = []
-    count.times { @created_organization_ids << Company.create!(name: "Company", title: "Company").id }
+    count.times do
+      company = Company.create!(name: "Company", title: "Company")
+      CompanyOwnership.create!(company:, visitor: visitor)
+      @created_organization_ids << company.id
+    end
   end
 end

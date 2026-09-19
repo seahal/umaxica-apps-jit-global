@@ -1,4 +1,5 @@
 import type { router as inertiaRouter } from "@inertiajs/react";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -68,7 +69,7 @@ describe("PreferenceSelect interaction", () => {
   const backLink = { label: "もどる", href: "/preference?ri=jp" };
   const props = {
     screen: "region",
-    title: "地域と言語の設定",
+    title: "地域設定",
     description: "地域を選びます。",
     back_link: backLink,
     form: {
@@ -79,8 +80,8 @@ describe("PreferenceSelect interaction", () => {
       label: "地域",
       value: 2,
       choices: [
-        { label: "日本", value: 2 },
-        { label: "アメリカ合衆国 (USA)", value: 1 },
+        { label: "日本", value: 2, disabled: true },
+        { label: "アメリカ合衆国 (USA)", value: 1, disabled: false },
       ],
       submit_label: "更新",
       submitting_label: "送信中",
@@ -126,6 +127,202 @@ describe("PreferenceSelect interaction", () => {
       finishVisit(options);
     });
     expect(submit.textContent).toBe("更新");
+  });
+
+  it("marks the stored region so it cannot be chosen again", async () => {
+    const user = userEvent.setup();
+    mount(<PreferenceSelect {...props} />);
+
+    await user.click(container.querySelector('button[aria-haspopup="listbox"]')!);
+
+    const stored = document.querySelector('[role="option"][aria-disabled="true"]');
+    expect(stored?.textContent).toBe("日本");
+  });
+
+  it("applies the stored theme only after the preference write is accepted", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ theme: "dr" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    document.documentElement.className = "";
+    delete document.documentElement.dataset["theme"];
+
+    mount(
+      <PreferenceSelect
+        {...props}
+        screen="theme"
+        title="テーマ設定"
+        description="表示テーマを選びます。"
+        form={{
+          ...props.form,
+          action: "/preference/theme?ri=jp",
+          scope: "preference_theme",
+          label: "テーマ",
+          value: 1,
+          choices: [
+            { label: "システム", value: 1, disabled: true },
+            { label: "ダーク", value: 3, disabled: false },
+          ],
+        }}
+      />,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    act(() => {
+      select.value = "3";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const form = container.querySelector<HTMLFormElement>("form")!;
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(document.documentElement.dataset["theme"]).toBeUndefined();
+    expect(patch).toHaveBeenCalledWith(
+      "/preference/theme?ri=jp",
+      { preference_theme: { option_id: "3" } },
+      containing({ onStart: A_FUNCTION, onFinish: A_FUNCTION, onSuccess: A_FUNCTION }),
+    );
+
+    const [, , options] = present(patch.mock.calls[0], "the first router.patch call");
+    await act(async () => {
+      present(options, "the recorded visit options").onSuccess?.({
+        component: "base/app/preference/option",
+        props: {
+          errors: {},
+          chrome: {
+            family_label: null,
+            surface: "app",
+            brand: { name: "Umaxica", href: "/" },
+            banner: null,
+            restricted_mode: null,
+            footer_navigation: null,
+            cookie_controls: null,
+            theme_controls: null,
+            copyright: "",
+          },
+        },
+        url: "/preference/theme/edit?ri=jp",
+        version: "",
+        clearHistory: false,
+        encryptHistory: false,
+        rescuedProps: [],
+        flash: {},
+        rememberedState: {},
+      });
+    });
+
+    expect(document.documentElement.dataset["theme"]).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it("skips theme application on success for non-theme screens", async () => {
+    document.documentElement.className = "";
+    delete document.documentElement.dataset["theme"];
+    mount(<PreferenceSelect {...props} />);
+
+    const form = container.querySelector<HTMLFormElement>("form")!;
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const [, , options] = present(patch.mock.calls[0], "the first router.patch call");
+    await act(async () => {
+      present(options, "the recorded visit options").onSuccess?.({
+        component: "base/app/preference/option",
+        props: {
+          errors: {},
+          chrome: {
+            family_label: null,
+            surface: "app",
+            brand: { name: "Umaxica", href: "/" },
+            banner: null,
+            restricted_mode: null,
+            footer_navigation: null,
+            cookie_controls: null,
+            theme_controls: null,
+            copyright: "",
+          },
+        },
+        url: "/preference/region/edit?ri=jp",
+        version: "",
+        clearHistory: false,
+        encryptHistory: false,
+        rescuedProps: [],
+        flash: {},
+        rememberedState: {},
+      });
+    });
+
+    // Region success must not touch the document theme.
+    expect(document.documentElement.dataset["theme"]).toBeUndefined();
+  });
+
+  it("leaves the document theme alone when the stored theme cannot be read", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    document.documentElement.className = "";
+    delete document.documentElement.dataset["theme"];
+
+    mount(
+      <PreferenceSelect
+        {...props}
+        screen="theme"
+        title="テーマ設定"
+        description="表示テーマを選びます。"
+        form={{
+          ...props.form,
+          action: "/preference/theme?ri=jp",
+          scope: "preference_theme",
+          label: "テーマ",
+          value: 1,
+          choices: [
+            { label: "システム", value: 1, disabled: true },
+            { label: "ダーク", value: 3, disabled: false },
+          ],
+        }}
+      />,
+    );
+
+    const form = container.querySelector<HTMLFormElement>("form")!;
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const [, , options] = present(patch.mock.calls[0], "the first router.patch call");
+    await act(async () => {
+      present(options, "the recorded visit options").onSuccess?.({
+        component: "base/app/preference/option",
+        props: {
+          errors: {},
+          chrome: {
+            family_label: null,
+            surface: "app",
+            brand: { name: "Umaxica", href: "/" },
+            banner: null,
+            restricted_mode: null,
+            footer_navigation: null,
+            cookie_controls: null,
+            theme_controls: null,
+            copyright: "",
+          },
+        },
+        url: "/preference/theme/edit?ri=jp",
+        version: "",
+        clearHistory: false,
+        encryptHistory: false,
+        rescuedProps: [],
+        flash: {},
+        rememberedState: {},
+      });
+    });
+
+    expect(document.documentElement.dataset["theme"]).toBeUndefined();
+    vi.unstubAllGlobals();
   });
 });
 

@@ -4,17 +4,6 @@
 require "test_helper"
 
 class CoverageThresholdControllerHelpersTest < ActiveSupport::TestCase
-  test "base application controllers expose their authority hosts" do
-    controllers = [Base::App::ApplicationController.new, Base::Com::ApplicationController.new, Base::Org::ApplicationController.new]
-    controllers.each do |controller|
-      assert_predicate controller.oidc_client_id, :present?
-      assert_predicate controller.oidc_sign_host, :present?
-      assert_predicate controller.oidc_base_authority_host, :present?
-      assert_predicate controller.oidc_acme_host, :present?
-      assert_predicate controller.oidc_base_host, :present?
-    end
-  end
-
   test "settings passkey option controllers expose registration collaborators" do
     controllers = [
       Auth::App::Settings::Passkeys::OptionsController.new,
@@ -182,6 +171,11 @@ class CoverageThresholdControllerHelpersTest
       rendered = []
       controller.define_singleton_method(:logged_in?) { false }
       controller.define_singleton_method(:t) { |_key| "landing" }
+      controller.define_singleton_method(:params) { { ri: "jp" } }
+      request = ActionDispatch::TestRequest.create
+      request.host = "auth.app.localhost"
+      controller.define_singleton_method(:request) { request }
+      controller.define_singleton_method(:response) { Struct.new(:headers).new({}) }
       controller.define_singleton_method(:render) { |**options| rendered << options }
       controller.index
 
@@ -237,6 +231,7 @@ class CoverageThresholdControllerHelpersTest
       controller.define_singleton_method(:request) { request }
       controller.define_singleton_method(:after_login_path) { "/after" }
       controller.define_singleton_method(:after_login_allows_other_host?) { false }
+      controller.define_singleton_method(:response) { Struct.new(:headers).new({}) }
       controller.define_singleton_method(:redirect_to) { |*args, **kwargs| redirected << [args, kwargs] }
       controller.define_singleton_method(:render) { |*args, **kwargs| redirected << [args, kwargs] }
       controller.define_singleton_method(:method_missing) { |method_name, *_args, **_kwargs| "/#{method_name}" }

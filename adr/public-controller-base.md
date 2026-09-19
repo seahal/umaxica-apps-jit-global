@@ -154,4 +154,3 @@ The following are explicitly deferred and not part of this decision:
 - `adr/actor-current-facade.md` — current request-context facade. `Jump::PublicController`
   deliberately does not populate it.
 - `adr/four-engine-restoration-and-base-contract.md` — boundary base class contract.
-- `plans/active/public-controller-base-plan.md` — implementation plan.

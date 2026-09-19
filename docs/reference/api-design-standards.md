@@ -12,7 +12,8 @@ here. They are repository decisions, not standards, and are recorded as ADRs:
 
 - `adr/api-error-format-problem-details.md` — adoption of RFC 9457 and ownership of the problem-type
   namespace.
-- `adr/api-collection-contract.md` — success envelope and cursor pagination.
+- `adr/api-collection-contract.md` — success envelope (`data` + `page`; unwrapped single resource).
+- `adr/api-collection-offset-pagination.md` — Pagy offset pagination (`page` query parameter).
 - `adr/api-versioning-and-client-conventions.md` — versioning strategy, `Idempotency-Key`,
   `RateLimit` header fields, and the OpenAPI target version.
 
@@ -31,27 +32,27 @@ Status values below were verified against the RFC Editor and the IETF Datatracke
 that order — RFC Editor first, Datatracker second — before citing any specification here; follow
 `.agents/harnesses/rules/generic/source-policy.mdc`.
 
-| Area | Source | Status |
-| --- | --- | --- |
-| HTTP semantics: methods, status codes, conditional requests, content negotiation | RFC 9110 | **Internet Standard (STD 97)**, 2022 |
-| Error responses | RFC 9457 | Proposed Standard, 2023 — obsoletes RFC 7807 |
-| Date and time values | RFC 3339 | Standard |
-| OAuth 2.0 / OIDC security | RFC 9700 | **Best Current Practice (BCP 240)**, 2025 |
-| OAuth 2.0 error responses | RFC 6749 §5.2, RFC 7009 | Proposed Standard |
-| Bearer token errors | RFC 6750 §3 | Proposed Standard |
-| Deprecation signaling | RFC 9745 | Proposed Standard, 2025 |
-| End-of-life signaling | RFC 8594 | **Informational**, 2019 — not standards track |
-| 429 status code | RFC 6585 §4 | Proposed Standard |
-| `Retry-After` | RFC 9110 §10.2.3 | Internet Standard |
-| JSON Pointer (validation `pointer`) | RFC 6901 | Proposed Standard |
+| Area                                                                             | Source                  | Status                                        |
+| -------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------- |
+| HTTP semantics: methods, status codes, conditional requests, content negotiation | RFC 9110                | **Internet Standard (STD 97)**, 2022          |
+| Error responses                                                                  | RFC 9457                | Proposed Standard, 2023 — obsoletes RFC 7807  |
+| Date and time values                                                             | RFC 3339                | Standard                                      |
+| OAuth 2.0 / OIDC security                                                        | RFC 9700                | **Best Current Practice (BCP 240)**, 2025     |
+| OAuth 2.0 error responses                                                        | RFC 6749 §5.2, RFC 7009 | Proposed Standard                             |
+| Bearer token errors                                                              | RFC 6750 §3             | Proposed Standard                             |
+| Deprecation signaling                                                            | RFC 9745                | Proposed Standard, 2025                       |
+| End-of-life signaling                                                            | RFC 8594                | **Informational**, 2019 — not standards track |
+| 429 status code                                                                  | RFC 6585 §4             | Proposed Standard                             |
+| `Retry-After`                                                                    | RFC 9110 §10.2.3        | Internet Standard                             |
+| JSON Pointer (validation `pointer`)                                              | RFC 6901                | Proposed Standard                             |
 
 Two entries carry a caveat that must not be lost:
 
 - **RFC 8594 (`Sunset`) is Informational.** It is a widely implemented convention, not a standard.
   It is used here because no standards-track alternative exists, and because RFC 9745
   (`Deprecation`, standards track) explicitly complements it.
-- **RFC 9700 is a BCP, not a protocol specification.** It updates the security guidance around
-  RFC 6749 rather than replacing it, and it is the reason the Implicit grant and the Resource Owner
+- **RFC 9700 is a BCP, not a protocol specification.** It updates the security guidance around RFC
+  6749 rather than replacing it, and it is the reason the Implicit grant and the Resource Owner
   Password Credentials grant are prohibited below.
 
 ## Errors
@@ -75,8 +76,8 @@ Rules, per RFC 9457 §3:
 - `type` (§3.1.1) is the machine-readable problem identity and is a URI reference. Clients branch on
   `type`, never on `title` or `detail`. A `type` value is permanent once shipped; a changed meaning
   requires a new URI.
-- `title` (§3.1.2) is a short, stable, human-readable summary of the `type`. It does not vary between
-  occurrences of the same `type`.
+- `title` (§3.1.2) is a short, stable, human-readable summary of the `type`. It does not vary
+  between occurrences of the same `type`.
 - `status` (§3.1.3) duplicates the HTTP status code and must agree with it.
 - `detail` (§3.1.4) is occurrence-specific prose, aimed at a human, and is not for programmatic
   consumption. It must never carry tokens, cookies, authorization headers, full request parameters,
@@ -91,6 +92,7 @@ Rules, per RFC 9457 §3:
     `pointer` is an RFC 6901 JSON Pointer into the request body.
 
   Any further extension member requires updating this document first.
+
 - Per §3.1.1, a client **must not** automatically dereference a `type` URI. The URI is an
   identifier; this document is its documentation.
 
@@ -107,25 +109,25 @@ never promised to.
 
 The table is authoritative. Each row is a permanent public contract.
 
-| `type` (after `urn:umaxica:problem:`) | Status | Meaning |
-| --- | --- | --- |
-| `bad-request` | 400 | The request was malformed. |
-| `authentication-required` | 401 | No usable credential was presented, or it is no longer valid. |
-| `token-expired` | 401 | The presented refresh credential is expired or already consumed. |
-| `authorization-denied` | 403 | Authenticated, but lacking the required scope or policy grant. |
-| `csrf-verification-failed` | 403 | The browser request failed CSRF verification. |
-| `not-found` | 404 | The addressed resource does not exist or is not visible to the caller. |
-| `method-not-allowed` | 405 | The method is not supported on this resource; see `Allow`. |
-| `not-acceptable` | 406 | No representation satisfies the request's `Accept`. |
-| `unsupported-media-type` | 415 | The request body media type is not `application/json`. |
-| `validation-failed` | 422 | Well-formed but semantically invalid; see the `errors` member. |
-| `rate-limited` | 429 | A rate limit was exceeded; see `Retry-After`. |
-| `server-error` | 500 | An unhandled failure. Carries no `detail`; correlate by `request_id`. |
-| `service-unavailable` | 503 | The endpoint is disabled by configuration, or a dependency is down. |
+| `type` (after `urn:umaxica:problem:`) | Status | Meaning                                                                |
+| ------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| `bad-request`                         | 400    | The request was malformed.                                             |
+| `authentication-required`             | 401    | No usable credential was presented, or it is no longer valid.          |
+| `token-expired`                       | 401    | The presented refresh credential is expired or already consumed.       |
+| `authorization-denied`                | 403    | Authenticated, but lacking the required scope or policy grant.         |
+| `csrf-verification-failed`            | 403    | The browser request failed CSRF verification.                          |
+| `not-found`                           | 404    | The addressed resource does not exist or is not visible to the caller. |
+| `method-not-allowed`                  | 405    | The method is not supported on this resource; see `Allow`.             |
+| `not-acceptable`                      | 406    | No representation satisfies the request's `Accept`.                    |
+| `unsupported-media-type`              | 415    | The request body media type is not `application/json`.                 |
+| `validation-failed`                   | 422    | Well-formed but semantically invalid; see the `errors` member.         |
+| `rate-limited`                        | 429    | A rate limit was exceeded; see `Retry-After`.                          |
+| `server-error`                        | 500    | An unhandled failure. Carries no `detail`; correlate by `request_id`.  |
+| `service-unavailable`                 | 503    | The endpoint is disabled by configuration, or a dependency is down.    |
 
-Splitting the two 401 causes is deliberate: a client must be able to distinguish "re-authenticate the
-human" from "exchange the refresh credential" without parsing prose. Never widen an existing `type`
-to cover an additional cause; add a row.
+Splitting the two 401 causes is deliberate: a client must be able to distinguish "re-authenticate
+the human" from "exchange the refresh credential" without parsing prose. Never widen an existing
+`type` to cover an additional cause; add a row.
 
 An unregistered `type` must not ship. The registry is enforced in code by `ProblemType`
 (`app/values/problem_type.rb`), which raises on an unknown slug rather than inventing a URI.
@@ -180,12 +182,13 @@ RFC 9110 §9.
   has no contract. `null` for absence is acceptable; a type change is not.
 - Identifiers exposed to clients are public identifiers (`public_id`), never database primary keys.
 - All timestamps are RFC 3339 with an explicit `Z` offset and second-or-finer precision:
-  `2026-08-16T12:34:56Z`. Do not emit epoch integers, local offsets, or bare dates for instants.
-  RFC 3339 is a profile of ISO 8601; "ISO 8601" alone is not a sufficient specification, because it
+  `2026-08-16T12:34:56Z`. Do not emit epoch integers, local offsets, or bare dates for instants. RFC
+  3339 is a profile of ISO 8601; "ISO 8601" alone is not a sufficient specification, because it
   permits forms RFC 3339 forbids.
 - Enumerated values are lowercase `snake_case` strings; never expose Rails integer enum backing
   values.
-- The shape of collection responses is a repository decision; see `adr/api-collection-contract.md`.
+- The shape of collection responses is a repository decision; see `adr/api-collection-contract.md`
+  (envelope) and `adr/api-collection-offset-pagination.md` (Pagy offset pages).
 - Follow `.agents/harnesses/rules/generic/data-shape-design.mdc` for the underlying shape rules.
 
 ## Content negotiation
@@ -195,8 +198,8 @@ RFC 9110 §12.
 - API endpoints declare `application/json` and honor `Accept`. When the request's `Accept` excludes
   both `application/json` and `application/problem+json`, respond `406` (§15.5.7). Overwriting
   `request.format` unconditionally is not negotiation; it is ignoring the request.
-- A request with no `Accept` accepts anything (§12.5.1) and must not be refused. The ranges `*/*` and
-  `application/*` both satisfy the rule.
+- A request with no `Accept` accepts anything (§12.5.1) and must not be refused. The ranges `*/*`
+  and `application/*` both satisfy the rule.
 - A request carrying a body must declare `Content-Type: application/json`; anything else is `415`. A
   request with no body has no media type to reject and must not be refused for declaring nothing —
   the token refresh endpoint carries its credential in a cookie and sends no body at all.
@@ -205,12 +208,12 @@ RFC 9110 §12.
   before anything tries to read it.
 - Errors are returned as `application/problem+json` even when the request asked only for
   `application/json`. RFC 9457 §3 defines it as a JSON media type, so any client that can parse JSON
-  can parse it. A `406` is likewise sent as a problem document even though the caller said it accepts
-  neither: §15.5.7 permits a representation the client did not ask for, and an explanation beats an
-  empty body.
+  can parse it. A `406` is likewise sent as a problem document even though the caller said it
+  accepts neither: §15.5.7 permits a representation the client did not ask for, and an explanation
+  beats an empty body.
 
-Enforced by `ApiContentNegotiation` (`app/controllers/concerns/api_content_negotiation.rb`), included
-by every `/api/v0` boundary. `/edge/v0` and `/web/v0` do not enforce it yet, because their
+Enforced by `ApiContentNegotiation` (`app/controllers/concerns/api_content_negotiation.rb`),
+included by every `/api/v0` boundary. `/edge/v0` and `/web/v0` do not enforce it yet, because their
 controllers still emit pre-Problem-Details error shapes and a negotiated `406` there would give one
 endpoint two error formats.
 
@@ -221,8 +224,8 @@ RFC 9110 §13 (conditional requests) and §5.2 / RFC 9111 (cache directives).
 - Credential, session, and token endpoints set `Cache-Control: no-store`. This is already the
   practice for token and bearer endpoints and is mandatory.
 - Read-only public content endpoints emit `ETag` and/or `Last-Modified` and answer `If-None-Match` /
-  `If-Modified-Since` with `304` (§13.1, §15.4.5). Published content carries a publication timestamp,
-  so unconditional re-transfer is avoidable.
+  `If-Modified-Since` with `304` (§13.1, §15.4.5). Published content carries a publication
+  timestamp, so unconditional re-transfer is avoidable.
 - A cacheable response whose body varies by authenticated subject requires `Vary` and `private`.
 
 ## Deprecation and sunset
@@ -245,14 +248,14 @@ This applies to each `/edge/v0` and `/web/v0` route as it converges on `/api/v0`
 ## Authentication
 
 - Browser clients authenticate with the first-party cookie transport
-  (`adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`) plus CSRF verification
-  on unsafe methods.
+  (`adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`) plus CSRF
+  verification on unsafe methods.
 - Native and machine clients authenticate with `Authorization: Bearer` (RFC 6750). Bearer endpoints
   reject cookie-bearing requests and set `Cache-Control: no-store`.
 - A single endpoint accepts exactly one credential transport. Accepting either invites
   confused-deputy and CSRF-on-bearer defects.
-- `401` from a bearer endpoint includes `WWW-Authenticate: Bearer error="invalid_token"`
-  (RFC 6750 §3.1).
+- `401` from a bearer endpoint includes `WWW-Authenticate: Bearer error="invalid_token"` (RFC 6750
+  §3.1).
 - Per RFC 9700 (BCP 240): Authorization Code with PKCE for all clients. The Implicit grant and the
   Resource Owner Password Credentials grant must not be used or reintroduced.
 - Rate limiting exceeded returns `429` (RFC 6585 §4) with a `rate-limited` problem document and
@@ -268,16 +271,16 @@ This applies to each `/edge/v0` and `/web/v0` route as it converges on `/api/v0`
 These endpoints keep their specification-defined wire format and are **exempt** from the Problem
 Details rule. Converting them would break protocol conformance.
 
-| Endpoint group | Governing format |
-| --- | --- |
-| OAuth 2.0 authorization, token, revocation, introspection | `{"error", "error_description"}` — RFC 6749 §5.2, RFC 7009 |
-| OIDC endpoints including UserInfo and back-channel logout | RFC 6750 §3.1 bearer errors, OIDC Core |
-| WebAuthn / passkey ceremony endpoints | Shapes fixed by the WebAuthn specification and the browser API |
-| DBSC endpoints | Device Bound Session Credentials; see `docs/architecture/dbsc.md` |
-| MCP endpoints (`app/controllers/concerns/mcp_endpoint.rb`) | **JSON-RPC 2.0** — the response is produced by the MCP transport, not by application code |
-| `/health`, `/health/*` | Text probe contract (`text/plain`) in `docs/reference/health-endpoints.md`; edge-blocked per `adr/internal-health-endpoint-edge-isolation.md` |
-| `/api/v0/health.json`, `/api/v0/revision.json` | Machine health/revision contract in `docs/reference/health-endpoints.md` (`application/json`, `pass/warn/fail`, `406` on non-JSON `Accept`) — not the Problem Details error format |
-| `/.well-known/*` | The specification defining each resource |
+| Endpoint group                                             | Governing format                                                                                                                                                                   |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OAuth 2.0 authorization, token, revocation, introspection  | `{"error", "error_description"}` — RFC 6749 §5.2, RFC 7009                                                                                                                         |
+| OIDC endpoints including UserInfo and back-channel logout  | RFC 6750 §3.1 bearer errors, OIDC Core                                                                                                                                             |
+| WebAuthn / passkey ceremony endpoints                      | Shapes fixed by the WebAuthn specification and the browser API                                                                                                                     |
+| DBSC endpoints                                             | Device Bound Session Credentials; see `docs/architecture/dbsc.md`                                                                                                                  |
+| MCP endpoints (`app/controllers/concerns/mcp_endpoint.rb`) | **JSON-RPC 2.0** — the response is produced by the MCP transport, not by application code                                                                                          |
+| `/health`, `/health/*`                                     | Text probe contract (`text/plain`) in `docs/reference/health-endpoints.md`; edge-blocked per `adr/internal-health-endpoint-edge-isolation.md`                                      |
+| `/api/v0/health.json`, `/api/v0/revision.json`             | Machine health/revision contract in `docs/reference/health-endpoints.md` (`application/json`, `pass/warn/fail`, `406` on non-JSON `Accept`) — not the Problem Details error format |
+| `/.well-known/*`                                           | The specification defining each resource                                                                                                                                           |
 
 An exemption covers the response format only. Status codes, TLS, logging, rate limiting, and surface
 separation still apply.

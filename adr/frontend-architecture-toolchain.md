@@ -1,5 +1,9 @@
 # Frontend Architecture Decision: Rails + Vite Rails + Direct pnpm Tooling
 
+Status: Superseded (2026-09-07) by `adr/20260907-frontend-stack-importmap-vite-bun.md`, which
+restores Importmap/Propshaft for Rails layouts, keeps Vite Rails for Inertia layouts, and makes Bun
+the package manager. Retained as the record of the earlier Vite-only, pnpm-based decision.
+
 ## Overview
 
 This document records the architecture for browser JavaScript and asset tooling.
@@ -12,8 +16,8 @@ This document records the architecture for browser JavaScript and asset tooling.
 - **CSS and static assets**: Vite-managed browser stylesheets are the default path for app UI CSS.
   Browser assets that participate in the Vite graph live under `src`; Rails continues to serve
   non-browser assets unless a feature explicitly needs a different delivery path.
-- **Development toolchain**: pnpm manages dependencies and scripts. Vite, Vitest, Oxlint, Oxfmt,
-  and TypeScript run directly without a unified CLI wrapper.
+- **Development toolchain**: pnpm manages dependencies and scripts. Vite, Vitest, Oxlint, Oxfmt, and
+  TypeScript run directly without a unified CLI wrapper.
 - **Importmap**: The application no longer uses `javascript_importmap_tags`, `config/importmap.rb`,
   or `bin/importmap` for browser entrypoint management. `importmap-rails` may still appear in
   `Gemfile.lock` as a transitive dependency of mounted engines such as `mission_control-jobs`.

@@ -1,4 +1,7 @@
-// Secret-credential sign-in for operators.
+// The secret-credential stage of normal operator sign-in, for a lost passkey.
+//
+// No identifier field: Entra ID already selected the operator and the server verifies the secret
+// against that operator alone, so there is nothing here for a browser to substitute.
 //
 // A document POST, as the ERB form was: the server answers with a redirect on success and with this
 // page re-rendered at 422 on failure, and the visible Turnstile token has to travel in the form
@@ -23,14 +26,6 @@ export type OrgSecretSignInPageProps = {
   hidden_fields: { pt: string | null; ri: string };
   errors_title: string;
   errors: string[];
-  identifier: {
-    name: string;
-    label: string;
-    placeholder: string;
-    min_length: number;
-    max_length: number;
-    pattern: string;
-  };
   secret: { name: string; label: string; placeholder: string };
   submit_label: string;
   back_link: { label: string; href: string };
@@ -43,7 +38,6 @@ export default function OrgSecretSignInPage({
   hidden_fields: hiddenFields,
   errors_title: errorsTitle,
   errors,
-  identifier,
   secret,
   submit_label: submitLabel,
   back_link: backLink,
@@ -85,20 +79,6 @@ export default function OrgSecretSignInPage({
           name="ri"
           value={hiddenFields.ri}
           readOnly
-        />
-
-        <TextField
-          label={identifier.label}
-          type="text"
-          name={identifier.name}
-          placeholder={identifier.placeholder}
-          autoComplete="username"
-          autoCapitalize="characters"
-          minLength={identifier.min_length}
-          maxLength={identifier.max_length}
-          pattern={identifier.pattern}
-          spellCheck="false"
-          isRequired
         />
 
         <TextField

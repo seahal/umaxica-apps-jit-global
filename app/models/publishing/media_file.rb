@@ -30,7 +30,7 @@ module Publishing
       values = shrine_file_column_values
       return if storage_key == values.fetch(:storage_key)
 
-      update_columns(values)
+      update(values)
     end
   end
 end

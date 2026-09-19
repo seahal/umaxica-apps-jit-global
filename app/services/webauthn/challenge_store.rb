@@ -25,7 +25,12 @@ module Webauthn
 
     class ChallengeBindingMismatchError < ChallengeError; end
 
-    PURPOSES = %w(registration authentication step_up).freeze
+    # Ceremony purposes are separate namespaces, not labels: a challenge issued
+    # for one is rejected by every other verifier (see #consume! /
+    # #consume_with_actor!). `emergency_sign_in` is the org Emergency Access
+    # ceremony and must never be interchangeable with normal `authentication`
+    # or with `step_up`.
+    PURPOSES = %w(registration authentication emergency_sign_in step_up).freeze
 
     Consumed = Data.define(:challenge, :actor_global_key)
 

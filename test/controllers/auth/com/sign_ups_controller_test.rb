@@ -12,18 +12,16 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   test "direct entry without a login challenge lists the registration methods" do
     get auth_com_sign_up_url(ct: "dr", ri: "jp"), headers: default_headers
 
-    assert_response :success
+    assert_response :see_other
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_equal "auth/com/sign_ups/new", inertia_component
-
-    hrefs = inertia_props.fetch("methods").map { |method| method.fetch("href") }
-
-    assert_includes hrefs, new_auth_com_sign_up_email_path(ct: "dr", ri: "jp")
-    assert_includes hrefs, new_auth_com_sign_up_telephone_path(ct: "dr", ri: "jp")
+    assert_equal "/", URI.parse(response.location).path
   end
 
   test "local ceremony shows email and telephone registration methods" do
-    get auth_com_sign_up_url(ct: "dr", ri: "jp", login_challenge: login_challenge), headers: default_headers
+    get auth_com_sign_up_url(ct: "dr", ri: "jp", admission: login_challenge), headers: default_headers
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal "auth/com/sign_ups/new", inertia_component
@@ -38,7 +36,10 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "does not show social login buttons when flag is off" do
-    get auth_com_sign_up_url(ct: "dr", ri: "jp", login_challenge: login_challenge), headers: default_headers
+    get auth_com_sign_up_url(ct: "dr", ri: "jp", admission: login_challenge), headers: default_headers
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal "auth/com/sign_ups/new", inertia_component
@@ -47,9 +48,12 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   test "does not show temporary google signup button when legacy flag is on" do
     with_env("COM_#{"GOOGLE"}_SIGNUP_ENABLED" => "true") do
-      get auth_com_sign_up_url(ct: "dr", ri: "jp", login_challenge: login_challenge),
+      get auth_com_sign_up_url(ct: "dr", ri: "jp", admission: login_challenge),
           headers: default_headers
     end
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal "auth/com/sign_ups/new", inertia_component
@@ -70,7 +74,10 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "sign up entry renders without an active registration" do
-    get auth_com_sign_up_url(ri: "jp", login_challenge: login_challenge), headers: default_headers
+    get auth_com_sign_up_url(ri: "jp", admission: login_challenge), headers: default_headers
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
   end
@@ -78,11 +85,12 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def login_challenge
-    OidcAuthorizationTransactionCoordinator.issue!(
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "com",
       intent: "sign_up",
       params: authorize_params,
-    ).transaction.login_challenge
+    ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
   end
 
   def authorize_params

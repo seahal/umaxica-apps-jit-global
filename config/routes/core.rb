@@ -38,11 +38,13 @@ scope module: :core, as: :core do
       namespace :api do
         namespace :v0 do
           namespace :preferences do
-            get :cookie, to: "/core/app/web/v0/cookies#show"
-            patch :cookie, to: "/core/app/web/v0/cookies#update"
-            get :theme, to: "/core/app/web/v0/themes#show"
-            patch :theme, to: "/core/app/web/v0/themes#update"
-            resource :dbsc, only: :create, controller: "/core/app/edge/v0/dbsc"
+            # These preference resources intentionally expose GET + PATCH only. Rails' `resource
+            # ... only: :update` also exposes PUT, which is outside the existing OpenAPI contract.
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+            resource :dbsc, only: :create
           end
 
           # Machine-readable health and revision. The literal ".json" is part of the path, not a
@@ -62,22 +64,23 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP OIDC entrypoints.
+      # RP back-channel receiver. Canonical browser start is /sign/in + /sign/in/callback.
       namespace :oidc do
-        resource :authorization, only: :show
-        resource :callback, only: :show
-
-        # RP back-channel receiver.
         namespace :backchannel do
           resource :logout, only: :create
         end
       end
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
+      scope path: "sign", as: :sign do
+        get "in", to: "oidc/authorizations#show", as: :in
+        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+      end
+
       namespace :sign do
-        resource :termination, only: %i(new edit create), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
       end
     end
   end
@@ -117,11 +120,12 @@ scope module: :core, as: :core do
       namespace :api do
         namespace :v0 do
           namespace :preferences do
-            get :cookie, to: "/core/com/web/v0/cookies#show"
-            patch :cookie, to: "/core/com/web/v0/cookies#update"
-            get :theme, to: "/core/com/web/v0/themes#show"
-            patch :theme, to: "/core/com/web/v0/themes#update"
-            resource :dbsc, only: :create, controller: "/core/com/edge/v0/dbsc"
+            # Keep the established GET + PATCH contract; resource update would add an unapproved PUT.
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+            resource :dbsc, only: :create
           end
 
           # Machine-readable health and revision. The literal ".json" is part of the path, not a
@@ -141,22 +145,23 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP OIDC entrypoints.
+      # RP back-channel receiver. Canonical browser start is /sign/in + /sign/in/callback.
       namespace :oidc do
-        resource :callback, only: :show
-        resource :authorization, only: :show
-
-        # RP back-channel receiver.
         namespace :backchannel do
           resource :logout, only: :create
         end
       end
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
+      scope path: "sign", as: :sign do
+        get "in", to: "oidc/authorizations#show", as: :in
+        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+      end
+
       namespace :sign do
-        resource :termination, only: %i(new edit create), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
       end
     end
   end
@@ -196,11 +201,12 @@ scope module: :core, as: :core do
       namespace :api do
         namespace :v0 do
           namespace :preferences do
-            get :cookie, to: "/core/org/web/v0/cookies#show"
-            patch :cookie, to: "/core/org/web/v0/cookies#update"
-            get :theme, to: "/core/org/web/v0/themes#show"
-            patch :theme, to: "/core/org/web/v0/themes#update"
-            resource :dbsc, only: :create, controller: "/core/org/edge/v0/dbsc"
+            # Keep the established GET + PATCH contract; resource update would add an unapproved PUT.
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+            resource :dbsc, only: :create
           end
 
           # Machine-readable health and revision. The literal ".json" is part of the path, not a
@@ -220,22 +226,23 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP OIDC entrypoints.
+      # RP back-channel receiver. Canonical browser start is /sign/in + /sign/in/callback.
       namespace :oidc do
-        resource :callback, only: :show
-        resource :authorization, only: :show
-
-        # RP back-channel receiver.
         namespace :backchannel do
           resource :logout, only: :create
         end
       end
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
+      scope path: "sign", as: :sign do
+        get "in", to: "oidc/authorizations#show", as: :in
+        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+      end
+
       namespace :sign do
-        resource :termination, only: %i(new edit create), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+        # Canonical first-party RP start + callback (AuthBoundaryAuthorityMap).
+
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
       end
     end
   end
@@ -273,7 +280,8 @@ scope module: :core, as: :core do
   end
 
   # Developer utility host.
-  constraints host: [ENV["PRIVATE_CORE_DEVELOPER_URL"] || ENV["CORE_DEVELOPER_URL"], "core.dev.localhost"].compact do
+  constraints host: [ENV["PUBLIC_CORE_DEVELOPER_URL"], ENV["PRIVATE_CORE_DEVELOPER_URL"] || ENV["CORE_DEVELOPER_URL"],
+                     "core.dev.localhost",].compact do
     scope module: :dev, as: :developer do
       # Thin landing endpoint.
       root to: "roots#index"

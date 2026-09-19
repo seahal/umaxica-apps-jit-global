@@ -9,7 +9,7 @@ class CoreRpBridgeTest < ActiveSupport::TestCase
     bridge = CoreAppClientBridge.create!(client:)
 
     assert_predicate bridge.public_id, :present?
-    assert_equal "core-next-rp", bridge.rp_client_id
+    assert_equal "core-app", bridge.rp_client_id
     assert_equal "umaxica-core-app", bridge.audience
     assert_equal "jpx.umaxica.app", bridge.host
     assert_equal client, bridge.actor
@@ -24,7 +24,7 @@ class CoreRpBridgeTest < ActiveSupport::TestCase
     bridge = CoreComVisitorBridge.create!(visitor:)
 
     assert_predicate bridge.public_id, :present?
-    assert_equal "core-next-rp", bridge.rp_client_id
+    assert_equal "core-com", bridge.rp_client_id
     assert_equal "umaxica-core-com", bridge.audience
     assert_equal "jpx.umaxica.com", bridge.host
     assert_equal visitor, bridge.actor
@@ -39,7 +39,7 @@ class CoreRpBridgeTest < ActiveSupport::TestCase
     bridge = CoreOrgOperatorBridge.create!(operator:)
 
     assert_predicate bridge.public_id, :present?
-    assert_equal "core-next-rp", bridge.rp_client_id
+    assert_equal "core-org", bridge.rp_client_id
     assert_equal "umaxica-core-org", bridge.audience
     assert_equal "jpx.umaxica.org", bridge.host
     assert_equal operator, bridge.actor

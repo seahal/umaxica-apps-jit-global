@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class OidcRefreshTokenIssuer
+  Resolved = Data.define(:usage, :verifier)
+
   Result =
     Data.define(:success, :token, :refresh_token, :previous_token, :reason) do
       def success? = success
@@ -18,51 +20,79 @@ class OidcRefreshTokenIssuer
       end
     end
 
-  def self.call(refresh_token:)
-    new(refresh_token).call
+  def self.call(refresh_token:, client_id: nil, resource_type: nil)
+    new(refresh_token, client_id: client_id, resource_type: resource_type).call
   end
 
-  def initialize(refresh_token)
+  def self.resolve(refresh_token:, resource_type: nil)
+    new(refresh_token, resource_type: resource_type).resolve
+  end
+
+  public
+
+  def initialize(refresh_token, client_id: nil, resource_type: nil)
     @refresh_token = refresh_token
+    @client_id = client_id
+    @resource_type = resource_type.to_s
+  end
+
+  def resolve
+    parsed = parse_refresh_token
+    return unless parsed
+
+    public_id, verifier = parsed
+    usage = find_usage(public_id)
+    return unless usage
+
+    Resolved.new(usage: usage, verifier: verifier)
   end
 
   def call
-    parsed = parse_refresh_token
-    return failure(:invalid_format) unless parsed
+    resolved = resolve
+    return failure(:invalid_format) unless resolved
 
-    public_id, verifier = parsed
+    usage = resolved.usage
+    verifier = resolved.verifier
 
     # The lookup must run on the writing role. On a replica, replication lag can
     # return a pre-rotation row and re-accept a refresh token that was already
     # rotated away. docs/security/refresh-token-rotation.md requires the writing
     # role for exactly this reason.
-    usage = find_usage(public_id)
-    return failure(:token_not_found) unless usage
-
     result = nil
     owner = connection_owner_for(usage.class)
     owner.connected_to(role: :writing) do
-      usage.with_lock do
-        # Check replay before activity: an attacker replaying a stolen token
-        # after the legitimate client already rotated it must be detected even
-        # once the usage has been revoked or has expired.
-        if usage.previous_refresh_token_digest_matches?(verifier)
-          handle_refresh_token_reuse(usage)
-          return failure(:refresh_token_reuse_detected, token: usage)
+      parent = usage.parent_token
+      return failure(:inactive_token, token: usage) unless parent
+
+      # Browser-session revocation and first authorization-code exchange both
+      # lock the parent before the RP child. Keep refresh rotation in the same
+      # order so a revoke that has acquired the parent cannot be overtaken by a
+      # child-only refresh lock.
+      parent.with_lock do
+        usage.with_lock do
+          return failure(:client_mismatch, token: usage) if @client_id.present? && usage.oidc_client_id != @client_id
+
+          # Check replay before activity: an attacker replaying a stolen token
+          # after the legitimate client already rotated it must be detected even
+          # once the usage has been revoked or has expired.
+          if usage.previous_refresh_token_digest_matches?(verifier)
+            handle_refresh_token_reuse(usage)
+            return failure(:refresh_token_reuse_detected, token: usage)
+          end
+
+          return failure(:inactive_token, token: usage) unless usage.active?
+          return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
+
+          previous_token = usage.dup
+          refresh_token = usage.rotate_refresh_token!
+          touch_oidc_connection!(usage)
+
+          result = success(
+            token: usage,
+            refresh_token: refresh_token,
+            previous_token: previous_token,
+          )
         end
-
-        return failure(:inactive_token, token: usage) unless usage.active?
-        return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
-
-        previous_token = usage.dup
-        refresh_token = usage.rotate_refresh_token!
-        touch_oidc_connection!(usage)
-
-        result = success(
-          token: usage,
-          refresh_token: refresh_token,
-          previous_token: previous_token,
-        )
       end
     end
 
@@ -71,20 +101,28 @@ class OidcRefreshTokenIssuer
 
   private
 
+  attr_reader :client_id, :resource_type
+
   def parse_refresh_token
     ClientToken.parse_refresh_token(@refresh_token)
   end
 
-  # Each usage class lives on its own surface ticket database, so the writing
-  # role has to be selected per connection class rather than once around the
-  # whole lookup.
+  # Each usage class lives on its own surface ticket database. The controller's
+  # fixed endpoint realm must therefore select exactly one writing connection
+  # and usage class before lookup; scanning all three surfaces would allow a
+  # refresh request to cross the endpoint boundary before its realm check.
   def find_usage(public_id)
-    AppTicketRecord.connected_to(role: :writing) do
-      ClientTokenUsage.find_by(public_id: public_id)
-    end || OrgTicketRecord.connected_to(role: :writing) do
-      OperatorTokenUsage.find_by(public_id: public_id)
-    end || ComTicketRecord.connected_to(role: :writing) do
-      VisitorTokenUsage.find_by(public_id: public_id)
+    context, usage_class = usage_context_and_class
+    return unless context && usage_class
+
+    context.connected_to(role: :writing) { usage_class.find_by(public_id: public_id) }
+  end
+
+  def usage_context_and_class
+    case resource_type
+    when "client" then [AppTicketRecord, ClientRpSession]
+    when "operator" then [OrgTicketRecord, OperatorRpSession]
+    when "visitor" then [ComTicketRecord, VisitorRpSession]
     end
   end
 
@@ -107,10 +145,12 @@ class OidcRefreshTokenIssuer
       )
     end
 
+    RefreshTokenReuseActivityRecorder.call(token: parent, result: "rp_session_revoked") if parent
+
     Rails.logger.info(
       JitLogEvent.format(
         "authentication.oidc_refresh.reuse_detected",
-        token_usage_id: usage.public_id,
+        rp_session_id: usage.public_id,
         oidc_client_id: usage.oidc_client_id,
         actor_type: parent&.class&.name,
         actor_id: actor_id,

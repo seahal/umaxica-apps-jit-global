@@ -31,7 +31,7 @@ is an intentional, reviewed security decision before touching the test.
 Skipping `set_region` on a controller that renders regional HTML removes `ri` from every URL it
 generates, because `default_url_options` propagates the region from the request params only. Treat
 an allowlist edit as a reviewed boundary change. See
-`plans/ri-preference-routing-regression-audit.md`.
+`plans/analysis/ri-preference-routing-regression-audit.md`.
 
 ## Bare controller guard
 

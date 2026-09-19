@@ -103,6 +103,8 @@ module Security
                 /\bclient_id:\s*(?:(?:current_client|principal|actor|user|client|@user|@client)\.id|legacy_compatibility_client_id)\b/,
                 # rubocop:enable Layout/LineLength
               )
+              # Authority ownership lookups filter by the owning principal; they are not avatars writes.
+              next if line.match?(/\b[A-Z]\w*Ownership\.where\(/)
               next if [AVATAR_PROVISIONING_CREATE_PATH,
                        AVATAR_BACKFILL_LEGACY_CLIENT_BINDINGS_PATH,].include?(relative_path)
 

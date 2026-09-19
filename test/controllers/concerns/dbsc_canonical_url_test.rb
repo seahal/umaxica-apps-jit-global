@@ -67,9 +67,9 @@ class DbscCanonicalUrlTest < ActiveSupport::TestCase
 
   test "core preference dbsc controllers use the canonical API audience" do
     {
-      Core::App::Edge::V0::DbscController => :core_app_api_v0_preferences_dbsc_url,
-      Core::Com::Edge::V0::DbscController => :core_com_api_v0_preferences_dbsc_url,
-      Core::Org::Edge::V0::DbscController => :core_org_api_v0_preferences_dbsc_url,
+      Core::App::Api::V0::Preferences::DbscController => :core_app_api_v0_preferences_dbsc_url,
+      Core::Com::Api::V0::Preferences::DbscController => :core_com_api_v0_preferences_dbsc_url,
+      Core::Org::Api::V0::Preferences::DbscController => :core_org_api_v0_preferences_dbsc_url,
     }.each do |controller_class, helper|
       controller = controller_class.new
       controller.define_singleton_method(helper) do

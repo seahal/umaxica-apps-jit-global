@@ -89,6 +89,6 @@ queries can leverage the Rails API.
 
 ## References
 
-- `plans/active/gh672-treeable-cte-refactor.md`
+- GH issue #672
 - `app/models/concerns/treeable.rb`
 - `test/support/treeable_shared_tests.rb`

@@ -9,6 +9,7 @@ module Auth
       module In
         module Challenge
           class PasskeysController < ::Auth::Org::ApplicationController
+            include ::AuthenticationModeSwitchGuard
             include ::PasskeyCeremonyContext
 
             include SessionLimitGate

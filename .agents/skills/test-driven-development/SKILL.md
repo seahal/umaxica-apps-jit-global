@@ -215,9 +215,9 @@ Write reproduction tests directly in the main loop. Delegation is worth its cost
 case below — see the subagent budget in
 `.agents/harnesses/rules/generic/model-behavior-calibration.mdc`.
 
-The one case that justifies it: a bug whose fix you have already worked out in enough detail that you
-cannot write the reproduction test without unconsciously shaping it around that fix. The value is
-**information isolation**, not parallelism.
+The one case that justifies it: a bug whose fix you have already worked out in enough detail that
+you cannot write the reproduction test without unconsciously shaping it around that fix. The value
+is **information isolation**, not parallelism.
 
 ```
 Main agent: "Spawn a subagent to write a test that reproduces this bug:

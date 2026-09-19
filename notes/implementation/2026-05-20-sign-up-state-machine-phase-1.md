@@ -4,8 +4,8 @@ Date: 2026-05-20
 
 ## Context
 
-Phase 1 of `plans/active/sign-up-state-machine-implementation-plan.md` prepares the app/com sign-up
-ticket carrier before wiring controllers, policies, or the state machine service.
+Phase 1 of GH issue #834 prepares the app/com sign-up ticket carrier before wiring controllers,
+policies, or the state machine service.
 
 ## Decision
 

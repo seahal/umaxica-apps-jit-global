@@ -6,6 +6,7 @@ module Auth
     module Sign
       module In
         class SecretsController < ::Auth::App::ApplicationController
+          include ::AuthenticationModeSwitchGuard
           include ::SurfaceInertiaPage
 
           include ::TurnstilePageProps

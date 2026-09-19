@@ -46,8 +46,11 @@ module CommonOtp
   # @param pass_code [String] The submitted pass code to verify
   # @return [Boolean] true if codes match, false otherwise
   def verify_hotp_code(secret_credential:, counter:, pass_code:)
+    submitted_code = pass_code.to_s
+    return false unless submitted_code.match?(/\A\d{6}\z/)
+
     hotp = ROTP::HOTP.new(secret_credential)
-    hotp.verify(pass_code, counter) == counter
+    hotp.verify(submitted_code, counter) == counter
   end
 
   # ============================================================
@@ -64,14 +67,18 @@ module CommonOtp
   #   otp_code = generate_otp_for(@user_email)
   #   # => "123456"
   def generate_otp_for(record, expiration_minutes: OTP_EXPIRATION_MINUTES)
-    otp_private_key = ROTP::Base32.random_base32
-    otp_count_number = generate_otp_counter
-    hotp = ROTP::HOTP.new(otp_private_key)
-    otp_code = hotp.at(otp_count_number)
-    expires_at = expiration_minutes.minutes.from_now.to_i
+    # Generate and persist under one row lock so a concurrent issuer cannot
+    # overwrite the credential after its code has been prepared for delivery.
+    record.with_lock do
+      otp_private_key = ROTP::Base32.random_base32
+      otp_count_number = generate_otp_counter
+      hotp = ROTP::HOTP.new(otp_private_key)
+      otp_code = hotp.at(otp_count_number)
+      expires_at = expiration_minutes.minutes.from_now.to_i
 
-    record.store_otp(otp_private_key, otp_count_number, expires_at)
-    otp_code.to_s
+      record.store_otp(otp_private_key, otp_count_number, expires_at)
+      otp_code.to_s
+    end
   end
 
   # Generates OTP and sets attributes directly on the record (without storing)
@@ -126,6 +133,29 @@ module CommonOtp
     end
   end
 
+  private
+
+  # Verification and consumption must share one row-lock boundary. A caller that only verifies
+  # first and clears the OTP later can accept the same correct code in two concurrent requests.
+  # Failed attempts are incremented under that same boundary so a successful peer cannot be
+  # followed by a stale invalid request that mutates the already-consumed record.
+  def verify_otp_code_and_consume(record, submitted_code)
+    result = nil
+    record.with_lock do
+      result = verify_otp_code(record, submitted_code)
+      if result[:success]
+        if !block_given? || yield(record)
+          clear_otp(record)
+        else
+          result = { success: false, error: :consumption_rejected }
+        end
+      else
+        increment_otp_attempts!(record)
+      end
+    end
+    result
+  end
+
   # ============================================================
   # Timing attack protection
   # ============================================================
@@ -137,7 +167,7 @@ module CommonOtp
   # @return [Hash] Always returns failure result
   def verify_dummy_otp(submitted_code)
     # Perform timing attack protection with dummy comparison
-    ActiveSupport::SecurityUtils.secure_compare("000000", submitted_code.to_s.ljust(6, "0"))
+    secure_compare_otp("000000", submitted_code)
     { success: false, error: "Invalid OTP code" }
   end
 
@@ -201,6 +231,10 @@ module CommonOtp
   # @param submitted [String] The submitted OTP code
   # @return [Boolean] true if codes match, false otherwise
   def secure_compare_otp(expected, submitted)
-    ActiveSupport::SecurityUtils.secure_compare(expected.to_s, submitted.to_s)
+    expected_value = expected.to_s
+    submitted_value = submitted.to_s
+    return false unless submitted_value.match?(/\A\d{#{expected_value.length}}\z/)
+
+    ActiveSupport::SecurityUtils.secure_compare(expected_value, submitted_value)
   end
 end

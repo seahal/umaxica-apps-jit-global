@@ -72,6 +72,6 @@ class OrgOperatorLifecycleRequestCreate
     org_id = attributes[:organization_id].to_i
     return false if org_id.zero?
 
-    Organization.find_by(id: org_id)&.operator_id == actor.id
+    OperatorOrganization.find_by(id: org_id)&.operator_id == actor.id
   end
 end

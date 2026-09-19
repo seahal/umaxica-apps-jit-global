@@ -58,7 +58,7 @@ class Auth::App::Settings::ActivityLogPresenter
       .recent_activity_first
   end
 
-  def occurred_at(activity) = activity.occurred_at || activity.created_at
+  def occurred_at(activity) = activity.occurred_at
 
   def event_label(activity)
     key = EVENT_LABELS[activity.event_id]

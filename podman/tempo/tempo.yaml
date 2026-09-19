@@ -4,18 +4,24 @@ server:
 
 distributor:
   receivers:
-    jaeger:
-      protocols:
-        thrift_http:
-        thrift_binary:
-        thrift_compact:
+    # OTLP only. Alloy is the single ingestion gateway
+    # (adr/traces-and-metrics-routing-via-alloy.md), and it exports over
+    # OTLP/gRPC; the former Jaeger and Zipkin receivers were ingestion paths
+    # that bypassed the agent's redaction stage and that nothing sent to.
+    #
+    # The endpoints are explicit because the embedded OpenTelemetry Collector
+    # receiver defaults to `localhost:4317` / `localhost:4318`, which binds the
+    # container's loopback only: Alloy then gets `connection refused` dialling
+    # `tempo:4317` and every trace is dropped after its retry budget (observed
+    # 2026-09-18, before this line existed). 0.0.0.0 here is the container-side
+    # listener; Tempo publishes no host port, so this is not host exposure
+    # (docs/operations/development-host-port-exposure.md).
     otlp:
       protocols:
         grpc:
+          endpoint: 0.0.0.0:4317
         http:
-    zipkin:
-      # Bind explicit host:port so Tempo listens correctly; default path /api/v2/spans stays intact.
-      endpoint: 0.0.0.0:9411
+          endpoint: 0.0.0.0:4318
 
 ingester:
   lifecycler:

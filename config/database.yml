@@ -1,5 +1,15 @@
 <%
-  test_host = ENV.fetch("POSTGRESQL_TEST_HOST", ENV.fetch("POSTGRESQL_HOST", "localhost"))
+  # Test databases are a separate safety boundary. Reusing the development host when the
+  # test host is absent can point a destructive test preparation task at the wrong server.
+  # `db:prepare` in development also prepares the test database, so this file is
+  # rendered for `test` from a development process. Resolving to nil there left
+  # every test host blank and sent the connection to a local Unix socket, so read
+  # the variable in every environment; require it only when test itself boots.
+  # The boundary that matters is preserved: this never falls back to a
+  # development host.
+  test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : ENV["POSTGRESQL_TEST_HOST"]
+  # Rendered in every environment; require the test port only when test boots.
+  test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : ENV["POSTGRESQL_PORT"]
 
   # Every `development:` host is required configuration: a missing name used to
   # fall back to a shared default, which silently pointed a database at the
@@ -39,6 +49,7 @@ default: &default
 test_default: &test_default
   !!merge <<: *default
   pool: 2
+  port: <%= test_port %>
   timeout: 20000
   prepared_statements: false
   advisory_locks: true
@@ -287,14 +298,14 @@ development:
     database: development_avatar_db
     host: <%= development_host.call("POSTGRESQL_AVATAR_SUB") %>
     migrations_paths: db/avatars_migrate
-  # Feature flags (Flipper). Deliberately has no replica: a flag is read immediately
+  # Rails default database. Durable, low-frequency, application-wide configuration
+  # (currently Flipper). Deliberately has no replica: a flag is read immediately
   # after it is toggled, and replication lag would surface as a flip that "did not apply".
-  platform:
+  primary:
     !!merge <<: *development_default
-    database: development_platform_db
-    host: <%= development_host.call("POSTGRESQL_PLATFORM_PUB") %>
-    migrations_paths: db/platform_migrate
-    schema_dump: platform_structure.sql
+    database: development_primary_db
+    host: <%= development_host.call("POSTGRESQL_PRIMARY_PUB") %>
+    migrations_paths: db/migrate
 # Warning: The database defined as "test" will be erased and
 # re-generated from your development database when you run "rake".
 # Do not set this db to the same as development or production.
@@ -488,6 +499,9 @@ test:
     schema_dump: com_signal_structure.sql
   queue:
     !!merge <<: *test_default
+    # A manually started isolated Solid Queue worker needs one execution
+    # connection plus its polling and heartbeat connections.
+    pool: 5
     database: test_queue_db
     host: <%= test_host %>
     migrations_paths: db/queues_migrate
@@ -540,12 +554,11 @@ test:
     host: <%= test_host %>
     migrations_paths: db/avatars_migrate
     schema_dump: avatar_structure.sql
-  platform:
+  primary:
     !!merge <<: *test_default
-    database: test_platform_db
+    database: test_primary_db
     host: <%= test_host %>
-    migrations_paths: db/platform_migrate
-    schema_dump: platform_structure.sql
+    migrations_paths: db/migrate
 production:
   publishing:
     !!merge <<: *default
@@ -925,13 +938,12 @@ production:
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
     migrations_paths: db/avatars_migrate
-  # Feature flags (Flipper). No replica by design; see the development section.
-  platform:
+  # Rails default database. No replica by design; see the development section.
+  primary:
     !!merge <<: *default
-    database: production_platform_db
+    database: production_primary_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_PGHOST") %>
     username: <%= production_value.call("NEON_PGUSER") %>
     password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/platform_migrate
-    schema_dump: platform_structure.sql
+    migrations_paths: db/migrate

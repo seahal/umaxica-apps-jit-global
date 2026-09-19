@@ -10,12 +10,11 @@ vi.mock("@inertiajs/react", () => ({
 const { default: ActivityIndex } = await import("@/features/identity/ActivityIndex");
 
 const columns = {
-  occurred_at: "Occurred",
-  event: "Event",
-  ip_address: "IP",
+  occurred_at: "Occurred at",
+  activity: "Activity",
   device: "Device",
-  login_method: "Login method",
-  context: "Context",
+  source: "Source",
+  risk: "Risk",
 };
 
 describe("ActivityIndex", () => {
@@ -29,21 +28,23 @@ describe("ActivityIndex", () => {
         columns={columns}
         activities={[
           {
-            id: "evt-1",
             occurred_at: "1 January 2026",
-            event_label: "Signed in",
-            event_id: "12",
-            ip_address: "203.0.113.4",
-            device: "Firefox",
-            login_method: "passkey",
-            context: "{}",
+            activity: "Google sign-in",
+            device: "Firefox / Linux",
+            source: "Location unavailable",
+            risk: "Low",
+            risk_rank: 1,
           },
         ]}
       />,
     );
 
-    expect(markup).toContain("Signed in");
-    expect(markup).toContain("203.0.113.4");
+    expect(markup).toContain("Google sign-in");
+    expect(markup).toContain("Firefox / Linux");
+    expect(markup).toContain("Location unavailable");
+    expect(markup).toContain("Low");
+    expect(markup).not.toContain("203.0.113.4");
+    expect(markup).not.toContain("{}");
     expect(markup).not.toContain("No activity.");
   });
 

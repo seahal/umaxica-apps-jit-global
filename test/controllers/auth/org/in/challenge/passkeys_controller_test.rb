@@ -7,6 +7,8 @@ require "base64"
 require "ostruct"
 
 class Auth::Org::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::IntegrationTest
+  include OrgEntraFirstStageHelper
+
   fixtures :operators, :operator_statuses, :operator_passkey_statuses, :operator_passkeys, :operator_secret_credentials,
            :operator_secret_credential_kinds, :operator_secret_credential_statuses, :operator_email_statuses,
            :operator_token_binding_methods, :operator_token_kinds, :operator_token_statuses,
@@ -358,11 +360,14 @@ class Auth::Org::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
 
   private
 
+  # Normal org sign-in starts at Entra, so the secret ceremony that gates MFA
+  # here only runs once that stage has selected the operator.
   def establish_pending_mfa!
+    complete_org_entra_first_stage!(@staff)
+
     post(
       auth_org_sign_in_secret_url(ri: "jp"), params: {
         secret_credential_login_form: {
-          identifier: @staff.public_id.downcase,
           secret_credential_value: @raw_secret_credential,
         },
         "cf-turnstile-response": "test_token",

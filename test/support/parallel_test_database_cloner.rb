@@ -64,7 +64,7 @@ module ParallelTestDatabaseCloner
 
     ActiveRecord::Base.connection_handler.clear_all_connections!
 
-    admin_connection = connect(first_config, ENV.fetch("POSTGRESQL_DATABASE", "db"))
+    admin_connection = connect(first_config, ENV.fetch("POSTGRESQL_DATABASE"))
     admin_connection.exec("select pg_advisory_lock(hashtext('umaxica_parallel_test_database_cloner'))")
 
     stamped_sha = clone_sha_by_database(admin_connection)
@@ -155,7 +155,7 @@ module ParallelTestDatabaseCloner
     errors = Queue.new
     Array.new(thread_count) {
       Thread.new do # rubocop:disable ThreadSafety/NewThread
-        connection = connect(config, ENV.fetch("POSTGRESQL_DATABASE", "db"))
+        connection = connect(config, ENV.fetch("POSTGRESQL_DATABASE"))
         begin
           loop do
             group = queue.pop
@@ -224,7 +224,7 @@ module ParallelTestDatabaseCloner
     digest = Digest::SHA1.new
     digest << File.binread(schema_path)
     Array(config.migrations_paths).sort.each do |path|
-      Dir.glob(File.join(path, "*.rb")).sort.each do |migration_path|
+      Dir.glob(File.join(path, "*.rb")).each do |migration_path|
         digest << migration_path
         digest << File.binread(migration_path)
       end

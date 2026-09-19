@@ -36,7 +36,7 @@ class ActorSupportTest < ActiveSupport::TestCase
 
   # --- set_current_observability ---
 
-  test "set_current_observability is no-op when OpenTelemetry is not loaded" do
+  test "set_current_observability leaves ids empty without a valid span context" do
     @host.set_current_observability
 
     assert_nil Actor.trace_id
@@ -53,14 +53,20 @@ class ActorSupportTest < ActiveSupport::TestCase
     assert_equal :app, Actor.tld
   end
 
-  test "set_current_observability keeps trace correlation when performant cookie is not consented" do
+  test "set_current_observability uses the valid span context without analytics consent" do
     # Default preference has performant? == false
     assert_not Actor.preferences.cookie.performant?
 
+    @host.define_singleton_method(:request) do
+      Struct.new(:request_id).new("request-correlation-id")
+    end
+
     hex_trace_id = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+    hex_span_id = "f1e2d3c4b5a6f1e2"
     span_context = Minitest::Mock.new
     span_context.expect(:valid?, true)
     span_context.expect(:hex_trace_id, hex_trace_id)
+    span_context.expect(:hex_span_id, hex_span_id)
 
     span = Minitest::Mock.new
     span.expect(:context, span_context)
@@ -73,7 +79,11 @@ class ActorSupportTest < ActiveSupport::TestCase
     end
 
     assert_equal hex_trace_id, Actor.trace_id
-    assert_nil Actor.span_id, "span_id must not be set without performant consent"
+    assert_equal hex_span_id, Actor.span_id
+    assert_not_equal @host.request.request_id, Actor.trace_id
+
+    span_context.verify
+    span.verify
   end
 
   test "set_current_observability sets trace_id and span_id when performant is consented" do
@@ -108,7 +118,7 @@ class ActorSupportTest < ActiveSupport::TestCase
     span.verify
   end
 
-  test "set_current_observability skips when span context is invalid" do
+  test "set_current_observability does not substitute request id for an invalid span context" do
     cookie = Actor::Preference::Cookie.new(
       consented: true, functional: true, performant: true,
       targetable: false, consent_version: "1", consented_at: Time.current,
@@ -120,6 +130,10 @@ class ActorSupportTest < ActiveSupport::TestCase
 
     span = Minitest::Mock.new
     span.expect(:context, span_context)
+
+    @host.define_singleton_method(:request) do
+      Struct.new(:request_id).new("request-correlation-id")
+    end
 
     otel_trace = Module.new
     otel_trace.define_singleton_method(:current_span) { span }
@@ -237,9 +251,7 @@ class ActorSupportTest < ActiveSupport::TestCase
 
   test "resolved_current_session ignores existing Actor authentication cache" do
     Actor.install_context!(authn: Actor::Authentication.new(login_public_id: "existing-session"))
-    @host.define_singleton_method(:access_token_payload) do
-      { "sid" => "token-session" }
-    end
+    @host.instance_variable_set(:@current_access_token_payload, { "sid" => "token-session" })
 
     assert_equal "token-session", @host.resolved_current_session
   end
@@ -251,48 +263,25 @@ class ActorSupportTest < ActiveSupport::TestCase
   end
 
   test "resolved_current_session falls back to token sid" do
-    @host.define_singleton_method(:access_token_payload) do
-      { "sid" => "token-session" }
-    end
+    @host.instance_variable_set(:@current_access_token_payload, { "sid" => "token-session" })
 
     assert_equal "token-session", @host.resolved_current_session
   end
 
-  test "resolved_current_token prefers access_token_payload over existing authentication claims" do
+  test "resolved_current_token returns the verified access-token claims over existing authentication claims" do
     Actor.install_context!(authn: Actor::Authentication.new(access_claims: { "sid" => "existing-cache" }))
-    @host.define_singleton_method(:access_token_payload) do
-      { "sid" => "from-access", "prf" => { "lx" => "en" } }
-    end
+    @host.instance_variable_set(:@current_access_token_payload, { "sid" => "from-access", "authn_ctx" => "emergency" })
 
-    assert_equal({ "sid" => "from-access", "prf" => { "lx" => "en" } }, @host.resolved_current_token)
+    assert_equal({ "sid" => "from-access", "authn_ctx" => "emergency" }, @host.resolved_current_token)
   end
 
-  test "resolved_current_token falls back to load_access_token_payload" do
+  test "resolved_current_token never reads the preference token" do
     @host.define_singleton_method(:load_access_token_payload) do
-      { "sid" => "from-load" }
+      raise StandardError, "preference token must not be read"
     end
-
-    assert_equal({ "sid" => "from-load" }, @host.resolved_current_token)
-  end
-
-  test "resolved_current_token ignores non-hash payloads" do
-    @host.define_singleton_method(:access_token_payload) { "not-a-hash" }
+    @host.instance_variable_set(:@preference_payload, { "sid" => "from-preference" })
 
     assert_nil @host.resolved_current_token
-  end
-
-  test "resolved_current_token raises resolution errors" do
-    @host.define_singleton_method(:access_token_payload) do
-      raise StandardError, "boom"
-    end
-
-    error =
-      assert_raises(ActorSupport::ResolutionError) do
-        @host.resolved_current_token
-      end
-
-    assert_match "Actor access_token resolution failed", error.message
-    assert_equal "boom", error.cause.message
   end
 
   test "safe_current_resource raises resolution errors" do
@@ -388,7 +377,7 @@ class ActorSupportTest < ActiveSupport::TestCase
 
     preference = @host.resolved_current_preference(user)
 
-    assert_predicate preference, :null?
+    assert_not preference.null?
     assert_equal "ja", preference.language
     assert_equal "jp", preference.region
     assert_equal "Asia/Tokyo", preference.timezone
@@ -417,8 +406,8 @@ class ActorSupportTest < ActiveSupport::TestCase
     preference = @host.resolved_current_preference(nil)
 
     # prf is dead transport: with no Preference JWT payload, hydration falls back
-    # to the NULL preference defaults rather than reading the prf claim.
-    assert_predicate preference, :null?
+    # to the default preference values rather than reading the prf claim.
+    assert_not preference.null?
     assert_equal "ja", preference.language
     assert_equal "jp", preference.region
     assert_equal "Asia/Tokyo", preference.timezone
@@ -455,10 +444,10 @@ class ActorSupportTest < ActiveSupport::TestCase
     assert_equal "dr", preference.theme
   end
 
-  test "resolved_current_preference falls back to null preference" do
+  test "resolved_current_preference falls back to default preference values" do
     preference = @host.resolved_current_preference(nil)
 
-    assert_predicate preference, :null?
+    assert_not preference.null?
     assert_equal "ja", preference.language
     assert_equal "jp", preference.region
     assert_equal "Asia/Tokyo", preference.timezone

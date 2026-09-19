@@ -8,8 +8,13 @@
 > imply sign-side authority. Do not use this document to reintroduce sign-side sessions, refresh,
 > preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
 
-This document describes the stable withdrawal and membership behavior for the sign configuration
-surfaces.
+This document describes the current Client/Visitor withdrawal and membership behavior for the sign
+configuration surfaces. It is not the lifecycle contract for Persona or Organization resources. The
+adopted resource lifecycle, once enabled, is documented separately in
+`docs/architecture/persona-organization-authority.md`; the recovery behavior below must not be
+copied to those resources. Until the required authority migration and lifecycle integration are
+complete, this document records the existing principal withdrawal contract and its explicit recovery
+window.
 
 ## Surface Policy
 
@@ -63,8 +68,10 @@ The user-visible sequence is distinct from the state-machine status names.
 - The withdrawal is finalized by setting `discarded_at` to the logical deletion time.
 - `purged_at` is set to `discarded_at + 31.days`.
 - The cycle transitions to `DISCARDED`.
-- Other sessions are revoked; the current verified session may continue only for the allowed
-  withdrawal-continuation surface.
+- Every session of the actor is revoked, including the requesting session, and the auth cookies are
+  cleared.
+- Withdrawal status, recovery, and early termination continue through the withdrawal ceremony, not
+  through a session.
 - The account row is not physically deleted by self-service withdrawal.
 
 3''. Recovery

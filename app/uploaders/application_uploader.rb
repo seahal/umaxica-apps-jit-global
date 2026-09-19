@@ -62,7 +62,10 @@ class ApplicationUploader < Shrine
   add_metadata :sha256 do |io, **|
     digest = Digest::SHA256.new
     io.binmode if io.respond_to?(:binmode)
-    while (chunk = io.read(16 * 1024))
+    loop do
+      chunk = io.read(16 * 1024)
+      break unless chunk
+
       digest.update(chunk)
     end
     io.rewind if io.respond_to?(:rewind)

@@ -26,7 +26,7 @@ class Side::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal(
       [
         ["Settings", side_org_settings_path(ri: "jp")],
-        ["Sign up", side_org_oidc_authorization_path(ri: "jp")],
+        ["Sign up", side_org_sign_in_path(ri: "jp")],
       ],
       inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
     )

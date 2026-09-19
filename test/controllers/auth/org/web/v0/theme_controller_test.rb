@@ -42,6 +42,10 @@ class Auth::Org::Web::V0::ThemeControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "li", response.parsed_body["theme"]
+    set_cookie = response.headers["Set-Cookie"].to_s
+
+    assert_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=li"
+    assert_not_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=sy"
   end
 
   test "PATCH update sets theme cookie and returns updated theme" do

@@ -7,6 +7,7 @@ module Base
       include ::AuthenticationLogoutable
       include ::SignOutNotice
       include ::SignOidcLogout
+      include ::BaseSignOutDestination
       include ::SurfaceInertiaPage
 
       AUTHENTICATION_MODE = :open
@@ -16,7 +17,7 @@ module Base
       layout -> { @render_surface_erb_layout ? "base/org/application" : "base/org/inertia" }
 
       declare_authentication_mode! :open
-      after_action :sign_out_notice_cache_headers!, only: %i(edit complete)
+      after_action :sign_out_notice_cache_headers!, only: %i(edit create)
 
       def new
         redirect_to(sign_out_edit_path, status: :see_other)
@@ -27,18 +28,7 @@ module Base
       end
 
       def create
-        if current_resource.blank? && current_session_public_id.blank?
-          return render_oidc_logout_completion
-        end
-
-        prepare_sign_out_completion_notice!
-        logout_current_session!(reason: "user_logout")
-        issue_sign_out_notice!
-        redirect_to(sign_out_complete_path, status: :see_other)
-      end
-
-      def complete
-        render_oidc_logout_completion
+        finish_local_sign_out!
       end
 
       private
@@ -46,17 +36,6 @@ module Base
       def reject_oidc_logout_challenge!(reason)
         @render_surface_erb_layout = true
         super
-      end
-
-      # The sign-out confirmation and completion screens left ERB for Inertia on this surface only,
-      # so the shared rendering hooks are overridden here rather than in the concern the other
-      # surfaces still render templates through.
-      def render_oidc_logout_completion
-        @sign_out_notice = consume_sign_out_notice
-        render inertia: "base/org/sign_outs/complete",
-               props: sign_out_complete_page_props,
-               status: :ok,
-               clear_history: true
       end
 
       def sign_out_edit_page_props
@@ -78,14 +57,6 @@ module Base
           submit: t("sign.shared.sign_out.button"),
           logout_challenge: params[:logout_challenge].presence,
           confirm_description: t("sign.shared.sign_out.confirm_description"),
-        }
-      end
-
-      def sign_out_complete_page_props
-        {
-          title: t("sign.shared.sign_out.completed_title"),
-          description: sign_out_completed_description,
-          home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path },
         }
       end
 

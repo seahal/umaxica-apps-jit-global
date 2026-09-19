@@ -37,6 +37,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       @user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: @token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     @headers = {
       "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
@@ -79,6 +80,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
       resource_type: "client",
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
     @headers.merge(
@@ -121,6 +123,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     headers = {
       "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
@@ -152,6 +155,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     headers = {
       "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
@@ -572,6 +576,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     headers = {
       "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
@@ -601,6 +606,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       user,
       host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
       session_public_id: token.public_id,
+      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
     )
     headers = {
       "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),

@@ -13,7 +13,11 @@ module Base
 
       def show
         authorize!(current_operator, to: :show?)
-        render inertia: true, props: { title: "Avatar", body: "avatar" }
+        render inertia: true, props: {
+          title: "Avatar",
+          body: "avatar",
+          action_link: { label: t("actions.edit"), href: edit_base_org_avatar_path(ri: params[:ri]) },
+        }
       end
 
       def edit

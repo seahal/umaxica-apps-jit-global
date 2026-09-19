@@ -4,8 +4,7 @@
 
 - Original request: Defer Acme/Core bridge model naming refactor to `plans/`, then repair Core RP
   provisioning and share the RP callback concern across Acme and Core.
-- Related docs/plans: `docs/architecture/database-boundaries.md`,
-  `plans/backlog/acme-core-rp-bridge-model-naming-refactor.md`.
+- Related docs/plans: `docs/architecture/database-boundaries.md`, `adr/acme-rp-boundary-naming.md`.
 - Implementation date: 2026-05-26.
 
 ## Decisions Made During Implementation

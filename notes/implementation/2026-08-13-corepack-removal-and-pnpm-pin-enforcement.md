@@ -85,7 +85,5 @@
 
 - `compose.yaml` described `umaxica-home-cache` as "pnpm / corepack / Vite / YJIT scratch";
   corrected.
-- `plans/chatgpt-pro-compose-scalable-mochi.md` line 84 carries the same stale volume description.
-  Left as-is: it is a historical plan, not current guidance.
 - `.github/workflows/ci.yml` line 60 carries a Japanese comment, which
   `docs/reference/repository-language-policy.md` disallows. Out of scope for this change.

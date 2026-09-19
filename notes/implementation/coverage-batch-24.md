@@ -15,10 +15,10 @@ Rails coverage only. VP/Vitest commands were intentionally not run.
 - Ending Rails branch coverage: 70.5236% (10,331 / 14,649 branches).
 - VP coverage: not measured in this Rails-only batch.
 
-The aggregate result varied slightly despite the targeted lines becoming fully covered. The full
-run again excluded one SimpleCov result older than the 600-second merge timeout, and the report
-also showed the usual runtime database warnings. The targeted controller evidence is stronger than
-the small aggregate fluctuation: all three Side sitemap controllers now report 100% line coverage.
+The aggregate result varied slightly despite the targeted lines becoming fully covered. The full run
+again excluded one SimpleCov result older than the 600-second merge timeout, and the report also
+showed the usual runtime database warnings. The targeted controller evidence is stronger than the
+small aggregate fluctuation: all three Side sitemap controllers now report 100% line coverage.
 
 ## Failures / Errors
 

@@ -118,7 +118,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
       session_id: token_record.public_id,
       expires_at: 10.minutes.from_now,
       scopes: %w(openid profile:read self:read),
-      issuer: AuthenticationJwtConfiguration.issuer("client"),
+      issuer: AuthenticationJwtConfiguration.issuer,
       audiences: audiences,
       jwt_issuer_id: CoreBrowserCredentialContract.core_jwt_issuer_id("client"),
     )

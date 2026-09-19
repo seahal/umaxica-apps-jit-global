@@ -41,7 +41,7 @@ function urlOf(target: Parameters<typeof fetch>[0]): string {
   return target instanceof URL ? target.href : target.url;
 }
 
-function jsonBody(init: RequestInit | undefined): unknown {
+export function jsonBody(init: RequestInit | undefined): unknown {
   const { body } = init ?? {};
 
   if (typeof body !== "string") {
@@ -112,4 +112,27 @@ export function stubFetchByMethod(answers: Record<string, Response>) {
       settlers.forEach((settle) => settle(response));
     },
   };
+}
+
+/**
+ * Installs a `fetch` that builds a fresh answer per request method. A `Response` body can be read
+ * once, so a subject that reads more than once (connect, then an explicit sync) needs a new one each
+ * time. Keeping the method dispatch here keeps the specs themselves free of branches.
+ */
+export function stubFetchAnswering(
+  answers: Record<string, (init: RequestInit | undefined) => Response | Promise<Response>>,
+) {
+  const fetchMock = vi.fn<typeof fetch>((_input, init) => {
+    const method = init?.method ?? "GET";
+    const answer = answers[method];
+
+    if (!answer) {
+      throw new Error(`No answer was stubbed for ${method}.`);
+    }
+
+    return Promise.resolve(answer(init));
+  });
+
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }

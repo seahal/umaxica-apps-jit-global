@@ -93,7 +93,7 @@ ja:
         region:
           edit:
             description: 通貨や表示形式などの地域別の既定値に使う地域を変更します。
-            heading: 地域・言語の設定
+            heading: 地域設定
             region_label: 地域
         resets:
           back: 設定一覧に戻る
@@ -162,7 +162,7 @@ ja:
             link: 時刻形式
           timezone:
             link: タイムゾーン設定
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           back_link: もどる
           cancel: キャンセル
@@ -186,7 +186,7 @@ ja:
             JST: 日本標準時 (JST)
             UTC: 協定世界時 (UTC)
           timezone_section: タイムゾーン設定
-          title: 地域・言語の設定
+          title: 地域設定
           update_settings: 設定を更新
         reset_settings: 設定のリセット
         submitting: 送信中...
@@ -200,7 +200,7 @@ ja:
         timezones:
           invalid: 無効なタイムゾーンが選択されました
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       settings:
@@ -289,7 +289,7 @@ ja:
         region:
           edit:
             description: 通貨や表示形式などの地域別の既定値に使う地域を変更します。
-            heading: 地域・言語の設定
+            heading: 地域設定
             region_label: 地域
         resets:
           back: 設定一覧に戻る
@@ -358,7 +358,7 @@ ja:
             link: 時刻形式
           timezone:
             link: タイムゾーン設定
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           back_link: もどる
           cancel: キャンセル
@@ -382,7 +382,7 @@ ja:
             JST: 日本標準時 (JST)
             UTC: 協定世界時 (UTC)
           timezone_section: タイムゾーン設定
-          title: 地域・言語の設定
+          title: 地域設定
           update_settings: 設定を更新
         reset_settings: 設定のリセット
         submitting: 送信中...
@@ -395,7 +395,7 @@ ja:
         timezones:
           invalid: 無効なタイムゾーンが選択されました
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
     org:
@@ -478,7 +478,7 @@ ja:
         region:
           edit:
             description: 通貨や表示形式などの地域別の既定値に使う地域を変更します。
-            heading: 地域・言語の設定
+            heading: 地域設定
             region_label: 地域
         resets:
           back: 設定一覧に戻る
@@ -551,7 +551,7 @@ ja:
             link: 時刻形式
           timezone:
             link: タイムゾーン設定
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           back_link: もどる
           cancel: キャンセル
@@ -575,7 +575,7 @@ ja:
             JST: 日本標準時 (JST)
             UTC: 協定世界時 (UTC)
           timezone_section: タイムゾーン設定
-          title: 地域・言語の設定
+          title: 地域設定
           update_settings: 設定を更新
         reset_settings: 設定のリセット
         submitting: 送信中...
@@ -589,11 +589,11 @@ ja:
         timezones:
           invalid: 無効なタイムゾーンが選択されました
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       privacy:
-        up_link: うえへ
+        up_link: もどる
       settings:
         description: 組織向けの設定を確認・調整できます。
         email_settings: メール設定
@@ -613,7 +613,7 @@ ja:
     edit: 編集
     save: 保存
     submit: 送信
-    up: 上へ
+    up: もどる
     update: 更新
   activemodel:
     errors:
@@ -662,6 +662,8 @@ ja:
       client_identity:
         identity_state: ID状態
         source_record_id: ソースレコードID
+      client_persona:
+        client_identity_id: ClientIdentity
       client_telephone:
         number: 電話番号
         number_digest: 電話番号ダイジェスト
@@ -1061,6 +1063,9 @@ ja:
     step_up:
       canceled: 認証をキャンセル
       completed: 続行
+      emergency_unavailable:
+        このセッションは緊急アクセスで確立されたため、段階的認証を行えません。サインアウトして通常モードで
+        サインインし直してください。
       invalid_request: 無効な認証リクエストです。
       method_unavailable: 選択した認証方法は利用できません。
       register_methods_required: 利用可能なステップアップ認証がありません。パスキー・メール・TOTPを登録してください。
@@ -1204,13 +1209,16 @@ ja:
             option_label: 時刻形式
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
         motion_settings: モーション設定
         pagination_settings: 1ページあたりの表示件数
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           back_link: もどる
         reset_settings: 設定のリセット
@@ -1218,7 +1226,7 @@ ja:
         theme_settings: テーマ設定
         timezone_settings: タイムゾーン設定
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
@@ -1344,13 +1352,16 @@ ja:
             option_label: 時刻形式
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
         motion_settings: モーション設定
         pagination_settings: 1ページあたりの表示件数
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           back_link: もどる
         reset_settings: 設定のリセット
@@ -1358,9 +1369,12 @@ ja:
         theme_settings: テーマ設定
         timezone_settings: タイムゾーン設定
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
+      roots:
+        message: Thin landing endpoint.
+    dev:
       roots:
         message: Thin landing endpoint.
     org:
@@ -1510,13 +1524,16 @@ ja:
             timezone_label: タイムゾーン
       preferences:
         back_to_settings: 設定に戻る
+        calendar_settings: カレンダー設定
+        clock_settings: 時計設定
         cookie_settings: クッキー設定
+        currency_settings: 通貨設定
         density_settings: 表示密度設定
         description: アカウントの設定を管理します。
         language_settings: 言語設定
         motion_settings: モーション設定
         pagination_settings: 1ページあたりの表示件数
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           back_link: もどる
         reset_settings: 設定のリセット
@@ -1524,11 +1541,110 @@ ja:
         theme_settings: テーマ設定
         timezone_settings: タイムゾーン設定
         title: 設定
-        up_link: うえへ
+        up_link: もどる
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
         message: Thin landing endpoint.
+    shared:
+      lobby:
+        title: ロビー
+        heading: ロビー
+        description: 続けるにはサインインしてください。
+        sign_in: サインイン
+      dashboard:
+        title: ダッシュボード
+        description: サインイン済み
+        sections:
+          primary_links: 主なリンク
+          protocol_links: プロトコルのリンク
+          publishing: 公開管理
+        links:
+          account: アカウント
+          authorize_sign_in: 認可（サインイン）
+          authorize_sign_up: 認可（サインアップ）
+          avatar: アバター
+          billings: 請求
+          dashboard: ダッシュボード
+          groups: グループ
+          identity: 本人情報
+          jwks: JWKS
+          logout: ログアウト
+          offline: オフライン
+          oidc_discovery: OIDC ディスカバリー
+          organization: 組織
+          preference: 設定
+          root: トップ
+          selector: セレクター
+          switcher: スイッチャー
+          userinfo: UserInfo
+      identity:
+        up_link: もどる
+        activities:
+          title: アクティビティ履歴
+          description: アカウントに関する最近のセキュリティ関連アクティビティです。
+          empty: 表示できるアクティビティはありません。
+          unknown_device: 不明なデバイス
+          unknown_location: 場所を確認できません
+          columns:
+            occurred_at: 発生日時
+            activity: アクティビティ
+            device: デバイス
+            source: 場所
+            risk: リスク
+          events:
+            sign_in: サインイン
+            google_sign_in: Googleでサインイン
+            apple_sign_in: Appleでサインイン
+            google_account_created: Googleでアカウントを作成
+            apple_account_created: Appleでアカウントを作成
+            email_account_created: メールアドレスでアカウントを作成
+            telephone_account_created: 電話番号でアカウントを作成
+            sign_out: サインアウト
+            sign_in_failed: サインインに失敗
+            step_up_completed: 追加認証を完了
+            step_up_failed: 追加認証に失敗
+            session_revoked: セッションを終了
+            security_change: セキュリティ設定を変更
+            session_security_alert: セキュリティ上の理由でセッションを終了
+          risks:
+            none: なし
+            low: 低
+            medium: 中
+            high: 高
+            critical: 重大
+        sessions:
+          title: セッション
+          empty: 有効なセッションはありません。
+          unknown_device: 不明なデバイス
+          expires_at_description: このセッションはこの時刻に終了します。この期限は延長されません。
+          current_session: 現在のセッション
+          active: 有効
+          normal: 通常
+          emergency: 緊急アクセス
+          unknown_mode: 不明
+          revoke: 終了
+          columns:
+            device: デバイス
+            last_activity: 最終アクティビティ
+            created: 作成日時
+            expires_at: 有効期限
+            status: 状態
+            mode: モード
+            action: 操作
+        sections:
+          account: アカウント
+          profile: プロフィール
+          security: セキュリティ
+        links:
+          activities: アクティビティ
+          birthdate: 生年月日
+          emails: メール
+          secrets: シークレット
+          sessions: セッション
+          standing: アカウント状態
+          telephones: 電話番号
+          withdrawal: 退会
   com_document_categories:
     "%{id}": com_document_category_%{id}
     announcement: お知らせ
@@ -1767,7 +1883,7 @@ ja:
             JST: 日本標準時 (JST)
             UTC: 協定世界時 (UTC)
           timezone_section: タイムゾーンの設定
-          title: 地域・言語の設定
+          title: 地域設定
           update_settings: 設定を更新
         theme_settings: テーマ設定
         themes:
@@ -1845,6 +1961,9 @@ ja:
       preferences:
         footer:
           preference: 設定
+    dev:
+      roots:
+        message: Thin landing endpoint.
     org:
       preference:
         emails:
@@ -2139,6 +2258,9 @@ ja:
         オリジン '%{origin}' は信頼されていません。TRUSTED_ORIGINS 環境変数を設定してください。
       pii_required: メールアドレスまたは電話番号を入力してください
       sign_count_mismatch: パスキーのセキュリティカウンターに問題があります。
+      sign_in_transaction_required:
+        サインインの手続きが期限切れであるか、Microsoft
+        サインインから開始されていません。最初からやり直してください。
       verification_failed: パスキーの検証に失敗しました。
       verification_required: パスキーの登録は WebAuthn 認証で完了する必要があります。
   hello: やぁ、せかい
@@ -2372,6 +2494,10 @@ ja:
           light: ライト
           system: システム設定に従う
         title: テーマ設定
+      restricted_mode:
+        description: 段階的認証とそれを必要とする操作は利用できません。
+        label: 制限モード — Emergency Access
+        sign_out: サインアウトして通常モードでサインインし直す
   mail:
     common:
       cta: 詳細を見る
@@ -2385,6 +2511,9 @@ ja:
             ignore_instruction: 心当たりがない場合は、このメールを無視してください。
             instruction: 以下の確認コードを使用して、登録を完了してください：
             subject: 確認コードのお知らせ
+            subjects:
+              sign_in: UMAXICA - サインインを確認してください
+              sign_up: UMAXICA - メールアドレスを確認してください
             title: メールアドレスの確認
             verify_link: メールアドレスを確認する
       com:
@@ -2394,6 +2523,9 @@ ja:
             ignore_instruction: 心当たりがない場合は、このメールを無視してください。
             instruction: 以下の確認コードを使用して、手続きを続行してください：
             subject: 確認コードのお知らせ
+            subjects:
+              sign_in: UMAXICA - サインインを確認してください
+              sign_up: UMAXICA - メールアドレスを確認してください
             title: メールアドレスの確認
             verify_link: メールアドレスを確認する
       org:
@@ -2435,6 +2567,16 @@ ja:
       recovery_identity_required: パスキー/シークレットを登録するには、先にメールアドレスまたは電話番号を1つ以上登録（確認）してください。
     visitor:
       recovery_identity_required: パスキー/シークレットを登録するには、先にメールアドレスまたは電話番号を1つ以上登録（確認）してください。
+  info:
+    app:
+      roots:
+        message: 情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。
+    com:
+      roots:
+        message: 情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。
+    org:
+      roots:
+        message: 情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。
   news:
     app:
       preferences:
@@ -2787,7 +2929,7 @@ ja:
         languages:
           unsupported: 対応していない言語が選択されました
         locale_settings: 言語の設定
-        region_settings: 地域と言語の設定
+        region_settings: 地域設定
         regions:
           cancel: キャンセル
           language_section: 言語の設定
@@ -2812,7 +2954,7 @@ ja:
             JST: 日本標準時 (JST)
             UTC: 協定世界時 (UTC)
           timezone_section: タイムゾーンの設定
-          title: 地域・言語の設定
+          title: 地域設定
           update_settings: 設定を更新
         theme_settings: テーマ設定
         themes:
@@ -2909,7 +3051,7 @@ ja:
         new:
           back: 他の方法を選びますか？
           back_link: もどる
-          back_to_root: うえへ
+          back_to_root: もどる
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
             apple: Appleで続行
@@ -3017,12 +3159,6 @@ ja:
           session_revoked: セッションを無効化しました。
           sessions_revoked: 選択したセッションを無効化しました。
           title: セッション管理
-      layout:
-        nav:
-          log_in: ログイン
-          logout: ログアウト
-          settings: 設定
-          sign_up: 新規登録
       outs:
         destroy:
           success: ログアウトしました
@@ -3542,12 +3678,6 @@ ja:
         checkpoints:
           show:
             title: サインインの確認
-      layout:
-        nav:
-          log_in: ログイン
-          logout: ログアウト
-          settings: 設定
-          sign_up: 新規登録
       preferences:
         footer:
           dashboard: ダッシュボード
@@ -3661,6 +3791,19 @@ ja:
             page_title: email で登録します
             registration: 登録しますか？
             you_have_already_logged_in: あなたはログインしています
+        emergency:
+          passkey:
+            new:
+              description:
+                スタッフIDと登録済みのパスキーでサインインします。Microsoft
+                サインインは使用しません。
+              identifier_label: ID
+              identifier_placeholder: スタッフIDを入力してください
+              page_title: 緊急アクセス
+              restricted_mode_notice:
+                このサインインでは制限モードのセッションになります。サインアウトして通常モードでサインインし直すまで、
+                段階的認証とそれを必要とする操作は利用できません。
+              submit: パスキーでサインイン
         entra:
           errors:
             authentication_method_locked:
@@ -3710,14 +3853,17 @@ ja:
             description: SMSで届くワンタイムコードで本人確認を行います。
             title: 携帯電話番号
           title: 登録方法を選ぶ
+        mode_switch:
+          sign_out_required: すでにサインインしています。モードを変更するには、いったんサインアウトしてください（%{sign_out_url}）。
         new:
           back: 他の方法を選びますか？
           back_link: もどる
-          back_to_root: うえへ
+          back_to_root: もどる
           description: スタッフコンソールにアクセスするための認証方法を選んでください。
           links:
             apple: Apple
             email: メールアドレス
+            emergency: 緊急アクセス（制限モード）
             entra: Microsoft でサインイン
             google: Google
             passkey: パスキー
@@ -3733,6 +3879,7 @@ ja:
             identifier_label: ID
             identifier_placeholder: staff の ID を入力
             page_title: パスキーでログイン
+            secret_credential: パスキーを紛失した場合はシークレットを使用します
             submit: パスキーでログイン
         recovery:
           new:
@@ -3808,12 +3955,6 @@ ja:
           restricted_notice: セッション数が上限に達しています。既存セッションを管理してください。
           session_revoked: セッションを無効化しました。
           sessions_revoked: セッションを無効化しました。
-      layout:
-        nav:
-          log_in: ログイン
-          logout: ログアウト
-          settings: 設定
-          sign_up: 新規登録
       preferences:
         footer:
           dashboard: ダッシュボード
@@ -4174,7 +4315,7 @@ ja:
             title: operator 招待を受諾
       ups:
         new:
-          back_to_root: うえへ
+          back_to_root: もどる
           description: お客様専用の管理操作をはじめるにはアカウントを作成してください。
           heading: アカウントを作成
           links:

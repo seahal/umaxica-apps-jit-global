@@ -38,7 +38,8 @@ module FqdnAvailabilityRegistry
       [ENV["PRIVATE_CORE_NETWORK_URL"] || ENV["CORE_NETWORK_URL"], "core.net.localhost"]
     },
     core_developer: lambda { |_hosts|
-      [ENV["PRIVATE_CORE_DEVELOPER_URL"] || ENV["CORE_DEVELOPER_URL"], "core.dev.localhost"]
+      [ENV["PUBLIC_CORE_DEVELOPER_URL"], ENV["PRIVATE_CORE_DEVELOPER_URL"] || ENV["CORE_DEVELOPER_URL"],
+       "core.dev.localhost",]
     },
     docs_service: ->(_hosts) { [ENV["PRIVATE_DOCS_SERVICE_URL"], "docs.jp.umaxica.app", "docs.app.localhost"] },
     docs_corporate: ->(_hosts) { [ENV["PRIVATE_DOCS_CORPORATE_URL"], "docs.jp.umaxica.com", "docs.com.localhost"] },
@@ -52,9 +53,37 @@ module FqdnAvailabilityRegistry
     info_service: ->(hosts) { [hosts.info_service.host, "info.app.localhost", "info.umaxica.app"] },
     info_corporate: ->(hosts) { [hosts.info_corporate.host, "info.com.localhost", "info.umaxica.com"] },
     info_staff: ->(hosts) { [hosts.info_staff.host, "info.org.localhost", "info.umaxica.org"] },
-    side_service: ->(hosts) { [hosts.side_service.host, "side.app.localhost"] },
-    side_corporate: ->(hosts) { [hosts.side_corporate.host, "side.com.localhost"] },
-    side_staff: ->(hosts) { [hosts.side_staff.host, "side.org.localhost"] },
+    guid_service: lambda { |hosts|
+      [hosts.guid_service.host, ENV["PRIVATE_GUID_SERVICE_URL"], "guid.umaxica.net", "guid.net.localhost"]
+    },
+    edit_staff: lambda { |hosts|
+      [hosts.edit_staff.host, ENV["PUBLIC_EDIT_STAFF_URL"], ENV["PRIVATE_EDIT_STAFF_URL"],
+       "edit.umaxica.org", "edit.org.localhost",]
+    },
+    mission: lambda { |_hosts|
+      [ENV["PUBLIC_MISSION_URL"], ENV["PRIVATE_MISSION_URL"], "mission.core.dev.localhost"]
+    },
+    flipper: lambda { |_hosts|
+      [ENV["PUBLIC_FLIPPER_URL"], ENV["PRIVATE_FLIPPER_URL"], "flipper.core.dev.localhost"]
+    },
+    blazer: lambda { |_hosts|
+      [ENV["PUBLIC_BLAZER_URL"], ENV["PRIVATE_BLAZER_URL"], "blazer.core.dev.localhost"]
+    },
+    pghero: lambda { |_hosts|
+      [ENV["PUBLIC_PGHERO_URL"], ENV["PRIVATE_PGHERO_URL"], "pghero.core.dev.localhost"]
+    },
+    performance: lambda { |_hosts|
+      [ENV["PUBLIC_PERFORMANCE_URL"], ENV["PRIVATE_PERFORMANCE_URL"], "performance.core.dev.localhost"]
+    },
+    coverband: lambda { |_hosts|
+      [ENV["PUBLIC_COVERBAND_URL"], ENV["PRIVATE_COVERBAND_URL"], "coverband.core.dev.localhost"]
+    },
+    swagger: lambda { |_hosts|
+      [ENV["PUBLIC_SWAGGER_URL"], ENV["PRIVATE_SWAGGER_URL"], "swagger.core.dev.localhost"]
+    },
+    side_service: ->(hosts) { [hosts.side_service.host, "wide.app.localhost"] },
+    side_corporate: ->(hosts) { [hosts.side_corporate.host, "wide.com.localhost"] },
+    side_staff: ->(hosts) { [hosts.side_staff.host, "wide.org.localhost"] },
     palm_service: ->(hosts) { [hosts.palm_service.host, "palm.app.localhost"] },
   }.freeze
 

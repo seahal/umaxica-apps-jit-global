@@ -10,7 +10,7 @@ class RedirectsNavigationTargetResolverTest < ActiveSupport::TestCase
 
       def auth_app_sign_in_path(ri:) = "/sign/in?ri=#{ri}"
 
-      def acme_app_dashboard_path(ri:) = "/dashboard?ri=#{ri}"
+      def base_app_root_path(ri:) = "/?ri=#{ri}"
 
       def auth_app_settings_path(ri:) = "/settings?ri=#{ri}"
     end
@@ -18,7 +18,7 @@ class RedirectsNavigationTargetResolverTest < ActiveSupport::TestCase
   test "resolves registered navigation keys" do
     assert_equal "/sign/in/check?ri=jp", resolve(:checkpoint).value
     assert_equal "/sign/in?ri=jp", resolve(:selector).value
-    assert_equal "/dashboard?ri=jp", resolve(:dashboard).value
+    assert_equal "/?ri=jp", resolve(:dashboard).value
     assert_equal "/settings?ri=jp", resolve(:settings_security, scope: :settings).value
   end
 
@@ -52,12 +52,12 @@ class RedirectsNavigationTargetResolverTest < ActiveSupport::TestCase
     assert_equal "/?ri=jp", home.value
 
     assert_predicate string_key, :ok?
-    assert_equal "/dashboard?ri=jp", string_key.value
+    assert_equal "/?ri=jp", string_key.value
   end
 
   test "does not resolve external urls from registry" do
     routes = Class.new do
-      def acme_app_dashboard_path(**) = "https://evil.example"
+      def base_app_root_path(**) = "https://evil.example"
     end.new
     result = RedirectsNavigationTargetResolver.call(
       :dashboard,

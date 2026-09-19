@@ -22,20 +22,12 @@ defaults:
 env:
   # CI Configuration
   CI: true
-  # Version Configuration
-  RUBY_VERSION: "4.0.6"
-  NODE_VERSION: "24.19.0"
-  BUN_VERSION: "1.4.0"
   # Rails Configuration
   RAILS_ENV: test
-  RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
   NODE_ENV: test
-  # Bundler Configuration
-  BUNDLE_WITH: test
-  BUNDLE_JOBS: 4
-  BUNDLE_PATH: vendor/bundle
-  BUNDLE_DEPLOYMENT: "true"
-  BUNDLE_FROZEN: "true"
+  # Bundler: install only the default and test groups. ruby/setup-ruby's bundler-cache already
+  # installs in deployment (frozen) mode into vendor/bundle, and its cache key includes this value.
+  BUNDLE_WITHOUT: development:production
   # Region Configuration
   REGION_CODE: all
   ACME_REGION: true
@@ -67,10 +59,10 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          bun-version-file: package.json
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - run: bunx vite build --mode production
       - name: Assert the production React runtime
@@ -93,7 +85,6 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
           cache-version: 1
       - name: Run Brakeman security scanner (SARIF + fail on issues)
@@ -140,7 +131,6 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
           cache-version: 1
       - name: Run RuboCop
@@ -155,111 +145,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Rails & Rack
-      RACK_ENV: test
-      RAILS_MAX_THREADS: 5
-      # Application
-      BRAND_NAME: UMAXICA
-      PORT: 3000
-      # Identifiers
-      SINGLETON_DEFAULT_SALT: hoge
-      IDENTIFIER_REGION_CODE: "392"
-      IDENTIFIER_INSTANCE_ID: "0123456789"
-      # Domain URLs - ACME
-      ACME_CORPORATE_URL: www.com.localhost
-      ACME_SERVICE_URL: www.app.localhost
-      ACME_STAFF_URL: www.org.localhost
-      ACME_NETWORK_URL: www.net.localhost
-      ACME_DEVELOPER_URL: www.dev.localhost
-      # Domain URLs - Auth
-      SIGN_CORPORATE_URL: sign.com.localhost
-      SIGN_SERVICE_URL: sign.app.localhost
-      SIGN_STAFF_URL: sign.org.localhost
-      TRUSTED_ORIGINS: http://sign.app.localhost,http://sign.org.localhost
-      # Domain URLs - Core
-      CORE_CORPORATE_URL: ww.com.localhost
-      CORE_SERVICE_URL: ww.app.localhost
-      CORE_STAFF_URL: ww.org.localhost
-      # Domain URLs - Docs
-      DOCS_CORPORATE_URL: docs.com.localhost
-      DOCS_SERVICE_URL: docs.app.localhost
-      DOCS_STAFF_URL: docs.org.localhost
-      # Domain URLs - News
-      NEWS_CORPORATE_URL: news.com.localhost
-      NEWS_SERVICE_URL: news.app.localhost
-      NEWS_STAFF_URL: news.org.localhost
-      # Domain URLs - Help
-      HELP_CORPORATE_URL: help.com.localhost
-      HELP_SERVICE_URL: help.app.localhost
-      HELP_STAFF_URL: help.org.localhost
-      # Domain URLs - Edge
-      EDGE_CORPORATE_URL: localhost:5170
-      EDGE_SERVICE_URL: localhost:5171
-      EDGE_STAFF_URL: localhost:5172
-      STATUS_URL: status.localhost
-      ASSET_URL: asset.localhost
-      # Region
-      ACME_REGION: true
-      GLOBAL_MODE: true
-      REGION_CODE: all
-      # PostgreSQL - Connection
-      POSTGRESQL_USER: root
+      # Non-secret baseline comes from .env.example (lib/local_environment.rb loads it when .env
+      # is absent). Only test-specific overrides live here; scripts/test-isolated checks them.
+      POSTGRESQL_TEST_HOST: 127.0.0.1
       POSTGRESQL_PORT: 5432
+      POSTGRESQL_USER: root
       POSTGRESQL_PASSWORD: password
-      # PostgreSQL - Primary/Replica Hosts
-      POSTGRESQL_UNIVERSAL_PUB: localhost
-      POSTGRESQL_UNIVERSAL_SUB: localhost
-      POSTGRESQL_AUDIT_PUB: localhost
-      POSTGRESQL_AUDIT_SUB: localhost
-      POSTGRESQL_DEFAULT_PUB: localhost
-      POSTGRESQL_GUEST_PUB: localhost
-      POSTGRESQL_GUEST_SUB: localhost
-      POSTGRESQL_PRINCIPAL_PUB: localhost
-      POSTGRESQL_PRINCIPAL_SUB: localhost
-      POSTGRESQL_PROFILE_PUB: localhost
-      POSTGRESQL_PROFILE_SUB: localhost
-      POSTGRESQL_COMMERCE_PUB: localhost
-      POSTGRESQL_COMMERCE_SUB: localhost
-      POSTGRESQL_TOKEN_PUB: localhost
-      POSTGRESQL_TOKEN_SUB: localhost
-      POSTGRESQL_DOCUMENT_PUB: localhost
-      POSTGRESQL_DOCUMENT_SUB: localhost
-      POSTGRESQL_PUBLISHING_PUB: localhost
-      POSTGRESQL_PUBLISHING_SUB: localhost
-      POSTGRESQL_BILLING_PUB: localhost
-      POSTGRESQL_BILLING_SUB: localhost
-      POSTGRESQL_MESSAGE_PUB: localhost
-      POSTGRESQL_MESSAGE_SUB: localhost
-      POSTGRESQL_NOTIFICATION_PUB: localhost
-      POSTGRESQL_NOTIFICATION_SUB: localhost
-      POSTGRESQL_QUEUE_PUB: localhost
-      POSTGRESQL_QUEUE_SUB: localhost
-      POSTGRESQL_STORAGE_PUB: localhost
-      POSTGRESQL_STORAGE_SUB: localhost
-      POSTGRESQL_OPERATOR_PUB: localhost
-      POSTGRESQL_OPERATOR_SUB: localhost
-      POSTGRESQL_AVATAR_PUB: localhost
-      POSTGRESQL_AVATAR_SUB: localhost
-      POSTGRESQL_FINDER_PUB: localhost
-      POSTGRESQL_FINDER_SUB: localhost
-      POSTGRESQL_SEARCH_PUB: localhost
-      POSTGRESQL_SEARCH_SUB: localhost
-      # Email
-      RESEND_SMTP_ENDPOINT: smtp.resend.com
-      RESEND_SMTP_USER_NAME: resend
-      # HMAC Secret
-      OCCURRENCE_HMAC_SECRET: ${{ secrets.OCCURRENCE_HMAC_SECRET }}
+      POSTGRESQL_DATABASE: db
+      VALKEY_TEST_HOST: 127.0.0.1
+      VALKEY_TEST_PORT: 6379
+      CACHE_REDIS_URL: redis://127.0.0.1:6379/3
+      RATE_LIMIT_REDIS_URL: redis://127.0.0.1:6379/4
+      AUTH_STATE_REDIS_URL: redis://127.0.0.1:6379/5
     services:
       postgres:
         image: postgres:18
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          # Administration database for scripts/test-environment-check (POSTGRESQL_DATABASE).
+          POSTGRES_DB: db
         ports:
           - 5432:5432
         options: >-
           --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      valkey:
+        # Same image as compose.yaml so CI and local development run one Valkey version.
+        image: valkey/valkey:8.0-alpine3.22
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v6.0.1
         with:
@@ -267,15 +183,20 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
           cache-version: 1
       - name: Install native runtime dependencies
         run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libvips
+      - name: Create test databases
+        run: scripts/test-isolated env RAILS_ENV=test bin/rails db:create
       - name: Setup test databases
-        run: bin/rails db:prepare
+        # Same command as config/ci.rb: scripts/test-isolated claims the Valkey run scope and sets
+        # VALKEY_NAMESPACE_RUN_ID, which config/environments/test.rb requires at boot.
+        run: >-
+          POSTGRESQL_TEST_PREPARE_DATABASES=test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db
+          scripts/test-isolated env RAILS_ENV=test bin/rails db:test:prepare
       - name: Run Rails tests
-        run: bin/rails test
+        run: scripts/test-isolated bin/rails test
       - name: Upload test logs
         if: failure()
         uses: actions/upload-artifact@v6.0.0
@@ -291,111 +212,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Rails & Rack
-      RACK_ENV: test
-      RAILS_MAX_THREADS: 5
-      # Application
-      BRAND_NAME: UMAXICA
-      PORT: 3000
-      # Identifiers
-      SINGLETON_DEFAULT_SALT: hoge
-      IDENTIFIER_REGION_CODE: "392"
-      IDENTIFIER_INSTANCE_ID: "0123456789"
-      # Domain URLs - ACME
-      ACME_CORPORATE_URL: www.com.localhost
-      ACME_SERVICE_URL: www.app.localhost
-      ACME_STAFF_URL: www.org.localhost
-      ACME_NETWORK_URL: www.net.localhost
-      ACME_DEVELOPER_URL: www.dev.localhost
-      # Domain URLs - Auth
-      SIGN_CORPORATE_URL: sign.com.localhost
-      SIGN_SERVICE_URL: sign.app.localhost
-      SIGN_STAFF_URL: sign.org.localhost
-      TRUSTED_ORIGINS: http://sign.app.localhost,http://sign.org.localhost
-      # Domain URLs - Core
-      CORE_CORPORATE_URL: ww.com.localhost
-      CORE_SERVICE_URL: ww.app.localhost
-      CORE_STAFF_URL: ww.org.localhost
-      # Domain URLs - Docs
-      DOCS_CORPORATE_URL: docs.com.localhost
-      DOCS_SERVICE_URL: docs.app.localhost
-      DOCS_STAFF_URL: docs.org.localhost
-      # Domain URLs - News
-      NEWS_CORPORATE_URL: news.com.localhost
-      NEWS_SERVICE_URL: news.app.localhost
-      NEWS_STAFF_URL: news.org.localhost
-      # Domain URLs - Help
-      HELP_CORPORATE_URL: help.com.localhost
-      HELP_SERVICE_URL: help.app.localhost
-      HELP_STAFF_URL: help.org.localhost
-      # Domain URLs - Edge
-      EDGE_CORPORATE_URL: localhost:5170
-      EDGE_SERVICE_URL: localhost:5171
-      EDGE_STAFF_URL: localhost:5172
-      STATUS_URL: status.localhost
-      ASSET_URL: asset.localhost
-      # Region
-      ACME_REGION: true
-      GLOBAL_MODE: true
-      REGION_CODE: all
-      # PostgreSQL - Connection
-      POSTGRESQL_USER: root
+      # Non-secret baseline comes from .env.example (lib/local_environment.rb loads it when .env
+      # is absent). Only test-specific overrides live here; scripts/test-isolated checks them.
+      POSTGRESQL_TEST_HOST: 127.0.0.1
       POSTGRESQL_PORT: 5432
+      POSTGRESQL_USER: root
       POSTGRESQL_PASSWORD: password
-      # PostgreSQL - Primary/Replica Hosts
-      POSTGRESQL_UNIVERSAL_PUB: localhost
-      POSTGRESQL_UNIVERSAL_SUB: localhost
-      POSTGRESQL_AUDIT_PUB: localhost
-      POSTGRESQL_AUDIT_SUB: localhost
-      POSTGRESQL_DEFAULT_PUB: localhost
-      POSTGRESQL_GUEST_PUB: localhost
-      POSTGRESQL_GUEST_SUB: localhost
-      POSTGRESQL_PRINCIPAL_PUB: localhost
-      POSTGRESQL_PRINCIPAL_SUB: localhost
-      POSTGRESQL_PROFILE_PUB: localhost
-      POSTGRESQL_PROFILE_SUB: localhost
-      POSTGRESQL_COMMERCE_PUB: localhost
-      POSTGRESQL_COMMERCE_SUB: localhost
-      POSTGRESQL_TOKEN_PUB: localhost
-      POSTGRESQL_TOKEN_SUB: localhost
-      POSTGRESQL_DOCUMENT_PUB: localhost
-      POSTGRESQL_DOCUMENT_SUB: localhost
-      POSTGRESQL_PUBLISHING_PUB: localhost
-      POSTGRESQL_PUBLISHING_SUB: localhost
-      POSTGRESQL_BILLING_PUB: localhost
-      POSTGRESQL_BILLING_SUB: localhost
-      POSTGRESQL_MESSAGE_PUB: localhost
-      POSTGRESQL_MESSAGE_SUB: localhost
-      POSTGRESQL_NOTIFICATION_PUB: localhost
-      POSTGRESQL_NOTIFICATION_SUB: localhost
-      POSTGRESQL_QUEUE_PUB: localhost
-      POSTGRESQL_QUEUE_SUB: localhost
-      POSTGRESQL_STORAGE_PUB: localhost
-      POSTGRESQL_STORAGE_SUB: localhost
-      POSTGRESQL_OPERATOR_PUB: localhost
-      POSTGRESQL_OPERATOR_SUB: localhost
-      POSTGRESQL_AVATAR_PUB: localhost
-      POSTGRESQL_AVATAR_SUB: localhost
-      POSTGRESQL_FINDER_PUB: localhost
-      POSTGRESQL_FINDER_SUB: localhost
-      POSTGRESQL_SEARCH_PUB: localhost
-      POSTGRESQL_SEARCH_SUB: localhost
-      # Email
-      RESEND_SMTP_ENDPOINT: smtp.resend.com
-      RESEND_SMTP_USER_NAME: resend
-      # HMAC Secret
-      OCCURRENCE_HMAC_SECRET: ${{ secrets.OCCURRENCE_HMAC_SECRET }}
+      POSTGRESQL_DATABASE: db
+      VALKEY_TEST_HOST: 127.0.0.1
+      VALKEY_TEST_PORT: 6379
+      CACHE_REDIS_URL: redis://127.0.0.1:6379/3
+      RATE_LIMIT_REDIS_URL: redis://127.0.0.1:6379/4
+      AUTH_STATE_REDIS_URL: redis://127.0.0.1:6379/5
     services:
       postgres:
         image: postgres:18
         env:
           POSTGRES_USER: root
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
+          # Administration database for scripts/test-environment-check (POSTGRESQL_DATABASE).
+          POSTGRES_DB: db
         ports:
           - 5432:5432
         options: >-
           --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      valkey:
+        # Same image as compose.yaml so CI and local development run one Valkey version.
+        image: valkey/valkey:8.0-alpine3.22
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v6.0.1
         with:
@@ -403,15 +250,20 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
           cache-version: 1
       - name: Install native runtime dependencies
         run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libvips
+      - name: Create test databases
+        run: scripts/test-isolated env RAILS_ENV=test bin/rails db:create
       - name: Setup test databases
-        run: bin/rails db:prepare
+        # Same command as config/ci.rb: scripts/test-isolated claims the Valkey run scope and sets
+        # VALKEY_NAMESPACE_RUN_ID, which config/environments/test.rb requires at boot.
+        run: >-
+          POSTGRESQL_TEST_PREPARE_DATABASES=test_primary_db,test_app_ticket_db,test_com_ticket_db,test_org_ticket_db
+          scripts/test-isolated env RAILS_ENV=test bin/rails db:test:prepare
       - name: Run Rails tests with coverage
-        run: COVERAGE=true bin/rails test test/
+        run: scripts/test-isolated env COVERAGE=true bin/rails test test/
       - name: Upload test coverage
         if: always()
         uses: actions/upload-artifact@v6.0.0
@@ -431,11 +283,11 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          bun-version-file: package.json
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .node-version
       - run: bun install --frozen-lockfile
       - name: Format check (oxfmt)
         run: bun run format:check
@@ -466,7 +318,6 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
           cache-version: 1
       - name: Scan Gemfile.lock for known gem vulnerabilities
@@ -500,7 +351,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - name: Run Bun dependency audit
         run: |

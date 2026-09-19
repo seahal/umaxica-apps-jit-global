@@ -1,5 +1,13 @@
 # Database Boundaries
 
+> **Global / Regional ownership settled (2026-09-08):** `adr/global-regional-database-ownership.md`
+> is the normative decision. `*_zenith`, `*_ticket`, `*_setting`, `*_signal`, `avatar`, and
+> `publishing` are **Global-only**. `chronicle`, `occurrence`, `primary`, and `queue` exist as
+> independent (never shared) databases in both Global and Regional. Regional owns one new
+> application database. There is no `*_principal` regional-ready database; that role is retired. The
+> `search` and `storage` reserved connections (zero migrations) are deletion candidates for the
+> split.
+
 > **Partially superseded by Identity Authority inversion:** Physical database names and table/model
 > placement do not imply logical identity authority. `acme/www` is the Session, Token, Account,
 > Preference, Authorization, and downstream-token Authority. `sign/id` is ceremony-only. Existing
@@ -68,6 +76,11 @@ The current `notification` connection will split into three surface signal datab
 
 These database names remain independent cross-cutting or infrastructure boundaries:
 
+- `primary` — Rails default database (`db/migrate`, dump `db/structure.sql`). Durable,
+  low-frequency, application-wide configuration or metadata that does not have a strong domain,
+  lifecycle, scaling, retention, isolation, or operational reason to own a dedicated database.
+  Flipper currently uses it. It is not an indiscriminate catch-all: data with a meaningful
+  independent ownership boundary stays in its dedicated database.
 - `queue`
 - `storage`
 - `search`

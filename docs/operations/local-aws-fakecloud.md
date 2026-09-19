@@ -1,9 +1,15 @@
 # Local AWS Emulation with fakecloud
 
-> **Not yet verified at runtime.** This migration was implemented in an environment with no
-> container tooling, and three files under `bin/` and `.devcontainer/` still need host-side edits
-> before `podman compose up` works at all. Read
-> `docs/operations/fakecloud-migration-verification.md` first.
+> **S3 is verified at runtime; everything else is not.** On 2026-09-14 the health endpoint,
+> `object_storage:prepare`, and `object_storage:smoke` were executed from the `core` container
+> against `fakecloud:4566` and all succeeded — see
+> `evidence/2026-09-14-fakecloud-s3-runtime-verification.md`. **Every Terraform command remains
+> unrun**, as does MSK and the `staging-development` environment. Read
+> `docs/operations/fakecloud-migration-verification.md` for the outstanding checklist.
+
+The decisions this document implements — Terraform over OpenTofu, Podman-hosted FakeCloud staging
+instead of an AWS account, the module/environment split, and the `DEPLOYMENT_TIER` contract — are
+recorded in `adr/fakecloud-podman-staging-environment.md`.
 
 `fakecloud` is this repository's single AWS compatibility layer for development. It replaces the
 former RustFS service (S3) and the former standalone Kafka broker (MSK), so there is one local AWS
@@ -11,25 +17,40 @@ endpoint rather than one emulator per service.
 
 It is **not** behind a Compose profile. A plain `podman compose up` starts it alongside `core`,
 `primary`, `replica`, `valkey-cache`, and `valkey-rate-limit`, because S3 and MSK are meant to be
-standing development
-infrastructure rather than a special mode.
+standing development infrastructure rather than a special mode.
 
 ## What Is Available
 
-| Surface                              | State                                                                                                                         |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| S3                                   | Fully usable. Bucket and object operations work through the AWS SDK, the AWS CLI, and the Terraform AWS provider.             |
-| MSK control plane                    | Usable. `CreateCluster`, `DescribeCluster`, `GetBootstrapBrokers`, `DeleteCluster` all respond with real AWS response shapes. |
-| MSK data plane (a real Kafka broker) | **Not available here.** See below.                                                                                            |
+> **This table is what has been investigated here, not what FakeCloud can do.** Version 0.44.10
+> advertises roughly 105 services on `GET /_fakecloud/health`, including `rds`, `elasticache`,
+> `ses`, `sns`, `sqs`, `kms`, `secretsmanager`, `monitoring`, and the CodeBuild/CodePipeline family
+> — see `evidence/2026-09-14-fakecloud-service-inventory.md` for the full list. Do not read an
+> absence below as a capability limit. Equally, do not read presence in that list as "it works":
+> `kafka` is listed, and the MSK data plane still does not function here, for the reason given
+> below.
+
+| Surface                              | State                                                                                                                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S3                                   | Fully usable, and **verified at runtime on 2026-09-14** for the AWS SDK path (PUT/HEAD/GET/DELETE on both boundary buckets). The AWS CLI and Terraform AWS provider paths remain unexercised. |
+| MSK control plane                    | Usable. `CreateCluster`, `DescribeCluster`, `GetBootstrapBrokers`, `DeleteCluster` all respond with real AWS response shapes.                                                                 |
+| MSK data plane (a real Kafka broker) | **Not available here.** See below.                                                                                                                                                            |
 
 ### Why There Is No Kafka Broker
 
 fakecloud can back each provisioned MSK cluster with a real single-node Apache Kafka container, but
 only when it is handed a Docker or Podman socket, because it spawns that broker as a sibling
-container. Mounting a container runtime socket into `fakecloud` would grant it the invoking user's
+container. Mounting a container runtime socket into `fakecloud` grants it the invoking user's
 complete container-management rights — the ability to start any image and bind-mount any host path
-the user can reach. This repository mounts no container socket anywhere, and that boundary is worth
-more than local `produce`/`consume`.
+the user can reach.
+
+> **Amended 2026-09-14.** `compose.yaml` still mounts no container socket, and the statement above
+> is why. A socket mount was added to `compose.override.yaml` as a deliberate, risk-accepted
+> exception so the MSK data plane can be exercised — see
+> `evidence/2026-09-14-fakecloud-podman-socket.md`. That file was untracked and gitignored the same
+> day, so the mount stays on one machine and reaches no other clone. It is also
+> `${XDG_RUNTIME_DIR}`-dependent and therefore not portable, and `devcontainer.json` passes explicit
+> `-f` flags that exclude `compose.override.yaml`, so the Dev Container path still gets a
+> socket-free fakecloud. The text below describes the unmodified `compose.yaml` behaviour.
 
 Without a socket fakecloud serves the MSK control plane with the _same response shapes_, which is
 what the Terraform resources in `terraform/` exercise. `GetBootstrapBrokers` therefore returns
@@ -81,19 +102,18 @@ bin/rails object_storage:prepare
 bin/rails object_storage:verify
 ```
 
-`prepare` creates the Avatar and publishing buckets named by
-`OBJECT_STORAGE_BUCKET_AVATAR` and `OBJECT_STORAGE_BUCKET_PUBLISHING`.
-`verify` checks FakeCloud health, those buckets, one Avatar upload, and one
-publishing upload.
+`prepare` creates the Avatar and publishing buckets named by `OBJECT_STORAGE_BUCKET_AVATAR` and
+`OBJECT_STORAGE_BUCKET_PUBLISHING`. `verify` checks FakeCloud health, those buckets, one Avatar
+upload, and one publishing upload.
 
 The complete storage matrix is:
 
-| Rails environment | Deployment tier | Storage |
-| ----------------- | --------------- | ------- |
-| `test` | not read | In-memory; no S3 network access |
-| `development` | not read | Configured S3-compatible endpoint |
-| `production` | `staging` | Configured S3-compatible endpoint |
-| `production` | `production` | AWS S3 through the platform credential provider |
+| Rails environment | Deployment tier | Storage                                         |
+| ----------------- | --------------- | ----------------------------------------------- |
+| `test`            | not read        | In-memory; no S3 network access                 |
+| `development`     | not read        | Configured S3-compatible endpoint               |
+| `production`      | `staging`       | Configured S3-compatible endpoint               |
+| `production`      | `production`    | AWS S3 through the platform credential provider |
 
 Missing or unrecognized `DEPLOYMENT_TIER` values fail when production storage configuration is
 resolved. There is no production default because accidentally interpreting staging as real

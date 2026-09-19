@@ -8,6 +8,7 @@ import {
   persistTheme,
   readThemeCookie,
   themeFromCode,
+  themeFromDocument,
 } from "@/lib/theme";
 
 // The theme radio group on the surfaces that do not boot React.
@@ -33,12 +34,19 @@ export default class extends Controller {
 
     const theme = themeFromCode(target.value);
     this.selectedTheme = theme;
-    this.showTheme(theme);
     void this.persist(theme);
   }
 
   async persist(theme: Theme) {
-    this.showTheme(await persistTheme(theme, csrfToken()));
+    const stored = await persistTheme(theme, csrfToken());
+    if (!stored) {
+      this.selectedTheme = null;
+      this.showTheme(themeFromDocument());
+      return;
+    }
+
+    this.selectedTheme = stored;
+    this.showTheme(stored);
   }
 
   async syncFromServer() {

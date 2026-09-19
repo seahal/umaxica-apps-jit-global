@@ -20,7 +20,7 @@ class ApplicationErrorTest < ActiveSupport::TestCase
   end
 
   test "specialized application errors expose their status codes" do
-    assert_equal :forbidden, AlreadyAuthenticatedError.new.status_code
+    assert_equal :conflict, AlreadyAuthenticatedError.new.status_code
     assert_equal :unauthorized, NotAuthenticatedError.new.status_code
     assert_equal :unprocessable_content, PreferenceOperationError.new.status_code
     assert_equal :unprocessable_content, InvalidUserStatusError.new(invalid_status: "inactive").status_code

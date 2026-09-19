@@ -46,7 +46,7 @@ class IdentityGraphProvisionerTest < ActiveSupport::TestCase
     end
 
     assert_no_difference -> {
-      ClientAccount.count + ClientIdentity.count + Persona.count + Enterprise.count + Avatar.count
+      ClientAccount.count + ClientIdentity.count + ClientPersona.count + Enterprise.count + Avatar.count
     } do
       IdentityGraphProvisioner.call!(surface: :app, principal: user)
     end

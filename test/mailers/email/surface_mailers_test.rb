@@ -24,6 +24,28 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
     assert_match "verification-token", mail.html_part.body.decoded
   end
 
+  test "app sign-up otp mail uses the purpose-specific subject" do
+    mail = Email::App::OtpMailer.with(
+      encrypted_hotp_token: encrypted_otp("123456"),
+      email_address: "user@example.com",
+      purpose: :sign_up,
+    ).create
+
+    assert_equal I18n.t("mail.email.app.otp_mailer.create.subjects.sign_up"), mail.subject
+    assert_not_includes mail.subject, "123456"
+  end
+
+  test "app sign-in otp mail uses the purpose-specific subject" do
+    mail = Email::App::OtpMailer.with(
+      encrypted_hotp_token: encrypted_otp("123456"),
+      email_address: "user@example.com",
+      purpose: :sign_in,
+    ).create
+
+    assert_equal I18n.t("mail.email.app.otp_mailer.create.subjects.sign_in"), mail.subject
+    assert_not_includes mail.subject, "123456"
+  end
+
   test "com otp mailer sends verification code from com sender" do
     mail = Email::Com::OtpMailer.with(
       encrypted_hotp_token: encrypted_otp("654321"),
@@ -34,6 +56,22 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
     assert_equal ["visitor@example.com"], mail.to
     assert_equal ["otp@umaxica.com"], mail.from
     assert_match "654321", mail.text_part.body.decoded
+  end
+
+  test "com sign-up and sign-in otp mails use the matching purpose-specific subjects" do
+    {
+      sign_up: "mail.email.com.otp_mailer.create.subjects.sign_up",
+      sign_in: "mail.email.com.otp_mailer.create.subjects.sign_in",
+    }.each do |purpose, translation_key|
+      mail = Email::Com::OtpMailer.with(
+        encrypted_hotp_token: encrypted_otp("654321"),
+        email_address: "visitor@example.com",
+        purpose: purpose,
+      ).create
+
+      assert_equal I18n.t(translation_key), mail.subject
+      assert_not_includes mail.subject, "654321"
+    end
   end
 
   test "org otp mailer sends verification code from org sender" do
@@ -63,7 +101,7 @@ class Email::SurfaceMailersTest < ActionMailer::TestCase
         encrypted_hotp_token: encrypted_otp("123456"),
         email_address: "target@example.com",
         public_id: public_id,
-        verification_token: token,
+        encrypted_verification_token: OutboundSensitivePayload.encrypt_email_verification_token(token),
       ).create
 
       assert_match host, mail.html_part.body.decoded

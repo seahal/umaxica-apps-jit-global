@@ -534,7 +534,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
     }
 
-    get auth_org_dashboard_url(ri: "jp", host: base_host), headers: headers
+    get base_org_accounts_url(ri: "jp", host: base_host), headers: headers
 
     assert_response :bad_request
   end
@@ -566,6 +566,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       staff, host: host, session_public_id: token.public_id,
              resource_type: "operator",
              expires_at: expires_at,
+             jwt_issuer_id: jwt_issuer_id_for_test_host(host, "operator"),
     )
     browser_headers.merge(
       "Host" => host,

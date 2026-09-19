@@ -12,12 +12,15 @@
 - Starting branch coverage: 10,368 / 14,661 (70.7182320442%)
 - Ending branch coverage: 10,409 / 14,661 (70.9978855467%)
 - Branch delta: +41 covered branches, +0.2796535025 percentage points
-- Remaining line gap to 95%: 3.0830891927 percentage points, approximately 1,516 additional covered lines at the current denominator
-- Starting failures/errors: 0 / 0 in the isolated rerun following batch 27's non-reproducible failure
+- Remaining line gap to 95%: 3.0830891927 percentage points, approximately 1,516 additional covered
+  lines at the current denominator
+- Starting failures/errors: 0 / 0 in the isolated rerun following batch 27's non-reproducible
+  failure
 - Ending failures/errors: 0 / 0
 - Ending suite: 9,198 runs, 43,794 assertions, 0 failures, 0 errors, 0 skips
 
-SimpleCov excluded one worker result older than its 600-second merge timeout. The ending values above are from the generated `coverage/coverage.json` report.
+SimpleCov excluded one worker result older than its 600-second merge timeout. The ending values
+above are from the generated `coverage/coverage.json` report.
 
 ## Selected Targets and Tests Added
 
@@ -53,20 +56,24 @@ SimpleCov excluded one worker result older than its 600-second merge timeout. Th
 
 - Narrow `bin/rails test` runs after each target edit
 - Combined target verification before formatting: 38 runs, 140 assertions, 0 failures, 0 errors
-- `bundle exec rubocop -a`: 3,739 files inspected; 34 corrections; exit 1 because 30 existing/non-autocorrectable offenses remain
+- `bundle exec rubocop -a`: 3,739 files inspected; 34 corrections; exit 1 because 30
+  existing/non-autocorrectable offenses remain
 - Combined target verification after formatting: 43 runs, 148 assertions, 0 failures, 0 errors
 - `COVERAGE=true bin/rails test test/`: 9,198 runs, 43,794 assertions, 0 failures, 0 errors
 - Read-only parsing of `coverage/coverage.json`
 
 ## Skipped Risky Areas
 
-- No routes, configuration, fixtures, factories, dependencies, CI, package files, or external paths were inspected or changed.
-- No authentication, step-up, token, OIDC, credential-secret, payment, destructive withdrawal, Redis, browser, network, or external-service application behavior was changed.
+- No routes, configuration, fixtures, factories, dependencies, CI, package files, or external paths
+  were inspected or changed.
+- No authentication, step-up, token, OIDC, credential-secret, payment, destructive withdrawal,
+  Redis, browser, network, or external-service application behavior was changed.
 - External gem paths printed by warnings were not opened.
 
 ## Next Batch Candidates
 
 - Remaining deterministic `PreferenceResourceSync` child creation and direct-option write paths.
 - `PreferenceCore` reset helpers, context-key mapping, and pure URL/helper selection branches.
-- Remaining simple group membership error responses where existing controller contracts provide a safe precedent.
+- Remaining simple group membership error responses where existing controller contracts provide a
+  safe precedent.
 - Pure policies with uncovered nil, wrong-resource, inactive-state, and ownership decisions.

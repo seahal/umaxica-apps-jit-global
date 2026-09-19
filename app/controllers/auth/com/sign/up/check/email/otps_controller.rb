@@ -45,6 +45,8 @@ module Auth
               def update
                 if dummy_existing_email_flow?
                   @user_email = VisitorEmail.new
+                  return unless verify_otp_turnstile!
+
                   submitted_code = submitted_pass_code
                   return render_code_required if submitted_code.blank?
 
@@ -55,6 +57,7 @@ module Auth
 
                 @user_email = current_registration_email
                 return redirect_invalid_session unless valid_email_session?
+                return unless verify_otp_turnstile!
 
                 submitted_code = submitted_pass_code
                 return render_code_required if submitted_code.blank?
@@ -88,6 +91,17 @@ module Auth
               def sign_up_family = "email"
 
               def sign_up_step = :otp
+
+              def verify_otp_turnstile!
+                return true if cloudflare_turnstile_validation["success"]
+
+                @user_email.errors.add(
+                  :base,
+                  t("sign.com.registration.email.create.turnstile_validation_failed"),
+                )
+                render_sign_up_email_edit(status: :unprocessable_content)
+                false
+              end
 
               def issue_otp_ceremony!
                 SignOtpCeremony.issue!(

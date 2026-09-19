@@ -13,6 +13,12 @@ module Core
           def create
             handle_oidc_backchannel_logout
           end
+
+          private
+
+          def oidc_client_id
+            "core-com"
+          end
         end
       end
     end

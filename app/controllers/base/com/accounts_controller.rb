@@ -14,7 +14,7 @@ module Base
       def index
         authorize!(current_visitor, to: :show?)
         @accounts = switcher.available_accounts
-        render inertia: true, props: { title: "Account", body: "account" }
+        render inertia: true, props: { title: "Account", body: "account", up_link: dashboard_up_link }
       end
 
       def show

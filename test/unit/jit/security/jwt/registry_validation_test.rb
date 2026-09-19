@@ -120,22 +120,40 @@ module Jit
           end
         end
 
-        # With no host list in boot config the preference issuer still needs an
-        # audience list, so it falls back to the configured base URLs. An empty list
-        # there would sign tokens no verifier accepts.
-        test "preference audiences fall back to the configured base URLs" do
+        # A keyring without audiences must fail validation rather than sign tokens
+        # for a guessed localhost audience.
+        test "a configured keyring with no audiences is rejected" do
+          record = build_record(current_kid: "auth-2026").with(audiences: [])
+
+          error =
+            assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+              JitSecurityJwtRegistry.send(:validate_record_metadata!, record)
+            end
+
+          assert_match(/audiences are missing/, error.message)
+        end
+
+        test "jump gateway audience is required outside local environments" do
           source = Object.new
-          source.define_singleton_method(:fetch) do |key, default = nil|
-            { "PUBLIC_BASE_SERVICE_URL" => "base.app.example", "PUBLIC_BASE_STAFF_URL" => "base.org.example" }
-              .fetch(key) { default }
+          source.define_singleton_method(:fetch) { |_key, default = nil| default }
+
+          Rails.stub(:env, ActiveSupport::StringInquirer.new("production")) do
+            error =
+              assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+                JitSecurityJwtRegistry.send(:jump_gateway_audience, source)
+              end
+
+            assert_match(/PUBLIC_JUMP_GATEWAY_URL is required/, error.message)
           end
 
-          JitSecurityJwtRegistry.stub(:preference_hosts_from_boot_config, nil) do
-            audiences = JitSecurityJwtRegistry.send(:preference_audiences, source: source)
+          assert_equal JitSecurityJwtRegistry::LOCAL_JUMP_GATEWAY_AUDIENCE,
+                       JitSecurityJwtRegistry.send(:jump_gateway_audience, source)
+        end
 
-            assert_equal ["base.app.example", "base.com.localhost", "base.org.example"], audiences
-            assert_predicate audiences, :frozen?
-          end
+        test "auth keyring audiences are the union of the per-resource-type audiences" do
+          audiences = JitSecurityJwtRegistry.issuer("auth").audiences
+
+          assert_equal %w(umaxica-api-client umaxica-api-visitor umaxica-api-operator).sort, audiences.sort
         end
       end
     end

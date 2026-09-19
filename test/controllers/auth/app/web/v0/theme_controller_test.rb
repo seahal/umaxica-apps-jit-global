@@ -40,6 +40,10 @@ class Auth::App::Web::V0::ThemeControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "dr", response.parsed_body["theme"]
+    set_cookie = response.headers["Set-Cookie"].to_s
+
+    assert_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=dr"
+    assert_not_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=sy"
   end
 
   test "PATCH update sets theme cookie and returns updated theme" do
@@ -60,6 +64,42 @@ class Auth::App::Web::V0::ThemeControllerTest < ActionDispatch::IntegrationTest
 
     assert_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=dr"
   end
+
+  test "PATCH update from an anonymous visitor with no preference cookie still persists a record" do
+    option_class = PreferenceClassRegistry.option_class("App", :theme)
+    option_class.ensure_defaults! if option_class.respond_to?(:ensure_defaults!)
+
+    assert_difference -> { AppPreference.count }, 1 do
+      with_preference_jwt_keys(host: @host) do
+        patch auth_app_web_v0_theme_path, params: { theme: "dark" }, as: :json
+      end
+    end
+
+    assert_response :ok
+    assert_equal "dr", response.parsed_body["theme"]
+    assert_equal option_class::DARK, AppPreference.order(:created_at).last.app_preference_theme.option_id
+  end
+
+  test "PATCH update persists the theme to the preference record so a reload keeps it" do
+    preference = AppPreference.create!(
+      status_id: AppPreferenceStatus::NOTHING,
+      expires_at: PreferenceBase::REFRESH_TOKEN_TTL.from_now,
+    )
+    option_class = PreferenceClassRegistry.option_class("App", :theme)
+    option_class.ensure_defaults! if option_class.respond_to?(:ensure_defaults!)
+    AppPreferenceTheme.create!(preference: preference, option_id: option_class::SYSTEM)
+    cookies[PreferenceCookieName.access(surface: :app)] = encode_preference_jwt(
+      preferences: { "ct" => "sy" }, host: @host, public_id: preference.public_id,
+    )
+
+    with_preference_jwt_keys(host: @host) do
+      patch auth_app_web_v0_theme_path, params: { theme: "dark" }, as: :json
+    end
+
+    assert_response :ok
+    assert_equal option_class::DARK, preference.reload.app_preference_theme.option_id
+  end
+
   private
 
   def encode_preference_jwt(preferences:, host:, public_id:, preference_type: "AppPreference")

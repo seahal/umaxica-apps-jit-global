@@ -28,6 +28,8 @@ export type ContactSignUpFormProps = {
     label: string;
     type: "email" | "tel";
     autocomplete: string;
+    /** The server-provided value to restore after a rejected submission. */
+    value?: string;
   };
   checkboxes: ContactSignUpCheckbox[];
   /** Heading shown above the validation errors, or null when there are none. */
@@ -89,6 +91,7 @@ export default function ContactSignUpForm({
           type={field.type}
           name={`${scope}[${field.name}]`}
           autoComplete={field.autocomplete}
+          defaultValue={field.value ?? ""}
           isRequired
           validationBehavior="native"
         />

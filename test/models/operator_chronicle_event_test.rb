@@ -37,6 +37,8 @@ class OperatorChronicleEventTest < ActiveSupport::TestCase
     assert_equal 10, OperatorChronicleEvent::STAFF_SECRET_UPDATED
     assert_equal 11, OperatorChronicleEvent::STEP_UP_VERIFIED
     assert_equal 12, OperatorChronicleEvent::SOCIAL_UNLINKED
+    assert_equal 16, OperatorChronicleEvent::STEP_UP_FAILED
+    assert_equal 17, OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED
   end
 
   test "has_many association with staff_chronicles" do
@@ -53,5 +55,7 @@ class OperatorChronicleEventTest < ActiveSupport::TestCase
     OperatorChronicleEvent::DEFAULTS.each do |id|
       assert OperatorChronicleEvent.exists?(id: id), "expected event id #{id} to exist"
     end
+    assert_includes OperatorChronicleEvent::DEFAULTS, OperatorChronicleEvent::STEP_UP_FAILED
+    assert_includes OperatorChronicleEvent::DEFAULTS, OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED
   end
 end

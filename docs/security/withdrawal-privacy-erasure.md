@@ -62,8 +62,10 @@ raw IP addresses. User agents are stored as digests when included.
 ## Processor Notifications
 
 Privacy erasure requests create processor notification rows and enqueue Solid Queue jobs. The job is
-idempotent: terminal notifications are left unchanged, successful notifications move to `notified`,
-and failed notifications record retry metadata and an occurrence event.
+idempotent: terminal notifications are left unchanged, an implemented processor may move its row to
+`notified` only after its concrete dispatch contract succeeds, and unavailable processors remain
+explicitly failed with retry metadata and an occurrence event. The current repository has no
+concrete processor adapter, so no processor is currently allowlisted as successfully notified.
 
 Processor integrations that are not implemented remain explicit failure or manual follow-up states
 instead of silently succeeding.

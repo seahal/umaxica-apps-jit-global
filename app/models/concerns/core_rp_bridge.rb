@@ -55,7 +55,7 @@ module CoreRpBridge
   end
 
   def legacy_core_client_id?
-    rp_client_id.in?(%w(core_app core_com core_org))
+    rp_client_id.in?(%w(core_app core_com core_org core-next-rp))
   end
 
   def legacy_core_host?

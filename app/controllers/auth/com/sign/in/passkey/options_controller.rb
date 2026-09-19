@@ -8,6 +8,7 @@ module Auth
         module Passkey
           class OptionsController < ::Auth::Com::ApplicationController
             include ::PasskeySignInFlow
+            include ::AuthenticationModeSwitchGuard
             include EmailValidation
             include IdentifierDetection
 

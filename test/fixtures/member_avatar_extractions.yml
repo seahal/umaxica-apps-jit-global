@@ -17,4 +17,4 @@
 # Foreign Keys
 #
 #  fk_rails_...  (avatar_id => avatars.id)
-  #
+#

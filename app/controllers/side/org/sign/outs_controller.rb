@@ -19,7 +19,11 @@ module Side
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
-        after_action :sign_out_notice_cache_headers!, only: %i(edit complete)
+        after_action :sign_out_notice_cache_headers!, only: %i(show edit)
+
+        def show
+          complete_oidc_rp_logout!
+        end
 
         def new
           redirect_to(sign_out_edit_path, status: :see_other)
@@ -31,14 +35,10 @@ module Side
 
         def create
           launch_oidc_rp_logout!(
-            client_id: "base-rails-rp",
+            client_id: "side-org",
             issuer_resource_type: "operator",
             token_issuer: "operator",
           )
-        end
-
-        def complete
-          complete_oidc_rp_logout!
         end
 
         private

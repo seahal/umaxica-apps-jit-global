@@ -37,9 +37,9 @@ class OrgComNoSocialCleanupSecurityTest < ActiveSupport::TestCase
     # exactly the ones this controller puts in its props.
     source = read("app/controllers/auth/org/sign/ins_controller.rb")
 
-    assert_match(/new_auth_org_sign_in_passkey_path/, source)
-    assert_match(/new_auth_org_sign_in_secret_path/, source)
-    assert_no_match(/social_authentication|google|apple|microsoft/i, source)
+    assert_match(/auth_org_social_entra_session_path/, source)
+    assert_match(/new_auth_org_sign_in_emergency_passkey_path/, source)
+    assert_no_match(/google|apple/i, source)
   end
 
   test "org routes expose local sign in and passkey verification only" do

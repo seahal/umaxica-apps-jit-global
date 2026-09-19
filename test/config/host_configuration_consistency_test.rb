@@ -24,6 +24,7 @@ class HostConfigurationConsistencyTest < ActiveSupport::TestCase
     base_service: "PUBLIC_BASE_SERVICE_URL",
     base_corporate: "PUBLIC_BASE_CORPORATE_URL",
     base_staff: "PUBLIC_BASE_STAFF_URL",
+    edit_staff: "PUBLIC_EDIT_STAFF_URL",
     core_service: "PUBLIC_CORE_SERVICE_URL",
     core_corporate: "PUBLIC_CORE_CORPORATE_URL",
     core_staff: "PUBLIC_CORE_STAFF_URL",

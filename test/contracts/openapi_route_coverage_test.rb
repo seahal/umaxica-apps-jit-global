@@ -33,6 +33,7 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
 
   # Surfaces with their own description. `net` and `dev` are internal-only and have none.
   SURFACES = OpenapiContract::SURFACES
+  APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm side).freeze
 
   test "every described surface has a bundled description that parses" do
     SURFACES.each do |surface|
@@ -77,18 +78,39 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
     assert_not_includes described_operations("org"), "GET /api/v0/profile"
   end
 
+  test "edit org operational API routes are covered by the org description" do
+    edit_operations = Rails.application.routes.routes.filter_map { |route|
+      next unless route.defaults[:controller].to_s.start_with?("edit/org/api/v0/")
+
+      path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
+      verb = route.verb.to_s.strip
+      next if verb.empty?
+
+      "#{verb} #{path}"
+    }.to_set
+
+    assert_equal Set["GET /api/v0/health.json", "GET /api/v0/revision.json"], edit_operations
+    assert edit_operations.subset?(described_operations("org"))
+  end
+
   private
 
   # "<METHOD> <path>" for every in-scope route on the surface, with Rails' `:slug` rewritten to
   # OpenAPI's `{slug}`. Deduplicated: several services serve the same path on the same surface --
   # `/api/v0/entries` comes from docs, help, info, and news -- and the description states the path
   # once.
+  # Edit owns an org-facing API health/revision pair and must be included even though it is not a
+  # browser application namespace. GUID remains deliberately outside this three-surface contract
+  # until its `net` OpenAPI ownership decision is made (see config/routes/guid.rb).
   def routed_operations(surface)
+    service_pattern = Regexp.union(*APPLICATION_SERVICE_NAMES)
+    controller_pattern = %r{\A(?:#{service_pattern})/#{Regexp.escape(surface)}(?:/|\z)}
+
     Rails.application.routes.routes.filter_map { |route|
       name = route.name.to_s
       controller_path = route.defaults[:controller].to_s
       next unless name.include?("_#{surface}_") ||
-        controller_path.match?(%r{\A(?:core|docs|help|info|news|palm|auth|base|side)/#{Regexp.escape(surface)}(?:/|\z)})
+        controller_path.match?(controller_pattern)
 
       path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
       next unless path.match?(DESCRIBED_PREFIXES)

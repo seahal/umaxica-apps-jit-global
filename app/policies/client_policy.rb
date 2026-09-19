@@ -30,10 +30,6 @@ class ClientPolicy < ApplicationPolicy
     (owner? && user.is_a?(Client)) || (user.is_a?(Operator) && operator?)
   end
 
-  def revoke_all?
-    user.is_a?(Client) && user.id == record.id
-  end
-
   def purge_sessions?
     user.is_a?(Operator)
   end

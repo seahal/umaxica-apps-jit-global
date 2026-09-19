@@ -9,8 +9,8 @@ previously shipped as defects, so static tests reject their reintroduction.
 
 - Resolve every ceremony's UV policy through the closed `Webauthn::UvPolicy` registry. Call sites
   must not directly specify `"required"`, `"preferred"`, or `"discouraged"` strings.
-- Every current registry entry is `required`: `registration`, `direct_sign_in`, `mfa_challenge`,
-  `ordinary_step_up`, and `high_risk_step_up`. Purposes are separated so that only
+- Every current registry entry is `required`: `registration`, `direct_sign_in`, `emergency_sign_in`,
+  `mfa_challenge`, `ordinary_step_up`, and `high_risk_step_up`. Purposes are separated so that only
   `ordinary_step_up` can be relaxed by a future explicit decision. Such a change must update this
   document and `adr/passkey-uv-policy.md`.
 - Enforce UV on the server as well as in client options. In addition to
@@ -19,6 +19,18 @@ previously shipped as defects, so static tests reject their reintroduction.
 - Never accept a response with UV=false for a purpose whose registry policy requires UV. Record
   achieved assurance separately from UV, freshness, phishing resistance, and step-up completion; UV
   alone does not imply AAL2.
+
+## Ceremony Purposes Are Namespaces
+
+- `Webauthn::ChallengeStore::PURPOSES` is closed, and a challenge issued for one purpose is rejected
+  by every other verifier in both directions. Consumption deletes the entry before any binding is
+  checked, so a rejected attempt still burns the challenge.
+- Org Emergency Access uses `emergency_sign_in`, distinct from normal sign-in's `authentication` and
+  from `step_up`. A new purpose must state what it may not be confused with; the exhaustive
+  cross-purpose check lives in `test/unit/webauthn/challenge_store_test.rb`.
+- Emergency Access must not grow a parallel verifier, challenge store, or credential store. It is a
+  different authentication policy running the same cryptographic implementation
+  (`docs/security/org-emergency-access.md`).
 
 ## Duplicate Registration by Credential ID
 

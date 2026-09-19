@@ -473,7 +473,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_not_equal 403, response.status
 
     post(
-      auth_app_oidc_backchannel_logout_url(host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")),
+      core_app_oidc_backchannel_logout_url(host: ENV.fetch("PUBLIC_CORE_SERVICE_URL")),
       params: { logout_token: "invalid" },
       headers: { "Accept" => "application/json", "Sec-Fetch-Site" => "cross-site" },
       as: :json,

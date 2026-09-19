@@ -1,18 +1,13 @@
 import Page from "@/components/ui/Page";
 import Table from "@/components/ui/Table";
 
-// Replaces the base identity activity log templates. Every cell arrives as finished text:
-// localisation and the chronicle formatting stayed on the server.
-
 export type ActivityRow = {
-  id: string;
   occurred_at: string;
-  event_label: string;
-  event_id: string;
-  ip_address: string;
+  activity: string;
   device: string;
-  login_method: string;
-  context: string;
+  source: string;
+  risk: string;
+  risk_rank: number;
 };
 
 export type ActivityIndexProps = {
@@ -22,11 +17,10 @@ export type ActivityIndexProps = {
   empty_message: string;
   columns: {
     occurred_at: string;
-    event: string;
-    ip_address: string;
+    activity: string;
     device: string;
-    login_method: string;
-    context: string;
+    source: string;
+    risk: string;
   };
   activities: ActivityRow[];
 };
@@ -52,26 +46,20 @@ export default function ActivityIndex({
           <thead>
             <tr>
               <th scope="col">{columns.occurred_at}</th>
-              <th scope="col">{columns.event}</th>
-              <th scope="col">{columns.ip_address}</th>
+              <th scope="col">{columns.activity}</th>
               <th scope="col">{columns.device}</th>
-              <th scope="col">{columns.login_method}</th>
-              <th scope="col">{columns.context}</th>
+              <th scope="col">{columns.source}</th>
+              <th scope="col">{columns.risk}</th>
             </tr>
           </thead>
           <tbody>
-            {activities.map((activity) => (
-              <tr key={activity.id}>
+            {activities.map((activity, index) => (
+              <tr key={`${activity.occurred_at}-${index}`}>
                 <td>{activity.occurred_at}</td>
-                <td>
-                  {activity.event_label} ({activity.event_id})
-                </td>
-                <td>{activity.ip_address}</td>
+                <td>{activity.activity}</td>
                 <td>{activity.device}</td>
-                <td>{activity.login_method}</td>
-                <td>
-                  <code className="text-xs text-fg-muted">{activity.context}</code>
-                </td>
+                <td>{activity.source}</td>
+                <td>{activity.risk}</td>
               </tr>
             ))}
           </tbody>

@@ -6,14 +6,19 @@ import Select from "@/components/ui/Select";
 import PreferenceScreenFrame, {
   type PreferenceLink,
 } from "@/features/preferences/PreferenceScreenFrame";
+import { applyTheme, fetchStoredTheme } from "@/lib/theme";
 
 // Backs both `option` (region, timezone, language, theme) and `selectable` (currency, calendar,
 // clock, motion, density, pagination). The two shared ERB templates they replace differed only in
 // how the server built the choice labels, which is still where that difference lives.
+//
+// A theme write must not recolour the document until the server accepts it and GET /web/v0/theme
+// reports the stored value — the same contract as the chrome ThemeControls on every Inertia surface.
 
 type PreferenceChoice = {
   label: string;
   value: number;
+  disabled?: boolean;
 };
 
 type PreferenceSelectForm = {
@@ -66,6 +71,13 @@ export default function PreferenceSelect({
       {
         onStart: () => setProcessing(true),
         onFinish: () => setProcessing(false),
+        onSuccess: () => {
+          // The theme screen writes through Inertia rather than the chrome control. Colour
+          // follows the value the server stored, and only after that write is accepted.
+          if (screen === "theme") {
+            void applyThemeAfterPreferenceWrite();
+          }
+        },
       },
     );
   };
@@ -94,6 +106,7 @@ export default function PreferenceSelect({
           options={form.choices.map((choice) => ({
             value: String(choice.value),
             label: choice.label,
+            isDisabled: choice.disabled === true,
           }))}
         />
 
@@ -132,4 +145,11 @@ export default function PreferenceSelect({
       ) : null}
     </PreferenceScreenFrame>
   );
+}
+
+async function applyThemeAfterPreferenceWrite(): Promise<void> {
+  const stored = await fetchStoredTheme();
+  if (stored) {
+    applyTheme(stored);
+  }
 }

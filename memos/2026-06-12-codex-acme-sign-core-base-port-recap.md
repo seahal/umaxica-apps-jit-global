@@ -34,4 +34,4 @@ Rails foundation, and native API responsibilities more cleanly.
 
 The stable decision is recorded in `adr/acme-sign-core-base-port-boundary.md`. The stable
 architecture reference is `docs/architecture/acme-sign-core-base-port.md`. Implementation follow-up
-is tracked in `plans/active/acme-sign-core-base-port-implementation.md`.
+is tracked in GH issue #829.

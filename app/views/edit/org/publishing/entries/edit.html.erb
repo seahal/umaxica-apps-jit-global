@@ -1,0 +1,55 @@
+<% page_title(title) %>
+<div class="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+  <%= link_to "← Back to entry", show_href, class: "text-sm text-fg-muted underline-offset-4 hover:underline" %>
+  <div>
+    <h1 class="text-2xl font-bold text-fg"><%= title %></h1>
+    <p class="text-sm text-fg-muted"><%= description %></p>
+  </div>
+
+  <%= form_with url: form[:action], method: form[:method], class: "flex flex-col gap-4" do %>
+    <%= hidden_field_tag "entry[lock_version]", form[:lock_version] %>
+
+    <p class="text-sm text-fg-muted">
+      Locale <%= form[:locale] %><%= " · slug #{form[:canonical_slug]}" if form[:canonical_slug] %>
+    </p>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Title</span>
+      <%= text_field_tag "entry[title]", form[:title], autocomplete: "off",
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+      <% if errors["title"] %>
+        <span role="alert" class="text-danger"><%= errors["title"] %></span>
+      <% end %>
+    </label>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Summary</span>
+      <%= text_area_tag "entry[summary]", form[:summary], rows: 3,
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+      <% if errors["summary"] %>
+        <span role="alert" class="text-danger"><%= errors["summary"] %></span>
+      <% end %>
+    </label>
+
+    <label class="flex flex-col gap-1 text-sm">
+      <span>Body (JSON)</span>
+      <%= text_area_tag "entry[body]", form[:body], rows: 16,
+            class: "w-full rounded-md border border-line bg-surface px-3 py-2 font-mono text-xs text-fg" %>
+      <% if errors["body"] %>
+        <span role="alert" class="text-danger"><%= errors["body"] %></span>
+      <% end %>
+    </label>
+
+    <% if errors["lock_version"] %>
+      <p role="alert" class="text-sm text-danger"><%= errors["lock_version"] %></p>
+    <% end %>
+    <% if errors["base"] %>
+      <p role="alert" class="text-sm text-danger"><%= errors["base"] %></p>
+    <% end %>
+
+    <div class="flex items-center gap-3">
+      <%= submit_tag "Save revision", class: "rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+      <%= link_to "All entries", index_href, class: "text-sm text-fg-muted underline-offset-4 hover:underline" %>
+    </div>
+  <% end %>
+</div>

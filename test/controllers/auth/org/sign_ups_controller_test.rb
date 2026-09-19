@@ -9,12 +9,14 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = configured_host(:sign_staff)
+    host! @host
   end
 
   test "direct entry without a login challenge renders the org entry page" do
     get auth_org_sign_up_url(ri: "jp"), headers: { "Host" => @host }
 
-    assert_response :success
+    assert_response :see_other
+    assert_equal "/", URI.parse(response.location).path
     assert_nil session[:oidc_authorization_login_challenge]
     assert_nil session[:oidc_code_verifier]
     assert_nil session[:oidc_state]
@@ -23,9 +25,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
   test "direct entry offers the reciprocal sign in link" do
     get auth_org_sign_up_url(ri: "jp"), headers: { "Host" => @host }
 
-    assert_response :success
-    assert_equal "auth/org/sign/ups/show", inertia_component
-    assert_equal auth_org_sign_in_path(ri: "jp"), inertia_props.fetch("sign_in_link").fetch("href")
+    assert_response :see_other
+    assert_equal "/", URI.parse(response.location).path
+    assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "local ceremony does not render sign in link on sign up page" do
@@ -35,8 +37,11 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_nil inertia_props["sign_in_link"]
@@ -49,8 +54,11 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
@@ -63,8 +71,11 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     # The org surface has no registration methods at all: recruitment is the only entry point.
@@ -80,9 +91,12 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
     )
 
     with_env("ORG_#{"GOOGLE"}_SIGNUP_ENABLED" => "true") do
-      get auth_org_sign_up_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+      get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
           headers: { "Host" => @host }
     end
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_no_match(%r{/social/auth/google|/auth/google}, response.body)
@@ -95,8 +109,11 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", login_challenge: issuance.transaction.login_challenge),
+    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
         headers: { "Host" => @host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
 
@@ -145,6 +162,10 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def admission_code(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  end
 
   def authorize_params(screen_hint: nil)
     params = {

@@ -230,8 +230,9 @@ confidence level and an estimated severity.
 
 **Ask for coverage first and filter in a separate pass.** A prompt that says "only report
 high-severity issues", "be conservative", or "don't nitpick" is followed literally: the review
-investigates just as thoroughly, finds the bugs, then declines to report the ones it judges below the
-stated bar. Precision rises while real bugs go unreported. Move the filtering downstream instead.
+investigates just as thoroughly, finds the bugs, then declines to report the ones it judges below
+the stated bar. Precision rises while real bugs go unreported. Move the filtering downstream
+instead.
 
 If you do want single-pass filtering, be concrete about where the bar sits rather than using
 qualitative words like "important" — for example, "report any bug that could cause incorrect

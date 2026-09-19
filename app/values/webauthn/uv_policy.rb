@@ -31,6 +31,7 @@ module Webauthn
     REGISTRY = {
       registration: new(:registration, client_value: REQUIRED),
       direct_sign_in: new(:direct_sign_in, client_value: REQUIRED),
+      emergency_sign_in: new(:emergency_sign_in, client_value: REQUIRED),
       mfa_challenge: new(:mfa_challenge, client_value: REQUIRED),
       ordinary_step_up: new(:ordinary_step_up, client_value: REQUIRED),
       high_risk_step_up: new(:high_risk_step_up, client_value: REQUIRED),

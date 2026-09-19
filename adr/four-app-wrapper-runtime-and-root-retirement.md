@@ -127,7 +127,3 @@ No compatibility alias for `acme` is retained.
 5. Use wrapper apps, not the root app, as the final `bin/rails s` target.
 
 ## Related
-
-- `plans/active/four-engine-reframe.md`
-- `plans/active/wrapper-app-architecture-plan.md`
-- `plans/active/root-app-retirement-plan.md`

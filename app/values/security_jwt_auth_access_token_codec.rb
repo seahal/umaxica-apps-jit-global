@@ -6,15 +6,21 @@
 require "jwt"
 
 class SecurityJwtAuthAccessTokenCodec
-  JWT_ALGORITHM = "ES384"
-  VALID_ACTOR_TYPES = %w(client operator visitor).freeze
+  JWT_ALGORITHM = SecurityJwtRfc9068AccessTokenProfile::ALGORITHM
+  TOKEN_TYPE = SecurityJwtRfc9068AccessTokenProfile::TOKEN_TYPE
+  VALID_RESOURCE_TYPES = %w(client operator visitor).freeze
+  # Keyring used when a caller does not name one. Callers that sign or verify
+  # with a surface keyring must pass `jwt_issuer_id:` explicitly; the keyring is
+  # never inferred from the request host.
+  DEFAULT_JWT_ISSUER_ID = "auth"
 
   class << self
     def encode(resource, host:, resource_type: nil, dpop_jkt: nil, expires_at: nil,
                session_public_id: nil, session_id: nil, oidc_sid: nil, oidc_jti: nil, scopes: nil, acr: nil,
                amr: nil, access_token_ttl: SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL,
                jwt_issuer_id: nil, issuer: nil, audiences: nil,
-               subject: nil, auth_time: nil, step_up_until: nil, client_id: nil)
+               subject: nil, auth_time: nil, step_up_until: nil, client_id: nil,
+               authentication_context: nil)
       resource_type ||=
         case resource
         when ::Client then "client"
@@ -47,16 +53,10 @@ class SecurityJwtAuthAccessTokenCodec
         auth_time: auth_time,
         step_up_until: step_up_until,
         client_id: client_id,
+        authentication_context: authentication_context,
       )
 
-      token_issuer_id = resolve_jwt_issuer_id(
-        host: host, resource_type: resource_type,
-        jwt_issuer_id: jwt_issuer_id,
-      )
-      token_issuer_id ? JitSecurityJwtKeyring.encode(
-        payload,
-        issuer_id: token_issuer_id,
-      ) : JitSecurityJwtKeyring.encode(payload)
+      JitSecurityJwtKeyring.encode(payload, typ: TOKEN_TYPE, issuer_id: resolve_jwt_issuer_id(jwt_issuer_id))
     rescue JWT::EncodeError, OpenSSL::PKey::PKeyError, ArgumentError, TypeError => e
       Rails.logger.error(
         JitLogEvent.format(
@@ -98,21 +98,12 @@ class SecurityJwtAuthAccessTokenCodec
       return nil if token.blank? || host.blank?
 
       header = JitSecurityJwtKeyring.parse_header(token)
-      unless valid_header?(header, resource_type)
+      unless valid_header?(header)
         report_invalid_header(resource_type: resource_type, host: host, header: header)
         return nil
       end
 
-      resolved_jwt_issuer_id = resolve_jwt_issuer_id(
-        host: host, resource_type: resource_type,
-        jwt_issuer_id: jwt_issuer_id,
-      )
-      public_key =
-        if resolved_jwt_issuer_id.present?
-          JitSecurityJwtKeyring.public_key_for(header["kid"], issuer_id: resolved_jwt_issuer_id)
-        else
-          JitSecurityJwtKeyring.public_key_for(header["kid"])
-        end
+      public_key = JitSecurityJwtKeyring.public_key_for(header["kid"], issuer_id: resolve_jwt_issuer_id(jwt_issuer_id))
       if public_key.nil?
         JitSecurityJwtAnomalyReporter.report_auth(
           resource_type: resource_type,
@@ -127,13 +118,13 @@ class SecurityJwtAuthAccessTokenCodec
         token, public_key, true,
         decode_options(resource_type, issuer, audiences, verify_exp: verify_exp),
       )
-      unless valid_payload_type?(payload, resource_type)
+      unless SecurityJwtRfc9068AccessTokenProfile.claims_structurally_valid?(payload)
         JitSecurityJwtAnomalyReporter.report_auth(
           resource_type: resource_type,
           host: host,
           header: header,
           payload: payload,
-          reason: "TYP_MISMATCH",
+          reason: "CLAIM_INVALID",
         )
         return nil
       end
@@ -186,12 +177,8 @@ class SecurityJwtAuthAccessTokenCodec
       AuthorizationTokenClaims.subject(payload)
     end
 
-    def extract_act(payload)
-      AuthorizationTokenClaims.actor(payload)
-    end
-
-    def extract_type(payload)
-      extract_act(payload)
+    def extract_resource_type(payload)
+      AuthorizationTokenClaims.resource_type(payload)
     end
 
     def extract_session_id(payload)
@@ -202,14 +189,15 @@ class SecurityJwtAuthAccessTokenCodec
       AuthorizationTokenClaims.jti(payload)
     end
 
-    def validate_actor_claim!(payload, expected_act)
+    # The resource type is carried by exactly one `domain:<type>` scope value,
+    # not by the RFC 8693 `act` claim.
+    def resource_type_scope_matches?(payload, expected_resource_type)
       return false if payload.blank?
 
-      act = extract_act(payload)
-      return false if act.blank?
-      return false unless VALID_ACTOR_TYPES.include?(act)
+      resource_type = extract_resource_type(payload)
+      return false unless VALID_RESOURCE_TYPES.include?(resource_type)
 
-      act == expected_act
+      resource_type == expected_resource_type.to_s
     end
 
     def extract_scopes(payload)
@@ -248,46 +236,8 @@ class SecurityJwtAuthAccessTokenCodec
       end
     end
 
-    def resolve_jwt_issuer_id(host:, resource_type:, jwt_issuer_id:)
-      return jwt_issuer_id.presence if jwt_issuer_id.present?
-
-      inferred = inferred_surface_jwt_issuer_id(host: host, resource_type: resource_type)
-      return inferred if inferred.present?
-
-      nil
-    end
-
-    def inferred_surface_jwt_issuer_id(host:, resource_type:)
-      normalized = host.to_s
-      return nil if normalized.blank?
-      return nil unless normalized.include?("umaxica") || normalized.include?("localhost") ||
-        normalized.include?("acme") || normalized.include?("core")
-
-      service =
-        if normalized.include?("acme")
-          "ACME"
-        elsif normalized.include?("core")
-          "CORE"
-        else
-          "SIGN"
-        end
-
-      surface =
-        if service == "SIGN"
-          case resource_type.to_s
-          when "operator" then "ORG"
-          when "visitor" then "COM"
-          else "APP"
-          end
-        elsif normalized.include?(".org") || normalized.include?("org.")
-          "ORG"
-        elsif normalized.include?(".com") || normalized.include?("com.")
-          "COM"
-        else
-          "APP"
-        end
-
-      "surface:#{service}_#{surface}"
+    def resolve_jwt_issuer_id(jwt_issuer_id)
+      jwt_issuer_id.presence || DEFAULT_JWT_ISSUER_ID
     end
 
     def token_connection_owner(token_class)
@@ -299,32 +249,20 @@ class SecurityJwtAuthAccessTokenCodec
     def decode_options(resource_type, issuer, audiences, verify_exp:)
       {
         algorithms: [JWT_ALGORITHM],
-        required_claims: %w(iss aud typ exp nbf iat sub sid act jti acr),
+        required_claims: %w(iss aud exp nbf iat sub sid client_id jti acr scope),
         leeway: AuthenticationJwtConfiguration.leeway_seconds,
         verify_iat: true,
         verify_exp: verify_exp,
         verify_nbf: true,
         verify_iss: true,
-        iss: issuer || AuthenticationJwtConfiguration.issuer(resource_type),
+        iss: issuer || AuthenticationJwtConfiguration.issuer,
         verify_aud: true,
         aud: audiences || AuthenticationJwtConfiguration.audiences(resource_type),
       }
     end
 
-    def valid_header?(header, resource_type)
-      return false if header.blank?
-      return false unless header["alg"] == JWT_ALGORITHM
-      return false unless header["typ"] == expected_token_type(resource_type)
-
-      header["kid"].present?
-    end
-
-    def valid_payload_type?(payload, resource_type)
-      payload.is_a?(Hash) && payload["typ"] == expected_token_type(resource_type)
-    end
-
-    def expected_token_type(resource_type)
-      AuthenticationJwtConfiguration.token_type(resource_type)
+    def valid_header?(header)
+      SecurityJwtRfc9068AccessTokenProfile.header_valid?(header)
     end
 
     def report_invalid_header(resource_type:, host:, header:)
@@ -332,7 +270,7 @@ class SecurityJwtAuthAccessTokenCodec
         resource_type: resource_type,
         host: host,
         header: header,
-        reason: "INVALID_HEADER",
+        reason: SecurityJwtRfc9068AccessTokenProfile.header_rejection_reason(header),
       )
     end
 

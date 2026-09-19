@@ -9,10 +9,12 @@ class Base::App::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
   end
 
-  test "callback route exists" do
-    assert_routing(
-      { method: :get, path: "http://#{@host}/oidc/callback" },
-      { controller: "base/app/oidc/callbacks", action: "show" },
-    )
+  test "retired RP callback route is unroutable" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{@host}/oidc/callback", method: :get)
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{@host}/oidc/authorization", method: :get)
+    end
   end
 end

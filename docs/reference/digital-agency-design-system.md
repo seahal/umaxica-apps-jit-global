@@ -10,8 +10,8 @@ before inventing screen patterns.
 - Notices and licensing: <https://design.digital.go.jp/dads/introduction/notices/>
 - Site root: <https://design.digital.go.jp/dads/>
 
-The introduction is written in Japanese. The pages above are the source; this file only records
-that we treat them as implementation guidance.
+The introduction is written in Japanese. The pages above are the source; this file only records that
+we treat them as implementation guidance.
 
 What to take from those pages:
 
@@ -25,8 +25,8 @@ What to take from those pages:
   quality instead of reinventing parts.
 
 This application still owns its primitives in `src/components/ui/` and its token layer in
-`src/styles/theme.css`. Do not copy Digital Agency Figma files or code snippets into this
-repository without following the notices page (source attribution for unedited content; edited
-content must not be presented as Digital Agency work).
+`src/styles/theme.css`. Do not copy Digital Agency Figma files or code snippets into this repository
+without following the notices page (source attribution for unedited content; edited content must not
+be presented as Digital Agency work).
 
 Source: Digital Agency Design System website <https://design.digital.go.jp/dads/>

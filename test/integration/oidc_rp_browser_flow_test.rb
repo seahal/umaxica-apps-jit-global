@@ -38,230 +38,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     OperatorIdentityState.ensure_defaults!
   end
 
-  test "app com and org sso authorize redirects to Acme OP with state nonce and PKCE" do
+  test "leftover base RP authorize and callback paths are unroutable" do
     SURFACES.each do |surface|
-      host! surface[:host]
-
-      get "/oidc/authorization", headers: browser_headers
-
-      assert_response :redirect
-      uri = URI.parse(response.location)
-      query = Rack::Utils.parse_nested_query(uri.query)
-
-      assert_equal surface[:acme_host], uri.host
-      assert_equal "/oauth/authorize", uri.path
-      assert_not_equal "jump.umaxica.net", uri.host
-      assert_equal surface[:client_id], query["client_id"]
-      assert_equal redirect_uri_for(surface), query["redirect_uri"]
-      assert_equal "S256", query["code_challenge_method"]
-      assert_predicate query["state"], :present?
-      assert_predicate query["nonce"], :present?
-      assert_predicate query["code_challenge"], :present?
-      # Base RP authorization defaults to the signup screen hint when no explicit
-      # screen_hint param is supplied (Base::App::Oidc::AuthorizationsController#screen_hint_param).
-      assert_equal "signup", query["screen_hint"]
-    end
-  end
-
-  test "acme app browser flow reaches Acme token exchange without stubbing OP" do
-    with_acme_oidc_client_key do
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-      client = OidcClientRegistry.find!("base-rails-rp")
-      host! acme_host
-
-      # Drive the sign-in screen explicitly; the RP entrypoint otherwise defaults to signup.
-      get "/oidc/authorization", params: { screen_hint: "signin" }, headers: browser_headers
-
-      assert_response :redirect
-      authorize_uri = URI.parse(response.location)
-      authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)
-      code_verifier = session.fetch(:oidc_code_verifier)
-
-      assert_equal acme_host, authorize_uri.host
-      assert_equal "/oauth/authorize", authorize_uri.path
-      assert_not_equal "jump.umaxica.net", authorize_uri.host
-
-      get "/oauth/authorize", params: authorize_query, headers: browser_headers
-
-      assert_response :redirect
-      sign_uri = URI.parse(jump_rt_url_from_location(response.location))
-      sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
-
-      assert_equal sign_host, sign_uri.host
-      assert_equal "/sign/in", sign_uri.path
-      assert_predicate sign_query["login_challenge"], :present?
-
-      host! sign_host
-      get sign_uri.request_uri, headers: browser_headers
-
-      assert_response :success
-
-      result =
-        OidcAuthorizationTransactionCoordinator.register_result!(
-          surface: "app",
-          login_challenge: sign_query.fetch("login_challenge"),
-          actor: clients(:one),
-          session_ref: "acme-e2e-session",
-          auth_method: "passkey",
-        )
-
-      host! acme_host
-      get URI.parse(result.resume_url).request_uri, headers: browser_headers
-
-      assert_response :redirect
-      callback_uri = URI.parse(jump_rt_url_from_location(response.location))
-      callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
-
-      assert_equal URI.parse(client.redirect_uris.first).host, callback_uri.host
-      assert_equal "/oidc/callback", callback_uri.path
-      assert_predicate callback_query["code"], :present?
-      assert_equal authorize_query.fetch("state"), callback_query["state"]
-
-      token_url = acme_app_oauth_token_url(host: acme_host)
-      client_assertion = OidcClientAssertionJwt.issue(client_id: "base-rails-rp", token_url: token_url)
-      post token_url,
-           params: {
-             grant_type: "authorization_code",
-             code: callback_query.fetch("code"),
-             redirect_uri: client.redirect_uris.first,
-             client_id: "base-rails-rp",
-             code_verifier: code_verifier,
-             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-             client_assertion: client_assertion,
-           },
-           headers: browser_headers
-
-      assert_response :ok
-      assert_predicate response.parsed_body["id_token"], :present?
-      assert_predicate response.parsed_body["access_token"], :present?
-    end
-  end
-
-  # Regression guard for the sign-up -> OIDC authorization resume handoff.
-  # The handoff mints a BROWSER_WEB token within seconds of the token issued
-  # while completing sign-up, so the login cooldown gate would fire a 429 unless
-  # resume_authorization! drives log_in with bootstrap_actor: true. This test
-  # fails if that wiring is removed (or if check_login_cooldown! stops honoring
-  # bootstrap_actor), even though the underlying unit test on the gate passes.
-  test "acme app authorization resume bypasses login cooldown for the sign-up handoff" do
-    with_acme_oidc_client_key do
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      host! acme_host
-
-      get "/oidc/authorization", headers: browser_headers
-
-      assert_response :redirect
-      authorize_uri = URI.parse(jump_rt_url_from_location(response.location))
-      authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)
-
-      get "/oauth/authorize", params: authorize_query, headers: browser_headers
-
-      assert_response :redirect
-      sign_uri = URI.parse(jump_rt_url_from_location(response.location))
-      sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
-
-      result =
-        OidcAuthorizationTransactionCoordinator.register_result!(
-          surface: "app",
-          login_challenge: sign_query.fetch("login_challenge"),
-          actor: clients(:one),
-          session_ref: "acme-cooldown-handoff-session",
-          auth_method: "email",
-        )
-
-      # Simulate the token freshly minted while completing sign-up, so the
-      # cooldown gate would reject a non-bootstrap login.
-      OrgTicketRecord.connected_to(role: :writing) do
-        ClientToken.create!(user: clients(:one), user_token_status_id: ClientTokenStatus::ACTIVE)
+      ["/oidc/authorization", "/oidc/callback"].each do |path|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{surface[:host]}#{path}", method: :get)
+        end
       end
-
-      self.login_cooldown = 30.seconds
-      begin
-        host!(acme_host)
-        get(URI.parse(result.resume_url).request_uri, headers: browser_headers)
-      ensure
-        self.login_cooldown = 0.seconds
-      end
-
-      assert_not_equal 429, response.status,
-                       "sign-up -> OIDC resume handoff must not be rejected by the login cooldown gate"
-      assert_response :redirect
-      callback_uri = URI.parse(jump_rt_url_from_location(response.location))
-      callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
-
-      assert_equal "/oidc/callback", callback_uri.path
-      assert_predicate callback_query["code"], :present?
-    end
-  end
-
-  test "acme app authorization resume opens session-limit resolution when three usable tokens already exist" do
-    with_acme_oidc_client_key do
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      user = clients(:one)
-      ClientToken.where(user_id: user.id).delete_all
-
-      3.times do
-        ClientToken.create!(
-          user: user,
-          user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-          user_token_status_id: ClientTokenStatus::ACTIVE,
-        )
-      end
-
-      host! acme_host
-      get "/oidc/authorization", headers: browser_headers
-
-      assert_response :redirect
-      authorize_uri = URI.parse(jump_rt_url_from_location(response.location))
-      authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)
-
-      get "/oauth/authorize", params: authorize_query, headers: browser_headers
-
-      assert_response :redirect
-      sign_uri = URI.parse(jump_rt_url_from_location(response.location))
-      sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
-
-      issuance =
-        OidcAuthorizationTransactionCoordinator.register_result!(
-          surface: "app",
-          login_challenge: sign_query.fetch("login_challenge"),
-          actor: user,
-          session_ref: "acme-session-limit-session",
-          auth_method: "passkey",
-        )
-
-      assert_no_difference -> { ClientToken.where(user_id: user.id).count } do
-        get URI.parse(issuance.resume_url).request_uri, headers: browser_headers
-      end
-
-      assert_response :see_other
-      resolution_uri = URI.parse(response.location)
-      resolution_query = Rack::Utils.parse_nested_query(resolution_uri.query.to_s)
-
-      assert_equal "/sign/in/limitation", resolution_uri.path
-      assert_predicate resolution_query["resolution_challenge"], :present?
-      assert_not_includes resolution_uri.query.to_s, user.id.to_s
-      assert_not_predicate issuance.transaction.reload, :consumed?
-
-      resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(
-        resolution_query.fetch("resolution_challenge"),
-      )
-
-      assert_equal "Client", resolution.actor_type
-      assert_equal user.public_id, resolution.actor_ref
-      assert_equal issuance.transaction.id, resolution.oidc_authorization_transaction_id
-
-      host! acme_host
-      get URI.parse(response.location).request_uri, headers: browser_headers
-      if response.redirect?
-        get URI.parse(response.location).request_uri, headers: browser_headers
-      end
-
-      assert_response :success
-      assert_equal "Session limit", inertia_props.fetch("heading")
-      assert_equal 3, inertia_props.fetch("sessions").count
-      assert_not_predicate issuance.transaction.reload, :consumed?
     end
   end
 
@@ -279,6 +62,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
             user: user,
             user_token_kind_id: ClientTokenKind::BROWSER_WEB,
             user_token_status_id: ClientTokenStatus::ACTIVE,
+            authentication_event_at: Time.current,
           )
         end
       current_session = tokens.second
@@ -352,9 +136,17 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       ClientToken.where(user_id: user.id).delete_all
       email = user.client_emails.create!(address: "oidc_email_limit_#{SecureRandom.hex(4)}@example.com")
 
-      first_active = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+      first_active = ClientToken.create!(
+        user: user,
+        user_token_status_id: ClientTokenStatus::ACTIVE,
+        authentication_event_at: Time.current,
+      )
       first_active.rotate_refresh_token!
-      second_active = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+      second_active = ClientToken.create!(
+        user: user,
+        user_token_status_id: ClientTokenStatus::ACTIVE,
+        authentication_event_at: Time.current,
+      )
       second_active.rotate_refresh_token!
 
       host!(acme_host)
@@ -447,6 +239,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         resource: user,
         client: OidcClientRegistry.find!("base-rails-rp"),
         nonce: session.fetch(:oidc_nonce),
+        auth_time: transaction.authenticated_at,
       )
       token_result = OidcRpTokenClient::Result.new(
         success: true,
@@ -462,7 +255,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_equal 3, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
       host!(sign_host)
-      get(sign_app_dashboard_path(ri: "jp"), headers: browser_headers)
+      get(auth_app_root_path(ri: "jp"), headers: browser_headers)
 
       assert_response :success
       assert_select "h1", "Dashboard"
@@ -477,8 +270,16 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     other = clients(:two)
     ClientToken.where(user_id: [user.id, other.id]).delete_all
-    own_token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    other_token = ClientToken.create!(user: other, user_token_status_id: ClientTokenStatus::ACTIVE)
+    own_token = ClientToken.create!(
+      user: user,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      authentication_event_at: Time.current,
+    )
+    other_token = ClientToken.create!(
+      user: other,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      authentication_event_at: Time.current,
+    )
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
     resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
       actor: user,
@@ -503,7 +304,11 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
-    token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.create!(
+      user: user,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      authentication_event_at: Time.current,
+    )
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
     resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
       actor: user,
@@ -541,7 +346,11 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
-    token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.create!(
+      user: user,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      authentication_event_at: Time.current,
+    )
 
     host! acme_host
     patch acme_app_sign_in_limitation_path,
@@ -616,56 +425,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_not_predicate issuance.transaction.reload, :consumed?
   end
 
-  test "acme app authorization resume succeeds with two usable tokens and consumes the transaction once" do
-    with_acme_oidc_client_key do
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      user = clients(:one)
-      ClientToken.where(user_id: user.id).delete_all
-
-      2.times do
-        ClientToken.create!(
-          user: user,
-          user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-          user_token_status_id: ClientTokenStatus::ACTIVE,
-        )
-      end
-
-      host! acme_host
-      get "/oidc/authorization", headers: browser_headers
-
-      assert_response :redirect
-      authorize_uri = URI.parse(jump_rt_url_from_location(response.location))
-      authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)
-
-      get "/oauth/authorize", params: authorize_query, headers: browser_headers
-
-      assert_response :redirect
-      sign_uri = URI.parse(jump_rt_url_from_location(response.location))
-      sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
-
-      issuance =
-        OidcAuthorizationTransactionCoordinator.register_result!(
-          surface: "app",
-          login_challenge: sign_query.fetch("login_challenge"),
-          actor: user,
-          session_ref: "acme-session-limit-success",
-          auth_method: "passkey",
-        )
-
-      assert_difference -> { ClientToken.where(user_id: user.id).count }, 1 do
-        get URI.parse(issuance.resume_url).request_uri, headers: browser_headers
-      end
-
-      assert_response :redirect
-      callback_uri = URI.parse(jump_rt_url_from_location(response.location))
-      callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
-
-      assert_equal "/oidc/callback", callback_uri.path
-      assert_predicate callback_query["code"], :present?
-      assert_predicate issuance.transaction.reload, :consumed?
-    end
-  end
-
   test "app com and org authorization endpoints are exposed at Acme oauth authorize" do
     SURFACES.each do |surface|
       open_session do |session|
@@ -713,78 +472,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       get "/sign/up", headers: browser_headers
 
       assert_response :not_found
-    end
-  end
-
-  test "callback rejects state mismatch" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    get "/oidc/authorization", headers: browser_headers
-
-    get "/oidc/callback", params: { code: "code", state: "wrong" }, headers: browser_headers
-
-    assert_response :unprocessable_content
-  end
-
-  test "callback rejects nonce mismatch" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    host! acme_host
-    get "/oidc/authorization", headers: browser_headers
-    state = Rack::Utils.parse_nested_query(URI.parse(jump_rt_url_from_location(response.location)).query).fetch("state")
-    id_token = OidcIdTokenIssuer.call(
-      resource: clients(:one),
-      client: OidcClientRegistry.find!("base-rails-rp"),
-      nonce: "wrong_nonce",
-    )
-    token_result = OidcRpTokenClient::Result.new(
-      success: true,
-      token_response: { id_token: id_token },
-      error: nil,
-    )
-
-    OidcRpTokenClient.stub(:call, token_result) do
-      get "/oidc/callback", params: { code: "code", state: state }, headers: browser_headers
-    end
-
-    assert_response :redirect
-    assert_not_equal "https://#{acme_host}/", response.location, "nonce mismatch must not land on root"
-  end
-
-  test "app com and org callback establishes RP session after successful authorization" do
-    SURFACES.each do |surface|
-      host! surface[:host]
-      get "/oidc/authorization", headers: browser_headers
-
-      state = Rack::Utils.parse_nested_query(URI.parse(jump_rt_url_from_location(response.location)).query).fetch("state")
-      resource = instance_exec(&surface[:resource])
-      clear_existing_tokens_for(resource)
-      resource_type = oidc_resource_type_for(resource)
-      id_token = OidcIdTokenIssuer.call(
-        resource: resource,
-        client: OidcClientRegistry.find!(surface[:client_id]),
-        nonce: session.fetch(:oidc_nonce),
-        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(resource_type),
-        issuer: OidcIssuer.for_resource_type(resource_type),
-      )
-      token_result = OidcRpTokenClient::Result.new(
-        success: true,
-        token_response: { id_token: id_token },
-        error: nil,
-      )
-
-      OidcRpTokenClient.stub(:call, token_result) do
-        get "/oidc/callback", params: { code: "code", state: state }, headers: browser_headers
-      end
-
-      assert_response :redirect
-      expected_location =
-        if surface[:host] == ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-          "https://#{surface[:host]}/dashboard"
-        else
-          "https://#{surface[:host]}/"
-        end
-
-      assert_equal expected_location, response.location
-      assert_response_has_auth_cookie if surface[:host] == ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     end
   end
 
@@ -865,6 +552,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         actor: user,
         session_ref: SecureRandom.hex(16),
         auth_method: auth_method,
+        authentication_event_at: Time.current,
       )
     end
   end
@@ -1322,6 +1010,7 @@ class OidcRpBrowserFlowTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     base.merge(
@@ -1346,6 +1035,7 @@ class OidcRpBrowserFlowTest
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     base.merge(
@@ -1370,6 +1060,7 @@ class OidcRpBrowserFlowTest
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
       visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     base.merge(

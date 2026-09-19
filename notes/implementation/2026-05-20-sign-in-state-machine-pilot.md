@@ -2,7 +2,6 @@
 
 ## Context
 
-- Original plan/spec: `plans/active/sign-in-state-machine-implementation-plan.md`
 - Related ADR/docs/plans:
   - `adr/authentication-assurance-level-boundaries.md`
   - `adr/actor-current-facade.md`

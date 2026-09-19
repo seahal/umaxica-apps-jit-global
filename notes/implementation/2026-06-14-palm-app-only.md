@@ -2,10 +2,7 @@
 
 ## Context
 
-- Original plan/spec: `plans/archive/palm-com-declarative-wombat.md`.
-- Related decisions/docs/plans:
-  `plans/archive/surface-routing-controller-pass-base-palm-help-docs-news.md`,
-  `notes/implementation/2026-06-13-base-palm-sitemap-endpoints.md`,
+- Related decisions/docs/plans: `notes/implementation/2026-06-13-base-palm-sitemap-endpoints.md`,
   `docs/architecture/controller-lifecycle.md`.
 - Implementation date: 2026-06-14.
 

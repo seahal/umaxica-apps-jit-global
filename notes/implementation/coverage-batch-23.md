@@ -31,14 +31,14 @@ aggregate line denominator remained stable.
 3. `CollectiveMembership::Revoke`, including idempotent re-entry.
 4. `CollectiveMembership::TransferUnit`, same-enterprise success and cross-enterprise rejection.
 5. `CollectiveMembership::MakePrimary`.
-6. `CollectiveMembership::Grant`, success, duplicate active, duplicate primary, and mismatched
-   unit branches.
+6. `CollectiveMembership::Grant`, success, duplicate active, duplicate primary, and mismatched unit
+   branches.
 
 ## Tests Added
 
-Added ten real-database behavior tests to `test/models/persona_enterprise_model_layer_test.rb`.
-The tests cover state transitions, approver/revoker ownership, primary membership replacement,
-unit ownership boundaries, duplicate membership rejection, and persisted field outcomes.
+Added ten real-database behavior tests to `test/models/persona_enterprise_model_layer_test.rb`. The
+tests cover state transitions, approver/revoker ownership, primary membership replacement, unit
+ownership boundaries, duplicate membership rejection, and persisted field outcomes.
 
 Focused verification passed: 24 runs, 90 assertions, 0 failures, 0 errors, 0 skips.
 

@@ -54,6 +54,30 @@ module TimezoneIdentifier
     default
   end
 
+  # A fixed instant to read the standard offset at. Any instant works because
+  # `base_utc_offset` is the zone's non-DST offset, not the one observed on the
+  # day; pinning it keeps the result independent of the wall clock and of the
+  # season, so a timezone picker ordered by it does not reshuffle twice a year.
+  OFFSET_REFERENCE_INSTANT = Time.utc(2020, 1, 1).freeze
+
+  # Standard (non-DST) offset from UTC in seconds, or nil when the value does not
+  # name a real zone. This is the offset a timezone list is ordered by:
+  # `ActiveSupport::TimeZone#utc_offset` returns the offset observed right now,
+  # which is DST-dependent and would reorder the list seasonally.
+  def standard_utc_offset(value)
+    identifier = normalize(value)
+    return nil if identifier.nil?
+
+    TZInfo::Timezone.get(identifier).period_for_utc(OFFSET_REFERENCE_INSTANT).base_utc_offset
+  end
+
+  # Ascending UTC-offset sort key: standard offset first (UTC-12 -> UTC+14), then
+  # the canonical identifier so zones that share an offset keep a stable,
+  # deterministic order.
+  def utc_offset_sort_key(value)
+    [standard_utc_offset(value) || 0, normalize(value).to_s]
+  end
+
   # Downcased spelling -> canonical identifier, covering the IANA identifiers and
   # the friendly ActiveSupport names ("Tokyo") alike. Built once at load rather
   # than memoized per call: it is a property of the tz database, not of a

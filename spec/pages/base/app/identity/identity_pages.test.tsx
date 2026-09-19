@@ -51,12 +51,11 @@ const backLink = { label: "Back", href: "/identity" };
 
 describe("identity activities index", () => {
   const headings = {
-    occurred_at: "Occurred",
-    event: "Event",
-    ip_address: "IP",
+    occurred_at: "Occurred at",
+    activity: "Activity",
     device: "Device",
-    login_method: "Login method",
-    context: "Context",
+    source: "Source",
+    risk: "Risk",
   };
 
   it("renders one row per activity", () => {
@@ -66,26 +65,24 @@ describe("identity activities index", () => {
         description="Recent activity."
         empty_message="No activity."
         back_link={backLink}
-        table_headings={headings}
+        columns={headings}
         activities={[
           {
-            event_id: 12,
             occurred_at: "1 January 2026",
-            event_label: "Signed in",
-            ip_address: "203.0.113.4",
-            user_agent_summary: "Firefox",
-            login_method: "passkey",
-            context_text: "{}",
+            activity: "Google sign-in",
+            device: "Firefox / Linux",
+            source: "Location unavailable",
+            risk: "Low",
+            risk_rank: 1,
           },
         ]}
       />,
     );
 
-    expect(html).toContain("Signed in");
-    expect(html).toContain("203.0.113.4");
-    // The context travels as code, not as prose. Matched as an element rather than as exact
-    // markup so styling it is not a change to what the row reports.
-    expect(html).toMatch(/<code[^>]*>\{\}<\/code>/u);
+    expect(html).toContain("Google sign-in");
+    expect(html).toContain("Firefox / Linux");
+    expect(html).not.toContain("203.0.113.4");
+    expect(html).not.toContain("{}");
     expect(html).not.toContain("No activity.");
   });
 
@@ -96,7 +93,7 @@ describe("identity activities index", () => {
         description="Recent activity."
         empty_message="No activity."
         back_link={backLink}
-        table_headings={headings}
+        columns={headings}
         activities={[]}
       />,
     );
@@ -627,23 +624,20 @@ describe("identity secret screens", () => {
 
 describe("identity session screens", () => {
   const sessionRow = {
-    public_id: "tok_1",
-    status: "1",
-    kind: "2",
-    binding: "DBSC",
+    device: "Firefox / Linux",
+    status: "Active",
     last_activity: "1 Jan",
     created: "1 Jan",
-    refresh_expires: "1 Feb",
-    current: false,
-    revoke_url: "/identity/sessions/tok_1",
+    expires_at: "1 Feb",
+    revoke: { label: "Revoke", href: "/identity/sessions/tok_1", confirm: "Revoke this session?" },
   };
   const headings = {
-    session: "Session",
-    kind: "Kind",
-    binding: "Binding",
+    device: "Device",
     last_activity: "Last activity",
     created: "Created",
-    refresh_expires: "Refresh expires",
+    expires_at: "Expires at",
+    status: "Status",
+    action: "Action",
   };
 
   it("renders the revocable inventory", () => {
@@ -652,25 +646,27 @@ describe("identity session screens", () => {
         title="Sessions"
         empty_message="No active sessions were found."
         back_link={backLink}
-        table_headings={headings}
-        current_label="current"
-        revoke_label="Revoke"
-        revoke_confirm="Revoke this session?"
-        bulk_revocation={{
-          others_label: "Sign out other sessions",
-          others_confirm: "Sure?",
-          others_url: "/identity/other_sessions",
-          all_label: "Sign out everywhere",
-          all_confirm: "Sure?",
-          all_url: "/identity/sessions",
+        expires_at_description="This session ends at this time and cannot be extended."
+        columns={headings}
+        bulk_revocations={{
+          others: {
+            label: "Sign out other sessions",
+            confirm: "Sure?",
+            href: "/identity/other_sessions",
+          },
         }}
-        sessions={[sessionRow, { ...sessionRow, public_id: "tok_2", current: true }]}
+        sessions={[sessionRow, { ...sessionRow, status: "Current session", revoke: null }]}
       />,
     );
 
-    expect(html).toContain("Sign out everywhere");
-    expect(html).toContain("tok_2");
-    expect(html).toContain("current");
+    expect(html).toContain("Sign out other sessions");
+    expect(html).not.toContain("Sign out everywhere");
+    expect(html).toContain("Current session");
+    expect(html).toContain("Firefox / Linux");
+    expect(html).toContain("Expires at");
+    expect(html).not.toContain(">tok_2<");
+    expect(html).not.toContain("DBSC");
+    expect(html).not.toContain("Refresh expires");
   });
 
   it("renders the empty inventory", () => {
@@ -679,11 +675,9 @@ describe("identity session screens", () => {
         title="Sessions"
         empty_message="No active sessions were found."
         back_link={backLink}
-        table_headings={headings}
-        current_label="current"
-        revoke_label="Revoke"
-        revoke_confirm="Revoke this session?"
-        bulk_revocation={null}
+        expires_at_description="This session ends at this time and cannot be extended."
+        columns={headings}
+        bulk_revocations={null}
         sessions={[]}
       />,
     );
@@ -697,12 +691,17 @@ describe("identity session screens", () => {
       <SessionShow
         title="Session"
         session={sessionRow}
+        columns={headings}
+        expires_at_description="This session ends at this time and cannot be extended."
         back_link={{ label: "Back", href: "/identity/sessions" }}
       />,
     );
 
-    expect(html).toContain("tok_1");
-    expect(html).toContain("DBSC");
+    expect(html).toContain("Firefox / Linux");
+    expect(html).toContain("1 Feb");
+    expect(html).toContain("This session ends at this time and cannot be extended.");
+    expect(html).not.toContain("tok_1");
+    expect(html).not.toContain("DBSC");
   });
 });
 
@@ -1013,6 +1012,29 @@ describe("identity withdrawal screens", () => {
 
     expect(html).toContain("Termination becomes available on 1 February 2026.");
     expect(html).not.toContain("Terminate now");
+  });
+
+  it("renders termination without a recovery section", () => {
+    const html = renderToStaticMarkup(
+      <WithdrawalEdit
+        title="Withdrawal status"
+        terminated={false}
+        unavailable_message="Recovery is unavailable."
+        deadline_message={null}
+        recovery={null}
+        termination={{
+          submit_label: "Terminate now",
+          confirm: "Sure?",
+          action: "/identity/withdrawal",
+          available_at_message: null,
+        }}
+        erasure_link={erasureLink}
+        sign_out={signOut}
+      />,
+    );
+
+    expect(html).toContain("Terminate now");
+    expect(html).not.toContain("Recover");
   });
 
   it("renders the terminated status", () => {

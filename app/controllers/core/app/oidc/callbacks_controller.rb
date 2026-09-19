@@ -21,7 +21,7 @@ module Core
         private
 
         def oidc_client_id
-          "core-next-rp"
+          "core-app"
         end
       end
     end

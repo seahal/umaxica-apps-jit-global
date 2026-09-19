@@ -35,6 +35,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     auth/app auth/com auth/org
     base/app base/com base/org
     core/app core/com core/org
+    edit/org
     side/app side/com side/org
     palm/app
   ).freeze
@@ -44,7 +45,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
 
   # Infrastructure editions: health probes, CSP sinks and root stubs only. They serve no regional
   # HTML and are not reachable by ordinary users.
-  RI_EXEMPT_INFRASTRUCTURE_TARGETS = %w(base/dev base/net core/dev core/net).freeze
+  RI_EXEMPT_INFRASTRUCTURE_TARGETS = %w(base/dev base/net core/dev core/net guid/net).freeze
 
   # Publishing content surfaces. Their language comes from the published document
   # (PublishingContentRendering), not from request context, so they do not carry `ri`.
@@ -90,18 +91,17 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/base/org/oauth/authorizations_controller.rb
     app/controllers/base/org/oidc/authorizations_controller.rb
     app/controllers/base/org/oidc/callbacks_controller.rb
-    app/controllers/core/app/edge/v0/cookies_controller.rb
-    app/controllers/core/app/edge/v0/dbsc_controller.rb
+    app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/app/oidc/authorizations_controller.rb
     app/controllers/core/app/oidc/callbacks_controller.rb
-    app/controllers/core/com/edge/v0/cookies_controller.rb
-    app/controllers/core/com/edge/v0/dbsc_controller.rb
+    app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/com/oidc/authorizations_controller.rb
     app/controllers/core/com/oidc/callbacks_controller.rb
-    app/controllers/core/org/edge/v0/cookies_controller.rb
-    app/controllers/core/org/edge/v0/dbsc_controller.rb
+    app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/oidc/authorizations_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
+    app/controllers/edit/org/oidc/authorizations_controller.rb
+    app/controllers/edit/org/oidc/callbacks_controller.rb
     app/controllers/side/app/oidc/authorizations_controller.rb
     app/controllers/side/app/oidc/callbacks_controller.rb
     app/controllers/side/com/oidc/authorizations_controller.rb

@@ -35,7 +35,7 @@ class PasskeySignInFlowRefusalsTest < ActiveSupport::TestCase
 
     def discard_passkey_challenge(id) = discarded << id
 
-    def consume_passkey_challenge_with_actor!(_id)
+    def consume_passkey_challenge_with_actor!(_id, **)
       raise raise_on_consume if raise_on_consume
 
       Struct.new(:challenge, :actor_global_key).new(:challenge, "client:1")

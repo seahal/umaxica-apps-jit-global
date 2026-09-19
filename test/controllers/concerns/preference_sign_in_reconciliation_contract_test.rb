@@ -88,9 +88,9 @@ class PreferenceSignInReconciliationContractTest < ActiveSupport::TestCase
 
   def principal_owner(surface)
     case surface
-    when :app then AppPrincipalRecord
-    when :org then OrgPrincipalRecord
-    when :com then ComPrincipalRecord
+    when :app then AppZenithRecord
+    when :org then OrgZenithRecord
+    when :com then ComZenithRecord
     end
   end
 

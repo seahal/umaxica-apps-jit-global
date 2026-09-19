@@ -60,6 +60,7 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
         expected_aal: "aal2",
         expected_method: "totp",
         audience: "step_up:app",
+        surface: "app",
         now: @now,
       )
 

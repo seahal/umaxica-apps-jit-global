@@ -187,6 +187,7 @@ class AuthStaffTest < ActiveSupport::TestCase
       host: @obj.request.host,
       session_public_id: token_record.public_id,
       resource_type: "operator",
+      jwt_issuer_id: @obj.send(:auth_jwt_issuer_id),
     )
     @obj.request.headers["Authorization"] = "Bearer #{access_token}"
 

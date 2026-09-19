@@ -12,13 +12,13 @@ class Base::Org::FullAccessGateTest < ActionDispatch::IntegrationTest
   end
 
   test "dashboard redirects authenticated unselected operator to selector" do
-    get base_org_dashboard_url(host: @host, ri: "jp"), headers: as_staff_headers(@operator, host: @host)
+    get base_org_root_url(host: @host, ri: "jp"), headers: as_staff_headers(@operator, host: @host)
 
     assert_redirected_to base_org_selector_path(ri: "jp")
   end
 
   test "dashboard requests selection as json when context is missing" do
-    get base_org_dashboard_url(host: @host, ri: "jp"), headers: as_staff_headers(
+    get base_org_root_url(host: @host, ri: "jp"), headers: as_staff_headers(
       @operator,
       host: @host,
     ), as: :json

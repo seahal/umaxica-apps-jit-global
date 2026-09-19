@@ -19,6 +19,9 @@ module OidcCallback
     id_token_result = verify_id_token!(token_result.token_response[:id_token])
     return render_callback_failure(id_token_result.error) unless id_token_result.success?
 
+    authentication_event_at = authentication_event_at_from_id_token(id_token_result.payload)
+    return render_callback_failure("authentication_time_missing") if authentication_event_at.blank?
+
     resource = provision_rp_account_from_id_token!(id_token_result)
     login_result =
       ActiveRecord::Base.connected_to(role: :writing) do
@@ -26,6 +29,7 @@ module OidcCallback
           resource, token_kind_id: "BROWSER_WEB", require_totp_check: false,
                     audit_context: { oidc_client_id: oidc_client_id },
                     skip_login_cooldown: true,
+                    authentication_event_at: authentication_event_at,
         )
       end
     return render_oidc_session_limit_hard_reject(login_result) if login_result[:status] == :session_limit_hard_reject
@@ -68,14 +72,37 @@ module OidcCallback
     code_verifier = oidc_flow_value("code_verifier") || session.delete(:oidc_code_verifier)
     raise InvalidCallbackState, "OIDC PKCE verifier missing" if code_verifier.blank?
 
+    token_url = oidc_token_url
     OidcRpTokenClient.call(
-      token_url: oidc_token_url,
+      token_url: token_url,
       client_id: oidc_client_id,
       client_secret: oidc_client_secret,
       code: params[:code],
       redirect_uri: oidc_callback_url,
       code_verifier: code_verifier,
+      require_https: oidc_token_endpoint_requires_https?(token_url),
     )
+  end
+
+  def oidc_token_endpoint_requires_https?(token_url)
+    return true unless Rails.env.local?
+
+    uri = URI.parse(token_url)
+    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+    allowed_hosts =
+      [hosts.base_service.host, hosts.base_corporate.host, hosts.base_staff.host]
+        .map { |host| host.to_s.downcase }
+    local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
+
+    !(
+      uri.scheme == "http" &&
+      allowed_hosts.include?(uri.host.to_s.downcase) &&
+      uri.port == local_port &&
+      uri.path == "/oauth/token" &&
+      uri.userinfo.blank? && uri.query.blank? && uri.fragment.blank?
+    )
+  rescue URI::InvalidURIError
+    true
   end
 
   def verify_id_token!(id_token)
@@ -84,9 +111,23 @@ module OidcCallback
       client_id: oidc_client_id,
       resource_type: oidc_resource_type,
       expected_nonce: oidc_flow_value("nonce") || session.delete(:oidc_nonce),
+      expected_max_age: oidc_flow_value("max_age") || session.delete(:oidc_max_age),
       issuer: OidcIssuer.for_resource_type(oidc_resource_type),
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(oidc_resource_type),
     )
+  end
+
+  def authentication_event_at_from_id_token(payload)
+    raw = payload&.fetch("auth_time", nil)
+    return if raw.blank?
+
+    value = raw.is_a?(Numeric) ? raw : Integer(raw, 10)
+    authentication_time = Time.at(value).utc
+    return if authentication_time > Time.current.utc + AuthenticationJwtConfiguration.leeway_seconds
+
+    authentication_time
+  rescue ArgumentError, RangeError, TypeError
+    nil
   end
 
   def oidc_client_secret
@@ -196,6 +237,7 @@ module OidcCallback
     session.delete(:oidc_state)
     session.delete(:oidc_nonce)
     session.delete(:oidc_pt)
+    session.delete(:oidc_max_age)
     session.delete(OIDC_PENDING_FLOWS_SESSION_KEY) if pending_flows
   end
 
@@ -239,6 +281,7 @@ module OidcCallback
     session.delete(:oidc_state)
     session.delete(:oidc_nonce)
     session.delete(:oidc_pt)
+    session.delete(:oidc_max_age)
   end
 
   def bind_oidc_rp_logout_session!(payload)

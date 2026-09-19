@@ -27,14 +27,14 @@ and stashed as `stash@{0}`, so nothing local was discarded.
 store isolation for tests, naming the opt-in helper `counts_rate_limits!` (ours) and
 `rate_limit_counters!` (theirs).
 
-| Area | Resolution | Reason |
-| --- | --- | --- |
-| Test cache-store indirection | theirs | `TestSupport::SwappableCacheStore` is a superset (`backend`, `with`, `reset!`). `RateLimitStoreOverride` deleted as superseded. |
-| `config/environments/{development,production}.rb` | ours | Keeps `valkey_store_error_handler`. The auto-merged rate-limit store config references it, so theirs raises `NameError` at boot. |
-| `config/environments/test.rb` | theirs | Follows the adopted `TestSupport::` namespace. |
-| `OidcClientAssertionJwt` replay check | ours | Theirs kept an injectable `replay_store` documented as "Tests may inject a deterministic store" — test-only behaviour in application code. Its one dependent test was aligned. |
-| `IdentityOneTimeReveal` cache accessor | theirs | Superseded by the PostgreSQL-backed `SecurityOneTimeReveal`; the accessor was dead code after the merge. |
-| `docs/*` | ours | Theirs still described a Memorize store, Redis-backed sessions and a CI Valkey service, all of which are gone. |
+| Area                                              | Resolution | Reason                                                                                                                                                                         |
+| ------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Test cache-store indirection                      | theirs     | `TestSupport::SwappableCacheStore` is a superset (`backend`, `with`, `reset!`). `RateLimitStoreOverride` deleted as superseded.                                                |
+| `config/environments/{development,production}.rb` | ours       | Keeps `valkey_store_error_handler`. The auto-merged rate-limit store config references it, so theirs raises `NameError` at boot.                                               |
+| `config/environments/test.rb`                     | theirs     | Follows the adopted `TestSupport::` namespace.                                                                                                                                 |
+| `OidcClientAssertionJwt` replay check             | ours       | Theirs kept an injectable `replay_store` documented as "Tests may inject a deterministic store" — test-only behaviour in application code. Its one dependent test was aligned. |
+| `IdentityOneTimeReveal` cache accessor            | theirs     | Superseded by the PostgreSQL-backed `SecurityOneTimeReveal`; the accessor was dead code after the merge.                                                                       |
+| `docs/*`                                          | ours       | Theirs still described a Memorize store, Redis-backed sessions and a CI Valkey service, all of which are gone.                                                                 |
 
 ## Three defects the merge introduced without conflicting
 
@@ -66,15 +66,17 @@ Same command on a clean `origin/feature` worktree (`/home/global/base-check`, 36
 
 Comparing the two runs' failing test names as sets:
 
-- merge-introduced failures: none. The merged run's failing set is a strict subset of the baseline's.
-- fixed by the merge: `HostAuthorizationContractTest#test_development_accepts_published_site_hosts_from_public_url_env_and_nothing_else`
+- merge-introduced failures: none. The merged run's failing set is a strict subset of the
+  baseline's.
+- fixed by the merge:
+  `HostAuthorizationContractTest#test_development_accepts_published_site_hosts_from_public_url_env_and_nothing_else`
   and `#test_effective_development_middleware_accepts_private_origins_and_rejects_an_unknown_host`,
   which pass because the resolution kept our `DEVELOPMENT_BOOT_ENV` constant.
 
 `pnpm test` on the merged tree: 84 files, 1020 tests, all passing.
 
-RuboCop over the 45 conflict-resolved files reported 4 offenses; all 4 are present at the same
-lines on `origin/feature`, so the resolutions added none. `git diff --check` was clean.
+RuboCop over the 45 conflict-resolved files reported 4 offenses; all 4 are present at the same lines
+on `origin/feature`, so the resolutions added none. `git diff --check` was clean.
 
 ## The 190 pre-existing non-passing cases
 
@@ -96,8 +98,8 @@ This was not investigated further: it is incomplete work on `origin/feature`, no
 
 ## Not verified
 
-The merge has not been applied to `/home/global/workspace`, because the read-only mounts above
-still block it there. It exists only as commits reachable from `/home/global/merge-check`.
+The merge has not been applied to `/home/global/workspace`, because the read-only mounts above still
+block it there. It exists only as commits reachable from `/home/global/merge-check`.
 
 ## Note on shared state
 

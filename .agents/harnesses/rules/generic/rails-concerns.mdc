@@ -8,6 +8,12 @@ description: Concerns stay small and low-side-effect; including one must not cha
 Concerns define reusable behavior. They must stay small and must not silently change the including
 class.
 
+## Enforcement
+
+`included do` and `prepended do` are rejected by the `Umaxica/NoConcernInclusionHooks` cop, and
+implicitly public methods by `Umaxica/ExplicitMethodVisibility`. Existing violations are baselined
+and may only decrease. See `docs/architecture/method-visibility-and-concerns.md`.
+
 ## Keep concerns low-side-effect
 
 Including a concern must not, on its own:
@@ -28,5 +34,7 @@ act of inclusion.
 
 ## Visibility
 
-Keep concern methods private by default. Expose a public method only when the including class or an
-external caller needs a stable public contract, and make that boundary intentional.
+Every method needs an explicit `public`, `protected` or `private` declaration; Ruby's implicit
+public default is not accepted. Keep concern methods private by default. Expose a public method only
+when the including class or an external caller needs a stable public contract, and make that
+boundary intentional.

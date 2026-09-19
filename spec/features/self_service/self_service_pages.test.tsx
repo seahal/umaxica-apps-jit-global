@@ -1,3 +1,4 @@
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -85,6 +86,36 @@ describe("SelfServiceShell", () => {
     expect(html).toMatch(/<h1[^>]*>Account<\/h1>/u);
     expect(html).toContain("account");
     expect(html).toContain("Signed in");
+    expect(html).not.toContain('href="/dashboard?ri=jp"');
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Account<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
+  });
+
+  it("renders the action link the server resolved beside the title", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+        action_link={{ label: "Edit", href: "/account/edit?ri=jp" }}
+      />,
+    );
+
+    expect(html).toContain('href="/account/edit?ri=jp"');
+    expect(html).toContain("Edit");
   });
 });
 
@@ -122,6 +153,58 @@ describe("EntityList", () => {
 
     expect(html).toContain("None available");
     expect(html).not.toContain("<ul>");
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Accounts<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
+  });
+
+  it("renders the server-provided create action as a disabled button without a destination", () => {
+    const actionContainer = document.createElement("div");
+    actionContainer.innerHTML = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        create_action={{ label: "Create Account" }}
+      />,
+    );
+
+    const button = getByRole(actionContainer, "button", { name: "Create Account" });
+
+    expect(button.tagName).toBe("BUTTON");
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(button.hasAttribute("href")).toBe(false);
+  });
+
+  it("does not render a create button when the server withheld the action", () => {
+    const emptyContainer = document.createElement("div");
+    emptyContainer.innerHTML = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        create_action={null}
+      />,
+    );
+
+    expect(queryByRole(emptyContainer, "button", { name: "Create Account" })).toBeNull();
   });
 });
 
@@ -210,6 +293,24 @@ describe("SwitcherShow", () => {
 
     expect(html).toContain("No current context.");
     expect(html).not.toContain('role="alert"');
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <SwitcherShow
+        title="Switcher"
+        current={null}
+        candidates={[]}
+        error={null}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Switcher<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
   });
 });
 

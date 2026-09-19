@@ -1,0 +1,130 @@
+<% page_title(title) %>
+<div class="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <%= link_to "← All entries", index_href, class: "text-sm text-fg-muted underline-offset-4 hover:underline" %>
+      <h1 class="text-2xl font-bold text-fg"><%= title %></h1>
+      <p class="text-sm text-fg-muted"><%= description %></p>
+    </div>
+    <%= link_to "Edit", edit_href,
+          class: "inline-flex items-center rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+  </div>
+
+  <% if errors["base"] %>
+    <p role="alert" class="text-sm text-danger"><%= errors["base"] %></p>
+  <% end %>
+
+  <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+    <% {
+         "Public ID" => entry[:public_id],
+         "Surface" => entry[:surface],
+         "Audience" => entry[:audience],
+         "Locale" => entry[:locale],
+         "Canonical slug" => entry[:canonical_slug] || "—",
+         "Current revision" => entry[:current_revision_public_id] || "—",
+         "Revision sequence" => entry[:revision_sequence].nil? ? "—" : entry[:revision_sequence].to_s,
+         "Archive" => entry[:archive_state] == "archived" ? "archived: #{entry[:archive_reason]}" : entry[:archive_state],
+         "Publication" => entry[:publication_state],
+         "Revisions" => entry[:revision_count].to_s,
+         "Versions" => entry[:version_count].to_s,
+         "Updated" => entry[:updated_at] || "—",
+       }.each do |label, value| %>
+      <div>
+        <dt class="text-fg-muted"><%= label %></dt>
+        <dd class="text-fg"><%= value %></dd>
+      </div>
+    <% end %>
+  </dl>
+
+  <section class="flex flex-col gap-3">
+    <h2 class="text-sm font-medium text-fg">Publication</h2>
+
+    <% if publication %>
+      <%= form_with url: publication[:end_href], method: :delete, class: "flex flex-col gap-2" do %>
+        <p class="text-sm text-fg">
+          Published since <%= publication[:effective_from] %> from version <%= publication[:version_public_id] %>.
+        </p>
+        <label class="flex flex-col gap-1 text-sm">
+          <span>Reason for unpublishing</span>
+          <%= text_field_tag "publication[reason]", nil, autocomplete: "off",
+                class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+          <% if errors["reason"] %>
+            <span role="alert" class="text-danger"><%= errors["reason"] %></span>
+          <% end %>
+        </label>
+        <div>
+          <%= submit_tag "Unpublish", class: "rounded-md bg-danger px-3 py-2 text-sm font-medium text-surface" %>
+        </div>
+      <% end %>
+    <% else %>
+      <%= form_with url: publish_href, method: :post, class: "flex flex-col gap-2" do %>
+        <p class="text-sm text-fg-muted">
+          This entry is not published. Publishing promotes the current revision to a version.
+        </p>
+        <label class="flex flex-col gap-1 text-sm">
+          <span>Effective from (leave empty to publish now)</span>
+          <%= datetime_field_tag "publication[effective_from]", nil,
+                class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+          <% if errors["effective_from"] %>
+            <span role="alert" class="text-danger"><%= errors["effective_from"] %></span>
+          <% end %>
+        </label>
+        <div>
+          <%= submit_tag "Publish", class: "rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+        </div>
+      <% end %>
+    <% end %>
+
+    <% if scheduled_publications.present? %>
+      <ul class="flex flex-col gap-2">
+        <% scheduled_publications.each do |scheduled| %>
+          <li class="text-sm text-fg">
+            Scheduled for <%= scheduled[:effective_from] %> from version <%= scheduled[:version_public_id] %>.
+            <%= form_with url: scheduled[:end_href], method: :delete, class: "mt-1 flex gap-2" do %>
+              <%= text_field_tag "publication[reason]", nil, "aria-label": "Reason for cancelling",
+                    autocomplete: "off",
+                    class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+              <%= submit_tag "Cancel", class: "rounded-md border border-line px-3 py-2 text-sm font-medium text-fg" %>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <section class="flex flex-col gap-2">
+    <h2 class="text-sm font-medium text-fg">Archive</h2>
+
+    <% if entry[:archive_state] == "archived" %>
+      <%= form_with url: archive_href, method: :delete do %>
+        <%= submit_tag "Restore", class: "rounded-md border border-line px-3 py-2 text-sm font-medium text-fg" %>
+      <% end %>
+    <% else %>
+      <%= form_with url: archive_href, method: :post, class: "flex flex-col gap-2" do %>
+        <label class="flex flex-col gap-1 text-sm">
+          <span>Reason for archiving</span>
+          <%= text_field_tag "archive[reason]", nil, autocomplete: "off",
+                class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+          <% if errors["reason"] %>
+            <span role="alert" class="text-danger"><%= errors["reason"] %></span>
+          <% end %>
+        </label>
+        <div>
+          <%= submit_tag "Archive", class: "rounded-md bg-danger px-3 py-2 text-sm font-medium text-surface" %>
+        </div>
+      <% end %>
+    <% end %>
+  </section>
+
+  <% if entry[:summary].present? %>
+    <section class="flex flex-col gap-1">
+      <h2 class="text-sm font-medium text-fg">Summary</h2>
+      <p class="text-sm text-fg"><%= entry[:summary] %></p>
+    </section>
+  <% end %>
+
+  <section class="flex flex-col gap-1">
+    <h2 class="text-sm font-medium text-fg">Body</h2>
+    <pre class="overflow-x-auto rounded-md border border-line bg-surface-muted p-3 text-xs text-fg"><%= JSON.pretty_generate(entry[:body] || {}) %></pre>
+  </section>
+</div>

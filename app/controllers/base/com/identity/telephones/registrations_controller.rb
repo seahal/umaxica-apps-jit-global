@@ -277,10 +277,9 @@ module Base
               return :session_expired
             end
 
-            result = verify_otp_code(@user_telephone, submitted_code)
+            result = verify_otp_code_and_consume(@user_telephone, submitted_code)
 
             unless result[:success]
-              increment_otp_attempts!(@user_telephone)
               if @user_telephone.locked?
                 @user_telephone.destroy!
                 return :locked
@@ -291,8 +290,6 @@ module Base
             end
 
             # sign/id verifies the OTP and commits the settings telephone.
-            clear_otp(@user_telephone)
-            @user_telephone.save! if @user_telephone.changed?
             :success
           end
 

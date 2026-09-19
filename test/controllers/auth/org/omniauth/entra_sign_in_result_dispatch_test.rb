@@ -3,91 +3,72 @@
 
 require "test_helper"
 
-# The staff Entra callback ends in one of four places depending on what the
-# sign-in commit reported. Each has to be distinguishable: a terminal result is
-# refused with its own status, a success continues the sign-in sequence, and
-# anything else is recorded as a failed sign-in rather than quietly treated as
-# one of the other three.
+# Entra ID is the first stage of normal org sign-in, not the whole of it.
+#
+# A successful callback must establish no session and issue no token. What it
+# produces is a pending transaction naming the operator Entra selected, plus a
+# handoff to the passkey stage; the ceremony is completed there, or at the
+# secret stage when the passkey is lost.
 class Auth::Org::Omniauth::EntraSignInResultDispatchTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   class Harness < Auth::Org::Omniauth::OmniauthCallbacksController
-    attr_reader :hard_reject, :sequence_pt, :entra_error, :failures, :redirected
+    attr_reader :redirected
 
     def initialize
       super
-      @failures = []
+      @session = {}
+      @region = "jp"
     end
 
-    def render_session_limit_hard_reject(message: nil, http_status: nil)
-      @hard_reject = [message, http_status]
-    end
+    def session = @session
 
-    def redirect_to_sign_in_sequence!(pt: nil, **)
-      @sequence_pt = pt
-    end
+    def current_region_identifier = @region
 
     def redirect_to(*args, **kwargs)
       @redirected = [args, kwargs]
     end
 
-    def render_entra_error(reason)
-      @entra_error = reason
-    end
-
-    def log_entra_failure(event, **context)
-      @failures << [event, context]
+    def new_auth_org_sign_in_passkey_path(**options)
+      "/sign/in/passkey/new?#{options.to_query}"
     end
 
     def invoke(name, ...) = send(name, ...)
   end
 
-  def result(status:, message: nil, response_status: nil, redirect_to: nil)
-    SignInResult.new(
-      status: status,
-      actor: nil,
-      token: nil,
-      sequence_id: nil,
-      redirect_to: redirect_to,
-      response_status: response_status,
-      message: message,
-    )
-  end
+  Operatorish = Struct.new(:id, :public_id)
+  Identityish = Struct.new(:id)
 
   setup do
     @harness = Harness.new
   end
 
-  test "a result that still needs a second factor follows the redirect it names" do
+  test "a successful callback hands the browser to the passkey stage without issuing a session" do
     @harness.invoke(
-      :handle_sign_in_result,
-      result(status: :mfa_required, redirect_to: "/sign/in/challenge"),
-      pt: "/settings",
+      :start_normal_sign_in_second_stage!,
+      operator: Operatorish.new(42, "0123456789ABCDEF"),
+      identity: Identityish.new(7),
     )
 
-    assert_equal [["/sign/in/challenge"], {}], @harness.redirected
+    paths, options = @harness.redirected
+
+    assert_equal "/sign/in/passkey/new?pt&ri=jp", paths.first
+    assert_equal :see_other, options.fetch(:status)
   end
 
-  test "a terminal result is refused with the status and message it carries" do
+  test "the pending transaction binds the operator, the entra identity, and the ceremony purpose" do
     @harness.invoke(
-      :handle_sign_in_result,
-      result(status: :session_limit_hard_reject, message: "too soon", response_status: :forbidden),
-      pt: "/settings",
+      :start_normal_sign_in_second_stage!,
+      operator: Operatorish.new(42, "0123456789ABCDEF"),
+      identity: Identityish.new(7),
     )
 
-    assert_equal ["too soon", :forbidden], @harness.hard_reject
-  end
+    transaction = @harness.session.fetch(OrgNormalSignInTransaction::SESSION_KEY)
 
-  test "a successful result continues the sign-in sequence at the requested target" do
-    @harness.invoke(:handle_sign_in_result, result(status: :success), pt: "/settings")
-
-    assert_equal "/settings", @harness.sequence_pt
-  end
-
-  test "any other result is recorded as a failed sign-in rather than passed through" do
-    @harness.invoke(:handle_sign_in_result, result(status: :unknown_state), pt: "/settings")
-
-    assert_equal :sign_in_failed, @harness.entra_error
-    assert_equal "sign_in_failed", @harness.failures.first.first
+    assert_equal OrgNormalSignInTransaction::PURPOSE, transaction.fetch("purpose")
+    assert_equal 42, transaction.fetch("operator_id")
+    assert_equal 7, transaction.fetch("entra_identity_id")
+    assert_operator transaction.fetch("expires_at"), :>, Time.current.to_i
+    assert_operator transaction.fetch("expires_at"), :<=, (Time.current + OrgNormalSignInTransaction::TTL).to_i
   end
 end

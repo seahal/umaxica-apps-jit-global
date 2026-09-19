@@ -7,20 +7,14 @@ require "test_helper"
 class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses
 
+  setup { host! host }
+
   test "direct entry without a login challenge lists the registration methods" do
     get auth_app_sign_up_url(format: :html, ri: "jp"), headers: { "Host" => host }
 
-    assert_response :success
+    assert_response :see_other
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_equal "auth/app/sign_ups/new", inertia_component
-    assert_equal(
-      [new_auth_app_sign_up_email_path(ri: "jp"), new_auth_app_sign_up_telephone_path(ri: "jp")],
-      inertia_props.fetch("methods").map { |method| method.fetch("href") },
-    )
-    assert_equal(
-      [auth_app_social_google_registration_path(ri: "jp"), auth_app_social_apple_registration_path(ri: "jp")],
-      inertia_props.fetch("social_providers").map { |provider| provider.fetch("url") },
-    )
+    assert_equal "/", URI.parse(response.location).path
   end
 
   test "direct entry without a login challenge starts no OIDC handoff state" do
@@ -33,15 +27,21 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "valid login challenge renders local ceremony" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
   end
 
   test "sets lang attribute on html element" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_select("html[lang=?]", "ja")
@@ -49,8 +49,11 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows registration methods and social providers" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
 
@@ -59,8 +62,11 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows telephone registration link" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_equal(
@@ -70,8 +76,11 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows social login buttons" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     # The provider buttons keep posting to the ceremony endpoints; the button markup and its
@@ -86,8 +95,11 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders registration layout structure" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
 
@@ -100,18 +112,26 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/^©.*#{Regexp.escape(expected_brand)}$/, inertia_props.fetch("chrome").fetch("copyright"))
   end
 
-  test "page contains navigation and registration heading" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+  test "page renders the registration heading and no sign-in/up chrome navigation" do
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
 
+    assert_response :see_other
+    follow_redirect!
+
     assert_response :success
-    assert_not_empty inertia_props.fetch("chrome").fetch("primary_navigation")
+    # The auth surface is itself the sign-in/sign-up entry point, so its shared header carries no
+    # navigation back to those flows.
+    assert_not inertia_props.fetch("chrome").key?("primary_navigation")
     assert_equal I18n.t("sign.app.registration.new.page_title"), inertia_props.fetch("title")
   end
 
   test "footer contains navigation links" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     # Footer should contain copyright and links
@@ -120,8 +140,11 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders specific cta text" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", login_challenge: login_challenge),
+    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
         headers: { "Host" => host }
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     # Check for Japanese text (since previous test asserted lang=ja)
@@ -133,7 +156,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     get auth_app_sign_up_url(format: :html, ri: "jp"), headers: as_user_headers(user, host: host)
 
     assert_response :redirect
-    assert_redirected_to base_app_dashboard_url(
+    assert_redirected_to base_app_root_url(
       ri: "jp",
       host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", Rails.configuration.x.boot_config.fetch(:hosts).base_service.host),
     )
@@ -156,11 +179,12 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   def login_challenge
-    OidcAuthorizationTransactionCoordinator.issue!(
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
       intent: "sign_up",
       params: authorize_params,
-    ).transaction.login_challenge
+    ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
   end
 
   def authorize_params

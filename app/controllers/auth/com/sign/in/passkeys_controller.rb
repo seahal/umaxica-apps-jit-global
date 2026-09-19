@@ -6,6 +6,7 @@ module Auth
     module Sign
       module In
         class PasskeysController < ::Auth::Com::ApplicationController
+          include ::AuthenticationModeSwitchGuard
           include EmailValidation
 
           include IdentifierDetection

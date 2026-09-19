@@ -33,7 +33,7 @@ module OutboundHttpStub
       end
 
     OutboundHttp::Connection.stub(:build, ->(**_kwargs) { connection }) do
-      yield
+      TestSupport::OutboundHttpGuard.allow { yield }
     end
   end
 end

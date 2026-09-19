@@ -31,6 +31,21 @@ class Actor::AuthenticationTest < ActiveSupport::TestCase
     assert_not Actor::Authentication::NULL.restricted?
   end
 
+  test "reads an authentication event timestamp from the access claims" do
+    timestamp = Time.utc(2026, 1, 2, 3, 4, 5)
+
+    numeric = Actor::Authentication.new(access_claims: { "auth_time" => timestamp.to_i })
+    string = Actor::Authentication.new(access_claims: { "auth_time" => timestamp.to_i.to_s })
+
+    assert_equal timestamp, numeric.authentication_event_at
+    assert_equal timestamp, string.authentication_event_at
+  end
+
+  test "does not promote an invalid or missing authentication timestamp" do
+    assert_nil Actor::Authentication::NULL.authentication_event_at
+    assert_nil Actor::Authentication.new(access_claims: { "auth_time" => "invalid" }).authentication_event_at
+  end
+
   test "hash is consistent for equal authentications" do
     auth1 = Actor::Authentication.new(
       login_public_id: "login-123",

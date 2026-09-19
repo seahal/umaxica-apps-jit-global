@@ -23,4 +23,5 @@ module StepUpConfiguredMethodsQuery
   def configured_totp?(subject)
     call(subject).include?(:totp)
   end
+  private_class_method :configured_email?, :configured_passkey?, :configured_totp?
 end

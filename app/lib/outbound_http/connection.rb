@@ -28,7 +28,13 @@ module OutboundHttp
     #
     # `write_timeout` is genuinely optional: only the Google JWKS fetch pins one.
     def self.build(url:, open_timeout:, read_timeout:, require_https:, write_timeout: nil)
-      uri = url.is_a?(URI::Generic) ? url : URI.parse(url.to_s)
+      # Faraday mutates the URI it is handed (Faraday::Connection#url_prefix=
+      # assigns #path on it). Call sites legitimately pass a shared class
+      # constant -- JitSecurityTurnstileVerifier::VERIFY_URI is frozen, others
+      # are merely shared -- so build always works on a private copy: a frozen
+      # constant would otherwise raise FrozenError, and a shared mutable one
+      # would be rewritten under other threads.
+      uri = (url.is_a?(URI::Generic) ? url.dup : URI.parse(url.to_s))
       raise InsecureEndpointError, "outbound HTTP endpoint must be HTTPS" if require_https && !uri.is_a?(URI::HTTPS)
 
       Faraday.new(url: uri) do |builder|

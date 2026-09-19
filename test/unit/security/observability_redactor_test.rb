@@ -27,6 +27,20 @@ class ObservabilityRedactorTest < ActiveSupport::TestCase
     assert_equal "https://example.com/path", ObservabilityRedactor.scrub("https://example.com/path?jwt=abc")
   end
 
+  test "scrubs token-shaped values inside free-form diagnostic strings" do
+    raw_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signature-value"
+
+    value = ObservabilityRedactor.scrub("verification failed: #{raw_jwt}; Bearer access-token-value")
+
+    assert_equal "verification failed: [FILTERED]; [FILTERED]", value
+  end
+
+  test "scrubs named credential values inside free-form diagnostic strings" do
+    value = ObservabilityRedactor.scrub("failure token=secret-value access_token: another-secret")
+
+    assert_equal "failure [FILTERED] [FILTERED]", value
+  end
+
   test "scrub_url returns REDACTED for an unparseable URI" do
     assert_equal ObservabilityRedactor::REDACTED, ObservabilityRedactor.scrub_url("https://[invalid")
 

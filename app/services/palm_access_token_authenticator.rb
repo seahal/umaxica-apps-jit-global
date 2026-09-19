@@ -69,7 +69,7 @@ class PalmAccessTokenAuthenticator < ApplicationService
     public_id = OidcSubject.public_id_from(AuthorizationTokenClaims.subject(payload), resource_type: RESOURCE_TYPE)
     return nil if public_id.blank?
 
-    AppPrincipalRecord.connected_to(role: :reading) do
+    AppZenithRecord.connected_to(role: :reading) do
       Client.find_by(public_id: public_id)
     end
   end
@@ -79,7 +79,7 @@ class PalmAccessTokenAuthenticator < ApplicationService
     return if sid.blank?
 
     AppTicketRecord.connected_to(role: :reading) do
-      ClientTokenUsage.find_by(public_id: sid) ||
+      ClientRpSession.find_by(public_id: sid) ||
         ClientToken.find_by(oidc_sid: sid) ||
         ClientToken.find_by(public_id: sid)
     end

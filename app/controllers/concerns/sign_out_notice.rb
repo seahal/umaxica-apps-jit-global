@@ -22,28 +22,37 @@ module SignOutNotice
 
   def prepare_sign_out_completion_notice!(state: nil)
     @sign_out_access_expires_at = current_sign_out_access_expires_at
+    @sign_out_actor_ref = current_resource.try(:public_id) if respond_to?(:current_resource, true)
     @sign_out_session_public_id = current_session_public_id if respond_to?(:current_session_public_id, true)
     @sign_out_state = state
   end
 
   def issue_sign_out_notice!
-    session[SIGN_OUT_NOTICE_SESSION_KEY] = sign_out_notice_payload
-    @sign_out_notice = sign_out_notice_from_session(session[SIGN_OUT_NOTICE_SESSION_KEY])
+    payload = sign_out_notice_payload
+    notice_id = Valkey::AuthState::SignOutNoticeStore.new.issue!(payload: payload)
+    # The browser cookie carries only an opaque random capability. The presentation payload lives
+    # in the dedicated auth-state namespace so two concurrent GETs cannot both render completion.
+    session[SIGN_OUT_NOTICE_SESSION_KEY] = notice_id
+    @sign_out_notice = sign_out_notice_from_session(payload)
   end
 
   def consume_sign_out_notice
-    notice = session[SIGN_OUT_NOTICE_SESSION_KEY]
-    return unless notice.is_a?(Hash)
-
-    parsed = sign_out_notice_from_session(notice)
-    return unless parsed
-
+    notice_id = session[SIGN_OUT_NOTICE_SESSION_KEY]
     session.delete(SIGN_OUT_NOTICE_SESSION_KEY)
-    parsed
+    return unless notice_id.is_a?(String) && notice_id.present?
+
+    notice = Valkey::AuthState::SignOutNoticeStore.new.consume(raw_id: notice_id)
+    return unless notice
+
+    sign_out_notice_from_session(notice)
+  rescue Umaxica::Valkey::Error
+    # A presentation marker is deliberately fail-closed. The authority state has already been
+    # handled by the logout transaction; a store outage must not manufacture a completion page.
+    nil
   end
 
   def sign_out_completion_notice_present?
-    session.key?(SIGN_OUT_NOTICE_SESSION_KEY)
+    session[SIGN_OUT_NOTICE_SESSION_KEY].is_a?(String)
   end
 
   def sign_out_active_context_present?
@@ -91,11 +100,11 @@ module SignOutNotice
   end
 
   def sign_out_complete_path(**options)
-    public_send("#{sign_out_route_helper_prefix}_sign_out_completion_path", **sign_out_route_params, **options.compact)
+    public_send("#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
   end
 
   def sign_out_complete_url(**options)
-    public_send("#{sign_out_route_helper_prefix}_sign_out_completion_url", **sign_out_route_params, **options.compact)
+    public_send("#{sign_out_route_helper_prefix}_sign_out_url", **sign_out_route_params, **options.compact)
   end
 
   def sign_out_home_path(**options)
@@ -316,6 +325,8 @@ module SignOutNotice
   def sign_out_notice_payload
     expires_at = SIGN_OUT_NOTICE_TTL.from_now
     payload = {
+      "actor_ref" => @sign_out_actor_ref.presence,
+      "face" => controller_path.split("/").second,
       "sid" => @sign_out_session_public_id.presence,
       "expires_at" => expires_at.iso8601,
       "access_expires_at" => @sign_out_access_expires_at&.iso8601,
@@ -335,6 +346,8 @@ module SignOutNotice
       access_expires_at: access_expires_at,
       session_public_id: payload["sid"].presence,
       state: payload["state"].presence,
+      actor_ref: payload["actor_ref"].presence,
+      face: payload["face"].presence,
     }
   end
 end

@@ -7,13 +7,14 @@ class OidcTokenRevoker < ApplicationService
       def success? = success
     end
 
-  def initialize(token:, client_id:, client_secret:, token_type_hint: nil, host: nil)
+  def initialize(token:, client_id:, client_secret:, token_type_hint: nil, host: nil, expected_resource_type: nil)
     super()
     @token = token
     @client_id = client_id
     @client_secret = client_secret
     @token_type_hint = token_type_hint
     @host = host
+    @expected_resource_type = expected_resource_type
   end
 
   def call
@@ -25,9 +26,15 @@ class OidcTokenRevoker < ApplicationService
 
   private
 
-  attr_reader :token, :client_id, :client_secret, :token_type_hint, :host
+  attr_reader :token, :client_id, :client_secret, :token_type_hint, :host, :expected_resource_type
 
   def authenticated_client?
+    if expected_resource_type.present?
+      client = OidcClientRegistry.find(client_id)
+      return false unless client
+      return false if OidcIssuer.resource_type_for_client(client) != expected_resource_type.to_s
+    end
+
     OidcClientRegistry.authenticate(client_id, client_secret)
   end
 
@@ -38,12 +45,12 @@ class OidcTokenRevoker < ApplicationService
     return false unless parsed
 
     public_id, verifier = parsed
-    token_record = find_usage_by_public_id(public_id, resource_type: client_resource_type)
+    token_record = find_rp_session_by_public_id(public_id, resource_type: client_resource_type)
     return false unless token_record
     return false unless token_record.oidc_client_id == client_id
     return false unless token_record.refresh_token_digest_matches?(verifier)
 
-    token_record.revoke!
+    RpSessionRevoker.call(scope: :rp_session, record: token_record)
     true
   end
 
@@ -61,40 +68,34 @@ class OidcTokenRevoker < ApplicationService
     )
     return false unless payload
 
-    token_record = find_usage_by_sid(
+    # OIDC revocation is scoped to the RP Session that issued the token. A
+    # parent Base Browser Session may also carry an OIDC sid for legacy or
+    # first-party browser flows, but falling back to that row here would let an
+    # RP revoke the whole browser session when its own RP Session is absent.
+    token_record = find_rp_session_by_sid(
       client_resource_type,
       payload["sid"],
-    ) || find_token_by_sid(client_resource_type, payload["sid"])
+    )
     return false unless token_record&.oidc_client_id == client_id
     return false unless token_jti_matches?(token_record, payload)
 
-    token_record.revoke!
+    RpSessionRevoker.call(scope: :rp_session, record: token_record)
     true
   end
 
-  def find_usage_by_public_id(public_id, resource_type:)
-    context, usage_class = usage_context_and_class(resource_type)
+  def find_rp_session_by_public_id(public_id, resource_type:)
+    context, rp_session_class = rp_session_context_and_class(resource_type)
 
-    context.connected_to(role: :writing) { usage_class.find_by(public_id: public_id) }
+    context.connected_to(role: :writing) { rp_session_class.find_by(public_id: public_id) }
   end
 
-  def find_usage_by_sid(resource_type, sid)
+  def find_rp_session_by_sid(resource_type, sid)
     return if sid.blank?
 
-    context, usage_class = usage_context_and_class(resource_type)
+    context, rp_session_class = rp_session_context_and_class(resource_type)
 
     context.connected_to(role: :writing) do
-      usage_class.find_by(public_id: sid)
-    end
-  end
-
-  def find_token_by_sid(resource_type, sid)
-    return if sid.blank?
-
-    context, token_class = token_context_and_class(resource_type)
-
-    context.connected_to(role: :writing) do
-      token_class.find_by(oidc_sid: sid)
+      rp_session_class.find_by(public_id: sid)
     end
   end
 
@@ -109,19 +110,11 @@ class OidcTokenRevoker < ApplicationService
     ActiveSupport::SecurityUtils.secure_compare(expected, actual)
   end
 
-  def token_context_and_class(resource_type)
+  def rp_session_context_and_class(resource_type)
     case resource_type
-    when "operator" then [OrgTicketRecord, OperatorToken]
-    when "visitor" then [ComTicketRecord, VisitorToken]
-    else [AppTicketRecord, ClientToken]
-    end
-  end
-
-  def usage_context_and_class(resource_type)
-    case resource_type
-    when "operator" then [OrgTicketRecord, OperatorTokenUsage]
-    when "visitor" then [ComTicketRecord, VisitorTokenUsage]
-    else [AppTicketRecord, ClientTokenUsage]
+    when "operator" then [OrgTicketRecord, OperatorRpSession]
+    when "visitor" then [ComTicketRecord, VisitorRpSession]
+    else [AppTicketRecord, ClientRpSession]
     end
   end
 

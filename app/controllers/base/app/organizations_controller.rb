@@ -23,6 +23,8 @@ module Base
           body: "organizations",
           empty: "None available",
           entries: organizations.map { |organization| serialize_organization(organization) },
+          create_action: { label: "Create Organization" },
+          up_link: dashboard_up_link,
         }
       end
 

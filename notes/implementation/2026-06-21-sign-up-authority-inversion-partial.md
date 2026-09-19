@@ -8,7 +8,7 @@
   - `docs/identity/authority-boundary.md`
   - `docs/security/sign-up-sequence.md`
   - `adr/sign-up-authentication-handoff-and-social-rt.md`
-  - `plans/active/sign-up-state-machine-implementation-plan.md`
+  - GH issue #834
 - Implementation date: 2026-06-21
 
 ## Decisions Made During Implementation

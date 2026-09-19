@@ -48,7 +48,7 @@ module Publishing
       foreign = publishing_term(vocabulary: other_vocabulary, locale: "ja", slug: "foreign")
       english = publishing_term(vocabulary: @category, locale: "en", slug: "english")
 
-      assert_raises(MoveTaxonomySubtreeOperation::ScopeMismatchError, ActiveRecord::AssociationTypeMismatch) {
+      assert_raises(MoveTaxonomySubtreeOperation::ScopeMismatchError) {
         MoveTaxonomySubtreeOperation.call(term: @guide, new_parent: foreign)
       }
       assert_raises(MoveTaxonomySubtreeOperation::ScopeMismatchError) { MoveTaxonomySubtreeOperation.call(term: @guide, new_parent: english) }

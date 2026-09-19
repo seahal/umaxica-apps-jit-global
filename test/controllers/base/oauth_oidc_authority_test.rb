@@ -6,6 +6,8 @@ require "test_helper"
 # require "helpers/auth_helpers"
 
 class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
+  include OidcAuthorizationResponseHelper
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -113,6 +115,32 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_includes captured[:token_endpoint_uri], ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     assert_equal "no-store", response.headers["Cache-Control"]
     assert_equal "no-cache", response.headers["Pragma"]
+  end
+
+  test "base token endpoint forwards an OIDC refresh grant" do
+    captured = nil
+    result = TokenResult.new(
+      success: true,
+      token_response: { access_token: "access", refresh_token: "next-refresh", token_type: "Bearer" },
+    )
+
+    OidcTokenExchangeCoordinator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+           params: {
+             grant_type: "refresh_token",
+             refresh_token: "refresh-value",
+             client_id: "core-next-rp",
+             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+             client_assertion: "assertion",
+           }
+    end
+
+    assert_response :ok
+    assert_equal "refresh_token", captured[:grant_type]
+    assert_equal "refresh-value", captured[:refresh_token]
+    assert_nil captured[:code]
+    assert_nil captured[:redirect_uri]
+    assert_nil captured[:code_verifier]
   end
 
   test "base token endpoint rejects missing csrf metadata with oauth json error instead of csrf 422" do
@@ -258,8 +286,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     test "base #{surface} userinfo serialises the authenticated principal for its own type" do
       host = ENV.fetch(host_env)
       resource = Struct.new(:id, :public_id, :name, :email).new(1, "principal-1", "Sample Name", "sample@example.com")
-      payload = { "act" => resource_type,
-                  "scp" => %w(openid profile email),
+      payload = { "scope" => "openid profile email domain:#{resource_type}",
                   "acr" => "aal1",
                   "auth_time" => 1_756_000_000, }
       result = AuthResult.new(success: true, resource: resource, payload: payload)
@@ -325,6 +352,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "refresh", captured[:token]
     assert_equal "core-next-rp", captured[:client_id]
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), captured[:host]
+    assert_equal "client", captured[:expected_resource_type]
   end
 
   test "base com revocation delegates with com host binding" do
@@ -346,6 +374,26 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "refresh", captured[:token]
     assert_equal "core-next-rp", captured[:client_id]
     assert_equal host, captured[:host]
+    assert_equal "visitor", captured[:expected_resource_type]
+  end
+
+  test "base org revocation delegates with operator realm binding" do
+    captured = nil
+    result = RevocationResult.new(success: true)
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+
+    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+      post base_org_oauth_revocation_url(host: host),
+           params: {
+             token: "refresh",
+             client_id: "core-org",
+             client_secret: "secret",
+             token_type_hint: "refresh_token",
+           }
+    end
+
+    assert_response :ok
+    assert_equal "operator", captured[:expected_resource_type]
   end
 
   test "base com revocation returns unauthorized when the revoker fails" do
@@ -534,9 +582,15 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
     assert_equal "/sign/in", uri.path
-    assert_predicate query["login_challenge"], :present?
+    assert_predicate query["admission"], :present?
+    assert_nil query["login_challenge"]
 
-    transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: query["login_challenge"])
+    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
+      raw_code: query["admission"],
+      surface: "app",
+      expected_intent: "sign_in",
+    )
+    transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
 
     assert_equal "app", transaction.surface
     assert_equal "sign_in", transaction.intent
@@ -556,6 +610,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             user_token_status_id: ClientTokenStatus::ACTIVE,
             user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
             user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+            authentication_event_at: Time.current,
           )
         end,
         transaction_class: ClientOidcAuthorizationTransaction,
@@ -575,6 +630,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
             staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
+            authentication_event_at: Time.current,
           )
         end,
         transaction_class: OperatorOidcAuthorizationTransaction,
@@ -594,6 +650,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             visitor_token_status_id: VisitorTokenStatus::ACTIVE,
             visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
             visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+            authentication_event_at: Time.current,
           )
         end,
         transaction_class: VisitorOidcAuthorizationTransaction,
@@ -628,6 +685,59 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "base app authorize honors prompt none for a fresh authenticated browser session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    actor = clients(:one)
+    ensure_user_token_reference_records!
+    token = ClientToken.create!(
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
+
+    host!(host)
+    get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"),
+                            headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
+
+    assert_response :redirect
+    callback = URI.parse(jump_rt_url_from_location(response.location))
+
+    assert_predicate Rack::Utils.parse_nested_query(callback.query.to_s)["code"], :present?
+  end
+
+  test "base app authorize starts a ceremony for prompt login despite an existing session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    actor = clients(:one)
+    ensure_user_token_reference_records!
+    token = ClientToken.create!(
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
+
+    host!(host)
+    get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
+                            headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
+
+    assert_response :redirect
+    uri = URI.parse(jump_rt_url_from_location(response.location))
+
+    assert_equal "/sign/in", uri.path
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
+      raw_code: query.fetch("admission"), surface: "app", expected_intent: "sign_in",
+    )
+    transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
+
+    assert_equal "login", transaction.oidc_prompt
+  end
+
   test "base oauth authorize starts sign up ceremony when screen_hint requests signup" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host!(host)
@@ -639,6 +749,17 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
     assert_equal "/sign/up", uri.path
+  end
+
+  test "base app authorize returns login_required for prompt none without a session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host!(host)
+
+    assert_no_difference "ClientOidcAuthorizationTransaction.count" do
+      get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"), headers: browser_headers
+    end
+
+    assert_oidc_error_redirect(error: "login_required", redirect_uri: oidc_authorize_params.fetch(:redirect_uri))
   end
 
   test "base oauth authorize rejects requests without openid scope" do
@@ -674,15 +795,16 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       params: oidc_authorize_params,
     )
 
-    OidcAuthorizationTransactionCoordinator.register_result!(
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
       surface: "app",
       login_challenge: issuance.transaction.login_challenge,
       actor: clients(:one),
+      authentication_event_at: Time.current,
       session_ref: "session-1",
       auth_method: "passkey",
     )
 
-    get "/oauth/authorize", params: { login_challenge: issuance.transaction.login_challenge }, headers: browser_headers
+    get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
@@ -692,10 +814,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal oidc_authorize_params[:state], query["state"]
     assert_predicate issuance.transaction.reload, :consumed?
 
-    get "/oauth/authorize", params: { login_challenge: issuance.transaction.login_challenge }, headers: browser_headers
+    get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
 
     assert_response :bad_request
-    assert_equal "authorization transaction already consumed", response.parsed_body["error_description"]
+    assert_equal "invalid authorization request", response.parsed_body["error_description"]
   end
 
   test "base oauth authorize rejects expired login challenge" do
@@ -706,13 +828,20 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         surface: "app",
         intent: "sign_in",
         params: oidc_authorize_params,
-        login_challenge_ttl: 1.second,
+        login_challenge_ttl: 1.minute,
         now: Time.current,
       )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+      surface: "app",
+      login_challenge: issuance.transaction.login_challenge,
+      actor: clients(:one),
+      authentication_event_at: Time.current,
+      session_ref: "session-1",
+      auth_method: "passkey",
+    )
 
-    travel 2.seconds do
-      get "/oauth/authorize", params: { login_challenge: issuance.transaction.login_challenge },
-                              headers: browser_headers
+    travel 2.minutes do
+      get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
     end
 
     assert_response :bad_request
@@ -891,6 +1020,7 @@ class BaseOauthOidcAuthorityTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     access_token = jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
@@ -919,6 +1049,7 @@ class BaseOauthOidcAuthorityTest
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     access_token = jwt_access_token_for(
@@ -950,6 +1081,7 @@ class BaseOauthOidcAuthorityTest
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
       visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
     )
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
     access_token = jwt_access_token_for(

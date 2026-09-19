@@ -17,7 +17,11 @@ module Auth
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
-        after_action :sign_out_notice_cache_headers!, only: %i(edit complete)
+        after_action :sign_out_notice_cache_headers!, only: %i(show edit)
+
+        def show
+          complete_oidc_rp_logout!
+        end
 
         def new
           redirect_to(sign_out_edit_path, status: :see_other)
@@ -42,10 +46,6 @@ module Auth
           )
         end
 
-        def complete
-          complete_oidc_rp_logout!
-        end
-
         private
 
         def continue_coordinated_sign_out!
@@ -53,9 +53,10 @@ module Auth
           logout_current_session!(reason: "user_logout")
 
           redirect_to(
-            auth_app_sign_out_completion_url(
+            base_app_sign_out_url(
               host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
               protocol: "https",
+              ri: params[:ri],
             ),
             status: :see_other,
             allow_other_host: true,

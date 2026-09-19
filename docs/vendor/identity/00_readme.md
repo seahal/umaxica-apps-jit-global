@@ -67,10 +67,6 @@ Primary evidence used for this package:
 - `docs/security/observability-boundary.md`
 - `adr/acme-sign-core-base-port-boundary.md`
 - `adr/frontend-architecture-toolchain.md`
-- `docs/auth-ceremony/CONTEXT.md`
-- `docs/auth-ceremony/AUTHORITY-MATRIX.md`
-- `docs/auth-ceremony/OPEN-QUESTIONS.md`
-- `docs/auth-ceremony/EVIDENCE-LEDGER.md`
 
 # Current Decisions
 
@@ -84,7 +80,6 @@ Primary evidence used for this package:
 - Social email match must not automatically link accounts.
 - User-confirmed linking is required.
 - Vendor-facing docs use current English vocabulary only.
-- `docs/auth-ceremony/` is evidence-only working area.
 - `docs/vendor/identity/` is the stable external handoff package.
 
 # Open Questions

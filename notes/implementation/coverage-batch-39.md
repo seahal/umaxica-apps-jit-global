@@ -46,11 +46,12 @@ block, `advance_cycle_to_checkpoint_after_active_session!` -- so 45 files were r
 upstream version and the deletions dropped.
 
 Two of those reversals were not merely deferential. `WithdrawalLifecycle`'s
-`revoke_sessions(except_public_id:)` and `exclude_fresh_withdrawal_step_up_sessions` are described
-by `plans/umaxica-grill-vivid-squirrel.md` as the current design for keeping the requesting session
+`revoke_sessions(except_public_id:)` and `exclude_fresh_withdrawal_step_up_sessions` were described
+by a since-removed withdrawal audit plan as the current design for keeping the requesting session
 alive through withdrawal; deleting them as unreferenced would have removed a capability an accepted
-plan depends on. Worth noting separately: the plan describes that behaviour as present, but the code
-calls `revoke_sessions` with no argument, so the plan and the code disagree today.
+plan depends on. Resolved 2026-09-13: the confirmed specification revokes every session, including
+the requesting one, and continues withdrawal through the withdrawal ceremony. The code already does
+this, and the unused `except_public_id:` exclusion and its tests were removed the same day.
 
 The scans themselves were still worth running -- they are what surfaced the defects below -- but "no
 caller in the tree" turned out to be a weak signal in a repository with parallel work in flight, and

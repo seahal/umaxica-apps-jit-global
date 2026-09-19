@@ -85,10 +85,20 @@ module OmniAuth
       # configuration), and to run the strict Entra ID token verifier instead
       # of the base gem's generic OIDC checks.
       #
-      # `client_auth_method: :basic` is Entra's `client_secret_basic`
-      # (rack-oauth2 lib/rack/oauth2/client.rb). The secret comes from the
-      # client options configured at boot from Rails credentials; no secret is
-      # stored in the database.
+      # Client authentication is `client_secret_post`: rack-oauth2 has no named
+      # branch for it, so any client_auth_method outside its recognized set
+      # falls through to the `else` in Client#authenticated_context_from, which
+      # merges `client_id`/`client_secret` into the POST body and sets no
+      # Authorization header (rack-oauth2 2.3.0 lib/rack/oauth2/client.rb).
+      # `:client_secret_post` is passed rather than a placeholder so the intent
+      # is readable, and
+      # test/contracts/omniauth_entra_token_request_contract_test.rb pins the
+      # resulting request shape against a rack-oauth2 upgrade changing it.
+      #
+      # Entra accepts client_secret_post at the v2.0 token endpoint and it keeps
+      # the credential in one place instead of a separately-encoded header.
+      # The secret comes from the client options configured at boot from Rails
+      # credentials; no secret is stored in the database.
       def access_token
         return @access_token if defined?(@access_token) && @access_token
 
@@ -97,7 +107,7 @@ module OmniAuth
 
         @access_token = client.access_token!(
           scope: options.scope,
-          client_auth_method: :basic,
+          client_auth_method: :client_secret_post,
           code_verifier: verifier,
         )
         verify_id_token!(@access_token.id_token)

@@ -28,10 +28,16 @@ export type PasskeyAuthenticationPanelProps = {
   options_url: string;
   verification_url: string;
   region: string;
-  identifier_param: string;
+  /**
+   * Null when an earlier stage of the ceremony already selected the actor, as the org normal
+   * sign-in flow does after Entra ID: the server reads the actor from its own pending transaction
+   * and ignores anything sent here, so the panel asks for nothing and sends nothing.
+   */
+  identifier_param: string | null;
   turnstile_site_key: string;
   turnstile_error_message: string;
-  field: PasskeyAuthenticationField;
+  /** Null exactly when `identifier_param` is null. */
+  field: PasskeyAuthenticationField | null;
   submit_label: string;
 };
 
@@ -85,7 +91,7 @@ export default function PasskeyAuthenticationPanel({
     }
 
     const trimmed = identifier.trim();
-    if (!trimmed) {
+    if (identifierParam !== null && !trimmed) {
       showError(PASSKEY_MESSAGES.identifierRequired);
       return;
     }
@@ -99,7 +105,7 @@ export default function PasskeyAuthenticationPanel({
       showStatus(PASSKEY_MESSAGES.fetchingOptions);
 
       const optionsResponse = await postJson(optionsUrl, {
-        [identifierParam]: trimmed,
+        ...(identifierParam === null ? {} : { [identifierParam]: trimmed }),
         "cf-turnstile-response": token,
         ri: region || undefined,
       });
@@ -168,30 +174,32 @@ export default function PasskeyAuthenticationPanel({
         `autoCapitalize`, and dropping it would change the mobile keyboard behaviour this identifier
         relies on.
       */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="identifier"
-          className="text-sm font-medium text-fg"
-        >
-          {field.label}
-        </label>
-        <input
-          type="text"
-          id="identifier"
-          value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
-          placeholder={field.placeholder}
-          autoComplete="username webauthn"
-          autoCapitalize="characters"
-          minLength={field.min_length}
-          maxLength={field.max_length}
-          pattern={field.pattern}
-          spellCheck={false}
-          required
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
+      {field === null ? null : (
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="identifier"
+            className="text-sm font-medium text-fg"
+          >
+            {field.label}
+          </label>
+          <input
+            type="text"
+            id="identifier"
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+            placeholder={field.placeholder}
+            autoComplete="username webauthn"
+            autoCapitalize="characters"
+            minLength={field.min_length}
+            maxLength={field.max_length}
+            pattern={field.pattern}
+            spellCheck={false}
+            required
+            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
             placeholder:text-fg-muted"
-        />
-      </div>
+          />
+        </div>
+      )}
 
       {error ? (
         <p

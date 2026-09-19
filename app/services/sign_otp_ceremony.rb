@@ -40,6 +40,7 @@ class SignOtpCeremony
     otp_code = nil
     record.with_lock do
       return result(false, :locked, record: record, error: :locked) if record.locked?
+      return result(false, :rate_limited, record: record, error: :rate_limited) if cooldown_active?(record)
 
       otp_code = generate_and_store_otp!(record)
     end
@@ -63,7 +64,7 @@ class SignOtpCeremony
 
       hotp = ROTP::HOTP.new(otp_data[:otp_private_key])
       expected_code = hotp.at(otp_data[:otp_counter]).to_s
-      if ActiveSupport::SecurityUtils.secure_compare(expected_code, code.to_s)
+      if otp_code_matches?(expected_code, code)
         record.clear_otp
         return result(true, :verified, record: record)
       end
@@ -152,10 +153,18 @@ class SignOtpCeremony
     otp_code
   end
 
+  def otp_code_matches?(expected, submitted)
+    expected_value = expected.to_s
+    submitted_value = submitted.to_s
+    return false unless submitted_value.match?(/\A\d{#{expected_value.length}}\z/)
+
+    ActiveSupport::SecurityUtils.secure_compare(expected_value, submitted_value)
+  end
+
   def deliver!(record, otp_code)
     OtpAdapter
       .for(surface: surface, channel: channel)
-      .deliver(record: record, otp_code: otp_code)
+      .deliver(record: record, otp_code: otp_code, purpose: purpose)
   end
 
   def result(success, status, record: nil, code: nil, error: nil)

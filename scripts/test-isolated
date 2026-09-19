@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${POSTGRESQL_TEST_HOST:?POSTGRESQL_TEST_HOST is required; do not reuse POSTGRESQL_HOST implicitly}"
+: "${POSTGRESQL_PORT:?POSTGRESQL_PORT is required}"
+: "${POSTGRESQL_USER:?POSTGRESQL_USER is required}"
+: "${POSTGRESQL_PASSWORD:?POSTGRESQL_PASSWORD is required}"
+: "${POSTGRESQL_DATABASE:?POSTGRESQL_DATABASE is required}"
+: "${CACHE_REDIS_URL:?CACHE_REDIS_URL is required and must use test logical DB 3}"
+: "${RATE_LIMIT_REDIS_URL:?RATE_LIMIT_REDIS_URL is required and must use test logical DB 4}"
+: "${AUTH_STATE_REDIS_URL:?AUTH_STATE_REDIS_URL is required and must use test logical DB 5}"
+: "${VALKEY_TEST_HOST:?VALKEY_TEST_HOST is required}"
+: "${VALKEY_TEST_PORT:?VALKEY_TEST_PORT is required}"
+
+export RAILS_ENV=test
+export RACK_ENV=test
+export VALKEY_NAMESPACE_RUN_ID="${VALKEY_NAMESPACE_RUN_ID:-e0-$(date -u +%Y%m%d%H%M%S)-$BASHPID-$RANDOM}"
+export VALKEY_NAMESPACE_WORKER_ID="${VALKEY_NAMESPACE_WORKER_ID:-parent}"
+
+child_pid=
+claimed=0
+cleanup_done=0
+
+cleanup_once() {
+  if ((cleanup_done == 1)); then
+    return
+  fi
+  cleanup_done=1
+
+  local cleanup_status=0
+  if ((claimed == 1)); then
+    VALKEY_CLEANUP_ALLOW_CLAIM=1 bundle exec ruby scripts/test-valkey-cleanup || cleanup_status=$?
+    local release_status=0
+    bundle exec ruby scripts/test-valkey-run-scope release || release_status=$?
+    if ((cleanup_status == 0 && release_status != 0)); then
+      cleanup_status=$release_status
+    fi
+  fi
+
+  if ((status == 0 && cleanup_status != 0)); then
+    status=$cleanup_status
+  fi
+}
+
+finish() {
+  status=$?
+  set +e
+  cleanup_once
+  set -e
+  exit "$status"
+}
+
+forward_signal() {
+  local signal="$1"
+  if [[ -n "${child_pid:-}" ]] && kill -0 "$child_pid" 2>/dev/null; then
+    kill "-$signal" "$child_pid" 2>/dev/null || true
+    wait "$child_pid" 2>/dev/null || true
+  fi
+  case "$signal" in
+    INT) exit 130 ;;
+    TERM) exit 143 ;;
+  esac
+}
+
+trap finish EXIT
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+bundle exec ruby scripts/test-valkey-run-scope claim
+claimed=1
+bundle exec ruby scripts/test-environment-check
+
+if (($# == 0)); then
+  set -- bin/rails test
+fi
+
+status=0
+set +e
+"$@" &
+child_pid=$!
+wait "$child_pid"
+status=$?
+set -e
+exit "$status"

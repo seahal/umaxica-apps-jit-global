@@ -61,4 +61,26 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
     assert_includes AppEnforcementCase.where(id: converged_case.id).to_a, converged_case
     assert_not_includes AppEnforcementCase.pending_convergence.to_a, converged_case
   end
+
+  test "ended cases use end convergence instead of the active-case reconciler" do
+    client = clients(:one)
+    operator = operators(:one)
+
+    ended_case = AppEnforcementCase.new(
+      kind: "cooldown",
+      duration_mode: "timed",
+      visibility: "visible",
+      release_mode: "automatic",
+      effective_at: Time.current,
+      expires_at: 1.day.from_now,
+      reason_code: "abuse",
+      principal_public_id: client.public_id,
+      applied_by_operator_public_id: operator.public_id,
+    )
+    EnforcementCaseApplyOperation.call(enforcement_case: ended_case)
+    ended_case.update_columns(ended_at: Time.current, end_reason: "revoked", audited_at: nil) # rubocop:disable Rails/SkipsModelValidations
+
+    assert_not_includes AppEnforcementCase.pending_convergence.to_a, ended_case
+    assert_includes AppEnforcementCase.pending_end_convergence.to_a, ended_case
+  end
 end

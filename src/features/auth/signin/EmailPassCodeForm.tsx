@@ -4,7 +4,7 @@
 // correct, how many attempts remain, and whether the account is locked are all decided by the
 // server, which re-renders this page with the resulting messages.
 import { useForm } from "@inertiajs/react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
@@ -55,6 +55,7 @@ export default function EmailPassCodeForm({
 }: EmailPassCodeFormProps) {
   const field = form.pass_code_field;
   const input = useRef<HTMLInputElement>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const { data, setData, patch, processing } = useForm<{
     [key: string]: string | null | Record<string, string>;
     "cf-turnstile-response": string;
@@ -69,6 +70,12 @@ export default function EmailPassCodeForm({
   const value = readString(data[field.scope], field.field) ?? "";
   const fieldId = `${field.scope}_${field.field}`;
 
+  const clearSubmissionState = () => {
+    setData(field.scope, { [field.field]: "" });
+    setData("cf-turnstile-response", "");
+    setTurnstileKey((key) => key + 1);
+  };
+
   return (
     <Page
       title={title}
@@ -78,7 +85,7 @@ export default function EmailPassCodeForm({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          patch(form.action);
+          patch(form.action, { onFinish: clearSubmissionState });
         }}
         className="flex flex-col gap-4"
       >
@@ -128,12 +135,13 @@ export default function EmailPassCodeForm({
         <OtpResendButton
           resend={otpResend}
           onResent={() => {
-            setData(field.scope, { [field.field]: "" });
+            clearSubmissionState();
             input.current?.focus();
           }}
         />
 
         <TurnstileWidget
+          key={turnstileKey}
           site_key={turnstile.site_key}
           mode={turnstile.mode}
           action={turnstile.action}

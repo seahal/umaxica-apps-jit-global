@@ -11,13 +11,13 @@ class Base::Com::FullAccessGateTest < ActionDispatch::IntegrationTest
   end
 
   test "dashboard redirects authenticated unselected visitor to selector" do
-    get base_com_dashboard_url(host: @host, ri: "jp"), headers: as_visitor_headers(@visitor, host: @host)
+    get base_com_root_url(host: @host, ri: "jp"), headers: as_visitor_headers(@visitor, host: @host)
 
     assert_redirected_to base_com_selector_path(ri: "jp")
   end
 
   test "dashboard requests selection as json when context is missing" do
-    get base_com_dashboard_url(host: @host, ri: "jp"), headers: as_visitor_headers(
+    get base_com_root_url(host: @host, ri: "jp"), headers: as_visitor_headers(
       @visitor,
       host: @host,
     ), as: :json

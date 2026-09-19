@@ -1,8 +1,12 @@
 # ADR: Solid Cache removal and two-store Valkey separation (2026-09-05)
 
+> **Topology supersession (2026-09-13):** Development/test Valkey service topology is superseded by
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`. Cache vs rate-limit separation semantics
+> remain.
+
 ## Status
 
-Accepted.
+Accepted; partially superseded (2026-09-13).
 
 Supersedes the Solid Cache portions of `adr/four-app-solid-cache-and-solid-queue.md`,
 `adr/distributor-solid-cache-queue-placement.md`, and

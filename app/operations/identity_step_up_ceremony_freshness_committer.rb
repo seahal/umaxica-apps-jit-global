@@ -5,9 +5,10 @@ class IdentityStepUpCeremonyFreshnessCommitter
   Commit = Data.define(:result, :token)
 
   def self.call!(result_token:, token:, expected_scope:, expected_aal:, expected_method:,
-                 expected_phishing_resistant: false, audience:, now: Time.current)
+                 expected_phishing_resistant: false, audience:, surface:, now: Time.current)
     new(
       result_token: result_token,
+      surface: surface,
       token: token,
       expected_scope: expected_scope,
       expected_aal: expected_aal,
@@ -19,8 +20,9 @@ class IdentityStepUpCeremonyFreshnessCommitter
   end
 
   def initialize(result_token:, token:, expected_scope:, expected_aal:, expected_method:,
-                 expected_phishing_resistant: false, audience:, now: Time.current)
+                 expected_phishing_resistant: false, audience:, surface:, now: Time.current)
     @result_token = result_token
+    @surface = surface.to_s
     @token = token
     @expected_scope = expected_scope.to_s
     @expected_aal = expected_aal.to_s
@@ -39,20 +41,32 @@ class IdentityStepUpCeremonyFreshnessCommitter
   private
 
   attr_reader :result_token, :token, :expected_scope, :expected_aal, :expected_method, :expected_phishing_resistant,
-              :audience, :now
+              :audience, :surface, :now
 
   def validate!
     raise IdentityStepUpCeremonyContract::Error, "token is required" if token.blank?
+    # An Emergency (Restricted Mode) session is not eligible to hold step-up
+    # freshness at all. Rejecting the commit here means that even a ceremony
+    # result that was somehow produced under an Emergency session cannot be
+    # turned into usable freshness on the session row.
+    raise IdentityStepUpCeremonyContract::Error,
+          "authentication context is not eligible for step-up" if emergency_authentication_context?
     raise IdentityStepUpCeremonyContract::Error,
           "result actor does not match current actor" unless result["actor_ref"].to_s == token_actor_ref
     raise IdentityStepUpCeremonyContract::Error,
           "result session does not match current session" unless result["session_ref"].to_s == token.public_id.to_s
+    raise IdentityStepUpCeremonyContract::Error,
+          "result surface does not match current surface" unless result["surface"].to_s == surface
     raise IdentityStepUpCeremonyContract::Error,
           "result scope does not match requirement" unless result["scope"].to_s == expected_scope
     raise IdentityStepUpCeremonyContract::Error,
           "result method does not match ceremony" unless result["method"].to_s == expected_method
     raise IdentityStepUpCeremonyContract::Error,
           "result AAL is insufficient" unless aal_rank(result["aal"]) >= aal_rank(expected_aal)
+  end
+
+  def emergency_authentication_context?
+    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
   end
 
   def update_token!
@@ -105,9 +119,5 @@ class IdentityStepUpCeremonyFreshnessCommitter
       result_token,
       issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id(surface), now: now,
     )
-  end
-
-  def surface
-    @surface ||= IdentityStepUpCeremonyContract.decode_unverified_payload(result_token)["surface"].to_s
   end
 end

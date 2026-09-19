@@ -18,7 +18,7 @@ module Base
             surface: "app",
             actor: current_client,
             token: current_session_token,
-            fallback: base_app_dashboard_path(ri: params[:ri]),
+            fallback: base_app_root_path(ri: params[:ri]),
           )
         end
 

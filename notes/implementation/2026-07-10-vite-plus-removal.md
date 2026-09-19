@@ -25,8 +25,8 @@
 ## Deviations From Plan
 
 - The tracked `vite.config.js` contained the effective Vite, Vitest, format, lint, and staged-task
-  configuration. Its Vite settings were moved to `vite.config.ts`; the remaining settings were
-  split into `vitest.config.ts`, `.oxfmtrc.json`, `.oxlintrc.json`, package scripts, and Lefthook.
+  configuration. Its Vite settings were moved to `vite.config.ts`; the remaining settings were split
+  into `vitest.config.ts`, `.oxfmtrc.json`, `.oxlintrc.json`, package scripts, and Lefthook.
 - The redundant `src/entrypoints/inertia.ts` forwarding file was removed because TypeScript treats
   same-basename `.ts` and `.tsx` files as a conflicting composite-project input. Vite continues to
   build the actual `inertia.tsx` entrypoint.

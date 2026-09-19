@@ -40,6 +40,8 @@
 # frozen_string_literal: true
 
 class AppPreferenceChronicle < ChronicleRecord
+  self.belongs_to_required_by_default = false
+
   include Retainable
 
   belongs_to :app_preference,

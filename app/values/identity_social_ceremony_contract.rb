@@ -142,6 +142,8 @@ module IdentitySocialCeremonyContract
   # test/services/identity/social_ceremony_untrusted_payload_allowlist_test.rb.
   def decode_untrusted_routing_payload(token)
     payload, = JWT.decode(token, nil, false)
+    raise IdentitySocialCeremonyContract::Error, "token payload must be a JSON object" unless payload.is_a?(Hash)
+
     payload
   rescue JWT::DecodeError => e
     raise IdentitySocialCeremonyContract::Error, "token is invalid: #{e.message}"

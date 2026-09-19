@@ -6,8 +6,7 @@
   Acme app `base-rails-rp` self-RP ambiguity without reintroducing `/auth/*`.
 - Date: 2026-06-21.
 - Existing worktree state: preserved unrelated dirty files in `adr/logout-ceremony-boundary.md`,
-  `docs/identity/authority-boundary.md`, `docs/security/logout-sequence.md`,
-  `plans/active/logout-state-machine-implementation-plan.md`,
+  `docs/identity/authority-boundary.md`, `docs/security/logout-sequence.md`, GH issue #833,
   `test/controllers/acme/com/oidc/logouts_controller_test.rb`,
   `test/controllers/acme/org/oidc/logouts_controller_test.rb`,
   `test/controllers/sign/app/sign_outs_controller_test.rb`, and

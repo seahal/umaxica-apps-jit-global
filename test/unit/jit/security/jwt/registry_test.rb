@@ -29,7 +29,8 @@ module Jit
             issuers = JitSecurityJwtRegistry.reload!
 
             assert_equal "auth-kid", issuers.fetch("auth").current_kid
-            assert_equal %w(umaxica-api), issuers.fetch("auth").audiences
+            assert_equal %w(umaxica-api-client umaxica-api-visitor umaxica-api-operator),
+                         issuers.fetch("auth").audiences
             assert_equal "pref-kid", issuers.fetch("preference").current_kid
             assert_equal(
               Rails.configuration.x.boot_config.fetch(:hosts).base_origins.map(&:to_s),
@@ -37,7 +38,8 @@ module Jit
             )
             assert_equal "sign-app-kid", issuers.fetch("surface:SIGN_APP").current_kid
             assert_predicate issuers.fetch("surface:SIGN_APP").jwks.fetch(:keys), :present?
-            assert_equal 12, issuers.keys.grep(/\Aoidc_client:/).size
+            assert_equal JitSecurityJwtRegistry::OIDC_CLIENT_NAMESPACES.size,
+                         issuers.keys.grep(/\Aoidc_client:/).size
             assert JitSecurityJwtRegistry.public_key_for("auth", "auth-legacy-kid")
             assert JitSecurityJwtRegistry.public_key_for("preference", "pref-legacy-kid")
           end

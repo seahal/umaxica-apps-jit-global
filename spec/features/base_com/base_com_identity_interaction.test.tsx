@@ -182,57 +182,62 @@ describe("SessionsIndex", () => {
   const props = {
     title: "Sessions",
     back_link: { label: "Back", href: "/identity" },
-    columns: ["Session", ""],
+    expires_at_description: "This session ends at its expiry and cannot be extended.",
+    columns: {
+      device: "Device",
+      last_activity: "Last activity",
+      created: "Created",
+      expires_at: "Expires at",
+      status: "Status",
+      action: "Action",
+    },
     empty_message: "No active sessions were found.",
-    current_label: "current",
-    bulk_actions: {
-      revoke_others: { label: "Revoke others", url: "/identity/other_sessions", confirm: "Sure?" },
-      revoke_all: { label: "Revoke all", url: "/identity/sessions", confirm: "Sure?" },
+    bulk_revocations: {
+      others: { label: "Revoke others", href: "/identity/other_sessions", confirm: "Sure?" },
     },
     sessions: [
       {
-        public_id: "sess-2",
-        current: false,
-        status: "1",
-        kind: "2",
-        binding: "NORMAL",
+        device: "Firefox / Linux",
         last_activity: "2026-01-01",
         created: "2026-01-01",
-        refresh_expires: "2026-02-01",
-        revoke: { label: "Revoke", url: "/identity/sessions/sess-2", confirm: "Sure?" },
+        expires_at: "2026-02-01",
+        status: "Active",
+        revoke: { label: "Revoke", href: "/identity/sessions/sess-2", confirm: "Sure?" },
       },
     ],
   };
 
   it("revokes the selected session with DELETE", () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(<SessionsIndex {...props} />);
-    submitForm(2);
+    submitForm(1);
     acceptConfirmation();
 
-    expect(destroy).toHaveBeenCalledWith("/identity/sessions/sess-2", expect.objectContaining({}));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("form")[1]?.getAttribute("action")).toBe(
+      "/identity/sessions/sess-2",
+    );
   });
 
   it("keeps the bulk revocations behind their confirmation", () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(<SessionsIndex {...props} />);
     submitForm(0);
     declineConfirmation();
 
-    expect(destroy).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
   });
 
-  it("disables the button while the revocation is in flight", () => {
+  it("posts the server-provided bulk revocation action", () => {
+    const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(<SessionsIndex {...props} />);
     submitForm(0);
     acceptConfirmation();
 
-    const [, options] = present(destroy.mock.calls[0], "the first router.delete call");
-    act(() => {
-      startVisit(options);
-    });
-    act(() => {
-      finishVisit(options);
-    });
-    expect(destroy).toHaveBeenCalledWith("/identity/other_sessions", expect.objectContaining({}));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("form")[0]?.getAttribute("action")).toBe(
+      "/identity/other_sessions",
+    );
   });
 });
 
@@ -717,6 +722,50 @@ describe("EnforcementRecoveryShow", () => {
     act(() => {
       finishVisit(appealOptions);
     });
+  });
+
+  it("updates the appeal reason when the visitor chooses another code", () => {
+    mount(
+      <EnforcementRecoveryShow
+        title="Account recovery"
+        description="Complete verification."
+        appeal_error={null}
+        enforcement_cases={[
+          {
+            public_id: "c1",
+            kind_label: "Security lock",
+            restore: { url: "/identity/recovery/completion", submit_label: "Restore access" },
+            appeal: {
+              url: "/identity/recovery/appeals",
+              scope: "appeal",
+              reason_label: "Appeal reason",
+              reason_codes: [
+                { label: "mistake", value: "mistake" },
+                { label: "other", value: "other" },
+              ],
+              statement_label: "Appeal statement",
+              statement_max_length: 500,
+              submit_label: "Submit appeal",
+            },
+          },
+        ]}
+      />,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    act(() => {
+      select.value = "other";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    submitForm(1);
+
+    expect(post).toHaveBeenCalledWith(
+      "/identity/recovery/appeals",
+      {
+        appeal: { enforcement_case_id: "c1", reason_code: "other", statement: "" },
+      },
+      expect.objectContaining({}),
+    );
   });
 
   it("falls back to an empty reason when the server offered no choices", () => {

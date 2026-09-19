@@ -14,8 +14,7 @@ several route → controller and route-helper gaps.
   `sign/app/sign/up/check/*` wrappers are part of the same unit.
 - **Com sign-up check controllers**: created the entire `sign/com/sign/up/check/{email,telephone}/*`
   tree (8 controllers) as thin subclasses of the old `sign/com/up/check/*` controllers. com is
-  social-free by design (email/telephone only) per
-  `plans/active/sign-up-state-machine-implementation-plan.md`.
+  social-free by design (email/telephone only) per GH issue #834.
 - **Com route-helper sweep**: the old `sign/com/up/*` controllers (which the new wrappers inherit)
   still referenced removed `sign_com_up_*_path` helpers. Applied a helper-only rename
   `sign_com_up_X_path/_url` → `sign_com_sign_up_X_path/_url` across 9 files. Non-helper tokens were

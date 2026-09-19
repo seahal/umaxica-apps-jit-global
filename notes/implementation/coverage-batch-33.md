@@ -15,10 +15,13 @@
 
 ## Changes
 
-- Replaced two unsupported negative-inclusion assertions in the standalone repository-language checker test with core Minitest assertions.
-- Added deterministic coverage for live, blank, terminal, invalid, expired, and cleared `SignInSequenceCarrier` states.
+- Replaced two unsupported negative-inclusion assertions in the standalone repository-language
+  checker test with core Minitest assertions.
+- Added deterministic coverage for live, blank, terminal, invalid, expired, and cleared
+  `SignInSequenceCarrier` states.
 - Added read-only audit coverage for existing lean and CMS publishing tables.
-- Added WebAuthn option serialization coverage for hash-backed user IDs, snake-case credential lists, binary strings, byte arrays, integers, and pass-through objects.
+- Added WebAuthn option serialization coverage for hash-backed user IDs, snake-case credential
+  lists, binary strings, byte arrays, integers, and pass-through objects.
 - Application and database implementation changes: none.
 - Dead-code changes: none.
 
@@ -39,14 +42,22 @@ The selected production targets now have 100% line coverage:
 - `bundle exec rubocop -a`
 - `COVERAGE=true bin/rails test test/`
 
-The first full run exposed a timezone-dependent assertion added in this batch. It was changed to compare against the same parsed time object's string representation. The focused tests then passed, and the final full run completed with no failures or errors.
+The first full run exposed a timezone-dependent assertion added in this batch. It was changed to
+compare against the same parsed time object's string representation. The focused tests then passed,
+and the final full run completed with no failures or errors.
 
-The repository-language checker command found extensive pre-existing non-English repository prose outside this batch. No policy exceptions or unrelated prose were changed.
+The repository-language checker command found extensive pre-existing non-English repository prose
+outside this batch. No policy exceptions or unrelated prose were changed.
 
-RuboCop reported pre-existing repository-wide offenses and exited nonzero. Its automatic edits outside this batch were restored. Batch-specific formatting changes were retained where behavior remained correct.
+RuboCop reported pre-existing repository-wide offenses and exited nonzero. Its automatic edits
+outside this batch were restored. Batch-specific formatting changes were retained where behavior
+remained correct.
 
 ## Risk boundaries and next candidates
 
-- No authentication, credential, token, OIDC, logout, payment, destructive, network, Redis, or browser implementation was changed.
-- No configuration, routes, fixtures, factories, migrations, dependencies, or external paths were modified or inspected.
-- A later low-risk batch can continue with deterministic serializers, read-only audits, pure value objects, and simple state carriers already covered by focused tests.
+- No authentication, credential, token, OIDC, logout, payment, destructive, network, Redis, or
+  browser implementation was changed.
+- No configuration, routes, fixtures, factories, migrations, dependencies, or external paths were
+  modified or inspected.
+- A later low-risk batch can continue with deterministic serializers, read-only audits, pure value
+  objects, and simple state carriers already covered by focused tests.

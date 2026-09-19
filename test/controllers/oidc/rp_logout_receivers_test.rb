@@ -5,24 +5,20 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
+  # Auth is ceremony-only (no RP backchannel). Cover the routed first-party RP
+  # receivers: Core app/com/org and Edit org.
   SURFACES = [
-    { host: ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost"),
-      client_id: "sign-rp",
-      resource_type: "client", },
-    { host: ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost"),
-      client_id: "sign-rp",
-      resource_type: "visitor", },
-    { host: ENV.fetch("PRIVATE_AUTH_STAFF_URL", "sign.org.localhost"),
-      client_id: "sign-rp",
-      resource_type: "operator", },
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"),
-      client_id: "core-next-rp",
+      client_id: "core-app",
       resource_type: "client", },
     { host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"),
-      client_id: "core-next-rp",
+      client_id: "core-com",
       resource_type: "visitor", },
     { host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"),
-      client_id: "core-next-rp",
+      client_id: "core-org",
+      resource_type: "operator", },
+    { host: ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.umaxica.org"),
+      client_id: "edit-org",
       resource_type: "operator", },
   ].freeze
 
@@ -53,12 +49,12 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "back-channel receiver rejects non-UUID sid without mutating session state" do
+  test "back-channel receiver rejects malformed sid without mutating session state" do
     SURFACES.each do |surface|
       token_record = create_session_token(surface, SecureRandom.uuid)
 
       with_oidc_key(namespace_for(surface.fetch(:resource_type))) do
-        token = forge_logout_token(surface, payload: base_logout_payload(surface, sid: "not-a-uuid"))
+        token = forge_logout_token(surface, payload: base_logout_payload(surface, sid: "not a sid"))
 
         post "https://#{surface.fetch(:host)}#{backchannel_logout_path(surface)}", params: { logout_token: token }
 
@@ -181,6 +177,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         staff: staff,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE,
+        oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
       )
       token.rotate_refresh_token!
@@ -195,6 +192,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         visitor: visitor,
         visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+        oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
       )
       token.rotate_refresh_token!
@@ -209,6 +207,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         user: user,
         user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
+        oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
       )
       token.rotate_refresh_token!
@@ -263,6 +262,7 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
   def forge_logout_token(surface, payload:)
     JitSecurityJwtKeyring.encode(
       payload,
+      typ: payload["typ"].presence || OidcLogoutTokenCodec::TOKEN_TYPE,
       issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(surface.fetch(:resource_type)),
     )
   end

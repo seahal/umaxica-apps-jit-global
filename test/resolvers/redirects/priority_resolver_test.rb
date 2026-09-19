@@ -10,7 +10,7 @@ class RedirectsPriorityResolverTest < ActiveSupport::TestCase
 
       def auth_app_sign_in_path(ri:) = "/sign/in?ri=#{ri}"
 
-      def acme_app_dashboard_path(ri:) = "/dashboard?ri=#{ri}"
+      def base_app_root_path(ri:) = "/?ri=#{ri}"
 
       def auth_app_settings_path(ri:) = "/settings?ri=#{ri}"
     end
@@ -18,7 +18,7 @@ class RedirectsPriorityResolverTest < ActiveSupport::TestCase
   test "explicit nt wins over signed pt" do
     result = resolve([{ kind: :nt, value: :dashboard }, { kind: :signed_pt, value: "/settings" }])
 
-    assert_equal "/dashboard?ri=jp", result.value
+    assert_equal "/?ri=jp", result.value
   end
 
   test "signed nt wins over raw pt" do

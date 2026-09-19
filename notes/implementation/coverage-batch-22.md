@@ -15,8 +15,8 @@ Rails coverage only. VP/Vitest commands were intentionally not run.
 - Ending Rails branch coverage: 70.4417% (10,319 / 14,649 branches).
 - VP coverage: not measured in this Rails-only batch.
 
-The full run again excluded one SimpleCov result older than the 600-second merge timeout. The
-ending report retained the same aggregate line denominator as the starting report.
+The full run again excluded one SimpleCov result older than the 600-second merge timeout. The ending
+report retained the same aggregate line denominator as the starting report.
 
 ## Failures / Errors
 

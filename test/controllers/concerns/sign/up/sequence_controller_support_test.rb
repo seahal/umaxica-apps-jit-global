@@ -116,12 +116,8 @@ class SignUpSequenceControllerSupportTest < ActiveSupport::TestCase
     assert_not harness.send(:sign_up_pending_telephone_status?, Object.new)
   end
 
-  test "hide_sign_up_auth_navigation and load_sign_up_ticket handle the fallback branches" do
+  test "load_sign_up_ticket handles the fallback branches" do
     harness = Harness.new
-
-    harness.send(:hide_sign_up_auth_navigation)
-
-    assert harness.instance_variable_get(:@hide_auth_navigation)
 
     state = Object.new
 

@@ -10,17 +10,24 @@ type MediaListener = () => void;
 const systemPrefersDark = { matches: false };
 const mediaListeners = new Set<MediaListener>();
 
-vi.stubGlobal(
-  "matchMedia",
-  vi.fn(() => ({
-    get matches() {
-      return systemPrefersDark.matches;
-    },
-    addEventListener: (_event: string, listener: MediaListener) => mediaListeners.add(listener),
-    removeEventListener: (_event: string, listener: MediaListener) =>
-      mediaListeners.delete(listener),
-  })),
-);
+function installMatchMedia() {
+  // Prefer replacing `window.matchMedia` over `vi.stubGlobal`: spec/setup.ts already defines
+  // that own-property, and a global stub does not replace it in jsdom.
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => ({
+      get matches() {
+        return systemPrefersDark.matches;
+      },
+      addEventListener: (_event: string, listener: MediaListener) => mediaListeners.add(listener),
+      removeEventListener: (_event: string, listener: MediaListener) =>
+        mediaListeners.delete(listener),
+    })),
+  });
+}
+
+installMatchMedia();
 
 const { applyThemeFromCookie } = await import("@/theme_cookie");
 
@@ -29,6 +36,8 @@ function setThemeCookie(code: string) {
 }
 
 beforeEach(() => {
+  // Do not replace `window.matchMedia` after the first `applyThemeFromCookie`: the module
+  // registers its system-theme watcher once and keeps that MediaQueryList for the suite.
   setThemeCookie("");
   systemPrefersDark.matches = false;
   document.documentElement.className = "";

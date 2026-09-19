@@ -88,6 +88,7 @@ module VerificationBase
   end
 
   def require_step_up!(scope:, required_aal: verification_required_aal)
+    return false if reject_step_up_for_authentication_context!
     return false if step_up_session_revoked?
     return if step_up_satisfied?(scope: scope, required_aal: required_aal)
 
@@ -137,6 +138,40 @@ module VerificationBase
 
   private
 
+  # An authentication context that is not eligible for Step-Up is rejected at
+  # the ceremony entry, before any credential is requested. This is not "step-up
+  # has not happened yet": no assertion can satisfy it, so offering the ceremony
+  # would only produce a credential prompt that can never succeed. Changing
+  # authentication mode requires signing out and signing in again.
+  #
+  # Rendered inline rather than through flash, and 403 rather than 401, because
+  # the session is valid and the operation is unavailable to it.
+  def reject_step_up_for_authentication_context!
+    return false unless emergency_authentication_context?
+    return true if performed?
+
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.step_up.authentication_context_ineligible",
+        authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+        session_public_id: current_session_token&.public_id,
+      ),
+    )
+
+    message = I18n.t("auth.step_up.emergency_unavailable")
+    if request.format.json?
+      render json: { error: message }, status: :forbidden
+    else
+      render plain: message, status: :forbidden
+    end
+    true
+  end
+
+  def emergency_authentication_context?
+    token = current_session_token
+    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
+  end
+
   # Check whether the underlying refresh token record has been revoked,
   # expired, or compromised.  If so, force-logout the session so that a
   # stale (but still JWT-valid) access token cannot pass step-up.
@@ -177,6 +212,7 @@ module VerificationBase
   end
 
   def enforce_step_up_prereqs!(scope_override: nil)
+    return false if reject_step_up_for_authentication_context!
     return true if available_step_up_methods.present?
 
     if request.get? || request.head?
@@ -195,7 +231,7 @@ module VerificationBase
           verification_redirect_fallback
         end
 
-      safe_redirect_to(destination, fallback: fallback, status: :found)
+      redirect_to_verification_destination(destination, fallback: fallback, status: :found)
     elsif request.format.json?
       render json: { error: I18n.t("auth.step_up.register_methods_required") }, status: :unprocessable_content
     else
@@ -212,7 +248,7 @@ module VerificationBase
           verification_redirect_fallback
         end
 
-      safe_redirect_to(
+      redirect_to_verification_destination(
         destination,
         fallback: fallback,
         status: :see_other,
@@ -523,6 +559,18 @@ module VerificationBase
 
   def verification_setup_redirect_fallback
     actor_root_path(ri: params[:ri])
+  end
+
+  def redirect_to_verification_destination(destination, fallback:, **redirect_options)
+    if destination.to_s.start_with?("/")
+      safe_redirect_to(destination, fallback: fallback, **redirect_options)
+    else
+      redirect_to(
+        destination,
+        allow_other_host: cross_host_redirect_allowed?,
+        **redirect_options,
+      )
+    end
   end
 
   def actor_verification_path(**args)

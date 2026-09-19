@@ -115,6 +115,51 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
     assert_equal 1, attempts
   end
 
+  test "allows an explicitly approved local HTTP token endpoint" do
+    token_url = "http://www.app.localhost:3000/oauth/token"
+    captured_require_https = nil
+    response = Struct.new(:body) do
+      def success? = true
+    end.new(JSON.generate(id_token: "id-token"))
+    connection = Object.new
+    connection.define_singleton_method(:post) { |_uri, _params| response }
+    build_connection =
+      lambda do |require_https:, **_options|
+        captured_require_https = require_https
+        connection
+      end
+
+    OutboundHttp::Connection.stub(:build, build_connection) do
+      result = OidcRpTokenClient.call(
+        token_url: token_url,
+        client_id: "base-rails-rp",
+        client_secret: nil,
+        code: "code",
+        redirect_uri: "https://auth.app.localhost/oidc/callback",
+        code_verifier: "verifier",
+        require_https: false,
+      )
+
+      assert_predicate result, :success?
+    end
+
+    assert_not captured_require_https
+  end
+
+  test "rejects an HTTP token endpoint unless it is explicitly approved" do
+    result = OidcRpTokenClient.call(
+      token_url: "http://www.app.localhost:3000/oauth/token",
+      client_id: "base-rails-rp",
+      client_secret: nil,
+      code: "code",
+      redirect_uri: "https://auth.app.localhost/oidc/callback",
+      code_verifier: "verifier",
+    )
+
+    assert_not_predicate result, :success?
+    assert_equal "token_exchange_failed", result.error
+  end
+
   private
 
   def exchange(code:, code_verifier:, client_secret: nil)

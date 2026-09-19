@@ -119,6 +119,7 @@ afterEach(() => {
   post.mockClear();
   patch.mockClear();
   destroy.mockClear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -393,6 +394,49 @@ describe("recovery interaction", () => {
     });
   });
 
+  it("updates the appeal reason when the visitor chooses another code", () => {
+    mount(
+      <RecoveryShow
+        title="Account recovery"
+        description="Complete verification."
+        appeal_error={null}
+        enforcement_cases={[
+          {
+            public_id: "case_1",
+            kind_label: "Security lock",
+            restore: { url: "/identity/recovery/completion", submit_label: "Restore access" },
+            appeal: {
+              url: "/identity/recovery/appeals",
+              reason_label: "Appeal reason",
+              reason_codes: [
+                { label: "other", value: "other" },
+                { label: "mistake", value: "mistake" },
+              ],
+              statement_label: "Appeal statement",
+              statement_max_length: 4000,
+              submit_label: "Submit appeal",
+            },
+          },
+        ]}
+      />,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    act(() => {
+      select.value = "mistake";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    submitForm(1);
+
+    expect(post).toHaveBeenCalledWith(
+      "/identity/recovery/appeals",
+      {
+        appeal: { enforcement_case_id: "case_1", reason_code: "mistake", statement: "" },
+      },
+      expect.anything(),
+    );
+  });
+
   it("appeals with an empty reason when the server sent no codes", () => {
     mount(
       <RecoveryShow
@@ -580,41 +624,40 @@ describe("secret interaction", () => {
 
 describe("session revocation interaction", () => {
   it("revokes one session and the whole inventory after confirmation", () => {
+    const nativeSubmit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
     mount(
       <SessionsIndex
         title="Sessions"
         empty_message="No active sessions were found."
         back_link={backLink}
-        table_headings={{
-          session: "Session",
-          kind: "Kind",
-          binding: "Binding",
+        expires_at_description="This session ends at its expiry and cannot be extended."
+        columns={{
+          device: "Device",
           last_activity: "Last activity",
           created: "Created",
-          refresh_expires: "Refresh expires",
+          expires_at: "Expires at",
+          status: "Status",
+          action: "Action",
         }}
-        current_label="current"
-        revoke_label="Revoke"
-        revoke_confirm="Revoke this session?"
-        bulk_revocation={{
-          others_label: "Sign out other sessions",
-          others_confirm: "Sure?",
-          others_url: "/identity/other_sessions",
-          all_label: "Sign out everywhere",
-          all_confirm: "Sure?",
-          all_url: "/identity/sessions",
+        bulk_revocations={{
+          others: {
+            label: "Sign out other sessions",
+            confirm: "Sure?",
+            href: "/identity/other_sessions",
+          },
         }}
         sessions={[
           {
-            public_id: "tok_1",
-            status: "1",
-            kind: "2",
-            binding: "DBSC",
+            device: "Firefox / Linux",
+            status: "Active",
             last_activity: "1 Jan",
             created: "1 Jan",
-            refresh_expires: "1 Feb",
-            current: false,
-            revoke_url: "/identity/sessions/tok_1",
+            expires_at: "1 Feb",
+            revoke: {
+              label: "Revoke",
+              href: "/identity/sessions/tok_1",
+              confirm: "Revoke this session?",
+            },
           },
         ]}
       />,
@@ -622,19 +665,16 @@ describe("session revocation interaction", () => {
 
     clickButton("Revoke");
     answerConfirmation(false);
-    expect(destroy).not.toHaveBeenCalled();
+    expect(nativeSubmit).not.toHaveBeenCalled();
 
     clickButton("Revoke");
     answerConfirmation(true);
-    expect(destroy).toHaveBeenCalledWith("/identity/sessions/tok_1");
+    expect(nativeSubmit).toHaveBeenCalledTimes(1);
 
     clickButton("Sign out other sessions");
     answerConfirmation(true);
-    expect(destroy).toHaveBeenCalledWith("/identity/other_sessions");
-
-    clickButton("Sign out everywhere");
-    answerConfirmation(true);
-    expect(destroy).toHaveBeenCalledWith("/identity/sessions");
+    expect(nativeSubmit).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain("Sign out everywhere");
   });
 });
 
@@ -856,6 +896,30 @@ describe("withdrawal interaction", () => {
 
     clickButton("Sign out");
     expect(destroy).toHaveBeenCalledWith("/identity/withdrawal/session");
+  });
+
+  it("renders without a termination section when the server sent none", () => {
+    mount(
+      <WithdrawalEdit
+        title="Withdrawal status"
+        terminated={false}
+        unavailable_message="Recovery is unavailable."
+        deadline_message="Recoverable until 1 February 2026."
+        recovery={{
+          available_message: "Recovery is available.",
+          submit_label: "Recover",
+          confirm: "Sure?",
+          action: "/identity/withdrawal",
+          unavailable_message: null,
+        }}
+        termination={null}
+        erasure_link={{ label: "Request early erasure", href: "/identity/privacy/erasure/new" }}
+        sign_out={{ label: "Sign out", url: "/identity/withdrawal/session" }}
+      />,
+    );
+
+    expect(container.textContent).toContain("Recover");
+    expect(container.textContent).not.toContain("Terminate now");
   });
 
   it("signs out from the terminated status", () => {

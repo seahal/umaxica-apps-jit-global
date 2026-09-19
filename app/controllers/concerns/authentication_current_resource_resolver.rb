@@ -53,7 +53,7 @@ class AuthenticationCurrentResourceResolver
     end
     return failure(:dpop_verification_failed, payload: payload) unless dpop_valid?(payload)
 
-    unless AuthenticationToken.validate_actor_claim!(payload, @resource_type)
+    unless AuthenticationToken.resource_type_scope_matches?(payload, @resource_type)
       return failure(:actor_mismatch, payload: payload)
     end
 
@@ -220,41 +220,19 @@ class AuthenticationCurrentResourceResolver
 
   def resolve_and_build_result!(token_record, payload, sid)
     if session_idle_expired?(token_record)
-      return failure(
-        :idle_timeout, payload: payload,
-                       session_public_id: current_session_public_id(token_record, sid),
-      )
+      return resource_failure(:idle_timeout, payload, token_record, sid, include_token: false)
     end
 
-    resource =
-      ActiveRecord::Base.connected_to(role: :writing) do
-        @resource_class.find_by(id: AuthenticationToken.extract_subject(payload))
-      end
-    return failure(
-      :resource_not_found, payload: payload,
-                           session_public_id: current_session_public_id(token_record, sid),
-                           token_public_id: token_record_public_id(token_record),
-    ) if resource.blank?
+    resource = find_resource_from_payload(payload)
+    return resource_failure(:resource_not_found, payload, token_record, sid) if resource.blank?
     if withdrawal_required?(resource)
-      return failure(
-        :withdrawal_required, payload: payload,
-                              session_public_id: current_session_public_id(token_record, sid),
-                              token_public_id: token_record_public_id(token_record),
-      )
+      return resource_failure(:withdrawal_required, payload, token_record, sid)
     end
     if administratively_locked?(resource)
-      return failure(
-        :administrative_access_locked, payload: payload,
-                                       session_public_id: current_session_public_id(token_record, sid),
-                                       token_public_id: token_record_public_id(token_record),
-      )
+      return resource_failure(:administrative_access_locked, payload, token_record, sid)
     end
     if token_stale_for_administrative_lock?(resource, payload)
-      return failure(
-        :administrative_access_token_stale, payload: payload,
-                                            session_public_id: current_session_public_id(token_record, sid),
-                                            token_public_id: token_record_public_id(token_record),
-      )
+      return resource_failure(:administrative_access_token_stale, payload, token_record, sid)
     end
 
     touch_session_activity!(token_record)
@@ -265,6 +243,25 @@ class AuthenticationCurrentResourceResolver
       token_public_id: token_record_public_id(token_record),
       payload: payload,
       failure_reason: nil,
+    )
+  end
+
+  def find_resource_from_payload(payload)
+    ActiveRecord::Base.connected_to(role: :writing) do
+      subject = AuthenticationToken.extract_subject(payload)
+      next unless subject.is_a?(String)
+      next unless subject.match?(/\A\d+\z/)
+
+      @resource_class.find_by(id: Integer(subject, 10))
+    end
+  end
+
+  def resource_failure(reason, payload, token_record, sid, include_token: true)
+    failure(
+      reason,
+      payload: payload,
+      session_public_id: current_session_public_id(token_record, sid),
+      token_public_id: include_token ? token_record_public_id(token_record) : nil,
     )
   end
 

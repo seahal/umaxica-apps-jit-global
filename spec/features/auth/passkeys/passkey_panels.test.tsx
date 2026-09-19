@@ -33,6 +33,7 @@ vi.mock("@/features/auth/passkeys/invisibleTurnstile", () => ({
 
 const { default: PasskeyAuthenticationPanel } =
   await import("@/features/auth/passkeys/PasskeyAuthenticationPanel");
+type PasskeyAuthenticationPanelProps = Parameters<typeof PasskeyAuthenticationPanel>[0];
 const { default: PasskeyRegistrationPanel } =
   await import("@/features/auth/passkeys/PasskeyRegistrationPanel");
 const { default: StepUpPasskeyForm } = await import("@/features/auth/passkeys/StepUpPasskeyForm");
@@ -87,7 +88,7 @@ describe("PasskeyAuthenticationPanel", () => {
   };
 
   const start = async (
-    overrides: Partial<typeof props> = {},
+    overrides: Partial<PasskeyAuthenticationPanelProps> = {},
     identifier = "someone@example.test",
   ) => {
     const screen = mount(
@@ -113,6 +114,40 @@ describe("PasskeyAuthenticationPanel", () => {
     expect(input?.maxLength).toBe(255);
     expect(screen.text("label")).toBe("メールアドレスまたはID");
     expect(screen.text("button")).toBe("パスキーでログイン");
+  });
+
+  // The org normal ceremony runs after Entra ID has already selected the
+  // operator, so the panel neither asks for an identifier nor sends one: the
+  // server reads the actor from its own pending transaction and would ignore
+  // anything here anyway.
+  it("asks for no identifier when an earlier stage already chose the actor", () => {
+    const screen = mount(
+      <PasskeyAuthenticationPanel
+        {...props}
+        identifier_param={null}
+        field={null}
+      />,
+    );
+
+    expect(screen.container.querySelector("input#identifier")).toBeNull();
+    expect(screen.container.querySelector("label")).toBeNull();
+    expect(screen.text("button")).toBe("パスキーでログイン");
+  });
+
+  it("starts without an identifier, and sends none, when the server named no field", async () => {
+    credentials.get.mockResolvedValue(assertionCredential());
+    const fetchMock = stubFetchQueue(
+      jsonResponse({ challenge_id: "challenge-1", options: REQUEST_OPTIONS }),
+      jsonResponse({ status: "ok", redirect_url: "/identity" }),
+    );
+    stubLocation();
+
+    await start({ identifier_param: null, field: null }, "");
+
+    expect(requestBody(fetchMock, 0)).toEqual({
+      "cf-turnstile-response": "turnstile-token",
+      ri: "jp",
+    });
   });
 
   it("refuses to start on a browser without WebAuthn", async () => {
