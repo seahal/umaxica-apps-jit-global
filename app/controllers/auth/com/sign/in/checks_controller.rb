@@ -15,13 +15,9 @@ module Auth
           before_action :continue_checkpoint_sequence_without_content!
 
           # TODO: Action Policy authorization is not yet enforced here.
-
-          # This sign-in ceremony step gates with allowed_to?, which does not satisfy
-
+          # This sign-in ceremony step gates with allowed_to?, which does not count toward
           # verify_authorized, so its render path is expected to raise UnauthorizedAction.
-
           # Audit the sign-in sequence boundary before choosing the authorize! rule.
-
           def show = super
         end
       end
