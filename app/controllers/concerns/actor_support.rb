@@ -134,13 +134,10 @@ module ActorSupport
     resolved_current_token&.dig("sid")
   end
 
+  # The verified access-token claims recorded by AuthenticationBase#load_from_token. This must
+  # not fall back to another token: ApplicationPolicy reads its Emergency context from here.
   def resolved_current_token
-    payload = nil
-    payload = access_token_payload if respond_to?(:access_token_payload, true)
-    payload ||= load_access_token_payload if respond_to?(:load_access_token_payload, true)
-    payload if payload.is_a?(Hash)
-  rescue StandardError => e
-    raise_actor_resolution_error!(:access_token, e)
+    @current_access_token_payload if defined?(@current_access_token_payload)
   end
 
   def resolved_current_authentication(resource: safe_current_resource,

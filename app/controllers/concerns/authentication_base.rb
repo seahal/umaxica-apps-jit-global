@@ -1724,7 +1724,12 @@ module AuthenticationBase
     @current_session_public_id = result.session_public_id if result.session_public_id.present?
     @current_token_public_id = result.token_public_id if result.token_public_id.present?
 
-    populate_current_attributes!(result.resource, result.payload) if result.resource.present?
+    if result.resource.present?
+      # ActorSupport#set_current_actor rebuilds Actor.authz later in the request and reads
+      # the verified claims back from here; ApplicationPolicy's Emergency pre-check depends on it.
+      @current_access_token_payload = result.payload
+      populate_current_attributes!(result.resource, result.payload)
+    end
 
     result.resource
   end

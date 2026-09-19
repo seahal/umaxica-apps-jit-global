@@ -251,9 +251,7 @@ class ActorSupportTest < ActiveSupport::TestCase
 
   test "resolved_current_session ignores existing Actor authentication cache" do
     Actor.install_context!(authn: Actor::Authentication.new(login_public_id: "existing-session"))
-    @host.define_singleton_method(:access_token_payload) do
-      { "sid" => "token-session" }
-    end
+    @host.instance_variable_set(:@current_access_token_payload, { "sid" => "token-session" })
 
     assert_equal "token-session", @host.resolved_current_session
   end
@@ -265,48 +263,25 @@ class ActorSupportTest < ActiveSupport::TestCase
   end
 
   test "resolved_current_session falls back to token sid" do
-    @host.define_singleton_method(:access_token_payload) do
-      { "sid" => "token-session" }
-    end
+    @host.instance_variable_set(:@current_access_token_payload, { "sid" => "token-session" })
 
     assert_equal "token-session", @host.resolved_current_session
   end
 
-  test "resolved_current_token prefers access_token_payload over existing authentication claims" do
+  test "resolved_current_token returns the verified access-token claims over existing authentication claims" do
     Actor.install_context!(authn: Actor::Authentication.new(access_claims: { "sid" => "existing-cache" }))
-    @host.define_singleton_method(:access_token_payload) do
-      { "sid" => "from-access", "prf" => { "lx" => "en" } }
-    end
+    @host.instance_variable_set(:@current_access_token_payload, { "sid" => "from-access", "authn_ctx" => "emergency" })
 
-    assert_equal({ "sid" => "from-access", "prf" => { "lx" => "en" } }, @host.resolved_current_token)
+    assert_equal({ "sid" => "from-access", "authn_ctx" => "emergency" }, @host.resolved_current_token)
   end
 
-  test "resolved_current_token falls back to load_access_token_payload" do
+  test "resolved_current_token never reads the preference token" do
     @host.define_singleton_method(:load_access_token_payload) do
-      { "sid" => "from-load" }
+      raise StandardError, "preference token must not be read"
     end
-
-    assert_equal({ "sid" => "from-load" }, @host.resolved_current_token)
-  end
-
-  test "resolved_current_token ignores non-hash payloads" do
-    @host.define_singleton_method(:access_token_payload) { "not-a-hash" }
+    @host.instance_variable_set(:@preference_payload, { "sid" => "from-preference" })
 
     assert_nil @host.resolved_current_token
-  end
-
-  test "resolved_current_token raises resolution errors" do
-    @host.define_singleton_method(:access_token_payload) do
-      raise StandardError, "boom"
-    end
-
-    error =
-      assert_raises(ActorSupport::ResolutionError) do
-        @host.resolved_current_token
-      end
-
-    assert_match "Actor access_token resolution failed", error.message
-    assert_equal "boom", error.cause.message
   end
 
   test "safe_current_resource raises resolution errors" do
