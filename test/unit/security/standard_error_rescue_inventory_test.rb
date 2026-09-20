@@ -44,10 +44,6 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
       count: 1,
       classification: "preference persistence side effect; resolution errors are re-raised separately",
     },
-    "app/controllers/concerns/preference_resource_sync.rb" => {
-      count: 1,
-      classification: "preference resource sync side effect; resolution errors are re-raised separately",
-    },
     "app/controllers/concerns/preference_transport.rb" => {
       count: 1,
       classification: "preference refresh transport side effect; resolution errors are re-raised separately",

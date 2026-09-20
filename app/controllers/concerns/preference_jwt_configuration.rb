@@ -122,26 +122,6 @@ module PreferenceJwtConfiguration
                       :audience_for, :host_scope_for, :private_key_for_active, :private_key_for,
                       :public_key_for, :private_key, :public_key, :parse_header
 
-  def self.parse_keyset(raw)
-    return {} if raw.blank?
-
-    parsed = JSON.parse(raw)
-    return parsed if parsed.is_a?(Hash)
-
-    {}
-  rescue JSON::ParserError
-    {}
-  end
-
-  def self.decode_key(base64_der)
-    return nil if base64_der.blank?
-
-    OpenSSL::PKey::EC.new(Base64.decode64(base64_der))
-  rescue OpenSSL::PKey::PKeyError
-    nil
-  end
-  private_class_method :parse_keyset, :decode_key
-
   def self.audiences_from_boot_config
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
 

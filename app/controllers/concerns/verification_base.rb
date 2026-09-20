@@ -21,10 +21,6 @@ module VerificationBase
     @required_verification = requirement.to_sym
   end
 
-  def clear_verification_requirement!
-    @required_verification = nil
-  end
-
   def verification_required?
     verification_requirement.present? ||
       (respond_to?(:verification_required_action?, true) && verification_required_action?)
@@ -584,4 +580,6 @@ module VerificationBase
   def actor_root_path(**args)
     actor_operator? ? auth_org_root_path(**args) : auth_app_root_path(**args)
   end
+
+  private :verification_requirement, :recorded_step_up_satisfied?
 end

@@ -177,10 +177,6 @@ module Auth
         dashboard_participant || super
       end
 
-      def jump_to_generated_url(url, fallback:)
-        @jumped = [url, fallback]
-      end
-
       def jumped
         @jumped
       end
@@ -249,41 +245,6 @@ module Auth
 
     test "Token.extract_resource_type returns nil for nil payload" do
       assert_nil AuthenticationToken.extract_resource_type(nil)
-    end
-
-    test "begin_sign_in_sequence stores only safe encoded return paths" do
-      harness = HeaderKeyHarness.new
-      harness.resource = ResourceStub.new(42)
-      Actor.tld = :app
-      Actor.install_context!(authn: Actor::Authentication.new(amr: ["email_otp"]))
-
-      unsafe_result = harness.send(
-        :begin_sign_in_sequence!,
-        pt: "https://evil.example/phish",
-        checkpoint_required: true,
-      )
-
-      assert_equal :success, unsafe_result.status
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("pt")
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("safe_return_path")
-
-      safe_result = harness.send(:begin_sign_in_sequence!, pt: "/settings", checkpoint_required: true)
-
-      assert_equal :success, safe_result.status
-      stored_rt = harness.session.fetch(:app_sign_in_sequence).fetch("pt")
-      stored_safe_return_path = harness.session.fetch(:app_sign_in_sequence).fetch("safe_return_path")
-
-      assert_equal "/settings", harness.path_from_signed_pt(stored_rt)
-      assert_equal "/settings", harness.path_from_signed_pt(stored_safe_return_path)
-
-      welcome_rt = "/welcome?ri=jp"
-      welcome_result = harness.send(:begin_sign_in_sequence!, pt: welcome_rt, checkpoint_required: true)
-
-      assert_equal :success, welcome_result.status
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("pt")
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("safe_return_path")
-    ensure
-      Actor.reset
     end
 
     test "checkpoint continuation uses db-backed sign-in cycle when locator is present" do
@@ -525,44 +486,6 @@ module Auth
 
     test "SkipNotAllowedError is a StandardError" do
       assert_operator AuthenticationBase::SkipNotAllowedError, :<, StandardError
-    end
-
-    test "request guard helpers render or redirect when already logged in" do
-      harness = HeaderKeyHarness.new
-      harness.logged_in = true
-
-      harness.ensure_not_logged_in
-
-      assert_equal "この操作を行う権限がありません。", harness.rendered[:plain]
-      assert_equal :unauthorized, harness.rendered[:status]
-
-      harness.ensure_not_logged_in(message_key: "auth.denied")
-
-      assert_equal "translated:auth.denied", harness.rendered[:plain]
-
-      assert harness.reject_if_logged_in("auth.bad_request")
-      assert_equal "translated:auth.bad_request", harness.rendered[:plain]
-      assert_equal :bad_request, harness.rendered[:status]
-
-      harness.json_request!
-      harness.ensure_not_logged_in_for_registration(redirect_path: "/dashboard", message_key: "auth.denied")
-
-      assert_equal :unauthorized, harness.rendered[:status]
-
-      harness.html_request!
-      harness.ensure_not_logged_in_for_registration(redirect_path: "/dashboard", message_key: "auth.denied")
-
-      assert_equal ["/dashboard", { alert: "translated:auth.denied" }], harness.redirected
-    end
-
-    test "request guard helpers no-op when not logged in" do
-      harness = HeaderKeyHarness.new
-
-      assert_nil harness.ensure_not_logged_in
-      assert_not harness.reject_if_logged_in("auth.bad_request")
-      assert_nil harness.ensure_not_logged_in_for_registration
-      assert_nil harness.rendered
-      assert_nil harness.redirected
     end
 
     test "redirect parameter helpers preserve peek retrieve and build params" do

@@ -67,10 +67,6 @@ module PreferenceWebCookieEndpoint
     raise
   end
 
-  def cookie_consent_state_overridden?
-    @cookie_consent_state_override.present?
-  end
-
   def apply_buffer_only_cookie_consent!(attrs)
     set_preference_consented_buffer!(
       consented: attrs.fetch(:consented),

@@ -141,17 +141,6 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "session helpers" do
-    get "/test_session_helpers"
-
-    assert_response :success
-    data = response.parsed_body
-
-    assert data["valid1"]
-    assert_not data["valid2"]
-    assert data["session_cleared"]
-  end
-
   test "load session record" do
     ClientStatus.find_or_create_by!(id: 1)
     Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
@@ -162,15 +151,6 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
     assert data["record1_present"]
     assert_not data["record2_present"]
-  end
-
-  test "validate session with expiry" do
-    ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
-    get "/test_validate_session_with_expiry"
-
-    assert_response :redirect
-    assert_equal I18n.t("auth.unauthorized"), flash[:notice]
   end
 
   test "login creates session and sets cookies" do
@@ -232,33 +212,6 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
     get "/test_auth_check"
 
     assert_response :success
-  end
-
-  test "reject logged in session" do
-    ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
-    post "/test_auth_login"
-
-    access_cookie = response.cookies[AuthenticationCookieName.access]
-    cookies[AuthenticationCookieName.access] = access_cookie
-
-    get "/test_auth_reject"
-
-    assert_response :unauthorized
-    assert_equal I18n.t("errors.messages.already_authenticated"), response.body
-  end
-
-  test "ensure not logged in" do
-    ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
-    post "/test_auth_login"
-
-    access_cookie = response.cookies[AuthenticationCookieName.access]
-    cookies[AuthenticationCookieName.access] = access_cookie
-
-    get "/test_auth_ensure"
-
-    assert_response :unauthorized
   end
 end
 

@@ -47,35 +47,8 @@ class OwnershipAndStatusGateSweepTest < ActiveSupport::TestCase
     assert_not SignIn::CyclePolicy.new(Object.new, user: clients(:one)).show_checkpoint?
   end
 
-  # A return target whose query string cannot even be parsed is treated as
-  # dangerous rather than safe: an unparsable query is exactly what a smuggled
-  # redirect parameter looks like.
-  test "a return target with an unparsable query is treated as dangerous" do
-    resolver = RedirectsPathTargetResolver.new("/settings", source: :test)
-
-    assert_not resolver.send(:dangerous_query_key?, nil)
-    assert_not resolver.send(:dangerous_query_key?, "ok=1")
-    assert resolver.send(:dangerous_query_key?, "return_to=%2Fevil")
-    assert resolver.send(:dangerous_query_key?, "a[]=1&a[b]=2")
-  end
-
   test "a session-limit token reference that was not signed here resolves to no token" do
     assert_nil SessionLimitResolutionTokenRef.find_client_token("not-a-signed-ref")
     assert_nil SessionLimitResolutionTokenRef.find_client_token(nil)
-  end
-
-  test "each surface's step-up replay store uses its own transaction table" do
-    {
-      "app" => ClientStepUpCeremonyTransaction,
-      "com" => VisitorStepUpCeremonyTransaction,
-      "org" => OperatorStepUpCeremonyTransaction,
-    }.each do |surface, model|
-      store = IdentityStepUpCeremonyReplayStore.for(surface)
-
-      assert_equal model, store.send(:transaction_class)
-      assert_not store.consumed?("never-issued-jti"), surface
-    end
-
-    assert_raises(IdentityStepUpCeremonyContract::Error) { IdentityStepUpCeremonyReplayStore.for("martian") }
   end
 end

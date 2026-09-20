@@ -173,6 +173,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     private
 
+    private :handoff_purpose_for, :result_purpose_for, :local_entry_purpose_for
+
     def consume_code!(purpose:, raw_code:, surface:, store:)
       result = store.consume!(purpose: purpose, raw_code: raw_code)
       raise Denied, "admission missing" if result.missing?

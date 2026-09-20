@@ -151,18 +151,6 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
     assert_not_predicate @token, :revoked?
   end
 
-  test "expired? handles blank and infinite discarded_at" do
-    token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-
-    token.define_singleton_method(:discarded_at) { nil }
-
-    assert_not token.send(:expired?)
-
-    token.define_singleton_method(:discarded_at) { Float::INFINITY }
-
-    assert_not token.send(:expired?)
-  end
-
   test "scheduled_revocation_due? tracks past discarded_at" do
     token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:discarded_at) { 1.minute.ago }

@@ -74,6 +74,8 @@ module Umaxica
 
         raise OperationError, "Valkey FLUSH commands are forbidden"
       end
+
+      private :driver_class
     end
   end
 end

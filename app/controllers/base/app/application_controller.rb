@@ -116,10 +116,6 @@ module Base
         oidc_base_authority_host
       end
 
-      def oidc_base_host
-        ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      end
-
       private
 
       def apple_only_credential?

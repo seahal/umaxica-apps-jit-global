@@ -84,14 +84,6 @@ module OidcSsoInitiator
     end
   end
 
-  def same_site_oidc_authorization_url?(url)
-    oidc_redirect_decision(url).direct?
-  end
-
-  def same_site_oidc_rejection_reason(url)
-    oidc_redirect_decision(url).reason_code
-  end
-
   def oidc_redirect_decision(url)
     oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
   end
@@ -276,10 +268,6 @@ module OidcSsoInitiator
 
   def oidc_acme_service_origin
     oidc_base_service_origin
-  end
-
-  def oidc_acme_default_scheme
-    oidc_base_default_scheme
   end
 
   def log_oidc_redirect_decision(decision)

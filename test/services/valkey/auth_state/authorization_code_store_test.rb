@@ -205,7 +205,11 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
   test "marking a replay keeps the tombstone expiry and refuses an unconsumed code" do
     raw = consumed_code
-    key_ttl = -> { @connection.call("TTL", @store.send(:storage_key, raw)) }
+    # This test's namespace holds only the consumed code's key until issued_code runs below.
+    code_keys = @connection.call("KEYS", "#{@namespace}:*")
+
+    assert_equal 1, code_keys.size
+    key_ttl = -> { @connection.call("TTL", code_keys.first) }
     before = key_ttl.call
 
     @store.mark_replay!(raw_code: raw)

@@ -316,4 +316,6 @@ module PreferenceClassRegistry
 
     audit_event_class.const_get(constant_name)
   end
+
+  private_class_method :prefix_from_preference_class
 end

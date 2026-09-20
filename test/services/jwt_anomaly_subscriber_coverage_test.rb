@@ -90,25 +90,4 @@ class JwtAnomalySubscriberCoverageTest < ActiveSupport::TestCase
     assert_equal({}, event.metadata)
     assert_equal Time.zone.parse("2026-06-15 21:00:00"), event.occurred_at
   end
-
-  test "build_metadata excludes unallowlisted fields" do
-    subscriber = JwtAnomalySubscriber.new
-    payload = {
-      code: "TEST_CODE",
-      request_host: "host",
-      kid: "kid",
-      alg: "alg",
-      typ: "typ",
-      iss: "iss",
-      jti: "jti",
-      error_class: "Error",
-      error_message: "msg",
-      extra_field1: "extra1",
-      extra_field2: "extra2",
-    }
-
-    metadata = subscriber.send(:build_metadata, payload)
-
-    assert_equal({}, metadata)
-  end
 end

@@ -159,4 +159,6 @@ module JitSecurityJwtIssuerBuilder
   rescue JitSecurityJwtJwk::Error => e
     raise Error, e.message
   end
+
+  private_class_method :key_state_for
 end

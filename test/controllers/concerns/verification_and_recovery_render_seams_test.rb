@@ -30,22 +30,6 @@ class VerificationAndRecoveryRenderSeamsTest < ActiveSupport::TestCase
     end.new
   end
 
-  test "the verification entry page defaults to the controller's own template" do
-    entry = harness(SignVerificationEntry)
-
-    entry.invoke(:render_verification_entry_page)
-
-    assert_equal [[:show], {}], entry.rendered
-  end
-
-  test "the recovery re-entry page defaults to the controller's own template" do
-    recovery = harness(EnforcementRecoveryCeremonyFlow)
-
-    recovery.invoke(:render_recovery_reentry_new)
-
-    assert_equal [[:new], { status: :ok }], recovery.rendered
-  end
-
   test "a passkey options request that fails answers with the shared options error" do
     flow =
       harness(PasskeySignInFlow) do

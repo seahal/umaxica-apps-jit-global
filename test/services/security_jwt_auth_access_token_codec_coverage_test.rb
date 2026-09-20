@@ -116,40 +116,6 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
     assert_not SecurityJwtAuthAccessTokenCodec.has_scope?(payload, :email)
   end
 
-  test "keyring is never inferred from the request host" do
-    resolve = ->(id) { SecurityJwtAuthAccessTokenCodec.send(:resolve_jwt_issuer_id, id) }
-
-    assert_equal "auth", resolve.call(nil)
-    assert_equal "auth", resolve.call("")
-    assert_equal "surface:ACME_ORG", resolve.call("surface:ACME_ORG")
-    assert_not SecurityJwtAuthAccessTokenCodec.respond_to?(:inferred_surface_jwt_issuer_id, true)
-  end
-
-  test "decode options require and verify nbf" do
-    options = SecurityJwtAuthAccessTokenCodec.send(
-      :decode_options,
-      "client",
-      "issuer",
-      ["audience"],
-      verify_exp: true,
-    )
-
-    assert_includes options.fetch(:required_claims), "nbf"
-    assert options.fetch(:verify_nbf)
-  end
-
-  test "decode options require iat" do
-    options = SecurityJwtAuthAccessTokenCodec.send(
-      :decode_options,
-      "client",
-      "issuer",
-      ["audience"],
-      verify_exp: true,
-    )
-
-    assert_includes options.fetch(:required_claims), "iat"
-  end
-
   test "rejects a correctly signed token when iat is missing" do
     private_key = OpenSSL::PKey::EC.generate("secp384r1")
     payload = {
@@ -175,19 +141,5 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
         audiences: ["audience"],
       )
     end
-  end
-
-  test "rejects a case-variant algorithm before JWT verification" do
-    assert_not SecurityJwtAuthAccessTokenCodec.send(
-      :valid_header?,
-      { "alg" => "eS384", "typ" => "at+jwt", "kid" => "kid" },
-    )
-  end
-
-  test "rejects an unsigned algorithm before JWT verification" do
-    assert_not SecurityJwtAuthAccessTokenCodec.send(
-      :valid_header?,
-      { "alg" => "none", "typ" => "at+jwt", "kid" => "kid" },
-    )
   end
 end

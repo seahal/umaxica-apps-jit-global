@@ -44,17 +44,6 @@ class ResultShapeAndHostComparisonTest < ActiveSupport::TestCase
     assert_match(/key not found: :previous_token/, error.message)
   end
 
-  # A configured host that cannot be parsed as an authority is compared verbatim
-  # rather than treated as matching everything.
-  test "an unparsable configured host is compared verbatim rather than accepted" do
-    request = OidcEndSessionRequest.allocate
-
-    assert request.send(:host_matches?, "www.umaxica.app", "www.umaxica.app")
-    assert_not request.send(:host_matches?, "www.umaxica.app", "evil.example.com")
-    assert request.send(:host_matches?, "[oops", "[oops")
-    assert_not request.send(:host_matches?, "www.umaxica.app", "[oops")
-  end
-
   # A redirect URI carrying its scheme's default port is normalised so it
   # compares equal to the registered one, which never carries it.
   test "a default port is dropped from a redirect URI and a non-default one kept" do

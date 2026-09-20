@@ -232,21 +232,6 @@ module OidcClientRegistry
     []
   end
 
-  def public_host?(host)
-    parsed_host = normalize_host(host)
-    return false if parsed_host.blank?
-
-    uri = URI.parse("//#{parsed_host}")
-    return false if uri.host.blank?
-
-    ip = IPAddr.new(uri.host)
-    !ip.loopback? && !ip.private? && !ip.link_local?
-  rescue IPAddr::InvalidAddressError
-    uri.host.present? && uri.host != "localhost"
-  rescue URI::InvalidURIError
-    false
-  end
-
   def filter_logout_uris(uris, resource_type)
     return uris if resource_type.blank?
 
@@ -317,9 +302,9 @@ module OidcClientRegistry
     host.to_s
   end
 
-  private_class_method :clients, :build_clients,
+  private_class_method :clients, :build_clients, :client_config_signature,
                        :resolve_secret_credential, :domains_from_redirect_uris,
-                       :public_host?, :redirect_uris_by_realm_for,
+                       :redirect_uris_by_realm_for,
                        :filter_logout_uris, :logout_uri_resource_type, :logout_hosts_for,
                        :normalize_resource_type, :metadata_auth_method, :normalize_allowed_scopes,
                        :normalize_host

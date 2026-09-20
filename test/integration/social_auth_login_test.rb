@@ -65,6 +65,13 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     # Client count should NOT increase
     assert_equal user_count_before, Client.count, "Existing user login should NOT create new user"
 
+    # An established account reaching the callback without an Acme ceremony grant is sent back to
+    # sign-in; the callback itself must not open a session for it.
+    assert_equal auth_app_sign_in_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_predicate cookies[AuthenticationBase::ACCESS_COOKIE_KEY].to_s, :empty?
+    assert_predicate cookies[AuthenticationBase::REFRESH_COOKIE_KEY].to_s, :empty?
+    assert_not ClientToken.exists?(user_id: existing_user.id)
+
     existing_user.reload
 
     assert_equal ClientStatus::NOTHING, existing_user.status_id
@@ -167,7 +174,6 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
   def create_active_user_session_for_limit(user)
     token = ClientToken.new(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    token.send(:skip_session_limit_check=, true)
     token.save!
     token
   end
@@ -309,6 +315,84 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     assert_equal "google", cycle.entry_method
     assert_equal identity.user_id, cycle.principal_id
+  end
+
+  test "Google sign up refuses a birthdate submitted against a stale or malformed checkpoint version" do
+    new_uid = "stale_checkpoint_#{SecureRandom.hex(4)}"
+    setup_google_mock_auth(uid: new_uid)
+    user_count_before = Client.count
+
+    state = start_social_auth_flow(provider: "google", intent: "login", entry: "sign_up")
+
+    get auth_app_social_google_callback_url(ri: "jp"),
+        params: { state: state },
+        headers: browser_headers.merge(@callback_headers)
+    submit_social_completion_if_present!
+
+    follow_redirect! while response.redirect?
+    cycle = ClientSignUpFlow.order(:id).last
+    patch auth_app_sign_up_check_google_confirmation_url(ri: "jp"),
+          params: {
+            confirm_new_social_identity: "1",
+            checkpoint_version: cycle.checkpoint_version,
+            "cf-turnstile-response": "test_token",
+          }, headers: browser_headers.merge(@callback_headers)
+    follow_redirect! while response.redirect?
+    current_version = cycle.reload.checkpoint_version
+
+    [current_version - 1, "not-a-number"].each do |submitted|
+      patch auth_app_sign_up_check_google_birthdate_url(ri: "jp"),
+            params: { requirement: "birthdate", birthdate: "2000-01-01", checkpoint_version: submitted },
+            headers: browser_headers.merge(@callback_headers)
+
+      assert_response :conflict, submitted.inspect
+      assert_equal "stale_checkpoint", response.body
+    end
+
+    assert_equal user_count_before, Client.count
+    assert_nil ClientGoogleIdentity.find_by(uid: new_uid)
+    assert_equal current_version, cycle.reload.checkpoint_version
+  end
+
+  test "Google sign up of an applicant below the minimum age creates no account and shows the age restriction" do
+    new_uid = "underage_signup_#{SecureRandom.hex(4)}"
+    setup_google_mock_auth(uid: new_uid)
+    user_count_before = Client.count
+
+    state = start_social_auth_flow(provider: "google", intent: "login", entry: "sign_up")
+
+    get auth_app_social_google_callback_url(ri: "jp"),
+        params: { state: state },
+        headers: browser_headers.merge(@callback_headers)
+    submit_social_completion_if_present!
+
+    follow_redirect! while response.redirect?
+    cycle = ClientSignUpFlow.order(:id).last
+    patch auth_app_sign_up_check_google_confirmation_url(ri: "jp"),
+          params: {
+            confirm_new_social_identity: "1",
+            checkpoint_version: cycle.checkpoint_version,
+            "cf-turnstile-response": "test_token",
+          }, headers: browser_headers.merge(@callback_headers)
+    follow_redirect! while response.redirect?
+    patch auth_app_sign_up_check_google_birthdate_url(ri: "jp"),
+          params: {
+            requirement: "birthdate",
+            birthdate: (Time.zone.today - 10.years).iso8601,
+            checkpoint_version: cycle.reload.checkpoint_version,
+          }, headers: browser_headers.merge(@callback_headers)
+    follow_redirect! while response.redirect? && URI.parse(response.location).host == @host
+
+    assert_includes CGI.unescapeHTML(response.body), I18n.t("sign.app.registration.checkpoint.age_restricted")
+    assert_includes response.headers["Cache-Control"].to_s.split(", "), "no-store"
+    assert_equal user_count_before, Client.count
+    assert_nil ClientGoogleIdentity.find_by(uid: new_uid)
+
+    get auth_app_sign_up_check_google_birthdate_url(ri: "jp"), headers: browser_headers.merge(@callback_headers)
+    follow_redirect! while response.redirect? && URI.parse(response.location).host == @host
+
+    assert_includes CGI.unescapeHTML(response.body), I18n.t("sign.app.registration.checkpoint.age_restricted")
+    assert_equal user_count_before, Client.count, "revisiting the step must not reopen the sign-up"
   end
 
   test "Apple sign up entry without an existing identity creates the client, identity and ceremony" do

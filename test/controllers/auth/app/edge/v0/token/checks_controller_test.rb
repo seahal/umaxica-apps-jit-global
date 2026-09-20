@@ -79,6 +79,30 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
     assert_includes registration, "challenge="
   end
 
+  # The advertised path is the DBSC proof audience, so it must be identical across registration
+  # and refresh. Per-request context params (ri/lx/tz) merged into generated URLs must not leak
+  # into it, or a later region switch would break the bound-session refresh.
+  test "GET check with context params still advertises the canonical DBSC path" do
+    token_record = ClientToken.create!(user: @user)
+    token_record.rotate_refresh_token!
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = jwt_access_token_for(
+      @user,
+      host: @host,
+      session_public_id: token_record.public_id,
+      resource_type: "client",
+    )
+
+    get "/edge/v0/token/check?ri=us&lx=en&tz=UTC",
+        headers: { "Host" => @host, "Accept" => "application/json" },
+        as: :json
+
+    assert_response :ok
+    registration = response.headers[AuthIoKeys::Headers::SECURE_DBSC_REGISTRATION]
+
+    assert_includes registration, %(path="#{auth_app_edge_v0_token_dbsc_path}")
+    assert_no_match(/path="[^"]*[?#]/, registration)
+  end
+
   test "GET check without access token returns 401" do
     get "/edge/v0/token/check",
         headers: { "Host" => @host, "Accept" => "application/json" },

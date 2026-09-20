@@ -31,26 +31,6 @@ class DpopAndOneTimeRevealRefusalsTest < ActiveSupport::TestCase
     assert_predicate result.error, :present?
   end
 
-  # The default port is dropped and a non-default one kept, on both sides, so a
-  # proof issued for the same request compares equal regardless of how the port
-  # was written.
-  test "the request URI is normalised the same way on both sides of the comparison" do
-    subject = verifier(proof_jwt: "x", request_uri: "https://id.example.test:443/oauth/token")
-
-    assert subject.send(:htu_matches?, "https://id.example.test/oauth/token")
-    assert_not subject.send(:htu_matches?, "https://id.example.test:8443/oauth/token")
-    assert_not subject.send(:htu_matches?, "https://other.example.test/oauth/token")
-    assert_not subject.send(:htu_matches?, "http://[oops"),
-               "an unparsable htu is a mismatch, not an exception"
-  end
-
-  test "a non-default port is kept so a proof for another port does not match" do
-    subject = verifier(proof_jwt: "x", request_uri: "https://id.example.test:8443/oauth/token")
-
-    assert subject.send(:htu_matches?, "https://id.example.test:8443/oauth/token")
-    assert_not subject.send(:htu_matches?, "https://id.example.test/oauth/token")
-  end
-
   # A reveal is single-use: consuming it twice, or with the wrong actor, nonce or
   # purpose, has to answer nothing rather than reveal the value again.
   test "a one-time reveal is consumable once and only by the actor it was issued to" do

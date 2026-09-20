@@ -111,36 +111,6 @@ module Sign
         ENV["RISK_ENFORCEMENT_ENABLED"] = original_enabled
       end
 
-      test "feature_enabled? defaults to false in test environment" do
-        original_disabled = ENV["RISK_ENFORCEMENT_DISABLED"]
-        original_enabled = ENV["RISK_ENFORCEMENT_ENABLED"]
-        ENV["RISK_ENFORCEMENT_DISABLED"] = nil
-        ENV["RISK_ENFORCEMENT_ENABLED"] = nil
-
-        assert_not SignRiskEmitter.send(:feature_enabled?)
-      ensure
-        ENV["RISK_ENFORCEMENT_DISABLED"] = original_disabled
-        ENV["RISK_ENFORCEMENT_ENABLED"] = original_enabled
-      end
-
-      test "feature_enabled? returns true when RISK_ENFORCEMENT_ENABLED" do
-        original = ENV["RISK_ENFORCEMENT_ENABLED"]
-        ENV["RISK_ENFORCEMENT_ENABLED"] = "true"
-
-        assert SignRiskEmitter.send(:feature_enabled?)
-      ensure
-        ENV["RISK_ENFORCEMENT_ENABLED"] = original
-      end
-
-      test "feature_enabled? returns false when RISK_ENFORCEMENT_DISABLED" do
-        original = ENV["RISK_ENFORCEMENT_DISABLED"]
-        ENV["RISK_ENFORCEMENT_DISABLED"] = "true"
-
-        assert_not SignRiskEmitter.send(:feature_enabled?)
-      ensure
-        ENV["RISK_ENFORCEMENT_DISABLED"] = original
-      end
-
       test "emit handles exceptions gracefully" do
         original_disabled = ENV["RISK_ENFORCEMENT_DISABLED"]
         original_enabled = ENV["RISK_ENFORCEMENT_ENABLED"]

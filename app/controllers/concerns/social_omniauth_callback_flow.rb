@@ -65,24 +65,6 @@ module SocialOmniauthCallbackFlow
     )
   end
 
-  def handle_missing_auth
-    redirect_missing_auth_hash
-  end
-
-  def handle_unexpected_error(error, auth)
-    clear_social_auth_intent!
-    Rails.logger.error(
-      JitLogEvent.format(
-        social_omniauth_unexpected_error_event,
-        error_class: error.class.name,
-        error_message: error.message,
-        provider: auth&.provider,
-        exception: error,
-      ),
-    )
-    raise error
-  end
-
   def social_omniauth_callback_requires_writing_role?
     false
   end
@@ -108,10 +90,6 @@ module SocialOmniauthCallbackFlow
 
   def social_omniauth_missing_auth_event
     "sign.social.omniauth.missing_auth_hash"
-  end
-
-  def social_omniauth_unexpected_error_event
-    "sign.social.omniauth.unexpected_error"
   end
 
   def social_omniauth_failure_i18n_key

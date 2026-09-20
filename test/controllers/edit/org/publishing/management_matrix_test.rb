@@ -20,54 +20,6 @@ class Edit::Org::Publishing::ManagementMatrixTest < ActiveSupport::TestCase
     ["org", "help", Edit::Org::Publishing::Help::Org::EntriesController],
   ].freeze
 
-  test "all twelve management controllers declare identity and share actions" do
-    CELLS.each do |audience, surface, controller|
-      assert_includes controller.ancestors, PublishingManagementEntriesActions, controller.name
-      assert_equal audience, controller.publishing_audience, controller.name
-      assert_equal surface, controller.publishing_surface, controller.name
-      assert_equal Publishing::ContentFamilies.entry_class(surface:, audience:), controller::ENTRY_CLASS,
-                   controller.name
-      assert_operator controller, :<, Edit::Org::ApplicationController
-      assert_equal "edit/org/publishing",
-                   controller.new.send(:publishing_management_namespace),
-                   controller.name
-      assert_equal :private, controller::AUTHENTICATION_MODE
-      assert_equal :private, controller.authentication_mode_for(:update)
-    end
-  end
-
-  # Publishing and archiving are nested resources of the entry, so each cell has three
-  # controllers, not one. All three answer for the same cell: a publication controller that
-  # answered for another audience would publish another audience's content.
-  test "the nested publication and archive controllers declare the same cell as their entries controller" do
-    CELLS.each do |audience, surface, controller|
-      nested = [
-        controller.module_parent::Entries::PublicationsController,
-        controller.module_parent::Entries::ArchivesController,
-      ]
-
-      nested.each do |nested_controller|
-        assert_equal audience, nested_controller.publishing_audience, nested_controller.name
-        assert_equal surface, nested_controller.publishing_surface, nested_controller.name
-        assert_equal controller::ENTRY_CLASS, nested_controller::ENTRY_CLASS, nested_controller.name
-        assert_operator nested_controller, :<, Edit::Org::ApplicationController
-        assert_equal "edit/org/publishing",
-                     nested_controller.new.send(:publishing_management_namespace),
-                     nested_controller.name
-        assert_equal :private, nested_controller::AUTHENTICATION_MODE, nested_controller.name
-      end
-
-      assert_includes(
-        controller.module_parent::Entries::PublicationsController.ancestors,
-        PublishingManagementPublicationsActions,
-      )
-      assert_includes(
-        controller.module_parent::Entries::ArchivesController.ancestors,
-        PublishingManagementArchivesActions,
-      )
-    end
-  end
-
   # The concern reads its cell from constants the including controller declares, and
   # `const_defined?(..., false)` deliberately does not inherit: a controller that forgets one must
   # not silently answer for its parent's cell, which is another audience's data. Each guard is

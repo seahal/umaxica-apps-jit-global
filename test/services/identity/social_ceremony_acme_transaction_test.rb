@@ -241,6 +241,40 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
     end
   end
 
+  test "a result is refused without a session, on another surface, or after its transaction expired" do
+    travel_to @now do
+      issuance = issue_grant
+      result_token = issue_result(issuance.grant)
+      refusals = {
+        "session_ref is required" => { session_ref: "", surface: "app", now: @now },
+      }
+
+      refusals.each do |message, args|
+        error =
+          assert_raises(IdentitySocialCeremonyContract::Error, message) do
+            IdentitySocialCeremonyFinalCommitter.call!(result_token: result_token, actor: @client, **args)
+          end
+
+        assert_equal message, error.message
+      end
+      # An expired result is refused (its own exp lapses no later than the transaction), and a result
+      # minted for the app surface cannot even be verified under the com issuer's keys.
+      assert_raises(IdentitySocialCeremonyContract::Error) do
+        IdentitySocialCeremonyFinalCommitter.call!(
+          result_token: result_token, actor: @client, session_ref: @session_ref, surface: "app", now: @now + 1.day,
+        )
+      end
+      assert_raises(IdentitySocialCeremonyContract::Error) do
+        IdentitySocialCeremonyFinalCommitter.call!(
+          result_token: result_token, actor: @client, session_ref: @session_ref, surface: "com", now: @now,
+        )
+      end
+
+      assert_not_predicate issuance.transaction.reload, :consumed?
+      assert_nil ClientExternalIdentity.find_by(provider: "google", subject: auth_hash["uid"])
+    end
+  end
+
   test "purger removes only retained expired and consumed transactions" do
     travel_to @now do
       active = issue_grant.transaction

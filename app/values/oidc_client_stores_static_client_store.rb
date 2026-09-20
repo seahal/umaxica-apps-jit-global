@@ -353,6 +353,9 @@ module OidcClientStoresStaticClientStore
   end
 
   private_class_method :first_party_browser_rp_clients, :deprecated_shared_browser_rp_clients,
+                       :native_and_content_rp_clients, :sign_rp_client, :base_rails_rp_client,
+                       :side_rails_rp_client, :core_next_rp_client, :native_rp_client,
+                       :content_surface_rp_clients, :content_rp_client,
                        :face_rp_client, :build_redirect_uris, :build_post_logout_redirect_uris,
                        :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
                        :normalize_host

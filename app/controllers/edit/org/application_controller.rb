@@ -98,10 +98,6 @@ module Edit
         oidc_base_authority_host
       end
 
-      def oidc_base_host
-        ENV.fetch("PUBLIC_BASE_STAFF_URL")
-      end
-
       def actor_verification_path(**args)
         base_org_verification_path(**args)
       end

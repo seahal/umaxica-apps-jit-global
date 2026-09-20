@@ -68,35 +68,7 @@ class Auth::App::UiFoundationTest < ActionDispatch::IntegrationTest
 
   private
 
-  def base_session_headers(scope: nil, host: @base_host)
-    token = ClientToken.new(
-      user: @user,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-    )
-    token.send(:skip_session_limit_check=, true)
-    token.save!
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
-    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: token)
-    mark_token_step_up_satisfied_for_test(token, scope: scope) if scope.present?
-
-    {
-      "Host" => host,
-      "X-TEST-CURRENT-USER" => @user.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
-  end
-
-  def follow_cross_host_redirect!(headers)
-    location = URI.parse(response.location)
-    follow_redirect!(
-      headers: headers.merge("Host" => location.host),
-    )
-  end
   private
-
-  def bearer_headers(token, host: nil, headers: {})
-    host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
 end
 
 # DAMP auth header helpers for this test class.

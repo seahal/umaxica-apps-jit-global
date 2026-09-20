@@ -48,4 +48,6 @@ module LocalEnvironment
 
     value.sub(/\s+#.*\z/, "").strip
   end
+
+  private_class_method :unquote
 end

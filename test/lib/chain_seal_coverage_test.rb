@@ -63,33 +63,4 @@ class ChainSealCoverageTest < ActiveSupport::TestCase
       ChainSeal.verify(compact: seal.compact, payload: @payload, public_key: rsa)
     end
   end
-
-  test "seal rejects unsupported algorithms kids and empty signatures" do
-    seal = ChainSeal.seal(payload: @payload, kid: "kid-1", private_key: @private_key)
-
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:validate_kid!, nil) }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:validate_kid!, "bad kid") }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:validate_hash_hex!, "zz", "block_hash") }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:decode_signature, "") }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:decode_signature, "abc=") }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:decode_signature, "+++") }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:raw_to_asn1_signature, "short") }
-    assert_not ChainSeal.send(:secure_compare, "ab", "a")
-    assert ChainSeal.send(:secure_compare, "ab", "ab")
-
-    mutated = seal.dup
-    mutated.define_singleton_method(:version) { "other" } if mutated.respond_to?(:version)
-    invalid = {
-      version: "x",
-      canonicalization: seal.canonicalization,
-      hash_alg: seal.hash_alg,
-      signature_alg: seal.signature_alg,
-      kid: seal.kid,
-      previous_hash: seal.previous_hash,
-      block_hash: seal.block_hash,
-      signature: seal.signature,
-    }
-    struct = Struct.new(*invalid.keys, keyword_init: true).new(**invalid)
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:validate_seal!, struct) }
-  end
 end

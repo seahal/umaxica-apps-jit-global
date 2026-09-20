@@ -4,7 +4,7 @@
 module Side
   module Com
     module Sign
-      class OutsController < Side::Com::BareController
+      class OutsController < Side::Com::ApplicationController
         include ::AuthenticationClient
         include ::AuthenticationLogoutable
         include ::SignOutNotice
@@ -13,8 +13,10 @@ module Side
         include ::SignOutInertiaPages
 
         AUTHENTICATION_MODE = :open
-        # Bare on purpose. The sign-out pages are Inertia pages (SignOutInertiaPages), so the
-        # completion page clears the encrypted Inertia history; SurfaceInertiaPage supplies the layout.
+        declare_authentication_mode! :open
+        # The sign-out pages are regional HTML (Inertia) documents, so they run the surface's
+        # ordinary callback chain -- `set_region` included, otherwise every link they generate
+        # would drop `ri` (test/unit/security/ri_routing_contract_test.rb).
 
         before_action :authenticate!, only: :create
         helper_method :sign_out_completed_description

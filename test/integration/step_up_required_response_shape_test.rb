@@ -133,4 +133,67 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
     assert_equal VerificationBase::STEP_UP_REQUIRED_MESSAGE, response.parsed_body.fetch("error")
   end
+  test "an org JSON request from an Emergency Access session is refused with 403 instead of a step-up prompt" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host! host
+    operator = operators(:one)
+    token = OperatorToken.create!(
+      staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    access_token = AuthenticationToken.encode(
+      operator, host: host, session_public_id: token.public_id,
+                resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+
+    assert_no_difference("OperatorEmail.count") do
+      post base_org_identity_emails_registration_url(ri: "jp", host: host),
+           params: { staff_email: { raw_address: "org_step_up_emergency_json@example.com" } }, as: :json,
+           headers: {
+             "Authorization" => "Bearer #{access_token}",
+             "Client-Agent" => "Mozilla/5.0",
+             "Host" => host,
+             "Accept" => "application/json",
+             "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+           }
+    end
+
+    assert_response :forbidden
+    assert_equal I18n.t("auth.step_up.emergency_unavailable"), response.parsed_body.fetch("error")
+  end
+
+  test "an app JSON request from a client with no step-up method asks to register one" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! host
+    client = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    token = ClientToken.create!(
+      user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
+    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    access_token = AuthenticationToken.encode(
+      client, host: host, session_public_id: token.public_id,
+              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+
+    patch base_app_identity_withdrawal_url(ri: "jp", host: host),
+          params: { ack_schedule_purge: "1" }, as: :json,
+          headers: {
+            "Authorization" => "Bearer #{access_token}",
+            "Client-Agent" => "Mozilla/5.0",
+            "Host" => host,
+            "Accept" => "application/json",
+            "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+          }
+
+    assert_response :unprocessable_content
+    assert_equal I18n.t("auth.step_up.register_methods_required"), response.parsed_body.fetch("error")
+    assert_not ClientWithdrawalFlow.exists?(client_id: client.id)
+  end
 end

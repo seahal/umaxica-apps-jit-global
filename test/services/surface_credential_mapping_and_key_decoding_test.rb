@@ -10,23 +10,6 @@ require "jit_security_jwt_keyring"
 class SurfaceCredentialMappingAndKeyDecodingTest < ActiveSupport::TestCase
   fixtures :operators, :operator_statuses
 
-  test "each credential class names its own recovery relation and kind column" do
-    operator = operators(:one)
-    requirement = SignRecoveryPasscodeRequirement.new(actor: operator, credential_class: OperatorSecretCredential)
-
-    assert_equal operator.staff_secret_credentials.to_a, requirement.send(:actor_secret_credentials).to_a
-    assert_equal :staff_secret_kind_id, requirement.send(:kind_column)
-  end
-
-  test "a credential class the recovery requirement does not serve is named in the error" do
-    requirement = SignRecoveryPasscodeRequirement.new(actor: operators(:one), credential_class: OperatorToken)
-
-    error = assert_raises(ArgumentError) { requirement.send(:actor_secret_credentials) }
-
-    assert_match(/unsupported recovery passcode credential class: OperatorToken/, error.message)
-    assert_nil requirement.send(:kind_column)
-  end
-
   # The risk score is read from the occurrence table of the actor's own surface;
   # scoring a staff sign-in against the client table would report someone else's
   # recent failures as theirs.

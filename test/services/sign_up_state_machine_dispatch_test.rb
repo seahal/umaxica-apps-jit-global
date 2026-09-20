@@ -63,16 +63,6 @@ class SignUpStateMachineDispatchTest < ActiveSupport::TestCase
     assert_predicate result.errors, :present?
   end
 
-  test "a terminal state is recognised through the ticket's own predicate and by status otherwise" do
-    machine = SignUpStateMachine.new(ticket: ticket("COMPLETED"), event: :complete, actor_context: nil)
-
-    assert machine.send(:terminal?)
-
-    without_predicate = SignUpStateMachine.new(ticket: ticket("STARTED"), event: :complete, actor_context: nil)
-
-    assert_not without_predicate.send(:terminal?)
-  end
-
   # A social callback that already carries a sign-in hand-off is handed straight to the hand-off
   # step. Transitioning it to the checkpoint first would ask a signed-in social account for a
   # confirmation it has already given.

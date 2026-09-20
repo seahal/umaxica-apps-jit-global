@@ -343,31 +343,6 @@ module AuthenticationSequenceGate
     expires_at <= 0 || Time.current.to_i >= expires_at
   end
 
-  def begin_sign_in_sequence!(pt:, checkpoint_required:)
-    actor = current_resource
-    return unless actor
-
-    transition = SignInStateMachine.after_session_issued(checkpoint_required: checkpoint_required)
-    sequence = sign_in_sequence_carrier.start!(
-      surface: Actor.tld,
-      actor: actor,
-      method: Array(Actor.authn.amr).first || "unknown",
-      state: transition.fetch(:state),
-      participant: transition.fetch(:participant),
-      pt: signed_pt_token(pt),
-    )
-
-    SignInResult.new(
-      status: :success,
-      actor: actor,
-      token: nil,
-      sequence_id: sequence.id,
-      redirect_to: nil,
-      response_status: :found,
-      message: nil,
-    )
-  end
-
   def require_sign_in_sequence_participant!(participant:, policy_rule:)
     sequence = sign_in_sequence_carrier.current
 
@@ -493,21 +468,6 @@ module AuthenticationSequenceGate
       changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
       cycle.reload.update!(changes)
     end
-  end
-
-  def advance_cycle_to_checkpoint_after_active_session!(cycle, resource, token)
-    cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
-
-    if cycle.sign_in_guardrail_pending?
-      guardrail = SignInGuardrailParticipant.new(cycle: cycle, actor: resource)
-      guardrail.advance_if_clear!
-    end
-
-    cycle.reload
-    cycle.update!(token: token) if cycle.token_id.blank?
-    cycle.advance_sign_in_to_checkpoint! if cycle.sign_in_session_issuance_pending?
-    sign_in_flow_locator_for(actor: resource, token: token).issue!(cycle.reload)
-    reset_current_db_sign_in_flow_for_sequence!
   end
 
   def promote_current_session_limit_cycle!(actor)
@@ -711,4 +671,6 @@ module AuthenticationSequenceGate
       session_management_path: session_management_path,
     )
   end
+
+  private :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?, :pending_sign_in_flow_actor
 end

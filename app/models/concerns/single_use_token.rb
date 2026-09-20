@@ -83,13 +83,18 @@ module SingleUseToken
     end
 
     def create_rotated_record!(consumed, now:)
+      # dbsc_session_id is unique: the DBSC binding moves to the replacement, so the consumed
+      # record releases it first.
+      bound_session_id = consumed.dbsc_session_id
+      consumed.update!(dbsc_session_id: nil, updated_at: now) if bound_session_id.present?
+
       attrs = {
         status_id: consumed.status_id,
         discarded_at: now + PREFERENCE_REFRESH_TTL,
         jti: JitSecurityJwtJtiGenerator.generate,
         binding_method_id: consumed.binding_method_id,
         dbsc_status_id: consumed.dbsc_status_id,
-        dbsc_session_id: consumed.dbsc_session_id,
+        dbsc_session_id: bound_session_id,
         dbsc_public_key: consumed.dbsc_public_key,
         dbsc_challenge: consumed.dbsc_challenge,
         dbsc_challenge_issued_at: consumed.dbsc_challenge_issued_at,

@@ -59,4 +59,6 @@ module CoverbandProcessGate
 
     WEB_SERVER_COMMANDS.include?(argv.first.to_s)
   end
+
+  private_class_method :web_server?
 end

@@ -48,5 +48,7 @@ module Webauthn
       # AAL2-aligned requires a user-verified, user-present assertion; anything
       # else is single-factor possession proof at best.
       def aal2_aligned? = user_verified && user_present
+
+      private_class_method :extract_aaguid
     end
 end

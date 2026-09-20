@@ -93,17 +93,4 @@ class OrgPreferenceCookieTest < ActiveSupport::TestCase
       cookie.destroy!
     end
   end
-
-  test "set_defaults fills nil booleans on new records" do
-    cookie = OrgPreferenceCookie.new(preference: @preference)
-    cookie.targetable = nil
-    cookie.performant = nil
-    cookie.consented = nil
-
-    cookie.send(:set_defaults)
-
-    assert_not cookie.targetable
-    assert_not cookie.performant
-    assert_not cookie.consented
-  end
 end

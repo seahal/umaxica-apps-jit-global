@@ -69,10 +69,6 @@ class ApplicationPolicy < ActionPolicy::Base
     AuthorizationTokenClaims.authentication_context(current_token)
   end
 
-  def emergency_session?
-    authentication_context.emergency?
-  end
-
   protected
 
   def actor_context
@@ -99,61 +95,11 @@ class ApplicationPolicy < ActionPolicy::Base
       end
   end
 
-  # Extract JWT scopes from the current user token.
-  # @return [Array<String>]
-  def jwt_scopes
-    return [] if current_token.blank?
-
-    AuthorizationTokenClaims.scopes(current_token)
-  end
-
-  # Check if the user has a specific scope
-  # @param scope [String] the scope to check (e.g., "read:self", "write:org")
-  # @return [Boolean]
-  def has_scope?(scope)
-    jwt_scopes.include?(scope.to_s)
-  end
-
-  # Check if the user has permission for the current domain
-  # @param allowed_domains [Array<String>] list of allowed domain prefixes (e.g., ["app", "org"])
-  # @return [Boolean]
-  def domain_permitted?(*allowed_domains)
-    return true if allowed_domains.blank?
-
-    domain = extract_domain_from_audience
-    return true if domain.blank?
-
-    allowed_domains.map(&:to_s).include?(domain.to_s)
-  end
-
-  # Extract domain from audience claim in the current user token.
-  def extract_domain_from_audience
-    return nil if current_token.blank?
-
-    audiences = Array(current_token["aud"])
-    return nil if audiences.empty?
-
-    audiences.first.to_s.split(".").first
-  end
-
   # Get JWT subject (user ID) from the current user token.
   def jwt_subject
     return nil if current_token.blank?
 
     AuthorizationTokenClaims.subject(current_token)
-  end
-
-  # Check if current token is for specific domain
-  def domain_app?
-    extract_domain_from_audience == "app"
-  end
-
-  def domain_org?
-    extract_domain_from_audience == "org"
-  end
-
-  def domain_com?
-    extract_domain_from_audience == "com"
   end
 
   # Check if user owns the record
@@ -189,22 +135,6 @@ class ApplicationPolicy < ActionPolicy::Base
   # Role-based checks
   def operator?
     user&.has_role?("operator", organization: organization)
-  end
-
-  def manager?
-    user&.has_role?("manager", organization: organization)
-  end
-
-  def editor?
-    user&.has_role?("editor", organization: organization)
-  end
-
-  def contributor?
-    user&.has_role?("contributor", organization: organization)
-  end
-
-  def viewer?
-    user&.has_role?("viewer", organization: organization)
   end
 
   # Combined role checks

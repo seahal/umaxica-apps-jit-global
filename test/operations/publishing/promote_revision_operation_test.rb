@@ -104,17 +104,6 @@ module Publishing
       assert_equal 1, Docs::App::VersionMultipleTaxonomyAssignment.where(entry_version_id: first.id).count
     end
 
-    test "a caller that loses the race is handed the winning version, not an arbitrary row" do
-      entry = publishing_draft(audience: "app", surface: "docs", slug: "raced", title: "Raced")
-      assign_tags(entry.current_revision, [@ruby])
-      winner = PromoteRevisionOperation.call(revision: entry.current_revision)
-
-      # Simulates the loser's path: its insert was rejected, so it re-reads.
-      loser = PromoteRevisionOperation.new(revision: entry.current_revision)
-
-      assert_equal winner.id, loser.send(:verify_complete!, winner).id
-    end
-
     test "a promoted revision and its assignments are frozen by the database" do
       entry = publishing_draft(audience: "app", surface: "docs", slug: "frozen-revision", title: "Frozen Revision")
       assign_tags(entry.current_revision, [@ruby])

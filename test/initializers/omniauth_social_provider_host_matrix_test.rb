@@ -69,12 +69,6 @@ class OmniauthSocialProviderHostMatrixTest < ActiveSupport::TestCase
     end
   end
 
-  test "hosts that own no auth surface are not classified as the app surface" do
-    non_auth_hosts.each do |host|
-      assert_equal :unknown, surface_for(host), "#{host} must not classify as a surface that allows providers"
-    end
-  end
-
   test "non-provider social paths remain app-surface only" do
     assert_allowed host: app_auth_host, path: "/social/authentication/completion"
     assert_allowed host: app_base_host, path: "/social/authentication/completion"
@@ -87,10 +81,6 @@ class OmniauthSocialProviderHostMatrixTest < ActiveSupport::TestCase
   end
 
   private
-
-  def surface_for(host)
-    @matrix.send(:surface_for_host, host)
-  end
 
   def app_auth_host = @hosts.auth_service.host
 

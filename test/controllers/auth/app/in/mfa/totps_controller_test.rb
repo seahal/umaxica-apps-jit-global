@@ -133,6 +133,28 @@ module Auth::App::In
       assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     end
 
+    test "a correct TOTP code submitted after the pending sign-in expired does not sign in" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_secret_credential!
+      end
+
+      expires_at = session[:pending_mfa]["expires_at"]
+
+      travel_to Time.zone.at(expires_at) + 1.second do
+        totp_code = ROTP::TOTP.new(@totp.private_key).now
+
+        with_prosopite_paused do
+          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+            totp_challenge_form: { token: totp_code },
+          }
+        end
+      end
+
+      assert_includes [302, 303], response.status
+      assert_equal auth_app_sign_in_path, URI.parse(response.location).path
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    end
+
     test "create with invalid TOTP code renders form with error" do
       with_prosopite_paused do
         establish_pending_mfa_via_secret_credential!

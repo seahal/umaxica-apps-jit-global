@@ -41,4 +41,6 @@ module JitHostOriginEnv
     normalized = host.to_s.downcase.delete_prefix("[").delete_suffix("]")
     LOCAL_HOSTS.include?(normalized) || normalized.end_with?(".localhost")
   end
+
+  private_class_method :production_local_origin?, :production_local_host?
 end

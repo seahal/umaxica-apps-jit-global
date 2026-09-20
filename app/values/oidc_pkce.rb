@@ -24,4 +24,6 @@ module OidcPkce
 
     ActiveSupport::SecurityUtils.secure_compare(code_challenge.to_s, challenge_for(code_verifier))
   end
+  # Inputs of `verify`, not a separate API: callers compare through `verify`.
+  private_class_method :challenge_for, :valid_verifier?
 end

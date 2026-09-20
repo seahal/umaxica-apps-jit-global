@@ -90,76 +90,6 @@ class SignEmailRegistrationFlowTest < ActiveSupport::TestCase
     end
   end
 
-  test "sanitize redirect params keeps safe redirect and removes unsafe values" do
-    harness = Harness.new
-    empty_params = {}
-
-    harness.send(:sanitize_redirect_params!, empty_params)
-
-    assert_empty empty_params
-
-    safe_path = "/settings/emails"
-    params = { pt: safe_path }
-
-    harness.send(:sanitize_redirect_params!, params)
-
-    assert_equal "signed:#{safe_path}", params[:pt]
-
-    params = { pt: "https://evil.example" }
-    harness.send(:sanitize_redirect_params!, params)
-
-    assert_not params.key?(:pt)
-
-    assert_nil harness.send(:sanitize_encoded_redirect, "")
-    assert_nil harness.send(:sanitize_encoded_redirect, "not-base64%%%")
-  end
-
-  test "reset and notice path clear session and preserve safe redirect" do
-    harness = Harness.new
-    harness.session_hash[harness.send(:registration_email_session_key)] = "email-public-id"
-
-    harness.send(:reset_email_registration_flow!)
-
-    assert_nil harness.session_hash[harness.send(:registration_email_session_key)]
-    assert_predicate harness, :reset_called
-
-    path = harness.send(:new_registration_path_with_notice)
-
-    assert_match "/emails/new?", path
-    assert_equal I18n.t("sign.app.registration.email.edit.session_expired"), harness.flash_hash[:notice]
-  end
-
-  test "valid registration email session checks presence expiry and status" do
-    harness = Harness.new
-    valid_email = Struct.new(:otp_expired?, :user_email_status_id).new(false, ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP)
-    expired_email = Struct.new(:otp_expired?, :user_email_status_id).new(true, ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP)
-    verified_email = Struct.new(:otp_expired?, :user_email_status_id).new(false, ClientEmailStatus::VERIFIED)
-
-    assert_not harness.send(:valid_registration_email_session?)
-
-    harness.instance_variable_set(:@user_email, valid_email)
-
-    assert harness.send(:valid_registration_email_session?)
-
-    harness.instance_variable_set(:@user_email, expired_email)
-
-    assert_not harness.send(:valid_registration_email_session?)
-
-    harness.instance_variable_set(:@user_email, verified_email)
-
-    assert_not harness.send(:valid_registration_email_session?)
-  end
-
-  test "new initializes user email and current registration email returns nil without target" do
-    harness = Harness.new
-
-    harness.new
-
-    assert_instance_of ClientEmail, harness.instance_variable_get(:@user_email)
-    assert_nil harness.send(:current_registration_email)
-    assert_nil harness.send(:on_email_registration_verified!)
-  end
-
   test "create renders new when verification cannot be initiated" do
     harness = Harness.new
     harness.params_hash = {
@@ -182,23 +112,6 @@ class SignEmailRegistrationFlowTest < ActiveSupport::TestCase
 
     assert_predicate harness, :reset_called
     assert_equal ["/emails/new?pt=signed%3A%2Fsettings%2Femails"], harness.redirect_args
-  end
-
-  test "abstract path hooks raise not implemented" do
-    harness = Harness.new
-
-    assert_raises(NotImplementedError) {
-      SignEmailRegistrationFlow.instance_method(:after_email_registration_started_path).bind_call(harness)
-    }
-    assert_raises(NotImplementedError) {
-      SignEmailRegistrationFlow.instance_method(:after_email_registration_verified_path).bind_call(harness)
-    }
-    assert_raises(NotImplementedError) {
-      SignEmailRegistrationFlow.instance_method(:email_registration_target_user).bind_call(harness)
-    }
-    assert_raises(NotImplementedError) {
-      SignEmailRegistrationFlow.instance_method(:new_email_registration_path).bind_call(harness)
-    }
   end
 
   test "update renders the edit screen when turnstile stealth validation fails" do
@@ -274,49 +187,5 @@ class SignEmailRegistrationFlowTest < ActiveSupport::TestCase
     assert_equal [pending], generated
     assert_equal ["654321"], sent
     assert_equal I18n.t("otp.resend.sent"), harness.flash_hash[:notice]
-  end
-
-  test "complete_registration_verification! resets the flow when the email is locked" do
-    harness = Harness.new
-    harness.instance_variable_set(:@user_email, ClientEmail.new(public_id: "email-public-id"))
-    harness.define_singleton_method(:complete_email_verification!) { |*| :locked }
-
-    result = harness.send(:complete_registration_verification!, "000000")
-
-    assert_not result
-    assert_predicate harness, :reset_called
-    assert_equal I18n.t("sign.app.registration.email.update.attempts_exceeded"), harness.flash_hash[:alert]
-    assert_equal ["/emails/new?"], harness.redirect_args
-  end
-
-  test "complete_registration_verification! re-renders edit when verification fails" do
-    harness = Harness.new
-    harness.instance_variable_set(:@user_email, ClientEmail.new(public_id: "email-public-id"))
-    harness.define_singleton_method(:complete_email_verification!) { |*| false }
-
-    result = harness.send(:complete_registration_verification!, "000000")
-
-    assert_not result
-    assert_equal [:edit, { status: :unprocessable_content }], harness.render_args
-  end
-
-  test "email_registration_params permits a plain hash payload" do
-    harness = Harness.new
-    harness.params_hash = { client_email: { address: "plain@example.com", extra: "drop" } }
-
-    permitted = harness.send(:email_registration_params, :address)
-
-    assert_equal "plain@example.com", permitted[:address]
-    assert_not permitted.key?(:extra)
-  end
-
-  test "email_registration_return_path uses the signed pt token when present" do
-    harness = Harness.new
-    harness.define_singleton_method(:retrieve_pt) { |_key| "signed:/settings/emails" }
-
-    assert_equal "/settings/emails", harness.send(:email_registration_return_path, "/fallback")
-    harness.define_singleton_method(:retrieve_pt) { |_key| nil }
-
-    assert_equal "/fallback", harness.send(:email_registration_return_path, "/fallback")
   end
 end

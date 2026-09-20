@@ -162,13 +162,6 @@ class FlowBaseTest < ActiveSupport::TestCase
     end
   end
 
-  test "read_cycle_time reads attribute value through column validation" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-    record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, purged_at: now + 2.days)
-
-    assert_equal now + 1.day, record.send(:read_cycle_time, :discarded_at)
-  end
-
   test "ensure_cycle_column raises for missing column" do
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
     record = MisconfiguredCycleBaseTestRecord.create!(
@@ -182,21 +175,6 @@ class FlowBaseTest < ActiveSupport::TestCase
     assert_match(/does not have nonexistent_status_column/, error.message)
   end
 
-  test "cycle_future_time returns true for infinity" do
-    record = build_record
-
-    assert record.send(:cycle_future_time?, Float::INFINITY, Time.current)
-  end
-
-  test "cycle_future_time returns true for future time" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-    record = build_record
-
-    travel_to now do
-      assert record.send(:cycle_future_time?, now + 1.hour, now)
-    end
-  end
-
   test "retainable_required raises when Retainable is not included" do
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
     record = UnconfiguredCycleBaseTestRecord.create!(
@@ -208,34 +186,6 @@ class FlowBaseTest < ActiveSupport::TestCase
     error = assert_raises(FlowConfigurationError) { record.cycle_accessible? }
 
     assert_match(/include Retainable/, error.message)
-  end
-
-  test "cycle boundary predicates follow retention and expiry timestamps" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-    record = nil
-
-    travel_to now do
-      record = build_record(
-        cycle_status_id: 10,
-        discarded_at: now + 1.second,
-        purged_at: now + 2.seconds,
-        expires_at: now + 1.second,
-      )
-
-      assert_predicate record, :cycle_accessible?
-      assert_not record.cycle_expired?
-      assert_not record.cycle_purgeable?
-    end
-
-    travel_to now + 1.second do
-      assert_not record.cycle_accessible?
-      assert_predicate record, :cycle_expired?
-      assert_not record.cycle_purgeable?
-    end
-
-    travel_to now + 2.seconds do
-      assert_predicate record, :cycle_purgeable?
-    end
   end
 
   test "with_cycle_lock requires a block" do
@@ -252,52 +202,6 @@ class FlowBaseTest < ActiveSupport::TestCase
     error = assert_raises(FlowInvalidTransition) { record.send(:with_cycle_lock) { nil } }
 
     assert_match(/cycle must be persisted/, error.message)
-  end
-
-  test "ensure_retention_order rejects blank discarded_at" do
-    record = build_record
-
-    error =
-      assert_raises(ArgumentError) {
-        record.send(:ensure_retention_order!, discarded_at: nil, purged_at: Time.current)
-      }
-
-    assert_match(/discarded_at is required/, error.message)
-  end
-
-  test "ensure_retention_order rejects blank purged_at" do
-    record = build_record
-
-    error =
-      assert_raises(ArgumentError) {
-        record.send(:ensure_retention_order!, discarded_at: Time.current, purged_at: nil)
-      }
-
-    assert_match(/purged_at is required/, error.message)
-  end
-
-  test "cycle_time_after handles various infinity and blank combinations" do
-    record = build_record
-
-    assert_not record.send(:cycle_time_after?, nil, Time.current)
-    assert_not record.send(:cycle_time_after?, Time.current, nil)
-    assert_not record.send(:cycle_time_after?, Float::INFINITY, Float::INFINITY)
-    assert record.send(:cycle_time_after?, Float::INFINITY, Time.current)
-    assert_not record.send(:cycle_time_after?, Time.current, Float::INFINITY)
-    assert record.send(:cycle_time_after?, 1.hour.from_now, Time.current)
-  end
-
-  test "cycle_future_time returns false for nil value" do
-    record = build_record
-
-    assert_not record.send(:cycle_future_time?, nil, Time.current)
-  end
-
-  test "cycle_past_or_present_time returns false for nil or infinity" do
-    record = build_record
-
-    assert_not record.send(:cycle_past_or_present_time?, nil, Time.current)
-    assert_not record.send(:cycle_past_or_present_time?, Float::INFINITY, Time.current)
   end
 
   private

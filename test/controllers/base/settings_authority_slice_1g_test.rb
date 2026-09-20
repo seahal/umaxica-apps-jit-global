@@ -165,7 +165,6 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    token.send(:skip_session_limit_check=, true)
     token.save!
     token
   end

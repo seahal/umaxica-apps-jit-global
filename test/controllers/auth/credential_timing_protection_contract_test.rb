@@ -53,13 +53,6 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
     assert_equal expected.map(&:name).sort, protected_controllers.map(&:name).sort
   end
 
-  test "email sign-in keeps explicit dummy work timing protection" do
-    controller = Auth::App::Sign::In::EmailsController.new
-
-    assert_includes controller.private_methods, :perform_dummy_otp_generation
-    assert_includes controller.private_methods, :ensure_min_elapsed
-  end
-
   # The Entra strategy's request phase used to pad its response time so a valid
   # and an invalid connection_public_id could not be told apart by timing. The
   # org surface now federates a single tenant read from configuration, so the

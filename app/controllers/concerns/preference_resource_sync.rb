@@ -6,45 +6,6 @@ module PreferenceResourceSync
 
   private
 
-  # Dual-write: when logged in, sync current AppPreference/ComPreference/OrgPreference
-  # values to the corresponding ClientPreference/VisitorPreference/OperatorPreference.
-  # Both direct columns and child option records are propagated so the resource
-  # preference is a complete mirror of the token preference.
-  def sync_to_resource_preference!
-    return unless respond_to?(:current_resource, true)
-
-    resource = preference_current_resource
-    return if resource.blank?
-
-    resource_pref = preference_write_resource_preference!(resource)
-    return if resource_pref.blank?
-
-    authorize!(resource_pref, to: :update?) if respond_to?(:authorize!, true)
-    sync_direct_resource_preference!(resource_pref)
-    sync_resource_preference_children!(resource_pref)
-  rescue PreferenceBase::ResolutionError
-    raise
-  rescue StandardError => e
-    # Surface mirror-sync failures instead of swallowing them. A failed resource
-    # write leaves the token (source) and resource (mirror) out of sync, so the
-    # caller must treat the whole preference operation as failed rather than
-    # silently logging and returning success.
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "preference.sync_to_resource.error", error: e.class.name,
-                                             message: e.message,
-      ),
-    )
-    raise PreferenceOperationError
-  end
-
-  def sync_resource_preference_children!(resource_pref)
-    return unless respond_to?(:copy_preference_values!, true)
-
-    target_prefix = resource_preference_registry_prefix(resource_pref)
-    copy_preference_values!(@preferences, resource_pref, target_prefix)
-  end
-
   def preference_write_resource_preference!(resource = nil)
     resource ||= preference_current_resource if respond_to?(:current_resource, true)
     return if resource.blank?
@@ -130,37 +91,6 @@ module PreferenceResourceSync
 
     with_resource_preference_writing_connection(resource_pref) do
       resource_pref.update!(allowed)
-    end
-  end
-
-  def reset_resource_preference_defaults_for_write!(resource_pref)
-    return if resource_pref.blank?
-
-    resource_prefix = resource_preference_registry_prefix(resource_pref)
-    association_prefix = resource_preference_association_prefix(resource_pref)
-
-    with_resource_preference_writing_connection(resource_pref) do
-      PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
-        PreferenceClassRegistry.option_class(resource_prefix, type).ensure_defaults!
-        default_id = PreferenceClassRegistry.default_option_id(resource_prefix, type)
-        association_name = "#{association_prefix}_#{type}"
-        child = resource_pref.public_send(association_name) if resource_pref.respond_to?(association_name)
-        child ||= load_or_create_resource_preference_child!(resource_pref, resource_prefix, type)
-        child&.update!(option_id: default_id) if child.blank? || child.option_id != default_id
-
-        direct_value = resource_preference_value_for_option(resource_prefix, type, default_id)
-        resource_pref.public_send(
-          :"#{type}=",
-          direct_value,
-        ) if direct_value.present? && resource_pref.respond_to?(:"#{type}=")
-      end
-
-      resource_pref.consented = false if resource_pref.respond_to?(:consented=)
-      resource_pref.functional = false if resource_pref.respond_to?(:functional=)
-      resource_pref.performant = false if resource_pref.respond_to?(:performant=)
-      resource_pref.targetable = false if resource_pref.respond_to?(:targetable=)
-      resource_pref.consented_at = nil if resource_pref.respond_to?(:consented_at=)
-      resource_pref.save!
     end
   end
 
@@ -275,15 +205,6 @@ module PreferenceResourceSync
         end
       end
     end
-  end
-
-  def sync_direct_resource_preference!(resource_pref)
-    snapshot = resolved_preference_snapshot(@preferences)
-    cookie = resolved_preference_cookie(@preferences)
-    attrs = snapshot.merge(cookie).compact
-    return if attrs.blank?
-
-    with_resource_preference_writing_connection(resource_pref) { resource_pref.update!(attrs) }
   end
 
   def resolved_preference_snapshot(preference)

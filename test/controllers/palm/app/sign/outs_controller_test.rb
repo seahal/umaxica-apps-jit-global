@@ -73,7 +73,7 @@ module Palm
         end
 
         test "post sign out revokes the current bearer token and returns opaque browser launch data" do
-          native_client = clients(:one)
+          native_client = Client.create!(status_id: ClientStatus::NOTHING)
           native_token = create_client_token(native_client)
           same_family_token = create_client_token(native_client, family_id: native_token.refresh_token_family_id)
           same_family_refresh = same_family_token.rotate_refresh_token!
@@ -169,7 +169,6 @@ module Palm
             oidc_jti: SecureRandom.uuid,
             oidc_client_id: "app-ios-rp",
           )
-          token.send(:skip_session_limit_check=, true)
           token.save!
           token
         end

@@ -193,6 +193,13 @@ Meaningful behavior changes need risk-appropriate tests covering success, failur
 and boundary cases. No placeholder, skipped, TODO, or behavior-mocking tests. Run the narrowest
 relevant checks first, then broaden only when the affected boundary warrants it.
 
+Unit tests cover public methods and functions only. A private or protected subroutine needs no test
+case of its own: it is reached through the public interface that uses it, and a subroutine that
+seems to need a direct test is evidence that the implementation, not the test, needs changing
+(wrong ownership, a missing collaborator, or behavior that belongs on a public boundary). Never
+widen visibility, add a test-only wrapper or accessor, or reach in through `send`, reflection, or a
+redefinition to test one. Any exception carries a comment at the test stating the reason.
+
 Environment and tooling construction is the exception, and it is absolute: never add a Minitest or
 Vitest case whose subject is dependency, configuration, container, or mounted-engine setup. Run the
 thing and record what you observed in `evidence/`. See

@@ -86,12 +86,6 @@ module AuthenticationJwtTokens
     current_authentication_event_at
   end
 
-  def token_record_oidc_sid(token_record)
-    token_session_public_id(token_record).presence ||
-      token_record_attribute(token_record, :oidc_sid).presence ||
-      token_record&.public_id
-  end
-
   def token_record_oidc_jti(token_record)
     token_record_attribute(token_record, :oidc_jti).presence
   end
@@ -114,38 +108,6 @@ module AuthenticationJwtTokens
   def uuid_identifier?(value)
     /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.match?(
       value.to_s,
-    )
-  end
-
-  def reissue_access_token!
-    resource = current_resource
-    return unless resource
-    return unless current_session
-
-    now = Time.current
-    access_expires_at = access_token_expires_at_for(current_session, now: now)
-
-    new_access_token = AuthenticationToken.encode(
-      resource,
-      host: request.host,
-      session_public_id: token_session_public_id(current_session),
-      oidc_sid: token_session_public_id(current_session),
-      oidc_jti: token_record_oidc_jti(current_session),
-      resource_type: resource_type,
-      dpop_jkt: token_record_attribute(current_session, :dpop_jkt),
-      expires_at: access_expires_at,
-      auth_time: token_record_authentication_event_at(current_session) || current_authentication_event_at_for_token,
-      jwt_issuer_id: auth_jwt_issuer_id,
-      authentication_context: token_record_authentication_context(current_session),
-    )
-    return unless new_access_token
-
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = cookie_options.merge(
-      value: new_access_token,
-      expires: access_expires_at,
-    )
-    Actor.install_context!(preferences: resolved_current_preference(resource)) if respond_to?(
-      :resolved_current_preference, true,
     )
   end
 

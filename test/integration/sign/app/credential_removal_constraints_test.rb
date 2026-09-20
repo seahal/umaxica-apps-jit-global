@@ -173,7 +173,6 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    stolen_token.send(:skip_session_limit_check=, true)
     stolen_token.save!
 
     delete base_app_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
@@ -191,7 +190,6 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    token.send(:skip_session_limit_check=, true)
     token.save!
     satisfy_user_verification(token)
     mark_token_step_up_satisfied_for_test(token, scope: scope)
@@ -287,10 +285,6 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     )
   end
   private
-
-  def bearer_headers(token, host: nil, headers: {})
-    host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
 end
 
 # DAMP auth header helpers for this test class.

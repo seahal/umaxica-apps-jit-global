@@ -37,12 +37,4 @@ class ApplicationPolicyActorContextTest < ActiveSupport::TestCase
     assert_same client, policy.user
     assert_not policy.apply(:show?)
   end
-
-  test "unauthenticated actor context fails closed for legacy user helpers" do
-    policy = ApplicationPolicy.new(clients(:one), actor: Actor.context)
-
-    assert_instance_of Actor::Context, policy.actor
-    assert_nil policy.user
-    assert_not policy.send(:owner?)
-  end
 end

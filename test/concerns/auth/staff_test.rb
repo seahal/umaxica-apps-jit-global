@@ -172,27 +172,6 @@ class AuthStaffTest < ActiveSupport::TestCase
       assert_in_delta 32.hours.from_now.to_i, token.purged_at.to_i, 1
     end
   end
-
-  test "current_operator works with Bearer token" do
-    @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
-
-    token_record =
-      OrgTicketRecord.connected_to(role: :writing) do
-        OperatorToken.create!(staff: @staff)
-      end
-
-    # Generate access token using AuthenticationToken
-    access_token = AuthenticationToken.encode(
-      @staff,
-      host: @obj.request.host,
-      session_public_id: token_record.public_id,
-      resource_type: "operator",
-      jwt_issuer_id: @obj.send(:auth_jwt_issuer_id),
-    )
-    @obj.request.headers["Authorization"] = "Bearer #{access_token}"
-
-    assert_equal @staff.id, @obj.current_operator.id
-  end
 end
 
 # DAMP local route helper aliases for former shared test support.

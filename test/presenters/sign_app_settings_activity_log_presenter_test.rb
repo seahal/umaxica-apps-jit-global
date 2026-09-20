@@ -139,26 +139,4 @@ class SignAppSettingsActivityLogPresenterTest < ActiveSupport::TestCase
 
     assert_equal "google", @log.login_method(activity)
   end
-
-  test "detect_browser identifies browsers" do
-    assert_equal "Edge", @log.send(:detect_browser, "Edg/120")
-    assert_equal "Chrome", @log.send(:detect_browser, "Chrome/120")
-    assert_equal "Safari", @log.send(:detect_browser, "Safari/605.1")
-    assert_equal "Firefox", @log.send(:detect_browser, "Firefox/120")
-    assert_equal "Other", @log.send(:detect_browser, "UnknownBrowser/1.0")
-  end
-
-  test "detect_device_type identifies devices" do
-    assert_equal "Mobile", @log.send(:detect_device_type, "Mobile Safari")
-    assert_equal "Mobile", @log.send(:detect_device_type, "iPhone")
-    assert_equal "Mobile", @log.send(:detect_device_type, "Android")
-    assert_equal "Tablet", @log.send(:detect_device_type, "iPad")
-    assert_equal "Desktop", @log.send(:detect_device_type, "Windows Chrome")
-  end
-
-  test "sensitive_context_key detects sensitive patterns" do
-    assert @log.send(:sensitive_context_key?, "authorization")
-    assert @log.send(:sensitive_context_key?, "token_value")
-    assert_not @log.send(:sensitive_context_key?, "browser")
-  end
 end

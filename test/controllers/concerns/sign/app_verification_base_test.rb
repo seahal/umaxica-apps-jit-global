@@ -130,30 +130,6 @@ class SignAppVerificationBaseTest < ActiveSupport::TestCase
     Rails.cache = @previous_cache_store
   end
 
-  test "verification params and incoming redirect helpers prefer verification payload" do
-    user = ClientStruct.new(7, "user-public-id", [], [])
-    harness = Harness.new(user: user)
-    return_to = "/settings/emails"
-    harness.params_hash = {
-      ri: "jp",
-      scope: "settings_secret_credential",
-      pt: "/settings/secrets",
-      verification: {
-        scope: "settings_email",
-        return_to: return_to,
-        ignored: "value",
-      },
-    }
-
-    assert_equal "settings_email", harness.send(:incoming_scope)
-    assert_equal "/settings/secrets", harness.send(:incoming_pt)
-    assert_equal(
-      { ri: "jp", scope: "settings_email", pt: "/settings/secrets" },
-      harness.send(:verification_recovery_redirect_params),
-    )
-    assert_equal %w(scope), harness.app_call(:verification_params).keys
-  end
-
   test "email otp session active and nonce helpers use step_up session session state" do
     user = clients(:one)
     token = ClientToken.create!(user: user)

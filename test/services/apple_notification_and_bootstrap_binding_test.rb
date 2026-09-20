@@ -39,41 +39,4 @@ class AppleNotificationAndBootstrapBindingTest < ActiveSupport::TestCase
 
     assert_match(/jwks_loader must respond to call/, error.message)
   end
-
-  # Only the event types the surface acts on are accepted; an unknown one is a
-  # refusal rather than a silently ignored notification.
-  test "an event type the surface does not act on is refused by name" do
-    subject = verifier(jws: "token")
-
-    ExternalAuthentication::VerifiedAppleNotification::EVENT_TYPES.each do |event_type|
-      assert_equal event_type, subject.send(:required_event_type, event_type)
-    end
-
-    error =
-      assert_raises(ExternalAuthentication::AppleNotificationVerifier::VerificationError) do
-        subject.send(:required_event_type, "account-teleported")
-      end
-
-    assert_match(/event_type_invalid/, error.message)
-  end
-
-  test "a non-positive or non-integer event time is refused rather than read as the epoch" do
-    subject = verifier(jws: "token")
-
-    assert_equal Time.at(1_756_000_000).utc, subject.send(:required_time, 1_756_000_000, :event_time_missing)
-
-    [0, -1, "1756000000", nil].each do |value|
-      assert_raises(ExternalAuthentication::AppleNotificationVerifier::VerificationError, value.inspect) do
-        subject.send(:required_time, value, :event_time_missing)
-      end
-    end
-  end
-
-  test "an avatar is bound only to an account kind the bootstrap authority serves" do
-    authority = BaseSelectorBootstrapAuthority.new(surface: :app, principal: clients(:one))
-
-    error = assert_raises(ArgumentError) { authority.send(:bind_avatar_account!, avatar: nil, account: Object.new) }
-
-    assert_match(/unsupported account class: Object/, error.message)
-  end
 end

@@ -556,19 +556,6 @@ class SignFlowTest < ActiveSupport::TestCase
     assert_equal "mfa", cycle.step
   end
 
-  test "canonical_step_for_status returns the mapped step for sign-in flows" do
-    cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
-    mfa_id = ClientSignInFlow.status_id_for("MFA_PENDING")
-
-    assert_equal "mfa", cycle.send(:canonical_step_for_status, mfa_id)
-  end
-
-  test "canonical_step_for_status returns nil when STEP_BY_STATUS_ID is absent" do
-    cycle = ClientSignUpFlow.create!(cycle_attrs(ClientSignUpFlow))
-
-    assert_nil cycle.send(:canonical_step_for_status, cycle.status_id)
-  end
-
   private
 
   def build_cycle(cycle_class, nonce: "nonce", **overrides)

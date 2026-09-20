@@ -21,26 +21,6 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
   end
 
-  test "every surface recognizes a token as current through its device session identifier" do
-    token = Struct.new(:id, :public_id, :device_session_id).new(41, "token-session", 7)
-    current_token = Struct.new(:id, :public_id, :device_session_id).new(42, "rotated-token", 7)
-
-    [
-      Base::App::Identity::SessionsController,
-      Base::Com::Identity::SessionsController,
-      Base::Org::Identity::SessionsController,
-    ].each do |controller_class|
-      controller = controller_class.new
-      controller.stub(:current_session, current_token) do
-        controller.stub(:current_session_public_id, "device-session") do
-          current = controller.send(:current_session_record?, token)
-
-          assert_predicate current, :itself, controller_class.name
-        end
-      end
-    end
-  end
-
   test "self-service routes cannot revoke every session" do
     {
       @app_host => "/identity/sessions",

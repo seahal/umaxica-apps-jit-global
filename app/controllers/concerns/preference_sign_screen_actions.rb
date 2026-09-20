@@ -123,11 +123,9 @@ module PreferenceSignScreenActions
     )
   end
 
-  def preference_index_path
-    preference_index_url
-  end
-
   def preference_index_path_without_context
     preference_index_url(PreferenceGlobal::PARAM_CONTEXT_KEYS.index_with { nil })
   end
+
+  private :reset_preference_edit_url, :preference_index_path_without_context
 end

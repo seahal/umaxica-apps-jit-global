@@ -77,10 +77,6 @@ module ActorSupport
     Actor.authz.policy_user || safe_current_resource
   end
 
-  def _reset_current_state
-    Actor.clear
-  end
-
   def resolved_current_context
     if Actor.tld.present?
       return HostContextResolver::Context.new(
@@ -337,22 +333,6 @@ module ActorSupport
     nil
   end
 
-  def preference_from_record(preference_record, cookie:)
-    Actor::Preference.new(
-      language: preference_record_value(preference_record, :language),
-      region: preference_record_value(preference_record, :region),
-      timezone: preference_record_value(preference_record, :timezone),
-      theme: preference_record_value(preference_record, :theme),
-      currency: preference_record_value(preference_record, :currency),
-      date_format: preference_record_value(preference_record, :date_format),
-      time_format: preference_record_value(preference_record, :time_format),
-      motion: preference_record_value(preference_record, :motion),
-      density: preference_record_value(preference_record, :density),
-      page_size: preference_record_value(preference_record, :page_size),
-      cookie: cookie,
-    )
-  end
-
   def preference_with_request_overlay(preference)
     return preference unless respond_to?(:requested_context, true)
 
@@ -404,19 +384,6 @@ module ActorSupport
       "jp" => "ja",
       "us" => "en",
     }[region.to_s.downcase]
-  end
-
-  def preference_record_value(preference_record, name)
-    return preference_adult_content_gate_value(preference_record) if name == :adult_content_gate
-
-    value = preference_record.public_send(name) if preference_record.respond_to?(name)
-    value.presence || Actor::Preference::DEFAULTS.fetch(name)
-  end
-
-  def preference_adult_content_gate_value(preference_record)
-    association = "#{preference_record.class.name.underscore}_adult_content_gate"
-    stopper = preference_record.public_send(association) if preference_record.respond_to?(association)
-    stopper&.option&.name || "nothing"
   end
 
   def set_current_observability

@@ -68,6 +68,8 @@ module ConfigValues
 
     "https://#{raw}"
   end
+
+  private_class_method :validate_origin_uri!, :sanitize_origin_uri!
 end
 
 ConfigValuesOriginValue = ConfigValues::OriginValue

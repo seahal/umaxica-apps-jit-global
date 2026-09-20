@@ -10,10 +10,6 @@ module EmailValidation
     JitUtilsEmailValidator.normalize(email)
   end
 
-  def valid_email_format?(email)
-    JitUtilsEmailValidator.valid?(email)
-  end
-
   def identity_email_model
     ClientEmail
   end

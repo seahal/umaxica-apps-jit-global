@@ -67,16 +67,5 @@ module Publishing
       assert_equal 1, @setup.reload.depth
       assert_equal 2, @install.reload.depth
     end
-
-    test "a failed move rolls back every row it had already touched" do
-      original_parent = @setup.parent_id
-
-      assert_raises(ActiveRecord::StatementInvalid) do
-        MoveTaxonomySubtreeOperation.new(term: @setup, new_parent: @setup).send(:apply_move)
-      end
-
-      assert_equal original_parent, @setup.reload.parent_id
-      assert_equal 1, @setup.depth
-    end
   end
 end

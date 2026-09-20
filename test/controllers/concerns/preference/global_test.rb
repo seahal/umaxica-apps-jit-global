@@ -42,22 +42,6 @@ class PreferenceGlobalTest < ActiveSupport::TestCase
     assert_equal({ ri: "us", lx: "en", ct: "dr", tz: "utc" }, context)
   end
 
-  test "current_region_identifier canonicalizes valid and invalid params" do
-    controller = PreferenceGlobalTestController.new
-    controller.request = ActionDispatch::TestRequest.create
-    controller.params = ActionController::Parameters.new(ri: "Us")
-
-    assert_equal "us", controller.send(:current_region_identifier)
-
-    controller.params = ActionController::Parameters.new(ri: "https://evil.example")
-
-    assert_equal "jp", controller.send(:current_region_identifier)
-
-    controller.params = ActionController::Parameters.new
-
-    assert_equal "jp", controller.send(:current_region_identifier)
-  end
-
   test "requested_context ignores unsupported lx values" do
     controller = PreferenceGlobalTestController.new
     controller.request = ActionDispatch::TestRequest.create
@@ -96,59 +80,6 @@ class PreferenceGlobalTest < ActiveSupport::TestCase
     context = controller.requested_context
 
     assert_equal({ ri: "jp" }, context)
-  end
-
-  test "request_context exposes all public request context keys through one safe reader" do
-    controller = PreferenceGlobalTestController.new
-    controller.request = ActionDispatch::TestRequest.create
-    controller.params = ActionController::Parameters.new(
-      ri: "US",
-      pt: "opaque-token",
-      lx: "EN",
-      ct: "DR",
-      tz: "Asia/Tokyo",
-      cu: "JPY",
-      df: "ISO",
-      tf: "Hour_24",
-      mo: "Reduced",
-      dn: "Compact",
-      ps: "50",
-      bad: "value",
-    )
-
-    assert_equal(
-      {
-        ri: "us",
-        pt: "opaque-token",
-        lx: "en",
-        ct: "dr",
-        tz: "asia/tokyo",
-        cu: "jpy",
-        df: "iso",
-        tf: "24",
-        mo: "rd",
-        dn: "cp",
-        ps: "50",
-      },
-      controller.request_context,
-    )
-    assert_equal "us", controller.send(:request_context_ri)
-    assert_equal "opaque-token", controller.send(:request_context_pt)
-    assert_equal(
-      {
-        ri: "us",
-        lx: "en",
-        ct: "dr",
-        tz: "asia/tokyo",
-        cu: "jpy",
-        df: "iso",
-        tf: "24",
-        mo: "rd",
-        dn: "cp",
-        ps: "50",
-      },
-      controller.requested_context,
-    )
   end
 
   test "effective_context lets get parameters override jwt preference values" do
@@ -226,24 +157,6 @@ class PreferenceGlobalTest < ActiveSupport::TestCase
     controller.params = ActionController::Parameters.new(ri: "us", lx: "EN", ct: "DR", tz: "UTC")
 
     assert_equal({ ri: "us", lx: "en", ct: "dr", tz: "utc" }, controller.default_url_options)
-  end
-
-  test "get_region uses persisted context when ri is missing" do
-    controller = PreferenceGlobalTestController.new
-    controller.request = ActionDispatch::TestRequest.create
-    controller.params = ActionController::Parameters.new
-    controller.define_singleton_method(:preference_payload_preferences) { { "ri" => "us" } }
-
-    assert_equal "us", controller.send(:get_region)
-  end
-
-  test "get_region keeps explicit ri ahead of persisted context" do
-    controller = PreferenceGlobalTestController.new
-    controller.request = ActionDispatch::TestRequest.create
-    controller.params = ActionController::Parameters.new(ri: "jp")
-    controller.define_singleton_method(:preference_payload_preferences) { { "ri" => "us" } }
-
-    assert_equal "jp", controller.send(:get_region)
   end
 
   test "ensure_required_ri! redirects when required ri differs" do

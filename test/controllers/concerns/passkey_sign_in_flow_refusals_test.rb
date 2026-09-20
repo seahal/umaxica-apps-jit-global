@@ -84,20 +84,4 @@ class PasskeySignInFlowRefusalsTest < ActiveSupport::TestCase
                    "no path may leave a replayable challenge behind"
     end
   end
-
-  test "an identifier is accepted by default and its two refusal keys agree" do
-    harness = Harness.new
-
-    assert harness.invoke(:valid_passkey_identifier?, "anything")
-    assert_equal harness.invoke(:passkey_identifier_required_error_key),
-                 harness.invoke(:passkey_identifier_invalid_error_key)
-  end
-
-  test "a restricted sign-in is recognised from the result and no surface claims a domain status" do
-    harness = Harness.new
-
-    assert harness.invoke(:passkey_success_restricted?, { restricted: true })
-    assert_not harness.invoke(:passkey_success_restricted?, { restricted: false })
-    assert_not harness.invoke(:handle_domain_specific_login_status, {})
-  end
 end

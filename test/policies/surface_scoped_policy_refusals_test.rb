@@ -22,23 +22,6 @@ class SurfaceScopedPolicyRefusalsTest < ActiveSupport::TestCase
     assert_not OrganizationMembershipPolicy.new(Object.new, user: nil).manage_memberships?
   end
 
-  # These raise rather than answer false: an unmapped class means the policy was
-  # extended without teaching it the new association, and a silent false would
-  # read as "denied" while actually being "not implemented".
-  test "an account or membership class with no mapping is named in the error" do
-    policy = OrganizationMembershipPolicy.new(Object.new, user: operators(:one))
-
-    account_error =
-      assert_raises(ArgumentError) { policy.send(:account_identity_association, Operator) }
-
-    assert_match(/unsupported account class: Operator/, account_error.message)
-
-    membership_error =
-      assert_raises(ArgumentError) { policy.send(:membership_account_association, Operator) }
-
-    assert_match(/unsupported membership class: Operator/, membership_error.message)
-  end
-
   # Lifecycle requests are staff-only, and an operator may never approve or
   # execute their own -- that separation is the whole point of the request.
   test "lifecycle requests are refused to anyone who is not an operator" do

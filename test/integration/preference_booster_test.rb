@@ -172,18 +172,4 @@ class PreferenceBoosterTest < ActionDispatch::IntegrationTest
 
     assert_response :success
   end
-
-  test "deletes preference cookie" do
-    get "/test_preference", env: { "HTTP_HOST" => "localhost" } # generate tokens
-    delete "/test_cookie_delete", env: { "HTTP_HOST" => "localhost" }
-
-    assert_response :success
-  end
-
-  test "resets preferences to defaults" do
-    get "/test_preference", env: { "HTTP_HOST" => "localhost" } # generate tokens
-    post "/test_reset_defaults", env: { "HTTP_HOST" => "localhost" }
-
-    assert_response :success
-  end
 end

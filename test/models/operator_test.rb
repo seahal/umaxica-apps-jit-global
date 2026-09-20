@@ -403,44 +403,6 @@ class OperatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "retry_on_public_id_collision regenerates public_id and retries" do
-    staff = Operator.new
-    generated_ids = [SECOND_VALID_PUBLIC_ID]
-    attempts = 0
-
-    staff.stub(:assign_public_id!, -> { staff.public_id = generated_ids.shift }) do
-      staff.send(:retry_on_public_id_collision) do
-        attempts += 1
-        raise ActiveRecord::RecordNotUnique, "duplicate key" if attempts == 1
-      end
-    end
-
-    assert_equal 2, attempts
-    assert_equal SECOND_VALID_PUBLIC_ID, staff.public_id
-  end
-
-  test "retry_on_public_id_collision logs and raises after retry limit" do
-    staff = Operator.new(public_id: VALID_PUBLIC_ID)
-    logger = Minitest::Mock.new
-
-    logger.expect(:error, nil, [String])
-    logger.expect(:error, nil, [String])
-
-    error =
-      assert_raises(ActiveRecord::RecordNotUnique) do
-        Rails.stub(:logger, logger) do
-          staff.stub(:assign_public_id!, -> { staff.public_id = VALID_PUBLIC_ID }) do
-            staff.send(:retry_on_public_id_collision) do
-              raise ActiveRecord::RecordNotUnique, "duplicate key"
-            end
-          end
-        end
-      end
-
-    assert_equal "duplicate key", error.message
-    logger.verify
-  end
-
   test "determinism: auto-generated public_id does not collide with existing records" do
     # Create multiple staffs and ensure no collision
     Prosopite.pause { 10.times { Operator.create! } }

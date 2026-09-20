@@ -89,19 +89,4 @@ class AppPreferenceCookieTest < ActiveSupport::TestCase
     assert loaded.functional
     assert loaded.consented
   end
-
-  test "set_defaults fills nil booleans on new records" do
-    cookie = AppPreferenceCookie.new(preference: @preference)
-    cookie.targetable = nil
-    cookie.performant = nil
-    cookie.functional = nil
-    cookie.consented = nil
-
-    cookie.send(:set_defaults)
-
-    assert_not cookie.targetable
-    assert_not cookie.performant
-    assert_not cookie.functional
-    assert_not cookie.consented
-  end
 end

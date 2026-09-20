@@ -228,6 +228,9 @@ module Umaxica
       rescue ArgumentError, TypeError => e
         raise ConfigurationError, "POSTGRESQL_PORT must be an integer", cause: e
       end
+
+      private_class_method :validate_configuration!, :validate_url!, :reject_unhandled_database_url_overrides!,
+                           :query_catalog!, :effective_test_configurations
     end
   end
 end

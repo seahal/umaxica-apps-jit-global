@@ -13,16 +13,6 @@ class BranchCoverageBatch37ThresholdCloseTest < ActiveSupport::TestCase
     assert_not AppleOnlyCredentialStatus.new(false).call
   end
 
-  test "JitSecurityTurnstileConfig fetch early-returns when Rails is undefined" do
-    rails = Object.const_get(:Rails)
-    Object.send(:remove_const, :Rails)
-    begin
-      assert_nil JitSecurityTurnstileConfig.send(:fetch, :CLOUDFLARE_TURNSTILE_VISIBLE_SITE_KEY)
-    ensure
-      Object.const_set(:Rails, rails)
-    end
-  end
-
   test "OrgOperatorLifecycleApprove rejects non-pending requests" do
     request = Object.new
     request.define_singleton_method(:pending?) { false }
@@ -31,44 +21,6 @@ class BranchCoverageBatch37ThresholdCloseTest < ActiveSupport::TestCase
 
     assert_not result.success
     assert_match(/pending/i, result.error.to_s)
-  end
-
-  test "SignInDashboardParticipant normalize_item blank and wrong type" do
-    participant = SignInDashboardParticipant.allocate
-
-    assert_nil participant.send(:normalize_item, nil)
-    assert_nil participant.send(:normalize_item, "")
-    assert_raises(ArgumentError) { participant.send(:normalize_item, { a: 1 }) }
-  end
-
-  test "BaseSwitcherAuthority current_selection blank session" do
-    authority = BaseSwitcherAuthority.allocate
-    authority.instance_variable_set(:@session, nil)
-
-    assert_nil authority.send(:current_selection)
-  end
-
-  test "ClientSecretCredentialsDestroy audit_class Operator vs Client" do
-    destroyer = ClientSecretCredentialsDestroy.allocate
-    destroyer.instance_variable_set(:@actor, Operator.new)
-
-    assert_equal OperatorChronicle, destroyer.send(:audit_class)
-    destroyer.instance_variable_set(:@actor, Client.new)
-    destroyer.instance_variable_set(:@audit_class, nil)
-
-    assert_equal ClientChronicle, destroyer.send(:audit_class)
-  end
-
-  test "Publishing archive and end forms message_for else arms" do
-    archive = Publishing::ArchiveEntryForm.new
-
-    assert_equal "too_long", archive.send(:message_for, :reason, :too_long)
-    assert_equal "blank", archive.send(:message_for, :other, :blank)
-
-    ending = Publishing::EndPublicationForm.new
-
-    assert_equal "too_long", ending.send(:message_for, :reason, :too_long)
-    assert_equal "blank", ending.send(:message_for, :other, :blank)
   end
 
   test "Publishing ArchiveEntryOperation refuses active publications" do
@@ -128,13 +80,6 @@ class BranchCoverageBatch37ThresholdCloseTest < ActiveSupport::TestCase
     assert_predicate ctx["user_agent_digest"], :present?
   end
 
-  test "IdentityTotpCeremonyCandidateStore candidate_from rejects invalid record" do
-    store = IdentityTotpCeremonyCandidateStore.new
-    record = IdentityTotpCeremonyCandidate.new
-    record.define_singleton_method(:valid?) { false }
-    assert_raises(IdentityTotpCeremonyContract::Error) { store.send(:candidate_from, record) }
-  end
-
   test "Webauthn AuthenticatorMetadata nil resolution safe navigation then arms" do
     context = Object.new
     %i(
@@ -153,21 +98,6 @@ end
 
 class BranchCoverageBatch37ControllerArmsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
-
-  test "Org verification passkeys props errors_sentence then arm" do
-    controller = Auth::Org::Verification::PasskeysController.new
-    controller.instance_variable_set(:@verification_errors, %w(alpha beta))
-    controller.instance_variable_set(:@passkey_challenge_id, "chal")
-    controller.instance_variable_set(:@passkey_request_options, { challenge: "x" })
-    controller.define_singleton_method(:t) { |*_a, **_k| "t" }
-    controller.define_singleton_method(:params) { ActionController::Parameters.new(ri: "jp") }
-    controller.define_singleton_method(:auth_org_verification_passkey_path) { |**_| "/passkey" }
-    controller.define_singleton_method(:auth_org_verification_path) { |**_| "/verification" }
-
-    props = controller.send(:verification_passkey_props)
-
-    assert_includes props[:errors_sentence], "alpha"
-  end
 
   test "BirthdatesController show props with birthdate present" do
     controller = Base::App::Identity::BirthdatesController.new
@@ -212,78 +142,5 @@ class BranchCoverageBatch37ControllerArmsTest < ActiveSupport::TestCase
     controller.new
 
     assert_not rendered
-  end
-
-  test "ProblemDetailsRendering includes errors when present" do
-    controller = Class.new(ApplicationController) { include ProblemDetailsRendering }.new
-    request = ActionDispatch::TestRequest.create
-    controller.set_request!(request)
-    problem = Struct.new(:uri, :title, :status_code).new("about:blank", "Bad", 422)
-    doc = controller.send(:problem_document, problem, detail: "x", errors: [{ detail: "y" }])
-
-    assert_equal [{ detail: "y" }], doc[:errors]
-  end
-
-  test "McpEndpoint render_mcp_response blank payload uses head" do
-    controller = Class.new(ApplicationController) do
-      include McpEndpoint
-
-      def mcp_surface_identity
-        Struct.new(:server_name, :surface, :realm).new("test", :app, :base)
-      end
-
-      def mcp_allowed_hosts
-        ["example.test"]
-      end
-    end.new
-    request = ActionDispatch::TestRequest.create
-    controller.set_request!(request)
-    controller.set_response!(ActionDispatch::TestResponse.new)
-
-    transport = Object.new
-    transport.define_singleton_method(:handle_request) { |_r| [204, { "X-Test" => "1" }, [""]] }
-    MCP::Server::Transports::StreamableHTTPTransport.stub(:new, transport) do
-      controller.send(:render_mcp_response)
-    end
-
-    assert_equal 204, controller.response.status
-  end
-
-  test "AuthenticationClient sign_app_redirect_host returns matching request host" do
-    controller = Class.new(ApplicationController) { include AuthenticationClient }.new
-    request = ActionDispatch::TestRequest.create
-    request.host = "auth.app.localhost"
-    controller.set_request!(request)
-
-    old = ENV["PUBLIC_AUTH_SERVICE_URL"]
-    ENV["PUBLIC_AUTH_SERVICE_URL"] = "https://auth.app.localhost"
-    begin
-      assert_equal "auth.app.localhost", controller.send(:sign_app_redirect_host)
-    ensure
-      if old.nil?
-        ENV.delete("PUBLIC_AUTH_SERVICE_URL")
-      else
-        ENV["PUBLIC_AUTH_SERVICE_URL"] = old
-      end
-    end
-  end
-
-  test "IdentityRecoveryPage appeal nil when case is not appealable" do
-    controller = Class.new(ApplicationController) do
-      include IdentityRecoveryPage
-
-      def t(*_args, **_kwargs) = "t"
-
-      def base_app_identity_recovery_completion_path(**_) = "/restore"
-
-      def base_app_identity_recovery_appeals_path(**_) = "/appeals"
-    end.new
-    enforcement_case = Object.new
-    enforcement_case.define_singleton_method(:public_id) { "ec-1" }
-    enforcement_case.define_singleton_method(:kind) { "method_protection" }
-    enforcement_case.define_singleton_method(:appeal) { nil }
-    props = controller.send(:serialize_recovery_case, enforcement_case)
-
-    assert_nil props[:appeal]
   end
 end

@@ -314,24 +314,3 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     ActionDispatch::TestRequest.create(env)
   end
 end
-
-class Oidc::AcmeServiceOriginTest
-  test "target parsing rejects relative non-path values and nil decisions stay nil-safe" do
-    origin = build_origin("www.umaxica.app", default_scheme: "https")
-
-    assert_nil origin.send(:parse_target_url, "authorize")
-    assert_nil origin.send(:request_site_key, "")
-
-    decision = origin.send(
-      :reject_decision,
-      "invalid_url",
-      request: test_request(host: "log.umaxica.app", scheme: "https"),
-      target: nil,
-    )
-
-    assert_nil decision.target_scheme
-    assert_nil decision.target_host
-    assert_nil decision.target_port
-    assert_nil decision.target_path
-  end
-end

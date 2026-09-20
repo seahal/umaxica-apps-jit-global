@@ -114,10 +114,6 @@ module Base
         oidc_base_authority_host
       end
 
-      def oidc_base_host
-        ENV.fetch("PUBLIC_BASE_STAFF_URL")
-      end
-
       private
 
       def actor_verification_path(**args)

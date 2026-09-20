@@ -587,22 +587,6 @@ class HealthEndpointsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "missing and inherited health profiles fail loudly" do
-    missing =
-      Class.new(::ApplicationController) do
-        include ::HealthCheckRendering
-      end
-    inherited_parent =
-      Class.new(::ApplicationController) do
-        include ::HealthCheckRendering
-      end
-    inherited_parent.const_set(:HEALTH_PROFILE, Health::Profiles::App)
-    inherited_child = Class.new(inherited_parent)
-
-    assert_raises(Health::MissingProfileError) { missing.new.send(:health_profile) }
-    assert_raises(Health::MissingProfileError) { inherited_child.new.send(:health_profile) }
-  end
-
   # ------------------------------------------------------------------------------------------------
   # Machine JSON aggregate: GET /api/v0/health.json
   # ------------------------------------------------------------------------------------------------

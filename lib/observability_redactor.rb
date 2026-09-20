@@ -97,4 +97,6 @@ module ObservabilityRedactor
       scrubbed.gsub(pattern, REDACTED)
     end
   end
+
+  private_class_method :scrub_entry, :url_like_key?, :scrub_string
 end

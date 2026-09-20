@@ -47,15 +47,4 @@ class AuthOrgVerificationSetupsPagePropsTest < ActiveSupport::TestCase
 
     assert_equal "/verification", @harness.redirected
   end
-
-  test "the page offers a way back only when the ceremony carried one, and lists only missing methods" do
-    @harness.instance_variable_set(:@pt, "signed-pt")
-    @harness.instance_variable_set(:@pt_destination, "/settings")
-    @harness.instance_variable_set(:@missing_methods, [])
-
-    props = @harness.invoke(:setup_props)
-
-    assert_equal "/settings", props.fetch(:back_link).fetch(:href)
-    assert_empty props.fetch(:methods)
-  end
 end

@@ -7,7 +7,7 @@ require "test_helper"
 class OidcCallbackTestController < ApplicationController
   class << self
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
-    attr_accessor :login_result_for_test, :last_login_kwargs, :last_session_limit_gate_pt, :hard_reject_payload
+    attr_accessor :login_result_for_test, :last_login_kwargs, :hard_reject_payload
     # rubocop:enable ThreadSafety/ClassAndModuleAttributes
   end
 
@@ -90,7 +90,6 @@ class OidcCallbackTestController < ApplicationController
     @logged_in_resource = resource
     @login_kwargs = kwargs
     self.class.last_login_kwargs = kwargs
-    self.class.last_session_limit_gate_pt = send(:session_limit_gate_pt)
     self.class.login_result_for_test || { status: :success }
   end
 
@@ -107,7 +106,6 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     @authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5).to_i
     OidcCallbackTestController.login_result_for_test = nil
     OidcCallbackTestController.last_login_kwargs = nil
-    OidcCallbackTestController.last_session_limit_gate_pt = nil
     OidcCallbackTestController.hard_reject_payload = nil
 
     Rails.application.routes.draw do
@@ -498,7 +496,6 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_redirected_to "/sign/in/session"
-    assert_equal "/settings?ri=jp", OidcCallbackTestController.last_session_limit_gate_pt
     assert OidcCallbackTestController.last_login_kwargs.fetch(:skip_login_cooldown)
     assert_not OidcCallbackTestController.last_login_kwargs.fetch(:bootstrap_actor, false)
   end
@@ -600,133 +597,6 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
           get "/oidc/callback", params: { code: "abc", state: "state" }
         end
       end
-    end
-  end
-
-  test "default provision_rp_account_from_id_token_payload! raises NotImplementedError" do
-    dummy_class =
-      Class.new(ApplicationController) do
-        def self.declare_authentication_mode!(*)
-        end
-
-        include OidcCallback
-      end
-
-    assert_raises(NotImplementedError) do
-      dummy_class.new.send(:provision_rp_account_from_id_token_payload!, {}, "aud")
-    end
-  end
-
-  # The legacy single-flow session keys are only cleared when the callback that
-  # arrived is the one they belong to; a callback for some other state must leave
-  # another tab's in-flight flow alone.
-  test "clear_legacy_oidc_flow_if_current! only clears the flow it matches" do
-    dummy_class =
-      Class.new(ApplicationController) do
-        def self.declare_authentication_mode!(*)
-        end
-
-        include OidcCallback
-
-        attr_writer :fake_session
-
-        def session = @fake_session
-      end
-
-    controller = dummy_class.new
-    controller.fake_session = {
-      oidc_state: "state-a", oidc_code_verifier: "verifier", oidc_nonce: "nonce", oidc_pt: "/after",
-    }
-
-    controller.send(:clear_legacy_oidc_flow_if_current!, "state-b")
-
-    assert_equal "state-a", controller.session[:oidc_state]
-
-    controller.send(:clear_legacy_oidc_flow_if_current!, "state-a")
-
-    assert_empty controller.session
-  end
-
-  # The RP logout sid is written onto the session row so a later back-channel logout
-  # can find it. A non-UUID sid, a session that cannot take column writes, or a token
-  # row with neither column must all leave the row alone.
-  test "bind_oidc_rp_logout_session! writes the sid only onto a session row that can take it" do
-    dummy_class =
-      Class.new(ApplicationController) do
-        def self.declare_authentication_mode!(*)
-        end
-
-        include OidcCallback
-
-        attr_writer :session_record
-
-        def oidc_client_id = "test-client"
-
-        def token_record_connection_owner(_klass) = ActiveRecord::Base
-      end
-
-    controller = dummy_class.new
-    writable = Class.new do
-      attr_reader :updated
-
-      def has_attribute?(name) = %i(oidc_sid oidc_client_id).include?(name.to_sym)
-
-      def respond_to_missing?(name, include_private = false)
-        name.to_sym == :update_columns || super
-      end
-
-      def update_columns(*) = nil
-
-      def update!(**attributes) = @updated = attributes
-    end.new
-    controller.instance_variable_set(:@current_session, writable)
-
-    controller.send(:bind_oidc_rp_logout_session!, { "sid" => "not-a-uuid" })
-
-    assert_nil writable.updated
-
-    sid = SecureRandom.uuid
-    controller.send(:bind_oidc_rp_logout_session!, { "sid" => sid })
-
-    assert_equal({ oidc_sid: sid, oidc_client_id: "test-client" }, writable.updated)
-
-    controller.instance_variable_set(:@current_session, nil)
-
-    assert_nil controller.send(:bind_oidc_rp_logout_session!, { "sid" => SecureRandom.uuid })
-  end
-
-  test "default oidc_client_id raises NotImplementedError" do
-    # create a dummy controller without overriding
-    dummy_class =
-      Class.new(ApplicationController) do
-        def self.declare_authentication_mode!(*)
-        end
-
-        include OidcCallback
-      end
-
-    assert_raises(NotImplementedError) do
-      dummy_class.new.send(:oidc_client_id)
-    end
-  end
-
-  test "oidc_client_secret_credential uses ClientRegistry" do
-    dummy_class =
-      Class.new(ApplicationController) do
-        def self.declare_authentication_mode!(*)
-        end
-
-        include OidcCallback
-
-        define_method(:oidc_client_id) do
-          "test-client"
-        end
-      end
-
-    client_mock = Struct.new(:client_secret).new("mock_secret_credential")
-
-    OidcClientRegistry.stub(:find, client_mock) do
-      assert_equal "mock_secret_credential", dummy_class.new.send(:oidc_client_secret)
     end
   end
 end

@@ -14,18 +14,6 @@ class PreferenceJwtTest < ActiveSupport::TestCase
     end
   end
 
-  test "parse_keyset rescues JSON::ParserError and returns empty hash" do
-    assert_equal({}, PreferenceJwtConfiguration.send(:parse_keyset, "invalid_json"))
-  end
-
-  test "parse_keyset returns empty hash for non-hash JSON" do
-    assert_equal({}, PreferenceJwtConfiguration.send(:parse_keyset, "[\"array\"]"))
-  end
-
-  test "decode_key rescues PKeyError" do
-    assert_nil PreferenceJwtConfiguration.send(:decode_key, Base64.encode64("invalid_der_data"))
-  end
-
   test "Token.encode returns nil on error" do
     PreferenceJwtConfiguration.stub(:private_key_for_active, nil) do
       assert_nil PreferenceToken.encode({}, host: "host", preference_type: "type", public_id: "id", jti: "jti")

@@ -92,4 +92,5 @@ module TimezoneIdentifier
   def canonical_identifier(downcased)
     CANONICAL_IDENTIFIERS[downcased]
   end
+  private_class_method :canonical_identifier
 end

@@ -138,10 +138,6 @@ module SocialAuth
     session[SOCIAL_INTENT_SESSION_KEY] || "login"
   end
 
-  def current_social_auth_pt
-    session[SOCIAL_PT_SESSION_KEY].presence
-  end
-
   def current_social_auth_entry
     session[SOCIAL_ENTRY_SESSION_KEY].presence
   end

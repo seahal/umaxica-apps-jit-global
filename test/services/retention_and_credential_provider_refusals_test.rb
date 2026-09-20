@@ -10,25 +10,6 @@ require "test_helper"
 class RetentionAndCredentialProviderRefusalsTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_visibilities, :operators, :operator_statuses
 
-  test "each actor's retention checks read its own surface's enforcement table" do
-    job = RetentionPurgeJob.new
-
-    assert_equal AppEnforcementCase, job.send(:enforcement_case_class_for, Client.new)
-    assert_equal ComEnforcementCase, job.send(:enforcement_case_class_for, Visitor.new)
-    assert_equal OrgEnforcementCase, job.send(:enforcement_case_class_for, Operator.new)
-    assert_nil job.send(:enforcement_case_class_for, Object.new)
-  end
-
-  # Only the two surfaces that accept privacy requests have a relation to read;
-  # anything else raises rather than purging against no request at all.
-  test "an actor with no privacy request relation is named in the error" do
-    job = RetentionPurgeJob.new
-
-    error = assert_raises(ArgumentError) { job.send(:privacy_requests_for, operators(:one)) }
-
-    assert_match(/unsupported retention actor: Operator/, error.message)
-  end
-
   # The Apple client secret is a signed assertion; every input it is signed with
   # has to be present, or the assertion is minted against a partial identity.
   test "each missing Apple credential input is refused by name" do

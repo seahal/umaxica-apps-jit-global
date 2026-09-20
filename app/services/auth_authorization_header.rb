@@ -52,5 +52,5 @@ module AuthAuthorizationHeader
   def normalize_scheme(header)
     header.sub(/\A(token|bearer)\b/i) { |scheme| scheme.capitalize }
   end
-  private_class_method :authorization_value_for, :normalize_scheme, :token_for_scheme
+  private_class_method :dpop_token, :authorization_value_for, :normalize_scheme, :token_for_scheme
 end

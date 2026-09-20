@@ -159,4 +159,54 @@ class ChainSealTest < ActiveSupport::TestCase
     assert_equal seal.as_json, seal.to_h
     assert_equal "to_h-kid", seal.to_h.fetch(:kid)
   end
+  test "parse refuses a compact seal whose fixed fields were rewritten" do
+    parts = ChainSeal.seal(payload: @payload, kid: "test-kid", private_key: @private_key).compact.split("$", -1)
+    rewritten = {
+      "version" => [1, "bc2", "unsupported version"],
+      "canonicalization" => [2, "json", "unsupported canonicalization"],
+      "kid" => [5, "kid with space", "kid contains unsupported characters"],
+      "empty signature" => [8, "", "signature is required"],
+      "non-base64url signature" => [8, "abc+/def", "signature must be base64url"],
+      "short signature" => [8, "AAAA", "signature must be #{ChainSeal::ES384_RAW_SIGNATURE_BYTES} bytes"],
+    }
+
+    rewritten.each do |label, (index, value, message)|
+      tampered = parts.dup
+      tampered[index] = value
+
+      error = assert_raises(ChainSeal::FormatError, label) { ChainSeal.parse(tampered.join("$")) }
+
+      assert_includes error.message, message, label
+    end
+  end
+
+  test "parse refuses a padded signature as a key-value compact string" do
+    parts = ChainSeal.seal(payload: @payload, kid: "test-kid", private_key: @private_key).compact.split("$", -1)
+    parts[8] = "#{parts[8]}=="
+
+    assert_raises(ChainSeal::FormatError) { ChainSeal.parse(parts.join("$")) }
+  end
+
+  test "seal refuses a public-only key" do
+    public_only = OpenSSL::PKey::EC.new(@private_key.public_to_der)
+
+    error =
+      assert_raises(ChainSeal::FormatError) do
+        ChainSeal.seal(payload: @payload, kid: "test-kid", private_key: public_only)
+      end
+    assert_includes error.message, "private key is required"
+  end
+
+  test "verify refuses a signature produced by another key over the same block" do
+    genuine = ChainSeal.seal(payload: @payload, kid: "test-kid", private_key: @private_key)
+    forged = ChainSeal.seal(payload: @payload, kid: "test-kid", private_key: OpenSSL::PKey::EC.generate("secp384r1"))
+    parts = genuine.compact.split("$", -1)
+    parts[8] = forged.signature
+
+    error =
+      assert_raises(ChainSeal::VerificationError) do
+        ChainSeal.verify(compact: parts.join("$"), payload: @payload, public_key: @private_key)
+      end
+    assert_equal "invalid signature", error.message
+  end
 end

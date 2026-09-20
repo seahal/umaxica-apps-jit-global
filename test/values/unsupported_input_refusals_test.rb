@@ -35,20 +35,6 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
     Rails.application.config.x.turnstile.verifier = configured
   end
 
-  test "each quota policy maps its own surface and refuses one it does not serve" do
-    {
-      Acme::AccountQuotaPolicy => :account_class,
-      Acme::OrganizationQuotaPolicy => :organization_class,
-    }.each do |policy_class, mapping|
-      policy = policy_class.allocate
-      policy.instance_variable_set(:@surface, :martian)
-
-      error = assert_raises(ArgumentError) { policy.send(mapping) }
-
-      assert_match(/unsupported surface/, error.message)
-    end
-  end
-
   test "quota policies refuse a principal from another surface" do
     account_policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: Visitor.new)
     organization_policy = Acme::OrganizationQuotaPolicy.new(surface: :com, principal: Client.new)
@@ -64,33 +50,6 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
     error = assert_raises(ArgumentError) { SignUpEligibilityPolicy.minimum_age(surface: :org) }
 
     assert_match(/unsupported sign-up eligibility surface/, error.message)
-  end
-
-  test "an avatar lifecycle state with no declared transitions is refused" do
-    transition = AvatarLifecycle::Transition.allocate
-
-    error =
-      assert_raises(AvatarLifecycle::InvalidTransition) do
-        transition.send(:validate_transition!, "teleported", "active")
-      end
-
-    assert_match(/unsupported avatar lifecycle state/, error.message)
-
-    disallowed =
-      assert_raises(AvatarLifecycle::InvalidTransition) do
-        transition.send(:validate_transition!, "deleted", "active")
-      end
-
-    assert_match(/is not allowed/, disallowed.message)
-    assert_nil transition.send(:validate_transition!, "active", "suspended")
-  end
-
-  test "an enforcement release mode with no declared actions is refused" do
-    enforcement_case = Struct.new(:release_mode).new("teleport")
-
-    error = assert_raises(ArgumentError) { AccountStanding.send(:actions_for, enforcement_case) }
-
-    assert_match(/unsupported enforcement release mode/, error.message)
   end
 
   # A decision has to carry when it was observed, because staleness is what

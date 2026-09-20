@@ -84,15 +84,6 @@ module SignUpFlowTicket
     has_attribute?(:cleanup_status_id) && cleanup_status_id == cleanup_status_id_for(:failed)
   end
 
-  def advance_sign_up_to_checkpoint!(now: Time.current)
-    transition_sign_up_to!(
-      "CHECKPOINT_PENDING",
-      step: "checkpoint",
-      allowed_from: %w(CONTACT_VERIFIED GUARDRAIL_PENDING),
-      now: now,
-    )
-  end
-
   def complete_sign_up!(step: "completed", now: Time.current)
     changes = { step: step, state: "COMPLETED" }
     changes[:completed_at] = now if has_attribute?(:completed_at)

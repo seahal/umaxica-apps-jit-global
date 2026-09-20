@@ -36,4 +36,6 @@ class JitSecurityTurnstileConfig
       Rails.app.creds.option(key)
     end
   end
+
+  private_class_method :visible_site_key
 end

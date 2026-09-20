@@ -249,29 +249,4 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
     assert_predicate inertia_props.fetch("form").fetch("action"), :present?
     assert_predicate inertia_props.dig("form", "code_label") || inertia_props.fetch("code_label"), :present?
   end
-
-  test "com step up email otp template allows one time code autocomplete" do
-    controller = Auth::Com::Verification::EmailsController.new
-    request = ActionDispatch::TestRequest.create
-    request.path_parameters = {
-      action: "edit",
-      controller: "auth/com/verification/emails",
-      id: "email-nonce",
-      ri: "jp",
-    }
-    controller.set_request!(request)
-    controller.set_response!(ActionDispatch::TestResponse.new)
-    controller.instance_variable_set(:@verification_errors, [])
-    controller.instance_variable_set(:@verification_pt, "signed-path-target")
-    controller.instance_variable_set(:@verification_scope, "settings_email")
-    # The `verification[code]` input and its one-time-code autocomplete hint belong to the
-    # EmailOtpEntry component the edit page resolves to; what the server still owns is the
-    # component name and the form the component posts the code to.
-    assert_equal "auth/com/verification/emails/edit", Auth::Com::Verification::EmailsController::EDIT_COMPONENT
-
-    form = controller.send(:edit_page_props).fetch(:form)
-
-    assert_equal "/verification/emails/email-nonce?ri=jp", form.fetch(:action)
-    assert_predicate form.fetch(:code_label), :present?
-  end
 end

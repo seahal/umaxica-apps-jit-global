@@ -48,27 +48,4 @@ class EntraTokenVerificationRefusalsTest < ActiveSupport::TestCase
 
     assert_match(/jwks_fetch_failed/, error.message)
   end
-
-  # A timestamp claim that is present but not a number is a malformed token, and
-  # is named separately from one that is simply absent.
-  test "a numeric claim that is present but unreadable is named apart from a missing one" do
-    subject = verifier
-
-    assert_equal 1_756_000_000, subject.send(:integer_claim, { "iat" => 1_756_000_000 }, "iat", required: true)
-    assert_nil subject.send(:integer_claim, {}, "iat", required: false)
-
-    missing =
-      assert_raises(ExternalSignIn::Providers::EntraId::VerificationError) do
-        subject.send(:integer_claim, {}, "iat", required: true)
-      end
-
-    assert_match(/iat_missing/, missing.message)
-
-    unreadable =
-      assert_raises(ExternalSignIn::Providers::EntraId::VerificationError) do
-        subject.send(:integer_claim, { "iat" => "not-a-number" }, "iat", required: true)
-      end
-
-    assert_match(/iat_invalid/, unreadable.message)
-  end
 end

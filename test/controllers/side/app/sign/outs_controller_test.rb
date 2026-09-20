@@ -108,16 +108,13 @@ class Side::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     )
 
     AcmeLogoutTransactionCoordinator.stub(:issue!, rejected) do
-      post side_app_sign_out_url(ri: "us"), headers: {
-        "X-TEST-CURRENT-USER" => user.id.to_s,
-        "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-      }
+      post side_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
     end
 
     assert_response :unprocessable_content
     assert_predicate token.reload, :currently_usable?
     assert_not_includes response.body, I18n.t("sign.shared.sign_out.completed_title")
-    assert_includes response.body, "無効なリクエスト"
+    assert_equal "side/app/sign/outs/unavailable", inertia_component
   end
 
   test "post sign out relay advances to sign coordination hop" do

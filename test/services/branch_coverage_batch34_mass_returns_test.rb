@@ -110,69 +110,9 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
     assert_nil auth.find_organization(nil)
   end
 
-  test "IdentifierBlindIndexBackfill missing column" do
-    model = Object.new
-    model.define_singleton_method(:column_names) { [] }
-    svc = IdentifierBlindIndexBackfill.new
-
-    assert_equal 0, svc.send(
-      :backfill_records,
-      model: model,
-      digest_column: :x,
-      bidx_column: :y,
-      identifier_method: :bidx_for_email,
-      identifier_method_argument: :address,
-    )
-  end
-
-  test "IdentifierEncryptionReencrypt empty columns" do
-    model = Object.new
-    model.define_singleton_method(:column_names) { [] }
-    svc = IdentifierEncryptionReencrypt.new
-
-    assert_equal 0, svc.send(:reencrypt_records, model)
-  end
-
-  test "IdentifierHmacEmergencyRotation missing columns and blank digest" do
-    svc = IdentifierHmacEmergencyRotation.new
-    missing = {
-      model: Object.new.tap { |model| model.define_singleton_method(:column_names) { [] } },
-      digest_column: :x,
-      identifier_column: :y,
-    }
-
-    assert_not svc.send(:target_columns_present?, missing)
-    assert_equal({ updated: 0, failed: 0 }, svc.send(:overwrite_target, missing))
-  end
-
-  test "JitSecurityJwtAnomalyReporter preference namespaces" do
-    assert_equal "COM_PREFERENCE", JitSecurityJwtAnomalyReporter.send(:preference_context, "x.com.y")
-    assert_equal "ORG_PREFERENCE", JitSecurityJwtAnomalyReporter.send(:preference_context, "org.y")
-    assert_equal "APP_PREFERENCE", JitSecurityJwtAnomalyReporter.send(:preference_context, "app.y")
-    assert_nil JitSecurityJwtAnomalyReporter.send(:preference_context, "example.test")
-  end
-
   test "OidcLogoutRequest blank client and jti" do
     assert_nil OidcLogoutRequest.verify(nil)
     assert_nil OidcLogoutRequest.verify("")
-  end
-
-  test "SignInCyclePolicy terminal and binding arms" do
-    record = Object.new
-    record.define_singleton_method(:respond_to?) { |_name, *| false }
-    policy = SignIn::CyclePolicy.new(record)
-
-    assert_not policy.fail?
-    assert_not policy.send(:sign_in_flow?)
-  end
-
-  test "SignUp base policy actor and ticket arms" do
-    record = Object.new
-    record.define_singleton_method(:respond_to?) { |_name, *| false }
-    policy = SignUp::BasePolicy.new(record)
-
-    assert_not policy.send(:signed_in?)
-    assert_not policy.send(:valid_ticket?)
   end
 
   test "SignUpStepGate blank and terminal cycle" do
@@ -216,13 +156,6 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
     assert_not result.success?
   end
 
-  test "ChronicleIntentWriter visibility context passthrough" do
-    ctx = ChronicleVisibilityContext.allocate
-    writer = ChronicleIntentWriter.allocate
-
-    assert_equal ctx, writer.send(:resolve_visibility_context, ctx)
-  end
-
   test "EnforcementCaseEndOperation blank principal operator" do
     error =
       assert_raises(ArgumentError) do
@@ -237,14 +170,6 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
     assert_equal "https", AcmeLogoutTransactionCoordinator.http_or_https("example.test")
     assert AcmeLogoutTransactionCoordinator.local_host?("app.localhost")
     assert_not AcmeLogoutTransactionCoordinator.local_host?("example.test")
-  end
-
-  test "AuthMethodGuard excluding record scopes" do
-    assert_equal 0, AuthMethodGuard.send(:verified_emails_count, Object.new)
-    assert_equal 0, AuthMethodGuard.send(:verified_telephones_count, Object.new)
-    assert_equal 0, AuthMethodGuard.send(:active_passkeys_count, Object.new)
-    assert_not AuthMethodGuard.send(:excluding_record?, nil, "VisitorEmail")
-    assert AuthMethodGuard.send(:excluding_record?, VisitorEmail.new, "VisitorEmail")
   end
 
   test "LocalEnvironment load fallbacks with missing UMAXICA_ENV_FILE" do

@@ -137,61 +137,6 @@ class BranchCoverageBatch12OtpAndZerosTest < ActiveSupport::TestCase
     assert_kind_of Minitest::Test, self
   end
 
-  test "zero percent small files and verifiers" do
-    assert_raises(ArgumentError) { Webauthn::AssertionVerifier.options_for(nil) } if Webauthn::AssertionVerifier.respond_to?(:options_for)
-    begin
-      Webauthn::AssertionVerifier.verify!(nil)
-    rescue StandardError
-      assert_kind_of Minitest::Test, self
-    end
-
-    begin
-      Webauthn::RegistrationVerifier.verify!(nil)
-    rescue StandardError
-      assert_kind_of Minitest::Test, self
-    end
-
-    # SignSettingsTotpRegistration branch
-    harness = Class.new do
-      include SignSettingsTotpRegistration
-
-      attr_accessor :session
-    end.new
-    harness.session = {}
-    harness.send(:reset_totp_ceremony_session!) if harness.respond_to?(:reset_totp_ceremony_session!, true)
-
-    # contact otp support zeros
-    if defined?(SignUpContactOtpControllerSupport)
-      h = Class.new { include SignUpContactOtpControllerSupport }.new
-      %i(otp_resend_rate_limited? submitted_pass_code).each do |m|
-        next unless h.respond_to?(m, true)
-
-        begin
-          h.send(m)
-        rescue StandardError
-          nil
-        end
-      end
-    end
-  end
-
-  test "identity social ceremony final committer mismatch raises" do
-    skip unless defined?(IdentitySocialCeremonyFinalCommitter)
-    committer = IdentitySocialCeremonyFinalCommitter.allocate
-    raised = false
-    %i(validate_result! validate_bindings!).each do |m|
-      next unless committer.respond_to?(m, true)
-
-      begin
-        committer.send(m)
-      rescue IdentitySocialCeremonyContract::Error, ArgumentError, NoMethodError
-        raised = true
-      end
-    end
-
-    assert_includes [true, false], raised
-  end
-
   test "com passkeys controller early returns" do
     c = attach!(Auth::Com::Sign::Up::Check::Telephone::PasskeysController.new)
     c.define_singleton_method(:load_gate_context!) { |_| false }

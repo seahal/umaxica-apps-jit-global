@@ -269,7 +269,7 @@ module PreferenceCore
     load_or_build_preference_child(child_type)
   end
 
-  def reload_preferences_and_reissue_token!(sync_resource: true)
+  def reload_preferences_and_reissue_token!
     @preferences.reload
     # Force reload all preference associations to ensure they reflect DB state
     PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
@@ -277,8 +277,6 @@ module PreferenceCore
       @preferences.association(assoc_name.to_sym).reload if @preferences.respond_to?(assoc_name)
     end
     issue_access_token_from(@preferences)
-
-    sync_to_resource_preference! if sync_resource
   end
 
   def update_preference_child_dual_write!(child, attributes, option_type:, audit_event:)
@@ -303,7 +301,7 @@ module PreferenceCore
       ) if resource_pref
     end
 
-    reload_preferences_and_reissue_token!(sync_resource: false)
+    reload_preferences_and_reissue_token!
   rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
     record_preference_write_error("preference.write.option_error", e, target: option_type)
     raise PreferenceOperationError
@@ -335,7 +333,7 @@ module PreferenceCore
       write_resource_preference_cookie!(resource_pref, p_hash) if resource_pref
     end
 
-    reload_preferences_and_reissue_token!(sync_resource: false)
+    reload_preferences_and_reissue_token!
   rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
     record_preference_write_error("preference.write.cookie_error", e, target: :cookie)
     raise PreferenceOperationError
@@ -480,18 +478,6 @@ module PreferenceCore
     )
   end
 
-  def preference_update_notice
-    t([preference_translation_scope, "update_success"].join("."))
-  end
-
-  def preference_reset_destroyed_notice
-    t(["acme", preference_surface_key, "preference.resets.destroyed"].join("."))
-  end
-
-  def preference_operation_failed_alert
-    I18n.t("errors.messages.preference_operation_failed")
-  end
-
   def preference_context_redirect_params
     PreferenceGlobal::PARAM_CONTEXT_KEYS.each_with_object({}) do |key, memo|
       memo[key] = params[key] if params[key].present?
@@ -555,7 +541,7 @@ module PreferenceCore
       end
     end
 
-    reload_preferences_and_reissue_token!(sync_resource: false)
+    reload_preferences_and_reissue_token!
   rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
     record_preference_write_error("preference.write.option_error", e, target: :region)
     raise PreferenceOperationError
@@ -594,44 +580,6 @@ module PreferenceCore
     }[screen.to_sym]
   end
 
-  def delete_preference_cookie
-    preference = find_preference_for_delete
-    if preference.present?
-      log_preference_reset(preference)
-      # Keep cookies and records intact on logout; do not delete or reset preference values.
-      # The preference record and cookies remain so the user retains their settings.
-    end
-    reset_preference_state
-    nil
-  end
-
-  # Reset preferences to defaults (explicit user action, not logout).
-  # Resets BOTH AppPreference/OrgPreference AND ClientPreference/OperatorPreference.
-  def reset_preference_to_defaults!
-    return if @preferences.blank?
-
-    resource_pref = preference_write_resource_preference!
-    authorize_resource_preference_write!(resource_pref)
-
-    # Same dual-write contract as the option/cookie writes: source (token) first,
-    # mirror (resource) second, both inside one cross-DB boundary so a failure
-    # rolls back the whole reset instead of leaving the databases out of sync.
-    with_dual_write_transaction(resource_pref) do
-      reset_app_org_preference_to_defaults!(@preferences)
-      reset_resource_preference_defaults_for_write!(resource_pref) if resource_pref
-
-      create_audit_log(
-        event_id: preference_audit_event_class::RESET_BY_USER_DECISION,
-        context: { preference_reset: true, reset_to_defaults: true },
-      )
-    end
-
-    reload_preferences_and_reissue_token!(sync_resource: false)
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
-    record_preference_write_error("preference.reset.error", e, target: :reset)
-    raise PreferenceOperationError
-  end
-
   def reset_preference_by_rebootstrap!
     return if @preferences.blank?
 
@@ -659,21 +607,6 @@ module PreferenceCore
 
   private
 
-  def find_preference_for_delete
-    return @preferences if @preferences.present?
-
-    token_value = refresh_token_value
-    @refresh_token_value = token_value
-    return nil if token_value.blank?
-
-    token_digest = refresh_token_lookup_digest(token_value)
-    return nil unless token_digest
-
-    with_preference_connection(:writing) do
-      preference_class.find_by(token_digest: token_digest)
-    end
-  end
-
   def log_preference_reset(preference)
     @preferences = preference
     create_audit_log(
@@ -682,35 +615,6 @@ module PreferenceCore
     )
   rescue StandardError => e
     Rails.logger.error("log_preference_reset failed: #{e.class} - #{e.message}")
-  end
-
-  def reset_app_org_preference_to_defaults!(preference)
-    association_prefix = preference.class.name.underscore
-    prefix = preference_prefix
-
-    with_preference_connection(:writing) do
-      PreferenceAdoption::CHILD_RECORD_TYPES.each do |type|
-        child = preference.public_send("#{association_prefix}_#{type}")
-        next unless child
-
-        ensure_model_defaults!(PreferenceClassRegistry.option_class(prefix, type))
-        default_id = PreferenceClassRegistry.default_option_id(prefix, type)
-        child.update!(option_id: default_id) if child.option_id != default_id
-      end
-
-      cookie = preference.public_send("#{association_prefix}_cookie")
-      cookie&.update!(
-        consented: false,
-        functional: false,
-        performant: false,
-        targetable: false,
-        consented_at: nil,
-      )
-
-      # Reset clears explicit intent: every field returns to default-seeded state
-      # so dynamic region seeding (?ri) applies again until the user sets a value.
-      preference.clear_explicit_fields! if preference.respond_to?(:clear_explicit_fields!)
-    end
   end
 
   def existing_resource_preference_for_reset
@@ -824,10 +728,6 @@ module PreferenceCore
     preference_class.name.delete_suffix("Preference").downcase
   end
 
-  def preference_translation_scope
-    "acme.#{preference_surface_key}.preferences"
-  end
-
   def preference_base_i18n_key(*segments)
     ["base", preference_surface_key, *segments].join(".")
   end
@@ -878,4 +778,6 @@ module PreferenceCore
     label = "#{label} (#{value.to_s.upcase})" if type.to_sym == :currency
     label
   end
+
+  private :pin_locale_to_saved_language
 end

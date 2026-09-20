@@ -86,44 +86,6 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
     ],
   }.freeze
 
-  SEAMS.each do |concern, seams|
-    test "#{concern} declares every per-surface seam it expects" do
-      harness = self.class.harness_for(concern).new
-
-      seams.each do |(seam, *arguments)|
-        assert_raises(NotImplementedError, "#{concern}##{seam}") { harness.invoke(seam, *arguments) }
-      end
-    end
-  end
-
-  test "the step-up lifecycle refuses a surface and a token class it does not serve" do
-    harness = self.class.harness_for(SignVerificationStepUpLifecycle).new
-    harness.define_singleton_method(:actor_token) { Struct.new(:id).new(1) }
-
-    assert_raises(NotImplementedError) { harness.invoke(:acme_step_up_completion_url_for, "martian") }
-    assert_raises(NotImplementedError) { harness.invoke(:step_up_ceremony_surface) }
-  end
-
-  test "the verification entry declares its invalid-request destination seam" do
-    harness = self.class.harness_for(SignVerificationEntry).new
-
-    assert_raises(NotImplementedError) { harness.invoke(:verification_invalid_request_redirect_path, ri: "jp") }
-  end
-
-  test "the step-up session store refuses a session model it does not map" do
-    harness = self.class.harness_for(SignVerificationStepUpSessionStore).new
-    unmapped = Class.new { def self.name = "MartianStepUpSession" }
-    harness.define_singleton_method(:step_up_session_model) { unmapped }
-
-    assert_raises(NotImplementedError) { harness.invoke(:step_up_session_token_foreign_key) }
-  end
-
-  test "step-up cancellation refuses a surface it does not serve" do
-    harness = self.class.harness_for(SignVerificationCancellation).new
-
-    assert_raises(NotImplementedError) { harness.invoke(:acme_step_up_cancellation_url_for, "martian") }
-  end
-
   test "the external authentication ports declare their single call seam" do
     [
       ExternalAuthentication::AppleClientSecretProviderPort,

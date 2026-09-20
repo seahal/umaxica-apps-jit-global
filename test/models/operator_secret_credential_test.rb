@@ -249,22 +249,6 @@ class OperatorSecretCredentialTest < ActiveSupport::TestCase
     assert_predicate secret_credential, :usable_for_secret_credential_sign_in?
   end
 
-  test "expired_for_secret_credential_sign_in? handles nil infinite and elapsed discarded_at values" do
-    secret_credential = OperatorSecretCredential.new
-
-    secret_credential.define_singleton_method(:discarded_at) { nil }
-
-    assert_not secret_credential.send(:expired_for_secret_credential_sign_in?, Time.current)
-
-    secret_credential.define_singleton_method(:discarded_at) { Float::INFINITY }
-
-    assert_not secret_credential.send(:expired_for_secret_credential_sign_in?, Time.current)
-
-    secret_credential.define_singleton_method(:discarded_at) { 1.minute.ago }
-
-    assert secret_credential.send(:expired_for_secret_credential_sign_in?, Time.current)
-  end
-
   test "public_id is automatically generated on create" do
     record = OperatorSecretCredential.create!(
       staff: @staff,

@@ -156,60 +156,6 @@ module AuthenticationBase
   # - Reads request format and writes HTTP response
   # ======================================================================
 
-  # Ensures user is not already logged in
-  # Renders bad_request with message if user is logged in
-  # Used for authentication endpoints (login)
-  #
-  # @param message_key [String] Optional translation key for the error message
-  # @return [nil] Returns nil if user is logged in (stops filter chain)
-  def ensure_not_logged_in(message_key: nil)
-    return unless logged_in?
-
-    message = message_key ? t(message_key) : I18n.t("errors.messages.not_authorized")
-    render plain: message, status: :unauthorized
-    nil
-  end
-
-  # Ensures user is not already logged in (registration variant)
-  # AuthenticationRedirects to root with alert message if user is logged in
-  # Used for registration endpoints
-  #
-  # @param redirect_path [String] Path to redirect to (default: "/")
-  # @param message_key [String] Optional translation key for the alert message
-  def ensure_not_logged_in_for_registration(redirect_path: "/", message_key: nil)
-    return unless logged_in?
-
-    message = message_key ? t(message_key) : I18n.t("errors.messages.not_authorized")
-
-    if request.format.json?
-      render plain: message, status: :unauthorized
-    else
-      redirect_to(redirect_path, alert: message)
-    end
-  end
-
-  # Checks if user is logged in and renders error if so (inline variant)
-  # Returns true if user is logged in, false otherwise
-  # Useful for inline checks in actions
-  #
-  # @param message_key [String] Translation key for the error message
-  # @return [Boolean] true if user is logged in, false otherwise
-  def reject_if_logged_in(message_key)
-    if logged_in?
-      render plain: t(message_key), status: :bad_request
-      true
-    else
-      false
-    end
-  end
-
-  # Reject if user/staff is already logged in with 401 Unauthorized
-  def reject_logged_in_session
-    return unless logged_in?
-
-    render plain: I18n.t("errors.messages.already_authenticated"), status: :unauthorized
-  end
-
   def render_sign_in_unavailable_while_authenticated(_exception = nil)
     response.set_header("Cache-Control", "no-store")
     render plain: AlreadyAuthenticatedError::MESSAGE, status: :conflict
@@ -226,70 +172,6 @@ module AuthenticationBase
   # ======================================================================
   # 4) Session auth lifecycle (public API, Cookie/session/request I/O boundary)
   # ======================================================================
-
-  # Loads authentication session data and validates expiry
-  # Returns the found record or handles redirect on expiry
-  #
-  # @param session_key [Symbol, String] The session key to load from
-  # @param model_class [Class] The model class to load
-  # @param redirect_path [String, Symbol] Where to redirect on session expiry
-  # @param redirect_message [String] The translation key for expiry message
-  # @param block [Proc] Optional block for additional validation
-  # @return [ActiveRecord::Base, nil] The loaded record or nil
-  def load_authentication_session(session_key, model_class, redirect_path, redirect_message)
-    record = nil
-
-    if session[session_key].present?
-      record = model_class.find_by(id: session[session_key])
-
-      # If block provided, use it for validation; otherwise just check presence
-      is_valid =
-        if block_given?
-          yield(record)
-        else
-          record.present?
-        end
-
-      return record if is_valid
-
-      # Session expired or invalid
-      handle_session_expiry(redirect_path, redirect_message)
-      nil
-    else
-      # No session data
-      handle_session_expiry(redirect_path, redirect_message)
-      nil
-    end
-  end
-
-  # Stores authentication session data
-  #
-  # @param session_key [Symbol, String] The session key to store to
-  # @param value [Object] The value to store (typically an ID or hash)
-  def store_authentication_session(session_key, value)
-    session[session_key] = value
-  end
-
-  # Clears authentication session data
-  #
-  # @param session_keys [Array<Symbol, String>] The session keys to clear
-  def clear_authentication_session(*session_keys)
-    session_keys.each do |key|
-      session.delete(key)
-    end
-  end
-
-  # Validates session expiry against a timestamp
-  #
-  # @param session_data [Hash] The session data containing expiry information
-  # @param expiry_key [String, Symbol] The key in session_data that contains expiry timestamp
-  # @return [Boolean] true if not expired, false otherwise
-  def validate_session_expiry(session_data, expiry_key = "expires_at")
-    return false if session_data.blank?
-    return true unless session_data[expiry_key]
-
-    epoch_seconds(session_data[expiry_key]) > Time.current.to_i
-  end
 
   # Loads a record from session with additional validation
   #
@@ -934,6 +816,8 @@ module AuthenticationBase
 
       super
     end
+
+    private :authentication_mode_rules, :authentication_modes
   end
 
   private
@@ -1857,18 +1741,6 @@ module AuthenticationBase
     )
   end
 
-  # Handles session expiry by redirecting with appropriate message
-  #
-  # @param redirect_path [String, Symbol] Where to redirect
-  # @param message_key [String] Translation key for the expiry message
-  def handle_session_expiry(redirect_path, message_key)
-    redirect_params = { notice: t(message_key) }
-    # Preserve redirect parameter if present
-    default_pt_key = DEFAULT_PT_SESSION_KEY
-    redirect_params[AuthIoKeys::Params::PT] = session[default_pt_key] if session[default_pt_key].present?
-    redirect_to(redirect_path, redirect_params)
-  end
-
   # ======================================================================
   # 7) Policy/domain decisions
   # ======================================================================
@@ -2208,24 +2080,6 @@ module AuthenticationBase
     kind_column = "#{token_resource_prefix}_token_kind_id"
     return raw_kind_id unless token_class.columns_hash[kind_column]&.type == :integer
 
-    kind_model = token_kind_model
-    if kind_model.column_names.include?("code")
-      begin
-        return kind_model.find_by!(code: raw_kind_id).id
-      rescue ActiveRecord::RecordNotFound
-        Rails.logger.error(
-          JitLogEvent.format(
-            "auth.token.kind_missing",
-            kind_model: kind_model.name,
-            code: raw_kind_id,
-            resource_type: resource_type,
-          ),
-        )
-        raise ActiveRecord::RecordNotFound,
-              "Missing #{kind_model.name} code=#{raw_kind_id} for #{resource_type} login"
-      end
-    end
-
     resolved =
       case [resource_type, raw_kind_id]
       when ["operator", "BROWSER_WEB"] then OperatorTokenKind::BROWSER_WEB
@@ -2241,7 +2095,7 @@ module AuthenticationBase
 
     return resolved if resolved
 
-    raise ActiveRecord::RecordNotFound, "Missing #{kind_model.name} for code=#{raw_kind_id}"
+    raise ActiveRecord::RecordNotFound, "Missing #{token_kind_model.name} for code=#{raw_kind_id}"
   end
 
   def ensure_token_kind_exists!(token_kind_id)
@@ -3037,10 +2891,6 @@ module AuthenticationBase
     safe_internal_path(candidate)
   end
 
-  def resolve_mfa_return_to(raw_value)
-    resolve_mfa_pt(raw_value)
-  end
-
   def decode_base64_urlsafe(value)
     Base64.urlsafe_decode64(value.to_s)
   rescue ArgumentError
@@ -3073,19 +2923,14 @@ module AuthenticationBase
       return redirect_to(withdrawal_required_session_entry_path, allow_other_host: false)
     end
 
-    path =
-      if respond_to?(:sign_in_url_with_pt, true)
-        store_authentication_return_target!(request.fullpath) unless respond_to?(
-          :redirect_to_oidc_authorization_url,
-          true,
-        )
-        pt = encoded_pt(request.fullpath) if respond_to?(:encoded_pt, true)
-        sign_in_url_with_pt(pt)
-      elsif main_app.respond_to?(:sign_in_path)
-        main_app.sign_in_path
-      else
-        "/sign/in"
-      end
+    # sign_in_url_with_pt is part of this concern's contract (declared abstract above), so every
+    # including controller answers it.
+    store_authentication_return_target!(request.fullpath) unless respond_to?(
+      :redirect_to_oidc_authorization_url,
+      true,
+    )
+    pt = encoded_pt(request.fullpath) if respond_to?(:encoded_pt, true)
+    path = sign_in_url_with_pt(pt)
     message = options[:message] || I18n.t("errors.messages.login_required")
     if path.match?(%r{\Ahttps?://}i) && respond_to?(:redirect_to_oidc_authorization_url, true)
       redirect_to_oidc_authorization_url(path, alert: message)
@@ -3135,14 +2980,7 @@ module AuthenticationBase
   end
 
   def handle_guest_only_html(options)
-    path =
-      if respond_to?(:after_login_path, true)
-        after_login_path
-      elsif main_app.respond_to?(:after_login_path)
-        main_app.after_login_path
-      else
-        "/"
-      end
+    path = after_login_path
     message = options[:message] || I18n.t("errors.messages.already_authenticated")
     redirect_to(path, allow_other_host: after_login_allows_other_host?, alert: message)
   end
@@ -3150,4 +2988,7 @@ module AuthenticationBase
   def after_login_allows_other_host?
     false
   end
+
+  private :check_totp_requirement_before_session_rotation, :resource_connection_owner,
+          :preserved_oidc_rp_session_state, :restore_oidc_rp_session_state!, :store_authentication_return_target!
 end

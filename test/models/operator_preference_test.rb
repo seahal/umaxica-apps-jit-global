@@ -126,21 +126,6 @@ class OperatorPreferenceTest < ActiveSupport::TestCase
     assert_equal staff.id, staff.staff_preference.staff_id
   end
 
-  test "set_defaults fills nil booleans on new records" do
-    pref = OperatorPreference.new(staff: operators(:sample_staff))
-    pref.consented = nil
-    pref.functional = nil
-    pref.performant = nil
-    pref.targetable = nil
-
-    pref.send(:set_defaults)
-
-    assert_not pref.consented
-    assert_not pref.functional
-    assert_not pref.performant
-    assert_not pref.targetable
-  end
-
   test "adult_content_gate returns nothing when no gate is set" do
     assert_equal "nothing", OperatorPreference.new.adult_content_gate
   end

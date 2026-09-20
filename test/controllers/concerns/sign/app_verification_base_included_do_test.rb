@@ -74,31 +74,3 @@ class SignAppVerificationBaseIncludedDoTest < ActiveSupport::TestCase
     assert SignAppVerificationBase::ALLOWED_SCOPES.key?("settings_telephone")
   end
 end
-
-# SignAppVerificationBase overrides VerificationBase#verification_model and
-# #current_verification_actor, so the full Harness above cannot reach VerificationBase's own
-# non-operator branches for those two methods. Build a minimal controller with only VerificationClient
-# (which does not override actor_operator?, verification_model, or current_verification_actor) to
-# exercise VerificationBase's own code directly.
-class SignAppVerificationBaseDirectCoverageTest < ActiveSupport::TestCase
-  test "verification_model resolves ClientVerification for non-operator actors" do
-    klass = Class.new(ApplicationController) { include VerificationClient }
-    controller = klass.new
-
-    assert_equal ClientVerification, controller.send(:verification_model)
-  end
-
-  test "verification_token_foreign_key resolves user_token_id for non-operator actors" do
-    klass = Class.new(ApplicationController) { include VerificationClient }
-    controller = klass.new
-
-    assert_equal :user_token_id, controller.send(:verification_token_foreign_key)
-  end
-
-  test "current_verification_actor returns nil when no actor reader is defined" do
-    klass = Class.new(ApplicationController) { include VerificationClient }
-    controller = klass.new
-
-    assert_nil controller.send(:current_verification_actor)
-  end
-end

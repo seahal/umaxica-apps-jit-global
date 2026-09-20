@@ -186,4 +186,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   def self.base_completion_helper_name(surface_name)
     "base_#{surface_name}_sign_out_url"
   end
+  private_class_method :find_by_logout_challenge!, :allowed_completion_url?,
+                       :complete_auth_out_helper_name, :complete_core_out_helper_name,
+                       :complete_side_out_helper_name, :base_completion_helper_name
 end

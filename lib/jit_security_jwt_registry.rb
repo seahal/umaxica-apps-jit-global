@@ -362,4 +362,10 @@ module JitSecurityJwtRegistry
   def reserved_env_kid?(kid)
     RESERVED_ENV_KID_PATTERN.match?(kid.to_s)
   end
+
+  private_class_method :build_issuers, :build_oidc_client_issuer, :jump_gateway_audience,
+                       :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
+                       :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
+                       :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,
+                       :insecure_default_kid_allowed?, :reserved_env_kid?
 end

@@ -70,10 +70,6 @@ module SignOperatorTelephoneRegistrable
     :success
   end
 
-  def verified_staff_telephones_for(staff)
-    staff.staff_telephones.where(staff_identity_telephone_status_id: VERIFIED_STAFF_TELEPHONE_STATUSES)
-  end
-
   private
 
   def send_staff_telephone_verification_sms(staff_telephone, otp_number)

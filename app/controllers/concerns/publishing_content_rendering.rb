@@ -135,10 +135,6 @@ module PublishingContentRendering
     Time.zone.parse(value.to_s) if value.present?
   end
 
-  def publishing_entries_json
-    publishing_entries_query.call.filter_map { |entry| publishing_entry_json(entry) }
-  end
-
   # JSON contract preserved from the legacy ReadOnlyContentRendering: the
   # "namespace" field is the content surface (docs/news/help/info) and the
   # "surface" field is the audience (app/com/org).

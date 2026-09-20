@@ -137,4 +137,5 @@ module FqdnAvailabilityRegistry
   end
 
   def normalize(value) = value.to_s.strip.downcase
+  private_class_method :hostnames_from
 end

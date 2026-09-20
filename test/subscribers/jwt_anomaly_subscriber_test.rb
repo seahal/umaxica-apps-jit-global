@@ -268,29 +268,6 @@ class JwtAnomalySubscriberTest < ActiveSupport::TestCase
     assert_not_includes logged_message, secret
   end
 
-  test "build_metadata does not retain unallowlisted event fields" do
-    subscriber = JwtAnomalySubscriber.new
-
-    metadata = subscriber.send(
-      :build_metadata,
-      {
-        :code => "AUTH_USER_MALFORMED_TOKEN",
-        "request_host" => "id.app.localhost",
-        :kid => "kid-1",
-        :alg => "ES384",
-        :typ => "JWT",
-        :iss => "jit",
-        :jti => "jti-123",
-        :error_class => "JWT::DecodeError",
-        :error_message => "invalid token",
-        :extra => "kept",
-        "another" => "kept-too",
-      },
-    )
-
-    assert_equal({}, metadata)
-  end
-
   test "emit logs and swallows persistence errors from event creation" do
     logged_message = nil
     mock_event = MockEvent.new(

@@ -16,35 +16,6 @@ class BranchCoverageBatch23EasyArmsTest < ActiveSupport::TestCase
     assert_equal "us", option.name
   end
 
-  test "DpopProofVerifier refuses missing binding claims before signature work" do
-    verifier = DpopProofVerifier.new(
-      proof_jwt: "x.y.z",
-      request_method: "POST",
-      request_uri: "https://example.test/resource",
-      access_token: "access-token",
-      record_jti: false,
-    )
-
-    assert_equal "missing_htm", verifier.send(:verify_request_binding, {}).error
-    assert_equal "missing_htu", verifier.send(:verify_request_binding, { "htm" => "POST" }).error
-    assert_equal "missing_iat",
-                 verifier.send(
-                   :verify_request_binding,
-                   { "htm" => "POST", "htu" => "https://example.test/resource" },
-                 ).error
-    assert_equal "iat_out_of_window",
-                 verifier.send(
-                   :verify_request_binding,
-                   {
-                     "htm" => "POST",
-                     "htu" => "https://example.test/resource",
-                     "iat" => Time.now.to_i - (DpopProofVerifier::IAT_LEEWAY_SECONDS + 120),
-                   },
-                 ).error
-    assert_equal "missing_ath", verifier.send(:verify_access_token_hash, {}).error
-    assert_equal "missing_jti", verifier.send(:record_jti, "", jkt: "jkt", payload: {}).error
-  end
-
   test "SurfaceInertiaPage refuses a controller path without a family and surface" do
     assert_raises(ArgumentError) do
       Class.new(ApplicationController) do

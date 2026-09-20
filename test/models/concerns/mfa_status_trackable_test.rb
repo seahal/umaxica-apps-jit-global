@@ -115,16 +115,4 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
 
     assert_equal VisitorMfaStatus::ACTIVE, visitor.reload.mfa_status_id
   end
-
-  test "default configured_mfa_level_methods returns empty array" do
-    fake_class =
-      Class.new(AppPrincipalRecord) do
-        self.table_name = "clients"
-        include MfaStatusTrackable
-
-        mfa_status_reference ClientMfaStatus
-      end
-
-    assert_empty fake_class.new.send(:configured_mfa_level_methods)
-  end
 end

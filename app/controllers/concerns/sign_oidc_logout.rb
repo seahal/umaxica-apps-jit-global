@@ -284,10 +284,6 @@ module SignOidcLogout
     nil
   end
 
-  def sign_out_confirmation_request?
-    current_resource.present? || current_session_public_id.present?
-  end
-
   def logout_oidc_current_session!(result)
     begin
       resource = current_resource if respond_to?(:current_resource, true)

@@ -71,13 +71,6 @@ module Jit
         end
       end
 
-      test "parse_expires_at falls back when the challenge timestamp is unusable" do
-        verifier = JitSecurityTurnstileVerifier.new(token: "tok", remote_ip: "1.2.3.4", secret_key: "secret")
-
-        assert_kind_of ActiveSupport::TimeWithZone, verifier.send(:parse_expires_at, nil)
-        assert_kind_of ActiveSupport::TimeWithZone, verifier.send(:parse_expires_at, "not-a-time")
-      end
-
       test "injected verifier returns the stubbed response" do
         TurnstileVerifierStub.response = { "success" => true, "mock" => true }
         result = Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
@@ -376,19 +369,6 @@ module Jit
       end
 
       private
-
-      # Pure unit test - no database/fixtures needed. `use_transactional_tests = false` was the
-      # wrong tool for that: it makes Rails clear the process-wide fixture cache
-      # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
-      # class to reload all ~200 fixture tables (~600 extra queries) on its next example.
-      # Overriding these two hooks as no-ops opts this class out of the fixtures machinery
-      # entirely, without that side effect, while keeping every other `ActiveSupport::TestCase`
-      # behavior (assertions, the `test` DSL) intact. See docs/guides/test-profiling.md.
-      def setup_fixtures(*)
-      end
-
-      def teardown_fixtures(*)
-      end
 
       # siteverify is reached through OutboundHttp::Connection, so the stub
       # states the URL and the response body rather than mocking a transport

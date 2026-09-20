@@ -211,17 +211,4 @@ class OidcTokenRevokerCoverageTest < ActiveSupport::TestCase
       end
     end
   end
-
-  test "RP Session lookup branches use the expected resource contexts" do
-    service = ::OidcTokenRevoker.new(
-      token: "token",
-      client_id: "client-1",
-      client_secret: "secret",
-      host: "app.example.test",
-    )
-
-    assert_equal [AppTicketRecord, ClientRpSession], service.send(:rp_session_context_and_class, "client")
-    assert_equal [OrgTicketRecord, OperatorRpSession], service.send(:rp_session_context_and_class, "operator")
-    assert_equal [ComTicketRecord, VisitorRpSession], service.send(:rp_session_context_and_class, "visitor")
-  end
 end

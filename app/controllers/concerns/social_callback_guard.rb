@@ -248,14 +248,6 @@ module SocialCallbackGuard
     }
   end
 
-  def test_mode_mock_auth_present?
-    return false unless defined?(OmniAuth) && OmniAuth.config.test_mode
-
-    callback_params = respond_to?(:params, true) ? params : request.parameters
-    provider = callback_params["provider"].to_s
-    OmniAuth.config.mock_auth[provider.to_sym].present?
-  end
-
   def detect_callback_state_error(state, provider)
     return "missing_callback_state" if state[:callback].blank?
     return "missing_expected_state" if state[:expected].blank?
@@ -428,4 +420,6 @@ module SocialCallbackGuard
     body = I18n.t("sign.app.social.sessions.create.failure")
     [403, { "Content-Type" => "text/plain; charset=utf-8" }, [body]]
   end
+
+  private_class_method :allowed_request_origins, :reject_request_phase!
 end

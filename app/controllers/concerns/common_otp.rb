@@ -38,21 +38,6 @@ module CommonOtp
     [sec, counter, hotp.at(counter)]
   end
 
-  # Verify the submitted pass code by recreating the HOTP value from the stored secret_credential and counter.
-  # Returns true only when the provided code exactly matches the expected value.
-  #
-  # @param secret_credential [String] The stored HOTP secret_credential
-  # @param counter [Integer] The stored counter value
-  # @param pass_code [String] The submitted pass code to verify
-  # @return [Boolean] true if codes match, false otherwise
-  def verify_hotp_code(secret_credential:, counter:, pass_code:)
-    submitted_code = pass_code.to_s
-    return false unless submitted_code.match?(/\A\d{6}\z/)
-
-    hotp = ROTP::HOTP.new(secret_credential)
-    hotp.verify(submitted_code, counter) == counter
-  end
-
   # ============================================================
   # Record-based OTP methods (from Auth::Otp)
   # ============================================================

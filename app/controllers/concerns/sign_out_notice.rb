@@ -51,10 +51,6 @@ module SignOutNotice
     nil
   end
 
-  def sign_out_completion_notice_present?
-    session[SIGN_OUT_NOTICE_SESSION_KEY].is_a?(String)
-  end
-
   def sign_out_active_context_present?
     return true if current_resource.present? || current_session_public_id.present?
     return true if respond_to?(:safe_current_session_for_logout, true) && safe_current_session_for_logout.present?
@@ -75,44 +71,16 @@ module SignOutNotice
     params.slice(:ri, :logout_challenge).permit(:ri, :logout_challenge).to_h.symbolize_keys
   end
 
-  def sign_out_new_path(**options)
-    public_send("new_#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
-  end
-
-  def sign_out_new_url(**options)
-    public_send("new_#{sign_out_route_helper_prefix}_sign_out_url", **sign_out_route_params, **options.compact)
-  end
-
   def sign_out_edit_path(**options)
     public_send("edit_#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
-  end
-
-  def sign_out_edit_url(**options)
-    public_send("edit_#{sign_out_route_helper_prefix}_sign_out_url", **sign_out_route_params, **options.compact)
   end
 
   def sign_out_post_path(**options)
     public_send("#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
   end
 
-  def sign_out_post_url(**options)
-    public_send("#{sign_out_route_helper_prefix}_sign_out_url", **sign_out_route_params, **options.compact)
-  end
-
-  def sign_out_complete_path(**options)
-    public_send("#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_route_params, **options.compact)
-  end
-
-  def sign_out_complete_url(**options)
-    public_send("#{sign_out_route_helper_prefix}_sign_out_url", **sign_out_route_params, **options.compact)
-  end
-
   def sign_out_home_path(**options)
     public_send("#{sign_out_route_helper_prefix}_root_path", **sign_out_route_params, **options.compact)
-  end
-
-  def sign_out_home_url(**options)
-    public_send("#{sign_out_route_helper_prefix}_root_url", **sign_out_route_params, **options.compact)
   end
 
   def sign_out_confirmation_form_path

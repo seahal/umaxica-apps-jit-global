@@ -91,10 +91,6 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_not_operator ClientToken, :<, OrgTicketRecord
   end
 
-  test "signed ref lookup uses mark connection owner" do
-    assert_equal AppTicketRecord, ClientToken.send(:connection_owner)
-  end
-
   test "signed ref lookup role defaults to reading" do
     assert_equal :reading, ClientToken.signed_ref_lookup_role
   end

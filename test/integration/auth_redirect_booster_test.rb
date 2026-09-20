@@ -94,7 +94,7 @@ class AuthRedirectBoosterTest < ActionDispatch::IntegrationTest
   test "redirect_with_notice with pt" do
     pt = "/settings?x=1"
     get "/auth_redirect/notice", params: { pt: pt }
-    # jump_to_generated_url redirects
+
     assert_redirected_to "/settings?x=1"
     assert_empty flash
   end

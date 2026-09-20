@@ -32,15 +32,6 @@ module RpSession
     now < max_expires_at + SecurityTokenLifetimes::OIDC_ACCESS_JWT_CLOCK_LEEWAY_SECONDS
   end
 
-  def access_token_retirement_deadline
-    return nil unless has_attribute?(:oidc_access_token_max_expires_at)
-
-    max_expires_at = self[:oidc_access_token_max_expires_at]
-    return nil if max_expires_at.blank?
-
-    max_expires_at + SecurityTokenLifetimes::OIDC_ACCESS_JWT_CLOCK_LEEWAY_SECONDS
-  end
-
   # Persist the maximum Access JWT exp before the token response leaves the
   # application. The value is monotonic so an older/shorter issuance cannot
   # shorten the retirement window established by a longer-lived JWT.
@@ -157,17 +148,6 @@ module RpSession
     end
   end
 
-  def mark_logout_status!(status:, now: Time.current)
-    with_parent_and_self_lock do
-      update!(
-        last_logout_status: status,
-        last_logout_attempted_at: now,
-        logged_out_at: ((status == "success") ? now : logged_out_at),
-        revoked_at: ((status == "success") ? now : revoked_at),
-      )
-    end
-  end
-
   private
 
   def ensure_public_id
@@ -187,10 +167,6 @@ module RpSession
 
   def root_token_active?
     parent_token_active?
-  end
-
-  def parent_association_name
-    raise NotImplementedError
   end
 
   def with_parent_and_self_lock

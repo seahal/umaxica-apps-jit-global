@@ -243,17 +243,6 @@ module Auth
             end
           end
 
-          def handle_failed_mfa(user, reason, details = {})
-            Rails.logger.info(
-              JitLogEvent.format(
-                "authentication.totp.failed", user_id: user&.id, ip_address: request.remote_ip,
-                                              method: "secret_credential", ri: current_region_identifier,
-              ),
-            )
-            @secret_credential_hints = active_secret_credential_hints_for(user) if user
-            render_failed_login(reason: reason, user: user, details: details)
-          end
-
           def process_standard_login(user)
             result = AuthenticationSessionCommitter.call(
               controller: self, resource: user, pt: nil, ri: current_region_identifier,
@@ -275,6 +264,17 @@ module Auth
           end
 
           private
+
+          def handle_failed_mfa(user, reason, details = {})
+            Rails.logger.info(
+              JitLogEvent.format(
+                "authentication.totp.failed", user_id: user&.id, ip_address: request.remote_ip,
+                                              method: "secret_credential", ri: current_region_identifier,
+              ),
+            )
+            @secret_credential_hints = active_secret_credential_hints_for(user) if user
+            render_failed_login(reason: reason, user: user, details: details)
+          end
 
           def turnstile_response_param
             request.request_parameters["cf-turnstile-response"].to_s

@@ -40,29 +40,6 @@ class CoverageThresholdModelConcernsTest < ActiveSupport::TestCase
     assert_equal({ status: :invalid, token: nil }, ClientToken.rotate_refresh!(presented_refresh_digest: nil))
   end
 
-  test "refresh token class helpers select actor status and kind columns" do
-    user = FakeAttributes.new(%i(user_id user_token_status_id user_token_kind_id))
-    staff = FakeAttributes.new(%i(staff_id staff_token_status_id staff_token_kind_id))
-    visitor = FakeAttributes.new([])
-    %i(actor_foreign_key_from token_status_key_from token_kind_key_from).each do |method|
-      assert_equal(
-        { actor_foreign_key_from: :user_id,
-          token_status_key_from: :user_token_status_id,
-          token_kind_key_from: :user_token_kind_id, }.fetch(method), ClientToken.send(method, user),
-      )
-      assert_equal(
-        { actor_foreign_key_from: :staff_id,
-          token_status_key_from: :staff_token_status_id,
-          token_kind_key_from: :staff_token_kind_id, }.fetch(method), ClientToken.send(method, staff),
-      )
-      assert_equal(
-        { actor_foreign_key_from: :visitor_id,
-          token_status_key_from: :visitor_token_status_id,
-          token_kind_key_from: :visitor_token_kind_id, }.fetch(method), ClientToken.send(method, visitor),
-      )
-    end
-  end
-
   test "token status management distinguishes active restricted revoked and expired states" do
     token = ClientToken.new(user_token_status_id: ClientTokenStatus::ACTIVE)
 

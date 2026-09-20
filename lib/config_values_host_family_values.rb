@@ -252,4 +252,7 @@ class << ConfigValues::HostFamilyValues
   rescue KeyError
     raise KeyError, "Missing required ENV key: #{key}"
   end
+
+  private :host_family_origins, :host_family_primary_origins, :host_family_secondary_origins,
+          :host_family_utility_origins, :guid_key, :edit_key
 end

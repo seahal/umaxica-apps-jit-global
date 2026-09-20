@@ -95,10 +95,6 @@ class VisitorTokenTest < ActiveSupport::TestCase
     assert_not_operator VisitorToken, :<, OrgTicketRecord
   end
 
-  test "signed ref lookup uses symbol connection owner" do
-    assert_equal ComTicketRecord, VisitorToken.send(:connection_owner)
-  end
-
   test "belongs to visitor" do
     association = VisitorToken.reflect_on_association(:visitor)
 

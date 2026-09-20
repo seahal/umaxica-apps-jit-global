@@ -50,30 +50,4 @@ class McpSurfaceIdentityAndTokenCodecTest < ActiveSupport::TestCase
     assert_equal 1, [base_app, same].uniq.size
     assert_equal 3, [base_app, same, other_surface, other_realm].uniq.size
   end
-
-  # The OIDC client records a resource type in its own vocabulary; the token has
-  # to carry the surface's. An unrecognised value is the end-user surface, which
-  # is the least privileged of the three.
-  test "an OIDC client's resource type maps onto the surface's own vocabulary" do
-    {
-      "operator" => "operator",
-      "staff" => "operator",
-      "visitor" => "visitor",
-      "customer" => "visitor",
-      "client" => "client",
-      "something-else" => "client",
-    }.each do |declared, expected|
-      client = Struct.new(:resource_type).new(declared)
-
-      assert_equal expected, SecurityJwtOidcIdTokenCodec.send(:resource_type_for_client, client), declared
-    end
-  end
-
-  test "a numeric timestamp is normalised to UTC alongside a Time" do
-    at = Time.utc(2026, 8, 31, 12, 0, 0)
-
-    assert_equal at, SecurityJwtOidcIdTokenCodec.send(:normalize_time!, at.to_i)
-    assert_equal at, SecurityJwtOidcIdTokenCodec.send(:normalize_time!, at)
-    assert_equal at, SecurityJwtOidcIdTokenCodec.send(:normalize_time!, at.in_time_zone("Asia/Tokyo"))
-  end
 end

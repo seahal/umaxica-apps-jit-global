@@ -29,56 +29,6 @@ class AuthenticationOperatorRedirectHostTest < ActiveSupport::TestCase
     harness
   end
 
-  test "a request already on the staff host keeps that host" do
-    staff_host = CommonRedirect.normalize_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL"))
-
-    assert_equal staff_host, build_harness(host: staff_host).invoke(:sign_org_redirect_host)
-  end
-
-  test "a request from any other host is sent to the configured staff host" do
-    harness = build_harness(host: "attacker.example.com")
-
-    assert_equal CommonRedirect.normalize_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL")),
-                 harness.invoke(:sign_org_redirect_host)
-  end
-
-  test "the staff sign-in URL is always https on the resolved staff host" do
-    url = build_harness(host: "attacker.example.com").invoke(:sign_in_url_with_pt, "/settings")
-
-    assert_match(%r{\Ahttps://}, url)
-    assert_includes url, CommonRedirect.normalize_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL"))
-    assert_not_includes url, "attacker.example.com"
-  end
-
-  test "an operator is only active when one is present and their record says so" do
-    harness = build_harness(host: "attacker.example.com")
-
-    harness.define_singleton_method(:current_resource) { nil }
-
-    assert_not harness.invoke(:active_operator?)
-
-    harness.define_singleton_method(:current_resource) { Struct.new(:active?).new(false) }
-
-    assert_not harness.invoke(:active_operator?)
-
-    harness.define_singleton_method(:current_resource) { Struct.new(:active?).new(true) }
-
-    assert harness.invoke(:active_operator?)
-  end
-
-  test "the staff surface names its own models and never another surface's" do
-    harness = build_harness(host: "attacker.example.com")
-
-    assert_equal ::Operator, harness.invoke(:resource_class)
-    assert_equal OperatorToken, harness.invoke(:token_class)
-    assert_equal ::OperatorChronicle, harness.invoke(:audit_class)
-    assert_equal "operator", harness.invoke(:resource_type)
-    assert_equal :staff_id, harness.invoke(:resource_foreign_key)
-    assert_predicate harness, :am_i_operator?
-    assert_not harness.am_i_user?
-    assert_not harness.am_i_owner?
-  end
-
   test "a failed staff login is audited against the operator that was attempted" do
     harness = build_harness(host: "attacker.example.com")
     recorded = []

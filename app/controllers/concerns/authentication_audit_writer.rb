@@ -338,6 +338,8 @@ class AuthenticationAuditWriter
 
   private_class_method :ensure_chronicle_references!
   private_class_method :normalize_event_id
+
+  private_class_method :enqueue_outbox_fallback!
 end
 
 # rubocop:enable Metrics/MethodLength

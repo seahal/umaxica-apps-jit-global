@@ -10,48 +10,6 @@ require "test_helper"
 class WithdrawalGateAndLogoutSeamsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  class GateHarness < ApplicationController
-    include AuthenticationWithdrawalGate
-
-    attr_accessor :format_symbol, :rendered
-
-    def logged_in? = true
-
-    def current_resource = Object.new
-
-    def withdrawal_restricted_resource?(_resource) = true
-
-    def withdrawal_gate_allowlisted? = false
-
-    def request
-      Struct.new(:format).new(Mime[format_symbol || :json])
-    end
-
-    def render(*args, **kwargs)
-      self.rendered = [args, kwargs]
-    end
-
-    def invoke(name, ...) = send(name, ...)
-  end
-
-  test "a json request from a withdrawing principal is refused with a machine-readable status" do
-    harness = GateHarness.new
-    harness.format_symbol = :json
-
-    harness.invoke(:enforce_withdrawal_gate!)
-
-    assert_equal [[], { json: { error: "WITHDRAWAL_REQUIRED" }, status: :forbidden }], harness.rendered
-  end
-
-  test "a non-html request from a withdrawing principal is refused the same way" do
-    harness = GateHarness.new
-    harness.format_symbol = :csv
-
-    harness.invoke(:enforce_withdrawal_gate!)
-
-    assert_equal [[], { json: { error: "WITHDRAWAL_REQUIRED" }, status: :forbidden }], harness.rendered
-  end
-
   test "an rp logout ends the local session and returns to the site root without leaving the host" do
     harness = Class.new do
       include OidcRpLogout

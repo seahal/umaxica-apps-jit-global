@@ -105,7 +105,7 @@ module OmniAuth
 
         assert_equal :client_secret_post, captured.fetch(:client_auth_method)
         assert_equal "pkce-verifier-value", captured.fetch(:code_verifier)
-        assert_nil strategy.send(:session)["omniauth.pkce.verifier"]
+        assert_nil strategy.env["rack.session"]["omniauth.pkce.verifier"]
         # No certificate assertion is sent: client authentication is the shared
         # secret carried in the client options.
         assert_not captured.key?(:client_assertion)

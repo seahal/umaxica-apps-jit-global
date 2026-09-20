@@ -70,4 +70,6 @@ module EntraOmniauthBootCredentials
 
     raise KeyError, "#{key} must be a valid UUID"
   end
+
+  private_class_method :local_boot_without_entra?, :require_present!, :require_uuid!
 end

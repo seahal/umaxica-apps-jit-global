@@ -179,10 +179,6 @@ module PreferenceGlobal
     (request.get? || request.head?) ? :found : :see_other
   end
 
-  def get_theme
-    "sy"
-  end
-
   def get_language
     I18n.locale.to_s
   end
@@ -260,4 +256,6 @@ module PreferenceGlobal
     session[:timezone] = timezone_value
     write_preference_cookie(PreferenceBase::TIMEZONE_COOKIE_KEY, timezone_value)
   end
+
+  private :preference_context_from_hash, :normalized_preference_value
 end

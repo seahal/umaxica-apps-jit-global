@@ -102,4 +102,36 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
     assert preference.functional
     assert_not preference.targetable
   end
+  test "a fresh browser session takes over the principal's explicit language and recorded consent" do
+    patch base_app_preference_language_url(ri: "jp"), headers: @headers, as: :json,
+                                                      params: { preference_language: { option_id: "en" } }
+    patch base_app_preference_cookie_url(ri: "jp"), headers: @headers, as: :json,
+                                                    params: {
+                                                      preference_cookie: {
+                                                        consented: "1",
+                                                        functional: "1",
+                                                        performant: "1",
+                                                        targetable: "0",
+                                                      },
+                                                    }
+
+    assert_predicate @user.reload.user_preference, :present?
+
+    reset!
+    https!
+    host! @host
+
+    get base_app_web_v0_theme_url(ri: "jp"), headers: @headers
+
+    assert_response :success
+    browser = AppPreference.order(:created_at).last
+
+    assert_equal AppPreferenceLanguageOption::EN, browser.app_preference_language.option_id
+    cookie = browser.app_preference_cookie
+
+    assert_predicate cookie, :consented?
+    assert_predicate cookie, :functional?
+    assert_predicate cookie, :performant?
+    assert_not_predicate cookie, :targetable?
+  end
 end

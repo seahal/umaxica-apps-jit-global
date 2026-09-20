@@ -66,5 +66,7 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
     def consume!(surface:, login_challenge:, now: Time.current)
       find_by_login_challenge!(surface: surface, login_challenge: login_challenge).consume!(now: now)
     end
+
+    private :find_by_login_challenge!
   end
 end

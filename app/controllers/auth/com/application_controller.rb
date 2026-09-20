@@ -98,10 +98,6 @@ module Auth
 
       private
 
-      def actor_staff?
-        false
-      end
-
       def current_verification_actor
         current_visitor
       end

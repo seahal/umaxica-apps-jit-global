@@ -40,16 +40,6 @@ module FlowBase
     accessible?
   end
 
-  def cycle_expired?(now = Time.current)
-    retainable_required!(:lapsed?)
-    lapsed? || cycle_expires_at_lapsed?(now)
-  end
-
-  def cycle_purgeable?(_now = Time.current)
-    retainable_required!(:purgeable?)
-    purgeable?
-  end
-
   def transition_cycle_to!(next_status_id, allowed_from:, changes: {}, now: Time.current)
     with_cycle_lock do
       ensure_cycle_transition_allowed!(next_status_id, allowed_from: allowed_from, now: now)
@@ -123,11 +113,6 @@ module FlowBase
     raise FlowConfigurationError, "#{self.class.name} does not have #{column}"
   end
 
-  def read_cycle_time(column)
-    ensure_cycle_column!(column)
-    public_send(column)
-  end
-
   def retainable_required!(method_name)
     return if respond_to?(method_name)
 
@@ -145,12 +130,6 @@ module FlowBase
     raise ArgumentError, "discarded_at is required" if discarded_at.blank?
     raise ArgumentError, "purged_at is required" if purged_at.blank?
     raise ArgumentError, "discarded_at must be <= purged_at" if cycle_time_after?(discarded_at, purged_at)
-  end
-
-  def cycle_future_time?(value, now)
-    return true if cycle_infinite_time?(value)
-
-    value.present? && value > now
   end
 
   def cycle_past_or_present_time?(value, now)

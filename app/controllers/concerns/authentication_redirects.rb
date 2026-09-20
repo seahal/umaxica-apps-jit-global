@@ -393,4 +393,6 @@ module AuthenticationRedirects
       status: :unprocessable_content,
     )
   end
+
+  private :verify_authentication_pt_path
 end

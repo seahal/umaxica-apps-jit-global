@@ -55,26 +55,4 @@ class SignUpStepGateRefusalsTest < ActiveSupport::TestCase
     assert_equal :invalid, context.status
     assert_includes context.errors, "challenge issuance is not allowed for this step"
   end
-
-  test "a surface with no sign-up cycle class is refused rather than raised out of the gate" do
-    controller = ControllerDouble.new
-    controller.define_singleton_method(:current_sign_up_flow_ticket) { nil }
-    subject = gate(surface: :app, controller: controller)
-    subject.instance_variable_set(:@surface, :org)
-
-    assert_raises(ArgumentError) { subject.send(:cycle_class) }
-  end
-
-  # A controller that signs its return targets is asked for the signed value; one
-  # that does not falls back to the raw parameter.
-  test "the return target is taken from the signing helper when the controller has one" do
-    plain = ControllerDouble.new
-
-    assert_equal "/settings", gate(controller: plain).send(:signed_pt)
-
-    signing = ControllerDouble.new
-    signing.define_singleton_method(:signed_pt_param) { "signed.token" }
-
-    assert_equal "signed.token", gate(controller: signing).send(:signed_pt)
-  end
 end

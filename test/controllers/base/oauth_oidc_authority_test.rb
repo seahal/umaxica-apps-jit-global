@@ -875,8 +875,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           user_token_status_id: ClientTokenStatus::ACTIVE,
           created_at: (count + index + 1).hours.ago,
           updated_at: (count + index + 1).hours.ago,
+          rotated_at: (count + index).hours.ago,
         )
-        token.send(:skip_session_limit_check=, true)
         token.save!
       end
     end

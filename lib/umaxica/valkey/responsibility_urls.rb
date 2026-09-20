@@ -76,6 +76,8 @@ module Umaxica
       rescue ArgumentError => e
         raise ConfigurationError, "Valkey URL DB index is invalid", cause: e
       end
+
+      private_class_method :extract_db
     end
   end
 end

@@ -17,12 +17,4 @@ module Sitemap
     response.set_header("Surrogate-Control", "max-age=#{CDN_CACHE_TTL.to_i}")
     render formats: :xml
   end
-
-  def show_json
-    render json: { urls: sitemap_urls }
-  end
-
-  def sitemap_urls
-    []
-  end
 end

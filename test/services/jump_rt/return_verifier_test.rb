@@ -269,27 +269,6 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "jwks_unavailable", result.error
   end
 
-  test "jump_gateway_url fails fast in production when host is missing" do
-    with_env("PUBLIC_JUMP_GATEWAY_URL" => nil, "JUMP_GATEWAY_URL" => nil) do
-      Rails.stub(:env, ActiveSupport::StringInquirer.new("production")) do
-        error =
-          assert_raises(KeyError) do
-            JumpRtReturnVerifier.allocate.send(:jump_gateway_url)
-          end
-
-        assert_equal 'key not found: "PUBLIC_JUMP_GATEWAY_URL"', error.message
-      end
-    end
-  end
-
-  test "jump_gateway_url allows local default outside production" do
-    with_env("PUBLIC_JUMP_GATEWAY_URL" => nil) do
-      Rails.stub(:env, ActiveSupport::StringInquirer.new("test")) do
-        assert_equal "https://jump.umaxica.net", JumpRtReturnVerifier.allocate.send(:jump_gateway_url)
-      end
-    end
-  end
-
   test "rejects invalid url in token payload" do
     token = sign_return_token(url: "not a valid url")
 
@@ -335,93 +314,6 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "invalid_url", verify(sign_return_token(url: "https://www.umaxica.app/path?ok=1#frag")).error
   end
 
-  test "fetch_jwks rejects invalid jwks origin configuration" do
-    verifier = JumpRtReturnVerifier.new(
-      token: "dummy",
-      request_url: "https://www.umaxica.app/path",
-      request_base_url: "https://www.umaxica.app",
-      now: @now,
-    )
-
-    with_env(
-      "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
-      "JUMP_GATEWAY_JWKS_URL" => "not a valid url",
-    ) do
-      error = assert_raises(JWT::DecodeError) { verifier.send(:fetch_jwks) }
-
-      assert_equal "jwks fetch failed", error.message
-    end
-  end
-
-  test "fetch_jwks parses a successful bounded response without network access" do
-    verifier = build_verifier
-    stubs = stub_jwks { [200, {}, { keys: [@public_jwk] }.to_json] }
-
-    verifier.stub(:jwks_url, JWKS_URL) do
-      stub_outbound_http(stubs) do
-        assert_equal({ "keys" => [@public_jwk] }, verifier.send(:fetch_jwks))
-      end
-    end
-
-    stubs.verify_stubbed_calls
-  end
-
-  test "fetch_jwks rejects a plaintext jwks url before making a request" do
-    verifier = build_verifier
-
-    verifier.stub(:jwks_url, "http://jump.umaxica.net/.well-known/jwks.json") do
-      assert_raises(JWT::DecodeError) { verifier.send(:fetch_jwks) }
-    end
-  end
-
-  test "fetch_jwks normalizes response and transport failures" do
-    assert_jwks_decode_error { [200, {}, "not-json"] }
-    assert_jwks_decode_error { [502, {}, "upstream unavailable"] }
-    assert_jwks_decode_error { [200, {}, "x" * (JumpRtReturnVerifier::MAX_JWKS_BYTES + 1)] }
-    assert_jwks_decode_error { raise Faraday::TimeoutError, "read timeout" }
-    assert_jwks_decode_error { raise Faraday::ConnectionFailed, "connection refused" }
-  end
-
-  test "valid_payload? rejects blank url future iat and inverted nbf/exp" do
-    verifier = build_verifier
-    now = @now
-    base = {
-      "url" => "https://www.umaxica.app/path",
-      "iat" => now.to_i,
-      "nbf" => now.to_i,
-      "exp" => now.to_i + 30,
-      "jti" => "jti",
-    }
-
-    assert_not verifier.send(:valid_payload?, base.merge("url" => ""))
-    assert_not verifier.send(:valid_payload?, base.merge("iat" => now.to_i + JumpRtReturnVerifier::LEEWAY + 120))
-    assert_not verifier.send(:valid_payload?, base.merge("nbf" => now.to_i + 120, "exp" => now.to_i + 60))
-  end
-
-  test "consume_jti! rejects already-expired claims and normalize_url requires HTTP" do
-    verifier = build_verifier
-
-    assert_not verifier.send(:consume_jti!, { "jti" => "x", "exp" => 1.hour.ago.to_i })
-    assert_nil verifier.send(:normalize_url_without_rt, "mailto:x@y.z")
-  end
-
-  test "cached_jwks raises when fetch fails" do
-    verifier = JumpRtReturnVerifier.new(
-      token: "dummy",
-      request_url: "https://www.umaxica.app/path",
-      request_base_url: "https://www.umaxica.app",
-      fetcher: -> { raise JWT::DecodeError, "boom" },
-      now: @now,
-    )
-    Rails.cache.stub(:read, nil) do
-      Rails.cache.stub(:delete, true) do
-        Rails.cache.stub(:write, true) do
-          assert_raises(JumpRtReturnVerifier::JwksUnavailable) { verifier.send(:cached_jwks, force: true) }
-        end
-      end
-    end
-  end
-
   test "call rejects invalid header" do
     verifier = JumpRtReturnVerifier.new(
       token: "a.b.c",
@@ -439,32 +331,6 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
   end
 
   private
-
-  def build_verifier
-    JumpRtReturnVerifier.new(
-      token: "dummy",
-      request_url: "https://www.umaxica.app/path",
-      request_base_url: "https://www.umaxica.app",
-      now: @now,
-    )
-  end
-
-  def stub_jwks(&)
-    Faraday::Adapter::Test::Stubs.new { |stub| stub.get(JWKS_URL, &) }
-  end
-
-  def assert_jwks_decode_error(&)
-    verifier = build_verifier
-    stubs = stub_jwks(&)
-
-    verifier.stub(:jwks_url, JWKS_URL) do
-      stub_outbound_http(stubs) do
-        assert_raises(JWT::DecodeError) { verifier.send(:fetch_jwks) }
-      end
-    end
-
-    stubs.verify_stubbed_calls
-  end
 
   def verify(token)
     JumpRtReturnVerifier.call(

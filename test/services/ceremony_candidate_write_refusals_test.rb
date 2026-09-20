@@ -69,20 +69,6 @@ class CeremonyCandidateWriteRefusalsTest < ActiveSupport::TestCase
     end
   end
 
-  # The region decides which activation options are offered, so a preference
-  # store that cannot answer falls back rather than leaving the candidate
-  # without a region at all.
-  test "an activation candidate falls back to a default region when none can be read" do
-    resolver = SignInActivationCandidateResolver.new(cycle: nil, actor: clients(:one))
-
-    assert_equal "Client", resolver.send(:default_persona)
-    assert_equal 1, resolver.candidates.size
-
-    Actor.stub(:preferences, ->(*) { raise IOError, "preference store unavailable" }) do
-      assert_equal "JP", resolver.send(:default_region)
-    end
-  end
-
   test "an activation resolver with no actor at all offers no candidates" do
     assert_empty SignInActivationCandidateResolver.new(cycle: ClientSignInFlow.new, actor: nil).candidates
   end

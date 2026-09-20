@@ -12,14 +12,4 @@ class FinisherTest < ActiveSupport::TestCase
   test "dummy controller includes finisher" do
     assert_includes DummyController.ancestors, ::Finisher
   end
-
-  test "finish_request does not hide subclass errors" do
-    controller = DummyController.new
-
-    controller.define_singleton_method(:finish_request) do
-      raise RuntimeError, "finish failed"
-    end
-
-    assert_raises(RuntimeError) { controller.send(:finish_request) }
-  end
 end

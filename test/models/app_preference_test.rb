@@ -377,22 +377,4 @@ class AppPreferenceTest < ActiveSupport::TestCase
     assert_predicate preference.used_at, :present?
     assert_equal rotated.id, preference.replaced_by_id
   end
-
-  test "migrate_preference_children! moves child preference reference" do
-    child = Struct.new(:preference_id) do
-      define_method(:update!) do |attributes|
-        self.preference_id = attributes.fetch(:preference_id)
-      end
-    end.new(1)
-    from = Struct.new(:app_preference_cookie) do
-      define_singleton_method(:model_name) do
-        ActiveModel::Name.new(AppPreference)
-      end
-    end.new(child)
-    to = Struct.new(:id).new(2)
-
-    AppPreference.send(:migrate_preference_children!, from: from, to: to)
-
-    assert_equal 2, child.preference_id
-  end
 end

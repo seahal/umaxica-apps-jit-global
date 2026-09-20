@@ -283,10 +283,6 @@ module PasskeySignInFlow
     false
   end
 
-  def passkey_success_restricted?(result)
-    result[:restricted]
-  end
-
   def render_passkey_restricted_success(_result)
     raise NotImplementedError, "#{self.class} must define #render_passkey_restricted_success"
   end

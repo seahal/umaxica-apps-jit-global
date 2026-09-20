@@ -114,16 +114,6 @@ class SecretCredentialConcernTest < ActiveSupport::TestCase
     assert_predicate record, :deleted?
   end
 
-  test "expired_by_time? handles Float::INFINITY" do
-    record = DummySecret.new(discarded_at: Float::INFINITY)
-
-    assert_not record.send(:expired_by_time?, Time.current)
-
-    record.discarded_at = -Float::INFINITY
-
-    assert_not record.send(:expired_by_time?, Time.current)
-  end
-
   test "base secret_credential class requires status hooks" do
     assert_raises(NotImplementedError) { MinimalSecret.identity_secret_credential_status_class }
     assert_raises(NotImplementedError) { MinimalSecret.identity_secret_credential_status_id_column }

@@ -141,28 +141,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     assert_match(/ActiveRecord::ActiveRecordError: boom/, cycle.cleanup_error_code)
   end
 
-  test "schedule_dependent_retention uses fallback retention attrs for non-retainable records" do
-    now = Time.current.change(usec: 0)
-    cycle = build_client_cycle(
-      cleanup_status_id: ClientSignUpFlowCleanupStatus::PENDING,
-      status_id: ClientSignUpFlowStatus::CANCELLED,
-    )
-    record = FakeFallbackRecord.new(created_at: now - 1.day)
-    service = SignUpArtifactCleanup.new(cycle: cycle, now: now)
-
-    service.stub(:dependent_records, [record]) do
-      service.stub(:deleted_status_column, :status_id) do
-        service.stub(:deleted_status_id, "deleted") do
-          service.send(:schedule_dependent_retention!)
-        end
-      end
-    end
-
-    assert_equal now, record.updated_attrs.fetch(:discarded_at)
-    assert_equal now + SignUpTermination::PHYSICAL_PURGE_DELAY, record.updated_attrs.fetch(:purged_at)
-    assert_equal "deleted", record.updated_attrs.fetch(:status_id)
-  end
-
   test "client pending telephone cleanup updates the phone and pending passkey" do
     now = Time.current.change(usec: 0)
     user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
@@ -236,18 +214,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     assert_equal VisitorTelephoneStatus::DELETED, telephone.reload.visitor_telephone_status_id
     assert_equal VisitorPasskeyStatus::DELETED, pending_passkey.reload.status_id
     assert_operator visitor.reload.discarded_at, :>=, now
-  end
-
-  test "client pending contact rejects unrelated objects" do
-    service = SignUpArtifactCleanup.new(cycle: build_client_cycle, now: Time.current)
-
-    assert_not service.send(:client_pending_contact?, Object.new)
-  end
-
-  test "visitor pending contact rejects unrelated objects" do
-    service = SignUpArtifactCleanup.new(cycle: build_visitor_cycle, now: Time.current)
-
-    assert_not service.send(:visitor_pending_contact?, Object.new)
   end
 
   private
@@ -385,31 +351,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
       self.cleanup_completed_at = attrs[:cleanup_completed_at] if attrs.key?(:cleanup_completed_at)
       self.cleanup_error_code = attrs[:cleanup_error_code] if attrs.key?(:cleanup_error_code)
       self
-    end
-  end
-
-  class FakeFallbackRecord
-    class << self
-      def transaction
-        yield
-      end
-    end
-
-    attr_reader :created_at, :updated_attrs
-
-    def initialize(created_at:)
-      @created_at = created_at
-    end
-
-    def lock!
-    end
-
-    def has_attribute?(name)
-      %i(discarded_at purged_at status_id).include?(name)
-    end
-
-    def update!(attrs)
-      @updated_attrs = attrs
     end
   end
 end

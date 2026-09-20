@@ -4,35 +4,6 @@
 require "test_helper"
 
 class TargetedModelLineCoverageTest < ActiveSupport::TestCase
-  class AbstractOidcUsage < AppTicketRecord
-    self.abstract_class = true
-    include RpSession
-  end
-
-  class ConcreteOidcUsage < AbstractOidcUsage
-    self.table_name = "client_rp_sessions"
-  end
-
-  class AbstractSignUpFlow
-    include ActiveModel::Validations
-
-    class << self
-      def before_validation(*) = nil
-
-      def validates(*) = nil
-
-      def validate(*) = nil
-    end
-
-    attr_accessor :completed_requirements
-
-    include SignUpFlowTicket
-
-    def has_attribute?(*) = false
-
-    def transition_sign_up_to!(*) = nil
-  end
-
   class AbstractOidcAuthorization < ApplicationRecord
     self.abstract_class = true
     include OidcAuthorizationTransactionable
@@ -41,11 +12,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   class AbstractStepUpCeremony < ApplicationRecord
     self.abstract_class = true
     include StepUpCeremonyTransactionable
-  end
-
-  class AbstractSocialIdentity < ApplicationRecord
-    self.abstract_class = true
-    include SocialIdentifiable
   end
 
   test "withdrawal occurrence helpers reject unsupported types and digest optional values" do
@@ -105,27 +71,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     end
   end
 
-  test "oidc usage exposes revoke logout expiry and abstract association behavior" do
-    usage = ClientRpSession.new(revoked_at: Time.current)
-
-    assert_predicate usage, :revoked?
-
-    updates = []
-    usage.stub(:update!, ->(attributes) { updates << attributes }) do
-      now = Time.current
-      usage.revoke!(status: "failed", now: now)
-
-      assert_equal now, updates.last.fetch(:revoked_at)
-      usage.mark_logout_status!(status: "success", now: now)
-
-      assert_equal now, updates.last.fetch(:logged_out_at)
-      assert_equal now, updates.last.fetch(:revoked_at)
-    end
-
-    assert_operator usage.send(:default_refresh_token_expires_at), :>, Time.current
-    assert_raises(NotImplementedError) { ConcreteOidcUsage.new.send(:parent_association_name) }
-  end
-
   test "processor notification status helpers and pending scope are executable" do
     assert_equal "PENDING", ClientProcessorErasureNotification.status_name_for(
       ClientProcessorErasureNotification.status_id_for("PENDING"),
@@ -136,33 +81,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
 
     assert_predicate notification, :pending?
     assert_kind_of ActiveRecord::Relation, ClientProcessorErasureNotification.pending_for_processing
-  end
-
-  test "sign up flow base and fallback helpers fail closed" do
-    assert_nil AbstractSignUpFlow.cleanup_status_class
-    assert_raises(NotImplementedError) { AbstractSignUpFlow.cleanup_status_id_for(:idle) }
-
-    flow = AbstractSignUpFlow.new
-
-    assert_equal 0, flow.checkpoint_version
-    assert_equal ["inner"],
-                 flow.send(
-                   :flatten_requirement_keys, { "outer" => [{ "inner" => true }] },
-                   include_current_level: false,
-                 )
-    assert_not flow.send(:safe_internal_return_to?, "http://[")
-
-    calls = []
-    flow.stub(:transition_sign_up_to!, ->(*arguments, **options) { calls << [arguments, options] }) do
-      flow.advance_sign_up_to_checkpoint!
-    end
-
-    assert_equal "CHECKPOINT_PENDING", calls.first.first.first
-
-    concrete_flow = ClientSignUpFlow.new(cleanup_status_id: nil)
-    concrete_flow.send(:default_cleanup_status)
-
-    assert_equal ClientSignUpFlowCleanupStatus::IDLE, concrete_flow.cleanup_status_id
   end
 
   test "retention and privacy state helpers expose status names and predicates" do
@@ -266,20 +184,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
 
     assert_not transaction.valid?
     assert_includes transaction.errors[:expected_step], "is not valid for the origin surface"
-  end
-
-  test "single use token switches to the writing role" do
-    connection_owner = Object.new
-    connection_owner.define_singleton_method(:current_role) { :reading }
-    connection_owner.define_singleton_method(:connected_to) do |role:, &block|
-      raise RuntimeError, "unexpected role" unless role == :writing
-
-      block.call
-    end
-
-    AppPreference.stub(:connection_class_for_self, connection_owner) do
-      assert_equal :written, AppPreference.send(:with_writing_role) { :written }
-    end
   end
 
   test "unsupported email verification outcome is reported" do

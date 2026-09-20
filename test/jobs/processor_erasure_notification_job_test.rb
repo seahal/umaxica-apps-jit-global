@@ -65,14 +65,6 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
     assert_equal 'unsupported processor erasure surface: "org"', error.message
   end
 
-  test "private mappings reject unsupported notification classes" do
-    job = ProcessorErasureNotificationJob.new
-    notification = Object.new
-
-    assert_raises(ArgumentError) { job.send(:subject_for, notification) }
-    assert_raises(ArgumentError) { job.send(:privacy_request_for, notification) }
-  end
-
   private
 
   def create_client

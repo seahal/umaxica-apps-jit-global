@@ -118,16 +118,6 @@ class RecoveryPasscodeTopUpTest < ActiveSupport::TestCase
     end
   end
 
-  test "an unknown credential class is refused by name rather than silently skipped" do
-    top_up = RecoveryPasscodeTopUp.new(
-      actor: @client, credential_class: ClientEmail, target_count: 1, now: Time.current,
-    )
-
-    error = assert_raises(ArgumentError) { top_up.send(:secret_credential_relation) }
-
-    assert_equal "unsupported recovery passcode credential class: ClientEmail", error.message
-  end
-
   private
 
   def create_client_recovery_passcodes!(client, count:)

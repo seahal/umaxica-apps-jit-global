@@ -380,6 +380,8 @@ module Auth
             host: base_authority_host,
           )
         end
+
+        private :initialize_totp, :handle_success, :handle_failure
       end
     end
   end

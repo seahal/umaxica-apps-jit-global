@@ -6,17 +6,6 @@ require "test_helper"
 class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "ChainSeal canonicalize and decode_signature edge arms" do
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:canonicalize, BasicObject.new) }
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:decode_signature, "abc=") }
-    assert_raises(ChainSeal::FormatError) do
-      ChainSeal.send(:decode_signature, Base64.urlsafe_encode64("short", padding: false))
-    end
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:validate_ec_key!, OpenSSL::PKey::RSA.new(2048)) }
-    key = OpenSSL::PKey::EC.generate("prime256v1")
-    assert_raises(ChainSeal::FormatError) { ChainSeal.send(:validate_ec_key!, key) }
-  end
-
   test "JitSecurityTurnstileVerifier blank token arms" do
     blank_token = JitSecurityTurnstileVerifier.verify(token: "", remote_ip: "127.0.0.1")
 
@@ -121,16 +110,5 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
     assert_kind_of String, a
     assert_kind_of String, b
     assert_not_equal a, b
-  end
-
-  test "SecurityJwtOidcIdTokenCodec normalize_time and decode_options" do
-    t = SecurityJwtOidcIdTokenCodec.send(:normalize_time!, Time.current)
-
-    assert_kind_of Time, t
-    assert_kind_of Time, SecurityJwtOidcIdTokenCodec.send(:normalize_time!, Time.current.to_i)
-    opts = SecurityJwtOidcIdTokenCodec.send(:decode_options, client_id: "c", resource_type: "client", issuer: "iss")
-
-    assert_equal "iss", opts[:iss]
-    assert_equal "c", opts[:aud]
   end
 end

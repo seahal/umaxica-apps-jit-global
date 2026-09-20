@@ -56,31 +56,4 @@ class EncryptionKeyLookupAndBindingMatchingTest < ActiveSupport::TestCase
       assert_empty JitSecurityActiveRecordEncryptionKeyProvider.parse_local_previous
     end
   end
-
-  # A binding matches a subject only when both name the same kind. A mismatched
-  # pair is not a match, because treating it as one would bind an avatar to a
-  # subject of the wrong type during the backfill.
-  test "a binding only matches a subject of its own kind" do
-    auditor = AvatarBackfill::AuditLegacyClientBindings.new
-    persona = ClientPersona.new(id: 1)
-    agent = Agent.new(id: 1)
-    individual = Individual.new(id: 1)
-
-    assert auditor.send(:binding_matches_subject?, AvatarPersonaBinding.new(persona_id: 1), persona)
-    assert auditor.send(:binding_matches_subject?, AvatarAgentBinding.new(agent_id: 1), agent)
-    assert auditor.send(:binding_matches_subject?, AvatarIndividualBinding.new(individual_id: 1), individual)
-
-    assert_not auditor.send(:binding_matches_subject?, AvatarPersonaBinding.new(persona_id: 1), agent)
-    assert_not auditor.send(:binding_matches_subject?, AvatarAgentBinding.new(agent_id: 1), persona)
-    assert_not auditor.send(:binding_matches_subject?, AvatarAgentBinding.new(agent_id: 2), agent)
-    assert_not auditor.send(:binding_matches_subject?, Object.new, persona)
-  end
-
-  test "the active binding for a subject is looked up in that subject's own binding table" do
-    auditor = AvatarBackfill::AuditLegacyClientBindings.new
-
-    assert_nil auditor.send(:active_binding_for_subject, Agent.new(id: 999_999))
-    assert_nil auditor.send(:active_binding_for_subject, Individual.new(id: 999_999))
-    assert_nil auditor.send(:active_binding_for_subject, Object.new)
-  end
 end

@@ -21,29 +21,6 @@ module SignUpSequenceControllerSupport
     render plain: I18n.t("errors.messages.not_found"), status: :not_found
   end
 
-  def load_sign_up_checkpoint_ticket
-    return render_sign_up_age_restricted if sign_up_session_state.age_restricted?
-
-    @sign_up_ticket = current_sign_up_flow_ticket
-    return if @sign_up_ticket
-
-    sign_up_session_state.clear_all!
-    session_missing_key = "sign.#{sign_up_surface}.registration.session_missing"
-    redirect_to(
-      sign_up_restart_path,
-      alert: I18n.t(session_missing_key),
-    )
-  end
-
-  def authorize_sign_up_participant!(rule)
-    return if performed?
-
-    context = sign_up_policy_context
-    return if allowed_to?(rule, context, with: SignUp::ParticipantPolicy)
-
-    render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
-  end
-
   def authorize_sign_up_requirement!(rule)
     return if performed?
 
@@ -51,26 +28,6 @@ module SignUpSequenceControllerSupport
     return if context && allowed_to?(rule, context, with: SignUp::RequirementPolicy)
 
     render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
-  end
-
-  def authorize_sign_up_requirement_or_cleared_continue!(rule)
-    return if performed?
-
-    context = sign_up_requirement_context
-    return if context && (
-      allowed_to?(rule, context, with: SignUp::RequirementPolicy) ||
-        allowed_to?(:continue_after_cleared_requirement?, context, with: SignUp::RequirementPolicy)
-    )
-
-    render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
-  end
-
-  def sign_up_policy_context
-    SignUpPolicyContext.build(
-      surface: sign_up_surface,
-      actor_authentication: sign_up_actor_authentication,
-      ticket: @sign_up_ticket,
-    )
   end
 
   def sign_up_requirement_context
@@ -86,37 +43,6 @@ module SignUpSequenceControllerSupport
     )
   rescue ArgumentError
     nil
-  end
-
-  def run_sign_up_event(event, payload: {})
-    return if performed?
-
-    render_sign_up_result(perform_sign_up_event(event, payload: payload))
-  end
-
-  def run_sign_up_requirement_event(payload: {})
-    return if performed?
-
-    result = perform_sign_up_event(
-      :clear_requirement,
-      payload: payload.merge(checkpoint_version: sign_up_checkpoint_version_param),
-    )
-    return finalize_sign_up_from_checkpoint! if result.success? && result.next_event == :finalize
-
-    render_sign_up_result(result)
-  end
-
-  def enter_sign_up_checkpoint!
-    return if performed?
-
-    unless @sign_up_ticket.sign_up_checkpoint_pending?
-      result = perform_sign_up_event(:enter_checkpoint)
-      return render_sign_up_result(result) unless result.success?
-    end
-
-    return finalize_sign_up_from_checkpoint! if sign_up_missing_requirements.empty?
-
-    render_sign_up_checkpoint
   end
 
   def perform_sign_up_event(event, payload: {})
@@ -170,25 +96,6 @@ module SignUpSequenceControllerSupport
     ).requirement_cleared?(@sign_up_ticket.completed_requirements, requirement)
   rescue ArgumentError
     false
-  end
-
-  def persist_sign_up_birthdate_requirement
-    return true unless sign_up_requirement_param == "birthdate"
-    return false unless validate_sign_up_checkpoint_version!
-
-    actor = sign_up_pending_actor
-    unless actor
-      render plain: I18n.t("errors.messages.not_found"), status: :not_found
-      return false
-    end
-
-    actor.birthdate = sign_up_birthdate_param
-    unless actor.save
-      render plain: actor.errors.full_messages.to_sentence, status: :unprocessable_content
-      return false
-    end
-
-    true
   end
 
   def clear_sign_up_birthdate_requirement
@@ -329,10 +236,6 @@ module SignUpSequenceControllerSupport
 
   def sign_up_ticket_public_id
     session[sign_up_sequence_session_key].presence
-  end
-
-  def sign_up_requirement_param
-    (params[:requirement].presence || params.dig(:sign_up, :requirement).presence).to_s
   end
 
   def sign_up_birthdate_param

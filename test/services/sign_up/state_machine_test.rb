@@ -323,30 +323,6 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
     assert_equal ClientSignUpFlowStatus::CANCELLED, ticket.reload.status_id
   end
 
-  test "failed helper builds failed result" do
-    ticket = create_cycle(ClientSignUpFlow)
-    machine = SignUpStateMachine.send(:new, ticket: ticket, event: :start, actor_context: nil, payload: {})
-
-    result = machine.send(:failed, "something went wrong", cleanup_required: true)
-
-    assert_equal :failed, result.status
-    assert_includes result.errors, "something went wrong"
-    assert_predicate result, :cleanup_required?
-  end
-
-  test "checkpoint_version_matches rescues invalid integer format" do
-    ticket = create_cycle(ClientSignUpFlow)
-    payload = { checkpoint_version: "not-a-number" }
-    machine = SignUpStateMachine.send(
-      :new, ticket: ticket, event: :clear_requirement,
-            actor_context: nil, payload: payload,
-    )
-
-    result = machine.send(:checkpoint_version_matches?)
-
-    assert_not result
-  end
-
   private
 
   def create_cycle(cycle_class, attrs = {})

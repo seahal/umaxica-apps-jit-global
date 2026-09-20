@@ -182,4 +182,8 @@ module JitSecurityJwtLocalKeysetInstaller
   def base64_der(key)
     Base64.strict_encode64(key.to_der)
   end
+
+  private_class_method :install_keyset_issuer!, :install_surface_issuer!, :install_oidc_client_issuer!,
+                       :complete_env?, :warn_local_keyset_regenerated, :load_store, :write_store, :keyset_issuer_env,
+                       :surface_issuer_env
 end

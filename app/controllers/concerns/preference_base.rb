@@ -84,54 +84,6 @@ module PreferenceBase
     raise ResolutionError.new("Preference #{component} resolution failed"), cause: exception
   end
 
-  # ==========================================================================
-  # 2) Preference request entrypoints (Request/Cookie I/O boundary)
-  # ==========================================================================
-  def cookie_banner_endpoint_url
-    return nil unless cookie_banner_endpoint_available_for_request?
-
-    @cookie_banner_endpoint_url ||=
-      begin
-        endpoint_url = nil
-        %i(
-          base_app_web_v0_cookie_url
-          base_com_web_v0_cookie_url
-          base_org_web_v0_cookie_url
-        ).each do |helper_name|
-          next unless respond_to?(helper_name, true)
-
-          endpoint_url = public_send(helper_name)
-          break
-        rescue ActionController::UrlGenerationError
-          next
-        end
-        endpoint_url
-      end
-  end
-
-  def cookie_banner_endpoint_available_for_request?
-    expected_host =
-      case ::CoreSurface.current(request)
-      when :app then ENV.fetch("PRIVATE_BASE_SERVICE_URL")
-      when :com then ENV.fetch("PRIVATE_BASE_CORPORATE_URL")
-      when :org then ENV.fetch("PRIVATE_BASE_STAFF_URL")
-      end
-    return false if expected_host.blank?
-
-    request.host == expected_host
-  end
-
-  def extract_cookie_banner_consent(payload)
-    return nil unless payload.is_a?(Hash)
-
-    preferences = payload["preferences"]
-    return nil unless preferences.is_a?(Hash)
-    return preferences["consent"] if preferences.key?("consent")
-    return preferences["consented"] if preferences.key?("consented")
-
-    nil
-  end
-
   def set_color_theme
     source = color_theme_preference_source
     theme = normalize_theme(public_option_cookie_value(source, THEME_COOKIE_KEY, :theme))
@@ -173,13 +125,6 @@ module PreferenceBase
     end
   end
 
-  def preference_record_theme
-    return if @preferences.blank?
-
-    option_id = @preferences.public_send(preference_theme_association)&.option_id
-    theme_short_code(option_id_to_theme(option_id, preference_prefix))
-  end
-
   def create_preference_options(preference, params_hash = {})
     prefix = preference_prefix(preference)
     option_ids = preference_option_ids(prefix, params_hash)
@@ -207,14 +152,6 @@ module PreferenceBase
         prefix,
       )
     end
-  end
-
-  def preference_option_classes(prefix)
-    classes =
-      PreferenceClassRegistry::CHILD_RECORD_TYPES.index_with do |type|
-        PreferenceClassRegistry.option_class(prefix, type)
-      end
-    classes
   end
 
   def create_preference_cookie(prefix, preference)
@@ -309,10 +246,6 @@ module PreferenceBase
       end
   end
 
-  def set_timezone_from_session
-    Time.zone = session[:timezone] if session[:timezone].present?
-  end
-
   def preference_class
     @preference_class ||=
       begin
@@ -401,10 +334,6 @@ module PreferenceBase
     # current IPAddr raises IPAddr::AddressFamilyError instead of returning the
     # IPv4 loopback address this fallback exists to produce.
     IPAddr.new((127 << 24) + 1, Socket::AF_INET).to_s
-  end
-
-  def preference_theme_association
-    @preference_theme_association ||= "#{preference_prefix_underscore}_theme"
   end
 
   def update_preference_child_with_audit(child, attributes, audit_event)
@@ -779,18 +708,6 @@ module PreferenceBase
 
   def preference_payload_preferences
     PreferenceToken.extract_preferences(@preference_payload)
-  end
-
-  def preference_payload_value(key)
-    preference_payload_preferences[key.to_s]
-  end
-
-  def preference_payload_public_id
-    PreferenceToken.extract_public_id(@preference_payload)
-  end
-
-  def preference_payload_jti
-    PreferenceToken.extract_jti(@preference_payload)
   end
 
   def clear_preference_refresh_failure!

@@ -88,10 +88,6 @@ class OperatorTokenTest < ActiveSupport::TestCase
     assert_operator OperatorToken, :<, OrgTicketRecord
   end
 
-  test "signed ref lookup uses token connection owner" do
-    assert_equal OrgTicketRecord, OperatorToken.send(:connection_owner)
-  end
-
   test "belongs to staff" do
     association = OperatorToken.reflect_on_association(:staff)
 

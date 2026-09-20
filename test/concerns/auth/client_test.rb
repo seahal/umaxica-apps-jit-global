@@ -174,27 +174,6 @@ class AuthClientTest < ActiveSupport::TestCase
     assert @obj.cookies.encrypted[::AuthenticationClient::REFRESH_COOKIE_KEY]
   end
 
-  test "current_client works with Bearer token" do
-    @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
-
-    token_record =
-      OrgTicketRecord.connected_to(role: :writing) do
-        ClientToken.create!(user: @user)
-      end
-
-    # Generate access token using AuthenticationToken
-    access_token = AuthenticationToken.encode(
-      @user,
-      host: @obj.request.host,
-      session_public_id: token_record.public_id,
-      resource_type: "client",
-      jwt_issuer_id: @obj.send(:auth_jwt_issuer_id),
-    )
-    @obj.request.headers["Authorization"] = "Bearer #{access_token}"
-
-    assert_equal @user, @obj.current_client
-  end
-
   test "log_in hard rejects when active and restricted sessions already exist" do
     2.times do
       token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)

@@ -60,10 +60,6 @@ module OrgNormalSignInTransaction
     data
   end
 
-  def org_normal_sign_in_transaction_valid?
-    org_normal_sign_in_transaction.present?
-  end
-
   # The Operator the Entra stage selected. This is the only admissible source of
   # the actor for the second stage of Normal sign-in.
   def org_normal_sign_in_operator

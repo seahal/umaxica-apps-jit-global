@@ -65,7 +65,10 @@ class ObservabilityGatewayContractTest < Minitest::Test
     known = datasources.pluck("uid")
     referenced = referenced_datasource_uids(datasources)
 
-    assert_not_empty referenced, "Tempo keeps a trace-to-logs correlation into Loki."
+    # Plain Minitest does not provide Rails' assert_not_empty assertion.
+    # rubocop:disable Rails/RefuteMethods
+    refute_empty referenced, "Tempo keeps a trace-to-logs correlation into Loki."
+    # rubocop:enable Rails/RefuteMethods
     assert_empty referenced - known,
                  "A datasource reference names a UID no provisioned datasource declares."
   end
@@ -80,11 +83,14 @@ class ObservabilityGatewayContractTest < Minitest::Test
 
     initializer = File.read(File.join(REPOSITORY_ROOT, "config/initializers/opentelemetry.rb"))
 
+    # Plain Minitest does not provide Rails' assert_not_includes assertion.
+    # rubocop:disable Rails/RefuteMethods
     %w(tempo: prometheus: loki:).each do |backend|
-      assert_not_includes initializer, backend,
-                          "Rails exports to Alloy only; a direct backend endpoint bypasses the gateway " \
-                          "and its redaction stage."
+      refute_includes initializer, backend,
+                      "Rails exports to Alloy only; a direct backend endpoint bypasses the gateway " \
+                      "and its redaction stage."
     end
+    # rubocop:enable Rails/RefuteMethods
   end
 
   # The agent-side half of the two-stage redaction in the ADR. Losing it leaves the in-process

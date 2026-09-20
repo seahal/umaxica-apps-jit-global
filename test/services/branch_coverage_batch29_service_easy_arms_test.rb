@@ -39,19 +39,6 @@ class BranchCoverageBatch29ServiceEasyArmsTest < ActiveSupport::TestCase
     assert_equal "invalid_token", blank.error
   end
 
-  test "OidcEndSessionRequest blank params helpers" do
-    request = OidcEndSessionRequest.new(params: {}, request: ActionDispatch::TestRequest.create)
-    request.define_singleton_method(:actor) { nil }
-
-    assert_nil request.send(:current_subject)
-
-    unauth = Object.new
-    unauth.define_singleton_method(:unauthenticated?) { true }
-    request.define_singleton_method(:actor) { unauth }
-
-    assert_nil request.send(:current_actor)
-  end
-
   test "DbscVerificationService blank proof arms" do
     missing_record = DbscVerificationService.new(record: nil, session_id: "s", proof: "p").call
     record = Struct.new(:dbsc_session_id, :dbsc_public_key, :dbsc_challenge, :dbsc_challenge_issued_at)
@@ -60,21 +47,6 @@ class BranchCoverageBatch29ServiceEasyArmsTest < ActiveSupport::TestCase
 
     assert_equal "record_missing", missing_record[:error_code]
     assert_equal "missing_proof", missing_proof[:error_code]
-  end
-
-  test "CredentialSecurityTransition blank actor arms" do
-    assert_raises(ArgumentError) do
-      CredentialSecurityTransition.new(
-        actor: nil,
-        current_session: nil,
-        reason: CredentialSecurityTransition::REASONS.first,
-        affected_surface: "app",
-        revoke_current: false,
-        revoke_step_up: false,
-        revoke_other_sessions: true,
-        request: ActionDispatch::TestRequest.create,
-      ).send(:validate!)
-    end
   end
 
   test "SignUpStateMachine blank transition guards" do
@@ -108,14 +80,6 @@ class BranchCoverageBatch29ServiceEasyArmsTest < ActiveSupport::TestCase
     assert_equal :invalid, gate.status
     assert_includes gate.errors, "unsupported sign-up route"
     assert_nil JumpRtReturnPolicy.normalize_origin("javascript:alert(1)")
-  end
-
-  test "OrganizationPolicy and ApplicationPolicy edge denies" do
-    policy = OrganizationPolicy.new(Object.new)
-    policy.define_singleton_method(:user) { Client.new }
-
-    assert_not policy.send(:organization_has_current_principal_membership?)
-    assert_not ApplicationPolicy.new(Object.new).index?
   end
 
   test "lib JitSecurityJwtJtiGenerator and KeyMaterial arms" do

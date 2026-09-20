@@ -44,18 +44,6 @@ module Security
       assert_equal :deny_all, UndeclaredController.authentication_mode_for(:index)
     end
 
-    test "runtime access policy enforcement uses authentication mode instead of inherited rules" do
-      controller = UndeclaredController.new
-      controller.define_singleton_method(:action_name) { "index" }
-
-      error =
-        assert_raises(AuthenticationBase::MissingPolicyError) do
-          controller.send(:enforce_access_policy!)
-        end
-
-      assert_match "Denied by default authentication mode", error.message
-    end
-
     test "legacy access policy DSL temporarily maps to authentication mode metadata" do
       assert_equal :private, PrivateController.authentication_mode_for(:show)
     end
