@@ -8,9 +8,9 @@
 #
 #  id             :bigint           not null, primary key
 #  attempt_count  :integer          default(0), not null
-#  discarded_at   :datetime         default(Infinity), not null
+#  discard_at   :datetime         default(Infinity), not null
 #  method         :string
-#  purged_at      :datetime         default(Infinity), not null
+#  purge_eligible_at      :datetime         default(Infinity), not null
 #  return_to      :text             not null
 #  scope          :string           not null
 #  status         :string           not null
@@ -43,7 +43,7 @@ class OperatorStepUpSessionTest < ActiveSupport::TestCase
       return_to: "/account",
       method: "passkey",
       status: "PENDING",
-      discarded_at: 10.minutes.from_now,
+      discard_at: 10.minutes.from_now,
     }.freeze
   end
 
@@ -89,8 +89,8 @@ class OperatorStepUpSessionTest < ActiveSupport::TestCase
   test "database rejects retention order when validations are bypassed" do
     session = OperatorStepUpSession.new(
       @valid_params.merge(
-        discarded_at: 2.days.from_now,
-        purged_at: 1.day.from_now,
+        discard_at: 2.days.from_now,
+        purge_eligible_at: 1.day.from_now,
       ),
     )
     exception_classes = [ActiveRecord::StatementInvalid]
@@ -115,9 +115,9 @@ class OperatorStepUpSessionTest < ActiveSupport::TestCase
     end
   end
 
-  test "expired? reflects discarded_at boundary" do
-    assert_predicate OperatorStepUpSession.new(@valid_params.merge(discarded_at: Time.current)), :expired?
-    assert_not OperatorStepUpSession.new(@valid_params.merge(discarded_at: 1.second.from_now)).expired?
+  test "expired? reflects discard_at boundary" do
+    assert_predicate OperatorStepUpSession.new(@valid_params.merge(discard_at: Time.current)), :expired?
+    assert_not OperatorStepUpSession.new(@valid_params.merge(discard_at: 1.second.from_now)).expired?
   end
 
   test "scopes filter and order sessions" do

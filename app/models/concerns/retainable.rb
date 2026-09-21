@@ -20,59 +20,61 @@ module Retainable
   end
 
   included do
-    attribute :discarded_at, :datetime, default: -> { SENTINEL }
-    attribute :purged_at, :datetime, default: -> { SENTINEL }
+    attribute :discard_at, :datetime, default: -> { SENTINEL }
+    attribute :purge_eligible_at, :datetime, default: -> { SENTINEL }
 
-    validates :discarded_at, presence: true
-    validates :purged_at, presence: true
-    validate :discarded_at_not_after_purged_at
+    validates :discard_at, presence: true
+    validates :purge_eligible_at, presence: true
+    validate :retention_order_valid
     validate :retention_times_not_before_created_at, on: :update
 
     Retainable.registry << self unless Retainable.registry.include?(self)
   end
 
   # NOTE: ActiveRecord scope intentionally omitted (conflicts with pre-existing
-  #   `.active` / `.deletable` semantics). Use raw `where('discarded_at > ?', Time.current)` for queries.
+  #   `.active` / `.deletable` semantics). Use raw `where('discard_at > ?', Time.current)` for queries.
 
-  def accessible?
-    future_time?(discarded_at)
+  def accessible?(now = Time.current)
+    future_time?(discard_at, now)
   end
 
-  def lapsed?
-    !future_time?(discarded_at)
+  def lapsed?(now = Time.current)
+    !future_time?(discard_at, now)
   end
 
-  def purgeable?
-    !future_time?(purged_at)
+  def purgeable?(now = Time.current)
+    !future_time?(purge_eligible_at, now)
   end
 
   # Schedule a future logical+physical deletion window. Both timestamps must be
   # in the future. Use this when scheduling retention up front (e.g. issuing a
   # token with a known expiry).
-  def schedule_retention!(discarded_at:, purged_at:)
-    raise ArgumentError, "discarded_at must be in the future" unless future_time?(discarded_at)
-    raise ArgumentError, "purged_at must be in the future" unless future_time?(purged_at)
-    raise ArgumentError, "discarded_at must be <= purged_at" if time_after?(discarded_at, purged_at)
+  def schedule_retention!(discard_at:, purge_eligible_at:)
+    raise ArgumentError, "discard_at must be in the future" unless future_time?(discard_at)
+    raise ArgumentError, "purge_eligible_at must be in the future" unless future_time?(purge_eligible_at)
+    raise ArgumentError, "discard_at must be <= purge_eligible_at" if time_after?(discard_at, purge_eligible_at)
 
-    update!(discarded_at: discarded_at, purged_at: purged_at)
+    update!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
   end
 
   # Mark as logically deleted *now* and schedule physical deletion after
   # `purge_after`. Use this for cancellation / expiration / failure paths where
   # the row stops being visible immediately and is eligible for purge later.
   #
-  # `discarded_at` clamps to `created_at` to satisfy the
+  # `discard_at` clamps to `created_at` to satisfy the
   # `retention_times_not_before_created_at` invariant when the row was created
   # in the same request (Time.current may be less than created_at by us).
   def discard_now!(purge_after:, now: Time.current)
     raise ArgumentError, "purge_after must be a Duration" unless purge_after.respond_to?(:from_now)
 
-    discarded_at_value = persisted_created_at_or(now)
-    purged_at_value = now + purge_after
-    raise ArgumentError, "purged_at must be in the future" unless future_time?(purged_at_value)
-    raise ArgumentError, "discarded_at must be <= purged_at" if time_after?(discarded_at_value, purged_at_value)
+    discard_at_value = persisted_created_at_or(now)
+    purge_eligible_at_value = now + purge_after
+    raise ArgumentError, "purge_eligible_at must be in the future" unless future_time?(purge_eligible_at_value, now)
+    if time_after?(discard_at_value, purge_eligible_at_value)
+      raise ArgumentError, "discard_at must be <= purge_eligible_at"
+    end
 
-    update!(discarded_at: discarded_at_value, purged_at: purged_at_value)
+    update!(discard_at: discard_at_value, purge_eligible_at: purge_eligible_at_value)
   end
 
   private
@@ -83,41 +85,54 @@ module Retainable
     [created_at, now].max
   end
 
-  def discarded_at_not_after_purged_at
-    return if discarded_at.blank? || purged_at.blank?
+  def retention_order_valid
+    return if discard_at.blank? || purge_eligible_at.blank?
 
-    return unless time_after?(discarded_at, purged_at)
+    return unless time_after?(discard_at, purge_eligible_at)
 
-    errors.add(:discarded_at, "must be <= purged_at")
+    errors.add(:discard_at, "must be <= purge_eligible_at")
   end
 
   def retention_times_not_before_created_at
     return if created_at.blank?
 
-    errors.add(:discarded_at, "must be >= created_at") if time_before?(discarded_at, created_at)
-    errors.add(:purged_at, "must be >= created_at") if time_before?(purged_at, created_at)
+    errors.add(:discard_at, "must be >= created_at") if time_before?(discard_at, created_at)
+    errors.add(:purge_eligible_at, "must be >= created_at") if time_before?(purge_eligible_at, created_at)
   end
 
-  def future_time?(value)
-    return true if value.respond_to?(:infinite?) && value.infinite?
+  def future_time?(value, now = Time.current)
+    return true if positive_infinity?(value)
+    return false if negative_infinity?(value)
 
-    value.present? && value > Time.current
+    value.present? && value > now
   end
 
   def time_after?(left, right)
     return false if left.blank? || right.blank?
-    return false if left.respond_to?(:infinite?) && left.infinite? && right.respond_to?(:infinite?) && right.infinite?
-    return true if left.respond_to?(:infinite?) && left.infinite?
-    return false if right.respond_to?(:infinite?) && right.infinite?
+    return false if positive_infinity?(left) && positive_infinity?(right)
+    return true if positive_infinity?(left)
+    return false if negative_infinity?(left)
+    return false if positive_infinity?(right)
+    return true if negative_infinity?(right)
 
     left > right
   end
 
   def time_before?(left, right)
     return false if left.blank? || right.blank?
-    return false if left.respond_to?(:infinite?) && left.infinite?
-    return true if right.respond_to?(:infinite?) && right.infinite?
+    return true if negative_infinity?(left)
+    return false if positive_infinity?(left)
+    return false if negative_infinity?(right)
+    return true if positive_infinity?(right)
 
     left < right
+  end
+
+  def positive_infinity?(value)
+    value.respond_to?(:infinite?) && value.infinite? == 1
+  end
+
+  def negative_infinity?(value)
+    value.respond_to?(:infinite?) && value.infinite? == -1
   end
 end

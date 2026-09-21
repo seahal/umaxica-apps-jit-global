@@ -30,7 +30,7 @@ class AppWithdrawalStepUpEnforcerTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     BaseSelectorAuthority.prepare(surface: :app, principal: @client, session: @token)

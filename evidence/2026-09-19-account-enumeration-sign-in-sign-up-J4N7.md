@@ -123,3 +123,21 @@ the same for registered and unregistered identifiers, and must be stored on the 
 - Password reset and recovery-style entry points (enforcement recovery, withdrawal re-entry) use
   the same `otp_cooldown_active?` pattern (`EnforcementRecoveryCeremonyFlow`,
   `WithdrawalCeremonyReentry`) and were not reviewed for this oracle.
+
+## Remediation follow-up (2026-09-20)
+
+The app/com email sign-in create boundary now applies a server-side Rails rate-limit bucket keyed by
+the normalized email blind index before account lookup. Registered and unregistered identifiers
+therefore receive the same existing cooldown status/body across fresh sessions. The rate-limit
+callback caches the Turnstile result once per request; unsuccessful Turnstile requests use an
+IP-scoped key and do not reserve the address-wide bucket.
+
+Executed verification:
+
+- `PARALLEL_WORKERS=1 bin/rails test test/controllers/auth/app/in/emails_controller_enumeration_test.rb test/controllers/auth/com/in/emails_controller_enumeration_test.rb` — 3 runs, 8 assertions, 0 failures, 0 errors, 0 skips.
+- Affected app/com sign-in, resend, enumeration, and burst-rate-limit set — 119 runs, 518 assertions, 0 failures, 0 errors, 0 skips.
+- Targeted RuboCop for both controllers and both enumeration tests — 4 files inspected, no offenses.
+
+F9 is therefore resolved for app/com email sign-in and app/com sign-up email/telephone entry
+points. Recovery-style entry points listed above remain unverified and are not closed by this
+slice.

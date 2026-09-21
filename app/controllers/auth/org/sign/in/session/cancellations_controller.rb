@@ -18,7 +18,7 @@ class Auth::Org::Sign::In::Session::CancellationsController < ::Auth::Org::Appli
   def session_limit_actor_class = Operator
 
   def session_limit_sign_in_path
-    challenge = session[:oidc_authorization_login_challenge]
+    challenge = oidc_authorization_login_challenge
     if challenge.present?
       auth_org_sign_in_path(ri: current_region_identifier, login_challenge: challenge)
     else

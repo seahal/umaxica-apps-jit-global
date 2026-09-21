@@ -12,7 +12,7 @@ module CommonOtp
   extend ActiveSupport::Concern
 
   # Default OTP expiration time in minutes
-  OTP_EXPIRATION_MINUTES = 12
+  OTP_EXPIRATION_MINUTES = (CommonOtpPolicy::AUTHENTICATION_TTL / 1.minute).to_i
 
   # Minimum elapsed time for timing attack protection (in seconds)
   TIMING_PROTECTION_SECONDS = 0.01
@@ -201,12 +201,13 @@ module CommonOtp
 
   private
 
-  # Generates a secure random counter for OTP
-  # Combines timestamp with random number for uniqueness
+  # Generates a secure random counter for OTP.
+  # The counter is an input to the one-time secret and must not encode a
+  # timestamp or any other predictable value.
   #
   # @return [Integer] A unique counter value
   def generate_otp_counter
-    Integer([Time.now.to_i, SecureRandom.random_number(1 << 64)].map(&:to_s).join.to_s, 10)
+    SecureRandom.random_number(1 << 64)
   end
 
   # Performs constant-time comparison of OTP codes

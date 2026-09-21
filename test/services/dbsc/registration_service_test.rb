@@ -7,7 +7,7 @@ require "test_helper"
 class DbscRegistrationServiceTest < ActiveSupport::TestCase
   test "sets user token to active dbsc state" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     token.update!(dbsc_challenge: "challenge-1", dbsc_challenge_issued_at: Time.current)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -36,8 +36,8 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
       binding_method_id: AppPreferenceBindingMethod::NOTHING,
       dbsc_status_id: AppPreferenceDbscStatus::NOTHING,
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
       created_at: 1.day.ago,
       updated_at: 1.day.ago,
     )
@@ -65,7 +65,7 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "returns challenge_expired when dbsc_challenge_issued_at is too old" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-old-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     token.update!(dbsc_challenge: "old-challenge", dbsc_challenge_issued_at: 10.minutes.ago)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -83,7 +83,7 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "returns challenge_expired when dbsc_challenge_issued_at is blank" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-blank-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     token.update!(dbsc_challenge: "stale-challenge", dbsc_challenge_issued_at: nil)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -101,7 +101,7 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "rejects registration proof with mismatched audience" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-aud-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     token.update!(dbsc_challenge: "aud-challenge", dbsc_challenge_issued_at: Time.current)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -126,7 +126,7 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
     user = create_verified_user_with_email(
       email_address: "dbsc-registration-signature-#{SecureRandom.hex(4)}@example.com",
     )
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     token.update!(dbsc_challenge: "signature-challenge", dbsc_challenge_issued_at: Time.current)
     verification_key = OpenSSL::PKey::EC.generate("prime256v1")
     signing_key = OpenSSL::PKey::EC.generate("prime256v1")
@@ -161,7 +161,7 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
   # kept because either one alone would leave the invariant implicit.
   test "refuses to bind a session to a symmetric registration JWK" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-oct-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     token.update!(dbsc_challenge: "oct-challenge", dbsc_challenge_issued_at: Time.current)
     shared_secret = "attacker-known-secret"
 
@@ -531,7 +531,7 @@ class DbscRegistrationServiceTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -549,7 +549,7 @@ class DbscRegistrationServiceTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -569,7 +569,7 @@ class DbscRegistrationServiceTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

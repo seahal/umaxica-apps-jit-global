@@ -9,8 +9,8 @@
 # 300s) and is meaningless once past it.
 #
 # These tables are intentionally NOT handled by `RetentionPurgeJob`, which keys
-# on `purged_at` (account-retention lifecycle). Proof-state rows have no
-# `purged_at`; without this job they would grow unbounded. The `expires_at`
+# on `purge_eligible_at` (account-retention lifecycle). Proof-state rows have no
+# `purge_eligible_at`; without this job they would grow unbounded. The `expires_at`
 # index on each table keeps the delete scan cheap.
 class DpopProofStatePurgeJob < ApplicationJob
   queue_as :retention

@@ -10,11 +10,11 @@
 #  access_discarded_at     :datetime
 #  access_expires_at       :datetime         not null
 #  completed_at            :datetime
-#  discarded_at            :datetime         default(Infinity), not null
+#  discard_at            :datetime         default(Infinity), not null
 #  failed_at               :datetime
 #  logically_revoked_at    :datetime
 #  nonce_digest            :string
-#  purged_at               :datetime         default(Infinity), not null
+#  purge_eligible_at               :datetime         default(Infinity), not null
 #  refresh_expires_at      :datetime         not null
 #  requested_at            :datetime         not null
 #  return_to               :text
@@ -30,11 +30,11 @@
 # Indexes
 #
 #  index_visitor_sign_out_flows_on_access_expires_at        (access_expires_at)
-#  index_visitor_sign_out_flows_on_discarded_at             (discarded_at)
+#  index_visitor_sign_out_flows_on_discard_at             (discard_at)
 #  index_visitor_sign_out_flows_on_kind_id                  (kind_id)
 #  index_visitor_sign_out_flows_on_principal_id             (principal_id)
 #  index_visitor_sign_out_flows_on_public_id                (public_id) UNIQUE
-#  index_visitor_sign_out_flows_on_purged_at                (purged_at)
+#  index_visitor_sign_out_flows_on_purge_eligible_at                (purge_eligible_at)
 #  index_visitor_sign_out_flows_on_refresh_expires_at       (refresh_expires_at)
 #  index_visitor_sign_out_flows_on_refresh_token_family_id  (refresh_token_family_id)
 #  index_visitor_sign_out_flows_on_status_id                (status_id)

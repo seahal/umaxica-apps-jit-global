@@ -11,7 +11,7 @@
 #
 # Why composition (not a parallel implementation):
 #   - There must be a single chokepoint that knows what "revoke one
-#     session" means (set discarded_at, write status, etc.). If we had
+#     session" means (set discard_at, write status, etc.). If we had
 #     two independent implementations they would drift.
 #   - It keeps the failure semantics of single-revoke consistent across
 #     callers (current-session logout, bulk revoke, lifecycle suspend).

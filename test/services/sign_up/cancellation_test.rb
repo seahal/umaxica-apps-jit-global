@@ -25,10 +25,10 @@ class SignUpCancellationTest < ActiveSupport::TestCase
     assert_equal ClientSignUpFlowStatus::CANCELLED, cycle.reload.status_id
     assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, cycle.cleanup_status_id
     assert_not_nil cycle.cleanup_completed_at
-    assert_operator cycle.purged_at, :>, Time.current
+    assert_operator cycle.purge_eligible_at, :>, Time.current
     assert_equal ClientEmailStatus::DELETED, email.reload.user_email_status_id
-    assert_operator email.discarded_at, :<=, Time.current
-    assert_operator email.purged_at, :>, Time.current
+    assert_operator email.discard_at, :<=, Time.current
+    assert_operator email.purge_eligible_at, :>, Time.current
   end
 
   test "replayed cancel reruns cleanup when previous cleanup did not finish" do
@@ -80,15 +80,15 @@ class SignUpCancellationTest < ActiveSupport::TestCase
       step: "cancelled",
       cleanup_status_id: ClientSignUpFlowCleanupStatus::PENDING,
     )
-    cycle.update_columns(discarded_at: cycle.created_at, purged_at: cycle.created_at + 29.minutes)
+    cycle.update_columns(discard_at: cycle.created_at, purge_eligible_at: cycle.created_at + 29.minutes)
 
     SignUpArtifactCleanup.call(cycle: cycle)
 
     assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal ClientPasskeyStatus::ACTIVE, existing_passkey.reload.status_id
-    assert_predicate existing_passkey.discarded_at, :infinite?
+    assert_predicate existing_passkey.discard_at, :infinite?
     assert_equal ClientPasskeyStatus::DELETED, pending_passkey.reload.status_id
-    assert_operator pending_passkey.discarded_at, :<=, Time.current
+    assert_operator pending_passkey.discard_at, :<=, Time.current
     assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_telephone_status_id
   end
 

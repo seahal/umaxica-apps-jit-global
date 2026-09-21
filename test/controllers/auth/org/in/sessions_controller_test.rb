@@ -484,7 +484,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   # ===================================================================
 
   test "restricted session at 14 minutes is still accessible (boundary: within TTL)" do
-    token = create_restricted_session(@staff, discarded_at: 15.minutes.from_now)
+    token = create_restricted_session(@staff, discard_at: 15.minutes.from_now)
     headers = as_staff_headers_with_token(@staff, token, host: @host, expires_at: 30.minutes.from_now)
 
     travel 14.minutes do
@@ -500,7 +500,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   end
 
   test "restricted session expires after 15 minutes and is locked" do
-    token = create_restricted_session(@staff, discarded_at: 15.minutes.from_now)
+    token = create_restricted_session(@staff, discard_at: 15.minutes.from_now)
     headers = as_staff_headers_with_token(@staff, token, host: @host)
     logs = []
 
@@ -541,13 +541,13 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   private
 
-  def create_restricted_session(staff, discarded_at: nil)
+  def create_restricted_session(staff, discard_at: nil)
     token = OperatorToken.create!(
       staff: staff,
       staff_token_status_id: OperatorTokenStatus::RESTRICTED,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
-    token.rotate_refresh_token!(discarded_at: discarded_at)
+    token.rotate_refresh_token!(discard_at: discard_at)
     token
   end
 
@@ -631,7 +631,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
         if session_public_id.present?
           ClientToken.find_by(public_id: session_public_id)
         else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
         end
       token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -653,7 +653,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
           OperatorToken.find_by(public_id: session_public_id)
         else
           OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end
@@ -679,7 +679,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
           VisitorToken.find_by(public_id: session_public_id)
         else
           VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end

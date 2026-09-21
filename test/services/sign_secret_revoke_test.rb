@@ -8,7 +8,7 @@ class SignSecretRevokeTest < ActiveSupport::TestCase
     now = Time.zone.parse("2026-06-14 12:00:00 UTC")
     saved = []
     credential = Class.new do
-      attr_accessor :revoked_at, :discarded_at
+      attr_accessor :revoked_at, :discard_at
       attr_reader :reloads
 
       def initialize(saved)
@@ -25,7 +25,7 @@ class SignSecretRevokeTest < ActiveSupport::TestCase
       end
 
       def save!
-        @saved << [revoked_at, discarded_at]
+        @saved << [revoked_at, discard_at]
       end
     end.new(saved)
 

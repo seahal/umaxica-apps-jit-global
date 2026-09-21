@@ -40,9 +40,28 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
     assert_not inertia_props.key?("description")
 
-    links = inertia_props.fetch("sections").flat_map { |section| section.fetch("items") }
+    sections = inertia_props.fetch("sections")
+    expected_headings = [
+      I18n.t("base.shared.dashboard.sections.menu_links", locale: :ja),
+      I18n.t("base.shared.dashboard.sections.primary_links", locale: :ja),
+    ]
+
+    assert_equal expected_headings,
+                 sections.map { |section| section.fetch("heading") }
+
+    menu_links = sections.first.fetch("items")
+    primary_links = sections.second.fetch("items")
+    links = sections.flat_map { |section| section.fetch("items") }
     hrefs = links.map { |link| link.fetch("href") }
     labelled = links.to_h { |link| [link.fetch("label"), link.fetch("href")] }
+    primary_hrefs = primary_links.map { |link| link.fetch("href") }
+
+    assert_equal [
+      base_app_switcher_path(ri: "jp"),
+      base_app_preference_path(ri: "jp"),
+      new_base_app_sign_out_path(ri: "jp"),
+    ], menu_links.map { |link| link.fetch("href") }
+    menu_links.each { |link| assert_not_includes primary_hrefs, link.fetch("href") }
 
     assert_includes hrefs, base_app_root_path(ri: "jp")
     assert_equal base_app_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
@@ -83,6 +102,24 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_not labelled.key?(dashboard_label(:authorize_sign_in))
     assert_not labelled.key?(dashboard_label(:authorize_sign_up))
+  end
+
+  test "menu links preserve the full request context" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+
+    get base_app_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
+        headers: session_headers(token)
+
+    menu_hrefs = inertia_props.fetch("sections").first.fetch("items").map { |item| item.fetch("href") }
+    menu_hrefs.each do |href|
+      query = Rack::Utils.parse_nested_query(URI.parse(href).query.to_s)
+
+      assert_equal "jp", query.fetch("ri")
+      assert_equal "dr", query.fetch("ct")
+      assert_equal "en", query.fetch("lx")
+      assert_equal "asia/tokyo", query.fetch("tz")
+    end
   end
 
   test "identity_show_links_up_to_the_dashboard" do
@@ -280,7 +317,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -303,7 +340,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -328,7 +365,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

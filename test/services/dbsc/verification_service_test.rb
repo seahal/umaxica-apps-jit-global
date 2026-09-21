@@ -7,7 +7,7 @@ require "test_helper"
 class DbscVerificationServiceTest < ActiveSupport::TestCase
   test "verifies proof and returns ok for active user token without changing status" do
     user = create_verified_user_with_email(email_address: "dbsc-verify-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
 
     token.update!(
@@ -43,8 +43,8 @@ class DbscVerificationServiceTest < ActiveSupport::TestCase
       binding_method_id: AppPreferenceBindingMethod::DBSC,
       dbsc_status_id: AppPreferenceDbscStatus::ACTIVE,
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
       created_at: 1.day.ago,
       updated_at: 1.day.ago,
     )
@@ -76,7 +76,7 @@ class DbscVerificationServiceTest < ActiveSupport::TestCase
 
   test "rejects verification proof that carries a public key" do
     user = create_verified_user_with_email(email_address: "dbsc-verify-jwk-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
 
     token.update!(
@@ -146,7 +146,7 @@ class DbscVerificationServiceTest < ActiveSupport::TestCase
 
   def dbsc_verification_token_with_stored_key(stored_key)
     user = create_verified_user_with_email(email_address: "dbsc-key-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     challenge = "challenge-#{SecureRandom.hex(4)}"
 
     token.update!(
@@ -514,7 +514,7 @@ class DbscVerificationServiceTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -532,7 +532,7 @@ class DbscVerificationServiceTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -552,7 +552,7 @@ class DbscVerificationServiceTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

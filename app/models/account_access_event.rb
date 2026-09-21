@@ -30,6 +30,8 @@
 #  index_account_access_events_on_ticket_id               (ticket_id)
 #
 class AccountAccessEvent < ChronicleRecord
+  encrypts :reason_note
+
   EVENT_TYPE_ADMIN_LOCK = "admin_lock"
   EVENT_TYPE_ADMIN_LOCK_REAFFIRMED = "admin_lock_reaffirmed"
   EVENT_TYPE_ADMIN_UNLOCK = "admin_unlock"

@@ -64,7 +64,7 @@ module SignIn
     test "existing restricted session becomes guardrail blocking item" do
       actor = create_client
       restricted = ClientToken.create!(user: actor, user_token_status_id: ClientTokenStatus::RESTRICTED)
-      restricted.rotate_refresh_token!(discarded_at: TokenStatusManagement::RESTRICTED_TTL.from_now)
+      restricted.rotate_refresh_token!(discard_at: TokenStatusManagement::RESTRICTED_TTL.from_now)
       cycle = create_cycle(actor)
 
       result = SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!

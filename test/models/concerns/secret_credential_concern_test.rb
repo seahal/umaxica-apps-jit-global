@@ -77,7 +77,7 @@ class SecretCredentialConcernTest < ActiveSupport::TestCase
   end
 
   test "verify_and_consume! returns false when expired" do
-    record, raw = DummySecret.issue!(name: "Expired", user: @user, discarded_at: 1.hour.ago, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
+    record, raw = DummySecret.issue!(name: "Expired", user: @user, discard_at: 1.hour.ago, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
     record.update_columns(created_at: 2.hours.ago)
 
     assert_not record.verify_and_consume!(raw)

@@ -13,11 +13,15 @@ module SignVerificationTotpChecks
       return false
     end
 
-    result = TotpWindowConsumer.call(credentials: active_totp_credentials, token: code)
+    result = TotpWindowConsumer.call(
+      credentials: active_totp_credentials,
+      token: code,
+      credential_public_id: verification_params[:credential_public_id],
+    )
     unless result.accepted?
       @verification_errors =
-        if result.locked?
-          ["確認コードの試行回数が上限に達しました。しばらくしてから再度お試しください"]
+        if result.credential_required?
+          ["認証アプリを選択してください"]
         else
           ["確認コードが正しくありません"]
         end

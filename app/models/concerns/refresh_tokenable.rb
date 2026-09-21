@@ -92,7 +92,7 @@ module RefreshTokenable
       {
         refresh_token_family_id: previous_token.refresh_token_family_id.presence || SecureRandom.uuid,
         refresh_token_generation: Integer(previous_token.refresh_token_generation.to_s, 10) + 1,
-        discarded_at: previous_token.discarded_at,
+        discard_at: previous_token.discard_at,
         dbsc_session_id: previous_token.dbsc_session_id,
         dbsc_public_key: previous_token.dbsc_public_key,
         dbsc_challenge: previous_token.dbsc_challenge,
@@ -103,7 +103,7 @@ module RefreshTokenable
     def copy_rotated_token_optional_attributes(attrs, previous_token)
       copy_attribute_if_present(attrs, previous_token, :device_session_id)
       copy_attribute_if_present(attrs, previous_token, :dpop_jkt)
-      copy_attribute_if_present(attrs, previous_token, :purged_at)
+      copy_attribute_if_present(attrs, previous_token, :purge_eligible_at)
       copy_attribute_if_present(attrs, previous_token, :oidc_connection_id)
       copy_attribute_if_present(attrs, previous_token, :oidc_client_id)
       copy_attribute_if_present(attrs, previous_token, :oidc_scope)
@@ -183,10 +183,11 @@ module RefreshTokenable
 
   # Whether the refresh token has expired.
   def expired_refresh?
-    return false if discarded_at.blank?
-    return false if discarded_at.respond_to?(:infinite?) && discarded_at.infinite?
+    return true if discard_at.blank?
+    return true if discard_at.respond_to?(:infinite?) && discard_at.infinite? == -1
+    return false if discard_at.respond_to?(:infinite?) && discard_at.infinite? == 1
 
-    discarded_at <= Time.current
+    discard_at <= Time.current
   end
 
   # Whether the token is active.
@@ -195,19 +196,19 @@ module RefreshTokenable
   end
 
   # Rotate (refresh) the token and return the raw token for the client.
-  def rotate_refresh_token!(discarded_at: nil)
+  def rotate_refresh_token!(discard_at: nil)
     # Use a transaction to keep token state consistent.
     transaction do
       token, verifier = generate_refresh_token(public_id: public_id)
 
       self.refresh_token_digest = digest_refresh_token(verifier)
-      self.discarded_at =
-        if discarded_at
-          SessionAbsoluteExpiryValue.cap(proposed_expiry: discarded_at, absolute_expiry: self.discarded_at)
-        elsif self.discarded_at.respond_to?(:infinite?) && self.discarded_at.infinite?
+      self.discard_at =
+        if discard_at
+          SessionAbsoluteExpiryValue.cap(proposed_expiry: discard_at, absolute_expiry: self.discard_at)
+        elsif self.discard_at.respond_to?(:infinite?) && self.discard_at.infinite?
           default_lapses_at
         else
-          self.discarded_at
+          self.discard_at
         end
       self.last_used_at = Time.current
       self.refresh_token_generation = Integer(refresh_token_generation.to_s, 10) + 1
@@ -245,9 +246,9 @@ module RefreshTokenable
   end
 
   def ensure_lapses_at
-    return if discarded_at.present? && !(discarded_at.respond_to?(:infinite?) && discarded_at.infinite?)
+    return if discard_at.present? && !(discard_at.respond_to?(:infinite?) && discard_at.infinite?)
 
-    self.discarded_at = default_lapses_at
+    self.discard_at = default_lapses_at
   end
 
   def ensure_refresh_token_family_id

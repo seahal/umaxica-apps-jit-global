@@ -51,6 +51,21 @@ The status is recalculated from surface-specific step-up methods:
 
 When multiple app step-up methods are available, prefer passkey, then TOTP, then email OTP.
 
+### App TOTP credential lifecycle
+
+TOTP is supported only on the `app` surface. `com` and `org` do not gain TOTP enrollment,
+sign-in, Step-Up, or settings routes through this status policy. The credential lifecycle and
+attempt-binding rules are recorded in `adr/app-totp-credential-lifecycle.md`.
+
+An app TOTP failure belongs to one actor-owned credential. With one active credential the server
+selects it; with two active credentials the actor selects by `public_id`. The browser never sends
+a database-local credential ID, and a failed guess is never applied to every active credential.
+The PostgreSQL counter is consecutive and bounded from 0 through 100. The 100th failure changes
+that credential to terminal `REVOKED`; a later correct code cannot reactivate it. Only `ACTIVE` and
+`INACTIVE` credentials consume one of the two enrollment slots. Revoked rows remain visible in
+app settings so the actor can distinguish `REVOKED` from `ACTIVE`, but no reactivation action is
+provided.
+
 Telephone numbers, social identities, and passcodes do not count as step-up methods. Telephone is
 also not an AAL1 method by itself; it may be an entry point into an AAL1 sign-in flow, but the
 verifier used after that entry point is the AAL method.

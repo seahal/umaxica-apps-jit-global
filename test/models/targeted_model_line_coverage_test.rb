@@ -132,7 +132,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
       sign_in.discard_sign_in!(now: Time.current)
     end
 
-    assert_equal sign_in.purged_at, discard_calls.last.fetch(:purged_at)
+    assert_equal sign_in.purge_eligible_at, discard_calls.last.fetch(:purge_eligible_at)
 
     sign_out = ClientSignOutFlow.new(status_id: ClientSignOutFlow.status_id_for("NOTHING"))
 

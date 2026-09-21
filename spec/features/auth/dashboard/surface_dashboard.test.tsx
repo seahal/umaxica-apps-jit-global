@@ -30,6 +30,22 @@ const props: SurfaceDashboardProps = {
 };
 
 describe("SurfaceDashboard", () => {
+  it("renders Menu links before Primary links without changing server-provided destinations", () => {
+    const markup = renderToStaticMarkup(
+      <SurfaceDashboard
+        title="Dashboard"
+        sections={[
+          { heading: "Menu links", items: [{ label: "Switcher", href: "/switcher?ri=jp" }] },
+          { heading: "Primary links", items: [{ label: "Account", href: "/account?ri=jp" }] },
+        ]}
+      />,
+    );
+
+    expect(markup.indexOf("Menu links")).toBeLessThan(markup.indexOf("Primary links"));
+    expect(markup).toContain('href="/switcher?ri=jp"');
+    expect(markup).toContain('href="/account?ri=jp"');
+  });
+
   it("links the destinations the server resolved", () => {
     const markup = renderToStaticMarkup(<SurfaceDashboard {...props} />);
 

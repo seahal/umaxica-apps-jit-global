@@ -7,9 +7,9 @@
 # Database name: com_ticket
 #
 #  id               :bigint           not null, primary key
-#  discarded_at     :datetime         default(Infinity), not null
+#  discard_at     :datetime         default(Infinity), not null
 #  last_used_at     :datetime
-#  purged_at        :datetime         default(Infinity), not null
+#  purge_eligible_at        :datetime         default(Infinity), not null
 #  token_digest     :string           not null
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
@@ -40,14 +40,14 @@ class VisitorVerificationTest < ActiveSupport::TestCase
         VisitorVerification.create!(
           visitor_token: @token,
           token_digest: VisitorVerification.digest_token("raw"),
-          discarded_at: 1.hour.from_now,
+          discard_at: 1.hour.from_now,
           last_used_at: Time.current,
         )
       end
 
     assert_predicate verification, :active?
 
-    verification.update_columns(discarded_at: 1.minute.ago)
+    verification.update_columns(discard_at: 1.minute.ago)
 
     assert_not verification.active?
   end
@@ -59,7 +59,7 @@ class VisitorVerificationTest < ActiveSupport::TestCase
 
     assert_predicate raw_token, :present?
     assert_predicate replacement, :active?
-    assert_predicate previous.reload.discarded_at, :present?
+    assert_predicate previous.reload.discard_at, :present?
   end
 
   private
@@ -404,7 +404,7 @@ class VisitorVerificationTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -422,7 +422,7 @@ class VisitorVerificationTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -442,7 +442,7 @@ class VisitorVerificationTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

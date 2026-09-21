@@ -50,17 +50,17 @@ class RefreshTokenReuseActivityRecorderTest < ActiveSupport::TestCase
       client.update!(status_id: ClientStatus::ACTIVE)
       ClientToken.create!(
         user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-        user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+        user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       )
     when :com
       VisitorToken.create!(
         visitor: visitors(:reserved_visitor), visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+        visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       )
     when :org
       OperatorToken.create!(
         staff: operators(:one), staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-        staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+        staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       )
     end
   end

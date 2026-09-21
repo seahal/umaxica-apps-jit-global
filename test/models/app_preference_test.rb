@@ -8,10 +8,10 @@
 #  dbsc_challenge           :text
 #  dbsc_challenge_issued_at :datetime
 #  dbsc_public_key          :jsonb
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  explicit_fields          :jsonb            not null
 #  jti                      :string
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  token_digest             :binary
 #  used_at                  :datetime
 #  created_at               :datetime         not null
@@ -30,7 +30,7 @@
 #  index_app_preferences_on_dbsc_status_id     (dbsc_status_id)
 #  index_app_preferences_on_jti                (jti) UNIQUE
 #  index_app_preferences_on_public_id          (public_id) UNIQUE
-#  index_app_preferences_on_purged_at          (purged_at)
+#  index_app_preferences_on_purge_eligible_at          (purge_eligible_at)
 #  index_app_preferences_on_replaced_by_id     (replaced_by_id)
 #  index_app_preferences_on_status_id          (status_id)
 #  index_app_preferences_on_token_digest       (token_digest)
@@ -166,7 +166,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("app-consume-once")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -190,18 +190,18 @@ class AppPreferenceTest < ActiveSupport::TestCase
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
       token_digest: revoked_digest,
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
       token_digest: compromised_digest,
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.minute.ago,
+      discard_at: 1.minute.ago,
       token_digest: expired_digest,
       jti: SecureRandom.uuid,
     )
@@ -216,16 +216,16 @@ class AppPreferenceTest < ActiveSupport::TestCase
 
     assert_not preference.revoked?
 
-    preference.discarded_at = Time.current
+    preference.discard_at = Time.current
 
     assert_predicate preference, :revoked?
   end
 
   test "rotated_within_grace? is true for a just-consumed token with a replacement" do
-    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discarded_at: 1.day.from_now)
+    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discard_at: 1.day.from_now)
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       used_at: Time.current,
       replaced_by_id: replacement.id,
     )
@@ -235,11 +235,11 @@ class AppPreferenceTest < ActiveSupport::TestCase
 
   test "rotated_within_grace? honors the window boundary" do
     now = Time.current
-    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discarded_at: 1.day.from_now)
+    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discard_at: 1.day.from_now)
     window = SingleUseToken::PREFERENCE_REFRESH_GRACE_WINDOW
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       replaced_by_id: replacement.id,
     )
 
@@ -259,12 +259,12 @@ class AppPreferenceTest < ActiveSupport::TestCase
     # the row is somehow marked consumed.
     self_replaced = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       used_at: Time.current,
     )
     not_consumed = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       replaced_by_id: self_replaced.id,
     )
 
@@ -277,7 +277,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("rotate-grace")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -295,7 +295,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("rotate-me")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -328,7 +328,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("rotate-with-children")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -364,7 +364,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("rotate-wrong-device")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )

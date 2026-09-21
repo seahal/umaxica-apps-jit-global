@@ -28,6 +28,21 @@ class TelephoneTest < ActiveSupport::TestCase
     assert locked.nil? || locked.to_s == "-infinity" || (locked.is_a?(Float) && locked == -Float::INFINITY)
   end
 
+  test "encrypts the OTP private key at rest" do
+    secret = "otp-private-key-#{SecureRandom.hex(12)}"
+
+    @telephone.store_otp(secret, 123, 5.minutes.from_now.to_i)
+
+    raw = OperatorTelephone.connection.select_value(
+      "SELECT otp_private_key FROM #{OperatorTelephone.connection.quote_table_name(OperatorTelephone.table_name)} " \
+      "WHERE id = #{Integer(@telephone.id)}",
+    )
+
+    assert_equal secret, @telephone.reload.otp_private_key
+    assert_not_equal secret, raw
+    assert_not_includes raw.to_s, secret
+  end
+
   test "store_otp does not clear active lockout" do
     lockout_expires_at = 10.minutes.from_now
     @telephone.update!(

@@ -44,13 +44,13 @@ The user-visible sequence is distinct from the state-machine status names.
 
 1. Normal state
    - The actor has no active withdrawal cycle.
-   - `discarded_at` and `purged_at` are the retention sentinel values.
+   - `discard_at` and `purge_eligible_at` are the retention sentinel values.
 
 2. Withdrawal flow entry
    - A withdrawal cycle is created and records `began_at`.
    - This means the actor entered the withdrawal flow, not that the account has been scheduled for
      withdrawal.
-   - `withdrawal_started_at`, `deactivated_at`, `discarded_at`, and `purged_at` are not changed.
+   - `withdrawal_started_at`, `deactivated_at`, `discard_at`, and `purge_eligible_at` are not changed.
    - Other sessions are not revoked.
    - The configuration history can show that the withdrawal process was opened.
 
@@ -65,8 +65,8 @@ The user-visible sequence is distinct from the state-machine status names.
 
 3'. Logical deletion and recovery window
 
-- The withdrawal is finalized by setting `discarded_at` to the logical deletion time.
-- `purged_at` is set to `discarded_at + 31.days`.
+- The withdrawal is finalized by setting `discard_at` to the logical deletion time.
+- `purge_eligible_at` is set to `discard_at + 31.days`.
 - The cycle transitions to `DISCARDED`.
 - Every session of the actor is revoked, including the requesting session, and the auth cookies are
   cleared.
@@ -76,12 +76,12 @@ The user-visible sequence is distinct from the state-machine status names.
 
 3''. Recovery
 
-- Recovery is available only after one hour has elapsed from `discarded_at` and before `purged_at`.
-- Recovery clears the withdrawal scheduling timestamps and restores `discarded_at` and `purged_at`
+- Recovery is available only after one hour has elapsed from `discard_at` and before `purge_eligible_at`.
+- Recovery clears the withdrawal scheduling timestamps and restores `discard_at` and `purge_eligible_at`
   to the retention sentinel values.
 
 4. Scheduled termination and anonymization
-   - Retention jobs pick up actors whose `purged_at` has elapsed.
+   - Retention jobs pick up actors whose `purge_eligible_at` has elapsed.
    - The actor is marked terminated and personally identifying data is anonymized.
    - Audit information is retained.
 
@@ -96,7 +96,7 @@ step-up scope as scheduling and recovery.
 ### App And Com State Machine
 
 The withdrawal cycle status tracks the withdrawal procedure. The actor row remains the source of
-truth for access and retention through `withdrawal_started_at`, `discarded_at`, `purged_at`, and
+truth for access and retention through `withdrawal_started_at`, `discard_at`, `purge_eligible_at`, and
 `terminated_at`.
 
 The status reference tables are surface-specific, not shared:
@@ -111,8 +111,8 @@ The intended status IDs are:
 | `NOTHING`    | 0   | Placeholder / no meaningful procedure state             |
 | `REQUESTED`  | 10  | The actor entered the withdrawal flow                   |
 | `CLOSING`    | 20  | The actor explicitly confirmed withdrawal scheduling    |
-| `DISCARDED`  | 30  | Logical deletion is active and `purged_at` is scheduled |
-| `RECOVERED`  | 40  | The actor recovered before `purged_at`                  |
+| `DISCARDED`  | 30  | Logical deletion is active and `purge_eligible_at` is scheduled |
+| `RECOVERED`  | 40  | The actor recovered before `purge_eligible_at`                  |
 | `TERMINATED` | 100 | The actor has been anonymized and cannot recover        |
 | `FAILED`     | 900 | The withdrawal procedure failed                         |
 

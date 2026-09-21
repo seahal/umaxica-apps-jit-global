@@ -3,6 +3,8 @@
 
 # adr/unified-enforcement.md: Enforcement Case for the org realm (Operator).
 class OrgEnforcementCase < OrgPrincipalRecord
+  encrypts :reason_note
+
   include EnforcementCaseApplicable
 
   self.table_name = "org_enforcement_cases"

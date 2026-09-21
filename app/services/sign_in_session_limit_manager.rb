@@ -53,7 +53,7 @@ class SignInSessionLimitManager
       raise InvalidCycle, "sign-in cycle already has a restricted token" if cycle.token_id.present?
 
       restricted_token = create_restricted_token!(metadata)
-      refresh_token = restricted_token.rotate_refresh_token!(discarded_at: restricted_expires_at)
+      refresh_token = restricted_token.rotate_refresh_token!(discard_at: restricted_expires_at)
       cycle.update!(token: restricted_token)
 
       SignInResult.new(cycle: cycle, token: restricted_token, refresh_token: refresh_token)

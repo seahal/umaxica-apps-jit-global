@@ -32,7 +32,7 @@ SimpleCov.coverage :line do
   # ordinary variance, and parked at an aspiration it stays red until someone disables it. Keep it
   # a couple of points below the measurement and raise it deliberately. The per-file and per-group
   # floors below, not this number, are what actually catch an untested file.
-  minimum 97
+  minimum 98
   # Suite-wide averages let a file with no test hide behind well-covered neighbours.
   # Hold every file to a floor of its own.
   minimum 70, per: :file

@@ -71,8 +71,12 @@ class Base::Org::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   end
 
   test "an unknown result code is refused with a fixed description" do
-    get base_org_oauth_authorization_url(host: @host, result: SecureRandom.uuid),
-        headers: host_headers(@host)
+    post base_org_oauth_authorization_url(host: @host),
+         params: { result: SecureRandom.uuid },
+         headers: host_headers(@host).merge(
+           "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}",
+           "Sec-Fetch-Site" => "same-site",
+         )
 
     assert_response :bad_request
     assert_equal "invalid_request", response.parsed_body["error"]

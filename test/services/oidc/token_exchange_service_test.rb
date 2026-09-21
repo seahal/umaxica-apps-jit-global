@@ -272,7 +272,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           expected_resource_type: "client",
         )
       end
-    @user_session_token.update!(discarded_at: Time.current)
+    @user_session_token.update!(discard_at: Time.current)
 
     result =
       with_authenticated_client do
@@ -294,7 +294,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "exchanged OIDC access id and refresh tokens end by the root session expiry" do
     travel_to(@user_session_token.created_at + 1.second) do
       absolute_expiry = 2.minutes.from_now
-      @user_session_token.update!(discarded_at: absolute_expiry)
+      @user_session_token.update!(discard_at: absolute_expiry)
       code_record = issue_code!
 
       result =
@@ -500,6 +500,67 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     payload = authorization_code_store.read(code_record.code)
 
     assert_equal "consumed", payload.fetch("state")
+  end
+
+  test "does not consume an authorization code when its Base Browser Session is already inactive" do
+    code_record = issue_code!
+    @user_session_token.update!(discard_at: Time.current)
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          expected_resource_type: "client",
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_code_unconsumed(code_record)
+    assert_empty ClientRpSession.where(client_token: @user_session_token)
+  end
+
+  test "revalidates the Base Browser Session after code consumption before issuing RP credentials" do
+    code_record = issue_code!
+    delegate = authorization_code_store
+    session_token = @user_session_token
+    code_store = Object.new
+    code_store.define_singleton_method(:read) { |raw_code| delegate.read(raw_code) }
+    code_store.define_singleton_method(:consume!) do |**arguments|
+      result = delegate.consume!(**arguments)
+      session_token.update!(discard_at: Time.current) if result.success?
+      result
+    end
+    code_store.define_singleton_method(:link_family!) { |**arguments| delegate.link_family!(**arguments) }
+
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          expected_resource_type: "client",
+          code_store: code_store,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_nil result.token_response
+    assert_equal "consumed", delegate.read(code_record.code).fetch("state")
+    assert_empty ClientRpSession.where(client_token: @user_session_token)
   end
 
   test "fails for wrong grant_type" do
@@ -1164,6 +1225,46 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal 1, revoke_calls
   end
 
+  test "replay cleanup does not select a session from family metadata alone" do
+    code_record = issue_code!
+    store = authorization_code_store
+    payload = store.read(code_record.code).merge(
+      "state" => "consumed",
+      "refresh_family_ref" => "family-for-sibling-sessions",
+    ).except("rp_session_ref")
+    store.instance_variable_get(:@connection).call(
+      "SET",
+      store.storage_key(code_record.code),
+      JSON.generate(payload),
+      "EX",
+      60,
+    )
+    revoke_calls = 0
+
+    result =
+      ClientRpSession.stub(:where, ->(*) { flunk("family metadata must not select RP sessions") }) do
+        RpSessionRevoker.stub(:call, ->(**) { revoke_calls += 1 }) do
+          with_authenticated_client do
+            OidcTokenExchangeCoordinator.call(
+              grant_type: "authorization_code",
+              code: code_record.code,
+              redirect_uri: @redirect_uri,
+              client_id: "core-next-rp",
+              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+              client_assertion: "test-client-assertion",
+              token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+              code_verifier: @code_verifier,
+              expected_resource_type: "client",
+            )
+          end
+        end
+      end
+
+    assert_not result.success?
+    assert_equal "invalid_grant", result.error
+    assert_equal 0, revoke_calls
+  end
+
   test "fails closed when consumed code family linkage does not succeed" do
     code_record = issue_code!
     delegate = authorization_code_store
@@ -1293,7 +1394,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     owner_refresh_digest = owner_session.refresh_token_digest
     @user_session_token.reload
     root_family_id = @user_session_token.refresh_token_family_id
-    root_discarded_at = @user_session_token.discarded_at
+    root_discard_at = @user_session_token.discard_at
     side_client = OidcClientRegistry.find("side-app")
     side_redirect_uri = side_client.redirect_uris.first
 
@@ -1327,7 +1428,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal owner_refresh_digest, owner_session.refresh_token_digest
     assert_nil owner_session.revoked_at
     assert_equal root_family_id, @user_session_token.refresh_token_family_id
-    assert_equal root_discarded_at, @user_session_token.discarded_at
+    assert_equal root_discard_at, @user_session_token.discard_at
     assert_predicate @user_session_token, :currently_usable?
     assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
   end

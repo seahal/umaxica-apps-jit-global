@@ -70,7 +70,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     flow = client.client_withdrawal_flows.create!(
       status_id: ClientWithdrawalFlowStatus::DISCARDED,
       began_at: Time.current,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
 
     assert_no_difference -> { client.client_withdrawal_flows.count } do
@@ -104,7 +104,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
 
     assert_not_nil client.reload.withdrawal_started_at
     assert_not_nil client.deactivated_at
-    assert_not_nil client.discarded_at
+    assert_not_nil client.discard_at
     assert_predicate client, :suspended?
 
     flow = client.client_withdrawal_flows.recent_first.first
@@ -124,22 +124,22 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     assert_predicate client.client_withdrawal_flows.recent_first.first, :withdrawal_discarded?
   end
 
-  test "suspend! preserves existing finite future purged_at" do
+  test "suspend! preserves existing finite future purge_eligible_at" do
     client = clients(:one)
-    future_purged_at = 10.days.from_now
-    client.update_columns(deactivated_at: nil, purged_at: future_purged_at)
+    future_purge_eligible_at = 10.days.from_now
+    client.update_columns(deactivated_at: nil, purge_eligible_at: future_purge_eligible_at)
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
       WithdrawalLifecycle.suspend!(actor: client, current_session_public_id: @session_public_id, request: @request)
     end
 
-    assert_in_delta Float(future_purged_at), Float(client.reload.purged_at), 1
+    assert_in_delta Float(future_purge_eligible_at), Float(client.reload.purge_eligible_at), 1
   end
 
-  test "suspend! computes purged_at from deactivated_at when existing purged_at is infinite" do
+  test "suspend! computes purge_eligible_at from deactivated_at when existing purge_eligible_at is infinite" do
     client = clients(:one)
     deactivated_at = 2.days.ago
-    client.update_columns(created_at: 3.days.ago, deactivated_at: deactivated_at, purged_at: Float::INFINITY)
+    client.update_columns(created_at: 3.days.ago, deactivated_at: deactivated_at, purge_eligible_at: Float::INFINITY)
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
       WithdrawalLifecycle.suspend!(actor: client, current_session_public_id: @session_public_id, request: @request)
@@ -148,7 +148,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.reload
 
     assert_in_delta Float(deactivated_at), Float(client.deactivated_at), 1
-    assert_in_delta Float((deactivated_at + WithdrawalLifecycle::RECOVERY_PERIOD)), Float(client.purged_at), 1
+    assert_in_delta Float((deactivated_at + WithdrawalLifecycle::RECOVERY_PERIOD)), Float(client.purge_eligible_at), 1
   end
 
   test "recover! raises when recovery is not available" do
@@ -166,8 +166,8 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.update_columns(
       withdrawal_started_at: 2.days.ago,
       deactivated_at: 2.days.ago,
-      discarded_at: 2.days.ago,
-      purged_at: 29.days.from_now,
+      discard_at: 2.days.ago,
+      purge_eligible_at: 29.days.from_now,
     )
     client.client_privacy_requests.create!(
       status_id: ClientPrivacyRequestStatus::VERIFIED,
@@ -190,8 +190,8 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.update_columns(
       withdrawal_started_at: 2.days.ago,
       deactivated_at: 2.days.ago,
-      discarded_at: 2.days.ago,
-      purged_at: 29.days.from_now,
+      discard_at: 2.days.ago,
+      purge_eligible_at: 29.days.from_now,
     )
     privacy_request = client.client_privacy_requests.create!(
       status_id: ClientPrivacyRequestStatus::RECEIVED,
@@ -204,7 +204,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.client_withdrawal_flows.create!(
       status_id: ClientWithdrawalFlowStatus::DISCARDED,
       began_at: 2.days.ago,
-      discarded_at: 2.days.ago,
+      discard_at: 2.days.ago,
     )
 
     WithdrawalLifecycle.recover!(actor: client, request: @request)
@@ -212,8 +212,8 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     assert_equal ClientPrivacyRequestStatus::CANCELLED, privacy_request.reload.status_id
     assert_nil client.reload.withdrawal_started_at
     assert_nil client.deactivated_at
-    assert_equal Float::INFINITY, client.discarded_at
-    assert_equal Float::INFINITY, client.purged_at
+    assert_equal Float::INFINITY, client.discard_at
+    assert_equal Float::INFINITY, client.purge_eligible_at
   end
 
   test "recover! creates a discarded flow when none exists" do
@@ -221,8 +221,8 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.update_columns(
       withdrawal_started_at: 2.days.ago,
       deactivated_at: 2.days.ago,
-      discarded_at: 2.days.ago,
-      purged_at: 29.days.from_now,
+      discard_at: 2.days.ago,
+      purge_eligible_at: 29.days.from_now,
     )
 
     assert_difference -> { client.client_withdrawal_flows.count }, 1 do
@@ -237,8 +237,8 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     visitor.update_columns(
       withdrawal_started_at: 2.days.ago,
       deactivated_at: 2.days.ago,
-      discarded_at: 2.days.ago,
-      purged_at: 29.days.from_now,
+      discard_at: 2.days.ago,
+      purge_eligible_at: 29.days.from_now,
     )
 
     WithdrawalLifecycle.recover!(actor: visitor, request: @request)
@@ -265,14 +265,14 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.update_columns(
       withdrawal_started_at: 10.days.ago,
       deactivated_at: 10.days.ago,
-      discarded_at: 10.days.ago,
-      purged_at: 21.days.from_now,
+      discard_at: 10.days.ago,
+      purge_eligible_at: 21.days.from_now,
       withdrawn_at: 10.days.ago,
     )
     client.client_withdrawal_flows.create!(
       status_id: ClientWithdrawalFlowStatus::DISCARDED,
       began_at: 10.days.ago,
-      discarded_at: 10.days.ago,
+      discard_at: 10.days.ago,
     )
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
@@ -322,14 +322,14 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     visitor.update_columns(
       withdrawal_started_at: 10.days.ago,
       deactivated_at: 10.days.ago,
-      discarded_at: 10.days.ago,
-      purged_at: 21.days.from_now,
+      discard_at: 10.days.ago,
+      purge_eligible_at: 21.days.from_now,
       withdrawn_at: 10.days.ago,
     )
     visitor.visitor_withdrawal_flows.create!(
       status_id: VisitorWithdrawalFlowStatus::DISCARDED,
       began_at: 10.days.ago,
-      discarded_at: 10.days.ago,
+      discard_at: 10.days.ago,
     )
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do

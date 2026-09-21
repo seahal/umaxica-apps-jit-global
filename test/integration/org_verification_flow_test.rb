@@ -22,7 +22,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       public_id: "ovf#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     @token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
     @headers = as_staff_headers(@staff, host: @host)
@@ -119,7 +119,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
       if session_public_id.present?
         ClientToken.find_by(public_id: session_public_id)
       else
-        ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+        ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
       end
     token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -139,7 +139,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
         OperatorToken.find_by(public_id: session_public_id)
       else
         OperatorToken.where(staff_id: staff.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end
@@ -163,7 +163,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
         VisitorToken.find_by(public_id: session_public_id)
       else
         VisitorToken.where(visitor_id: visitor.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end

@@ -170,7 +170,7 @@ class SignAppVerificationBaseTest < ActiveSupport::TestCase
                                  rs.user_token_id = other_token.id
                                },
     )
-    assert_not harness.app_call(:valid_step_up_session?, valid_session.dup.tap { |rs| rs.discarded_at = 1.minute.ago })
+    assert_not harness.app_call(:valid_step_up_session?, valid_session.dup.tap { |rs| rs.discard_at = 1.minute.ago })
     assert_not harness.app_call(:valid_step_up_session?, valid_session.dup.tap { |rs| rs.scope = "" })
     assert_not harness.app_call(:valid_step_up_session?, valid_session.dup.tap { |rs| rs.return_to = "" })
 
@@ -244,12 +244,12 @@ class SignAppVerificationBaseTest < ActiveSupport::TestCase
       :write_email_otp_session_data!,
       { "otp_digest" => harness.app_call(:email_otp_digest, "123456") },
     )
-    step_up_session.update_columns(discarded_at: 1.minute.ago, purged_at: 1.minute.ago)
+    step_up_session.update_columns(discard_at: 1.minute.ago, purge_eligible_at: 1.minute.ago)
 
     assert_not harness.app_call(:verify_email_otp!)
     assert_equal ["確認コードの有効期限が切れました"], harness.instance_variable_get(:@verification_errors)
 
-    step_up_session.update!(discarded_at: 5.minutes.from_now, purged_at: 5.minutes.from_now)
+    step_up_session.update!(discard_at: 5.minutes.from_now, purge_eligible_at: 5.minutes.from_now)
     harness.app_call(
       :write_email_otp_session_data!,
       { "otp_digest" => harness.app_call(:email_otp_digest, "654321") },
@@ -276,8 +276,8 @@ class SignAppVerificationBaseTest < ActiveSupport::TestCase
       method: nil,
       status: "PENDING",
       attempt_count: 0,
-      discarded_at: 5.minutes.from_now,
-      purged_at: 5.minutes.from_now,
+      discard_at: 5.minutes.from_now,
+      purge_eligible_at: 5.minutes.from_now,
     )
   end
 end

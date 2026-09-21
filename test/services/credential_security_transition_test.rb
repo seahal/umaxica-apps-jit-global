@@ -36,7 +36,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       status: "VERIFIED",
       method: "totp",
       verified_at: 1.minute.ago,
-      discarded_at: 10.minutes.from_now,
+      discard_at: 10.minutes.from_now,
     )
 
     assert_difference -> {
@@ -57,7 +57,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     assert_predicate other_token.reload, :revoked?
     assert_nil current_token.last_step_up_at
     assert_nil other_token.last_step_up_at
-    assert_operator other_token.step_up_session.reload.discarded_at, :<=, Time.current
+    assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
 
     audit = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).order(:created_at).last
 

@@ -47,7 +47,7 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
     visitor.update!(birthdate: "1990-01-02")
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -84,7 +84,7 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
     operator.update!(birthdate: "1985-03-04")
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)

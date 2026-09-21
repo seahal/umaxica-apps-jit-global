@@ -19,7 +19,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "stepup_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     @token.update!(created_at: 1.hour.ago)
 
@@ -107,7 +107,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "stepup_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     other_token.update!(created_at: 1.hour.ago)
     other_headers = @headers.merge("X-TEST-SESSION-PUBLIC-ID" => other_token.public_id)
@@ -142,7 +142,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     # and never reaches /identity/emails while retaining step-up freshness.
     satisfy_user_verification(@token)
     mark_step_up_satisfied!(@token, at: 10.minutes.ago, scope: "settings_email")
-    @token.update!(discarded_at: 1.second.ago)
+    @token.update!(discard_at: 1.second.ago)
 
     get base_app_identity_emails_url(ri: "jp", host: @base_host), headers: @headers
 
@@ -188,7 +188,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_email")
     ClientStepUpSession.create!(
@@ -198,7 +198,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       status: "VERIFIED",
       method: "passkey",
       verified_at: 1.minute.ago,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
 
     before_audit_count = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
@@ -213,7 +213,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_predicate other_token.reload, :revoked?
     assert_nil @token.last_step_up_at
     assert_nil other_token.last_step_up_at
-    assert_operator other_token.step_up_session.reload.discarded_at, :<=, Time.current
+    assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
 
     post base_app_identity_emails_registration_url(ri: "jp", host: @base_host),
          params: { user_email: { address: "after-disable@example.com" } },
@@ -230,7 +230,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_email")
     ClientStepUpSession.create!(
@@ -240,7 +240,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       status: "VERIFIED",
       method: "passkey",
       verified_at: 1.minute.ago,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
 
     post base_app_identity_mfa_reset_url(ri: "jp", host: @base_host), headers: @headers
@@ -250,7 +250,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_predicate other_token.reload, :revoked?
     assert_nil @token.last_step_up_at
     assert_nil other_token.last_step_up_at
-    assert_operator other_token.step_up_session.reload.discarded_at, :<=, Time.current
+    assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
     assert_equal ClientMfaLevel::NOTHING, @user.reload.mfa_level_id
     assert_not @user.mfa_level_enabled?
   end
@@ -261,7 +261,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_email")
 
@@ -283,7 +283,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "stepup_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_secret")
     ClientStepUpSession.create!(
@@ -293,7 +293,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       status: "VERIFIED",
       method: "passkey",
       verified_at: 1.minute.ago,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
 
     pending_email = @user.client_emails.create!(
@@ -330,7 +330,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_predicate other_token.reload, :revoked?
     assert_nil @token.last_step_up_at
     assert_nil other_token.last_step_up_at
-    assert_operator other_token.step_up_session.reload.discarded_at, :<=, Time.current
+    assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
 
     get base_app_identity_secrets_url(ri: "jp", host: @base_host), headers: other_session_headers(other_token)
 
@@ -735,7 +735,7 @@ class StepUpAuthenticationTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -753,7 +753,7 @@ class StepUpAuthenticationTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -773,7 +773,7 @@ class StepUpAuthenticationTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

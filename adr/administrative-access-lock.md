@@ -7,7 +7,7 @@ Accepted (2026-06-03)
 ## Context
 
 The account withdrawal and retention model already uses lifecycle timestamps such as
-`withdrawal_started_at`, `deactivated_at`, `discarded_at`, `purged_at`, and `terminated_at`. Those
+`withdrawal_started_at`, `deactivated_at`, `discard_at`, `purge_eligible_at`, and `terminated_at`. Those
 timestamps describe withdrawal, suspension, retention, and termination behavior.
 
 Operational forced access removal is a different security action. It is not ordinary inactivity, not

@@ -24,7 +24,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     BaseSelectorAuthority.prepare(surface: :app, principal: user, session: token)
@@ -102,7 +102,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -180,7 +180,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)

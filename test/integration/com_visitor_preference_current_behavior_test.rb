@@ -31,8 +31,8 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
       visibility_id: VisitorVisibility::VISITOR,
       mfa_level_id: VisitorMfaLevel::NOTHING,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
-      discarded_at: 20.years.from_now,
-      purged_at: 20.years.from_now,
+      discard_at: 20.years.from_now,
+      purge_eligible_at: 20.years.from_now,
     )
 
     cookies.delete(PreferenceCookieName.refresh(surface: :com))

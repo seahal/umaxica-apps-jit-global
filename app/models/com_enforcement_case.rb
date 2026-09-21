@@ -3,6 +3,8 @@
 
 # adr/unified-enforcement.md: Enforcement Case for the com realm (Visitor).
 class ComEnforcementCase < ComPrincipalRecord
+  encrypts :reason_note
+
   include EnforcementCaseApplicable
 
   self.table_name = "com_enforcement_cases"

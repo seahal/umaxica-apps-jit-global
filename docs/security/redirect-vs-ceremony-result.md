@@ -20,6 +20,19 @@ audience-bound, purpose-bound, one-shot, expiring, and transaction/session-bound
 
 `acme/www` consumes ceremony results and commits authority state.
 
+## Current browser OIDC handoff
+
+The current Base/Auth browser OIDC handoff follows the same rule. Auth does not put the result in a
+redirect query or fragment. Its GET handoff only renders a same-origin CSRF-protected continuation
+form; the following Auth POST creates the opaque one-shot result. A second form then submits that
+result in the POST body to the matching Base `POST /oauth/authorize` endpoint.
+
+Base accepts the result only from the exact configured Auth origin (including the existing
+same-site/null-origin proxy case), checks the surface-bound result at atomic consumption, and then
+resumes the pending Base transaction. `GET /oauth/authorize?result=...` never consumes a result.
+Rails forgery protection is not disabled for this flow, and Auth ceremony continuity is stored in
+the surface-specific database ceremony session rather than a Rails-session pre-authentication map.
+
 ## Related
 
 - `docs/security/redirect_targets.md`

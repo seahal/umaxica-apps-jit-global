@@ -134,7 +134,13 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     follow_redirect!
 
     assert_response :success
-    assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
+
+    record = auth_ceremony_record_for(surface.fetch(:name))
+
+    assert_predicate record, :admitted?
+    assert_equal issuance.transaction.transaction_id, record.authorization_transaction_ref
+    assert_nil session[:oidc_authorization_login_challenge]
+    assert_nil session[:oidc_authorization_intent]
   end
 
   def issue_transaction!(surface)
@@ -163,5 +169,16 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       nonce: "nonce-#{surface_name}",
       scope: "openid profile",
     }
+  end
+
+  def auth_ceremony_record_for(surface)
+    model = {
+      "app" => ClientAuthCeremonySession,
+      "com" => VisitorAuthCeremonySession,
+      "org" => OperatorAuthCeremonySession,
+    }.fetch(surface)
+    raw_sid = cookies[AuthCeremonySidCookie::COOKIE_BASENAME].presence ||
+      cookies["#{AuthIoKeys::HOST_COOKIE_PREFIX}#{AuthCeremonySidCookie::COOKIE_BASENAME}"].presence
+    model.find_active_by_raw_sid(raw_sid)
   end
 end

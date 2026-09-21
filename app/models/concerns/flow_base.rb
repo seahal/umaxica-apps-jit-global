@@ -35,9 +35,9 @@ module FlowBase
   # Kept as named aliases so callers can use intent-revealing names within
   # the cycle namespace; new code may use `accessible?` / `purgeable?` /
   # `expired_or_lapsed?` directly.
-  def cycle_accessible?(_now = Time.current)
+  def cycle_accessible?(now = Time.current)
     retainable_required!(:accessible?)
-    accessible?
+    accessible?(now)
   end
 
   def transition_cycle_to!(next_status_id, allowed_from:, changes: {}, now: Time.current)
@@ -48,11 +48,11 @@ module FlowBase
     end
   end
 
-  def discard_cycle!(discarded_at: Time.current, purged_at:)
+  def discard_cycle!(discard_at: Time.current, purge_eligible_at:)
     with_cycle_lock do
-      ensure_retention_order!(discarded_at: discarded_at, purged_at: purged_at)
+      ensure_retention_order!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
 
-      update!(discarded_at: discarded_at, purged_at: purged_at)
+      update!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
     end
   end
 
@@ -126,10 +126,10 @@ module FlowBase
     cycle_past_or_present_time?(expires_at, now)
   end
 
-  def ensure_retention_order!(discarded_at:, purged_at:)
-    raise ArgumentError, "discarded_at is required" if discarded_at.blank?
-    raise ArgumentError, "purged_at is required" if purged_at.blank?
-    raise ArgumentError, "discarded_at must be <= purged_at" if cycle_time_after?(discarded_at, purged_at)
+  def ensure_retention_order!(discard_at:, purge_eligible_at:)
+    raise ArgumentError, "discard_at is required" if discard_at.blank?
+    raise ArgumentError, "purge_eligible_at is required" if purge_eligible_at.blank?
+    raise ArgumentError, "discard_at must be <= purge_eligible_at" if cycle_time_after?(discard_at, purge_eligible_at)
   end
 
   def cycle_past_or_present_time?(value, now)

@@ -76,8 +76,8 @@ module PreferenceLifecycleSurfaces
       status_id: cfg[:status_class].call::NOTHING,
       binding_method_id: cfg[:binding_class].call::NOTHING,
       dbsc_status_id: cfg[:dbsc_class].call::NOTHING,
-      discarded_at: 20.years.from_now,
-      purged_at: 20.years.from_now,
+      discard_at: 20.years.from_now,
+      purge_eligible_at: 20.years.from_now,
       jti: JitSecurityJwtJtiGenerator.generate,
     )
     create_default_children!(pref) if with_default_children

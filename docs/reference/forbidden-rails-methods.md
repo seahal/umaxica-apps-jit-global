@@ -217,7 +217,7 @@ Sanctioned call sites (do not "fix" these into row-by-row `destroy`):
 - `app/jobs/retention_purge_job.rb`, `app/jobs/dpop_proof_state_purge_job.rb`
 - `app/services/retention_cross_database_child_purge.rb`
 - `app/services/identity_*_ceremony_transaction_purger.rb`
-- discard/expiry sweeps such as `acme_refresh_token_service.rb` (`update_all(discarded_at:)`)
+- discard/expiry sweeps such as `acme_refresh_token_service.rb` (`update_all(discard_at:)`)
 
 New destructive-op call sites still require explicit approval and should reference an Accepted ADR.
 

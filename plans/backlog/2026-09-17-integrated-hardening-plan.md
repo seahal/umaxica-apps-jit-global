@@ -1,5 +1,11 @@
 # Integrated hardening and reachability implementation plan
 
+> **Retention vocabulary amendment (2026-09-21):** The unreleased schema reconstruction renamed
+> Retainable columns to `discard_at` and `purge_eligible_at`. Historical inventory rows below may
+> retain their original wording; current implementation and active documentation use the semantic
+> names. The reconstruction and test-only database verification are recorded in
+> `evidence/2026-09-21-phase-09-reconstruction-X4Y5.md`.
+
 ## Status
 
 GO_FOR_UNBLOCKED_SLICES. Phase 0 is complete as an initial inventory. The observability correction,

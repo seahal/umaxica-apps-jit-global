@@ -243,7 +243,7 @@ side effect that necessarily comes after):
    state) via `PreferenceRefreshTokenTransport#persist_new_preference_record!`, without issuing
    response cookies or headers.
 3. Seed only the safe-copy allowlist onto the new row, marked non-explicit (browser continuity seed,
-   not the new guest's own choice), and retire the old row server-side (`used_at`/`discarded_at` set
+   not the new guest's own choice), and retire the old row server-side (`used_at`/`discard_at` set
    to now).
 4. After the transaction commits, issue the new refresh cookie, any DBSC cookie and registration
    header, and the new access-token cookie.
@@ -258,7 +258,7 @@ it, banner shows again).
 ### Token retirement guarantees
 
 - Old row: `used_at` set (fails `SingleUseToken#replay?`'s "unused" check going forward) and
-  `discarded_at` set to now (falls out of the `active` scope). Both the refresh path
+  `discard_at` set to now (falls out of the `active` scope). Both the refresh path
   (`PreferenceBase#valid_refresh_preference?`, which every DBSC verification/refresh request also
   goes through via `load_preference_record_from_refresh_token!`) and the access-token path
   (`PreferenceAccessTokenTransport#load_access_token_preference_record!`, scoped to
@@ -270,7 +270,7 @@ it, banner shows again).
   cannot be used to authenticate a bound-cookie refresh. See
   `test/controllers/concerns/preference_dbsc_retirement_test.rb`.
 - **Access JWT**: fixed 2026-07-21. `load_access_token_preference_record!` previously resolved a
-  presented JWT's `public_id` with a bare `find_by`, ignoring `discarded_at`/`used_at`. Because
+  presented JWT's `public_id` with a bare `find_by`, ignoring `discard_at`/`used_at`. Because
   `PREFERENCE_JWT_TTL` is 7 days (`app/values/security_token_lifetimes.rb`), a still-unexpired
   access JWT issued before sign-out kept resolving to the retired row for up to 7 days -- the
   DB-side retirement existed but was not enforced at the verification layer. Now scoped to

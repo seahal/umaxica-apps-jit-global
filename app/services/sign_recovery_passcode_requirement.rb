@@ -32,13 +32,13 @@ class SignRecoveryPasscodeRequirement
     relation = relation.where(kind_column => recovery_kind_id)
     relation = relation.where(last_used_at: nil)
     relation = relation.where(
-      "discarded_at IS NULL OR discarded_at > ?",
+      "discard_at IS NULL OR discard_at > ?",
       now,
-    ) if credential_class.column_names.include?("discarded_at")
+    ) if credential_class.column_names.include?("discard_at")
     relation = relation.where(
-      "purged_at IS NULL OR purged_at > ?",
+      "purge_eligible_at IS NULL OR purge_eligible_at > ?",
       now,
-    ) if credential_class.column_names.include?("purged_at")
+    ) if credential_class.column_names.include?("purge_eligible_at")
     relation = relation.where("uses_remaining > 0") if credential_class.column_names.include?("uses_remaining")
     relation
   end

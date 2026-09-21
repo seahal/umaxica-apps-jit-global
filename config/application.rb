@@ -55,6 +55,7 @@ end
 
 require_relative "../lib/jit_security_active_record_encryption_key_provider"
 require_relative "../lib/app_config_loader"
+require_relative "../lib/request_body_size_limit"
 require_relative "../lib/trusted_forwarded_headers"
 require_relative "../lib/umaxica/test_environment/database_safety"
 
@@ -134,6 +135,9 @@ module Jit
       TrustedForwardedHeaders,
       trusted_proxies: trusted_proxies,
     )
+    # Reject oversized JSON before Rails parameter parsing can read an unbounded request body.
+    # Multipart and other upload content types retain their existing, separate limits.
+    config.middleware.insert_after(ActionDispatch::RequestId, RequestBodySizeLimit)
     config.x.boot_config = AppConfigLoader.load!
 
     # Active Record Encryption Configuration

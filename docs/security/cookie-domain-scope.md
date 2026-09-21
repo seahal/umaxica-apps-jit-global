@@ -13,13 +13,15 @@ transport role, not the logical credential kind.
 | Preference access   | `__Host-preference_access`  | `preference_access`    |
 | Preference refresh  | `__Host-preference_refresh` | `preference_refresh`   |
 | Preference DBSC     | `__Host-preference_dbsc`    | `preference_dbsc`      |
+| RP access            | `__Host-oidc_rp_access`     | `oidc_rp_access`       |
+| RP refresh           | `__Host-oidc_rp_refresh`    | `oidc_rp_refresh`      |
 
 New credential cookie writes are host-only. They use `Path=/`; secure contexts use `Secure` and the
 `__Host-` prefix. They never carry a `Domain` attribute.
 
 Cookie names must not include `global`, `regional`, `app`, `com`, `org`, `core`, or `palm`. For
-example, Acme's `__Host-auth_access`, Sign's `__Host-auth_access`, and Core/Base browser hosts'
-`__Host-auth_access` are separate cookies because the browser stores them per host.
+example, Auth's `__Host-auth_access` and a Core RP's `__Host-oidc_rp_access` are separate cookies
+because the browser stores them per host.
 
 ## JS-Readable Preference Mirrors
 
@@ -68,13 +70,15 @@ Application code must not add new direct references to `app_preference_access`,
 Credential kind is enforced by issuer, audience, validator contract, client classification, and
 transport binding:
 
-- Acme is the only Authorization Server and token authority.
-- Sign is a special RP. It does not own issuer, token, or refresh authority.
+- Base is the only physical Authorization Server and token authority.
+- Auth is ceremony-only. It does not own issuer, token, Browser Session, or RP Session authority.
+- Core/Side/Edit RP callbacks store Base-issued credentials in the RP cookie slots above. The exact
+  RP client ID, issuer, audience, and resource type are checked before the cookie is used.
 - `SignRefreshTokenService` is a legacy compatibility subclass; new refresh authority references
   should use `AcmeRefreshTokenService`.
-- Core browser credentials use the `core-browser` audience from cookie transport.
+- Legacy `core-browser` credentials are not accepted by the Core browser API as RP credentials.
 - Palm API tokens use the `palm-api` audience from `Authorization: Bearer`.
-- Core browser cookie validators reject `palm-api`.
+- Core RP cookie validators reject `palm-api` and sibling RP client bindings.
 - Palm bearer validators reject `core-browser`.
 - Palm controllers do not read auth or preference cookies and do not issue browser session cookies.
 - Acme/Sign do not issue or consume Core/Base regional browser cookies.

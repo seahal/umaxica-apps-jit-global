@@ -23,7 +23,7 @@ module SurfaceChrome
   # repeated by every Inertia controller. `banner_domain` selects the banner stream the family
   # answers with (`auth` reads `sign`, `base` reads `acme`); nil opts out of the banner, which is
   # what the families without a banner region do. `footer_navigation` marks the families whose
-  # layout carries the cross-host footer links (home, preference, settings).
+  # layout carries the cross-host footer links (preference, and dashboard when signed in).
   FAMILY_CHROME = {
     "base" => { family_label: "BASE", banner_domain: :acme, footer_navigation: false },
     "auth" => { family_label: nil, banner_domain: :sign, footer_navigation: true },
@@ -153,31 +153,22 @@ module SurfaceChrome
 
   def chrome_footer_navigation
     surface = chrome_configuration.fetch(:surface)
-    family = chrome_configuration.fetch(:family)
     base_options = { ri: current_region_identifier, host: base_authority_host }
+    links = []
 
-    first_link =
-      if chrome_logged_in?
-        {
-          label: chrome_t("sign.#{surface}.preferences.footer.dashboard"),
-          href: chrome_url("base_#{surface}_root_url", base_options),
-        }
-      else
-        { label: chrome_t("sign.#{surface}.preferences.footer.home"),
-          href: chrome_url("#{family}_#{surface}_root_path"), }
-      end
+    if chrome_logged_in?
+      links << {
+        label: chrome_t("sign.#{surface}.preferences.footer.dashboard"),
+        href: chrome_url("base_#{surface}_root_url", base_options),
+      }
+    end
 
-    [
-      first_link,
-      {
-        label: chrome_t("sign.#{surface}.preferences.footer.preference"),
-        href: chrome_url("base_#{surface}_preference_url", base_options),
-      },
-      {
-        label: chrome_t("sign.#{surface}.preferences.footer.settings"),
-        href: chrome_url("base_#{surface}_identity_url", base_options),
-      },
-    ]
+    links << {
+      label: chrome_t("sign.#{surface}.preferences.footer.preference"),
+      href: chrome_url("base_#{surface}_preference_url", base_options),
+    }
+
+    links
   end
 
   def chrome_cookie_controls

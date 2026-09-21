@@ -4,7 +4,7 @@
 class SignOtpCeremony
   Result = Struct.new(:success?, :status, :record, :code, :error, keyword_init: true)
 
-  OTP_EXPIRATION_MINUTES = 12
+  OTP_EXPIRATION = CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL
 
   def self.issue!(...)
     new(...).issue!
@@ -28,6 +28,7 @@ class SignOtpCeremony
 
   def issue!
     validate_scope!
+    return session_mismatch_result unless session_nonce_matches_subject?
 
     record = bound_record
     return result(false, :missing_destination, error: :missing_destination) unless record
@@ -50,6 +51,7 @@ class SignOtpCeremony
 
   def verify!
     validate_scope!
+    return session_mismatch_result unless session_nonce_matches_subject?
 
     record = bound_record
     return result(false, :missing_destination, error: :missing_destination) unless record
@@ -146,9 +148,9 @@ class SignOtpCeremony
 
   def generate_and_store_otp!(record)
     otp_private_key = ROTP::Base32.random_base32
-    otp_counter = Integer([Time.current.to_i, SecureRandom.random_number(1 << 64)].join, 10)
+    otp_counter = SecureRandom.random_number(1 << 64)
     otp_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    record.store_otp(otp_private_key, otp_counter, OTP_EXPIRATION_MINUTES.minutes.from_now.to_i)
+    record.store_otp(otp_private_key, otp_counter, (Time.current + OTP_EXPIRATION).to_i)
     record.update!(otp_last_sent_at: Time.current) if record.respond_to?(:otp_last_sent_at=)
     otp_code
   end
@@ -169,5 +171,19 @@ class SignOtpCeremony
 
   def result(success, status, record: nil, code: nil, error: nil)
     Result.new(success?: success, status: status, record: record, code: code, error: error)
+  end
+
+  def session_mismatch_result
+    result(false, :session_mismatch, error: :session_mismatch)
+  end
+
+  def session_nonce_matches_subject?
+    return false unless subject.respond_to?(:public_id)
+
+    expected = subject.public_id.to_s
+    supplied = session_nonce.to_s
+    return false if expected.blank? || supplied.blank? || expected.bytesize != supplied.bytesize
+
+    ActiveSupport::SecurityUtils.secure_compare(expected, supplied)
   end
 end

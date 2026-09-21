@@ -18,7 +18,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
     @operator = operators(:one)
     @token = OperatorToken.create!(
       staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)

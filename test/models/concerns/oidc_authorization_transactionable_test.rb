@@ -105,6 +105,64 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_match(/not authenticated/, error.message)
   end
 
+  test "an authenticated transaction cannot be overwritten by another result" do
+    transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
+    first_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
+    second_event_at = first_event_at + 1.minute
+
+    transaction.register_authentication!(
+      actor_ref: "client-1",
+      session_ref: "session-1",
+      auth_method: "passkey",
+      acr: "aal2",
+      authentication_event_at: first_event_at,
+    )
+
+    error =
+      assert_raises(ArgumentError) do
+        transaction.register_authentication!(
+          actor_ref: "client-2",
+          session_ref: "session-2",
+          auth_method: "password",
+          acr: "aal1",
+          authentication_event_at: second_event_at,
+        )
+      end
+
+    assert_equal "authorization transaction is not pending", error.message
+    transaction.reload
+
+    assert_equal "client-1", transaction.actor_ref
+    assert_equal "session-1", transaction.session_ref
+    assert_equal first_event_at, transaction.authenticated_at
+    assert_equal "aal2", transaction.acr
+  end
+
+  test "concurrent authentication results have exactly one winner" do
+    transaction = create_transaction(VisitorOidcAuthorizationTransaction, surface: "com")
+    results =
+      2.times.map do |index|
+        Concurrent::Promises.future do
+          VisitorOidcAuthorizationTransaction.find(transaction.id).register_authentication!(
+            actor_ref: "visitor-#{index}",
+            session_ref: "session-#{index}",
+            auth_method: "passkey",
+            acr: "aal2",
+            authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5) + index,
+          )
+          :success
+        rescue ArgumentError => e
+          e.message
+        end
+      end.map(&:value!)
+
+    assert_equal 1, results.count(:success), results.inspect
+    assert_equal 1, results.count("authorization transaction is not pending"), results.inspect
+    assert_predicate transaction.reload, :authenticated?
+
+    assert_includes %w(visitor-0 visitor-1), transaction.actor_ref
+  end
+
   test "transaction surface must match the owning class" do
     {
       ClientOidcAuthorizationTransaction => "org",

@@ -59,7 +59,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
         if session_public_id.present?
           ClientToken.find_by(public_id: session_public_id)
         else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
         end
       token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -85,7 +85,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
           OperatorToken.find_by(public_id: session_public_id)
         else
           OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end
@@ -115,7 +115,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
           VisitorToken.find_by(public_id: session_public_id)
         else
           VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end

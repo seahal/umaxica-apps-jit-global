@@ -132,13 +132,13 @@ class BranchCoverageBatch27ValuesLibEasyArmsTest < ActiveSupport::TestCase
 
   test "TokenStatusManagement discarded and currently_valid_at arms" do
     token = ClientToken.new
-    if token.has_attribute?(:discarded_at)
-      token.discarded_at = 1.minute.ago
+    if token.has_attribute?(:discard_at)
+      token.discard_at = 1.minute.ago
 
       assert_not token.currently_usable?
     end
 
-    if ClientToken.column_names.include?("discarded_at")
+    if ClientToken.column_names.include?("discard_at")
       scope = ClientToken.currently_valid_at
 
       assert_kind_of ActiveRecord::Relation, scope

@@ -22,12 +22,14 @@ module Auth
       include ::VerificationVisitor
       include ActionPolicy::Controller
       include ::OidcSsoInitiator
+      include ::AuthCeremonyContext
       include ::RestrictedSessionGuard
       include SignComRouteAliasHelper
       include ::ActorSupport
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+      AUTH_CEREMONY_SURFACE = "com"
 
       layout "auth/com/application"
 
@@ -144,7 +146,7 @@ module Auth
       def after_login_path
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
-        session.delete(:auth_ceremony_admitted_intent)
+        complete_auth_ceremony_session!
         base_com_root_url(ri: current_region_identifier, host: base_authority_host)
       end
 
@@ -201,26 +203,11 @@ module Auth
         ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
       end
 
-      def oidc_authorization_login_challenge
-        session[:oidc_authorization_login_challenge]
-      end
-
       def oidc_authorization_after_login_path
-        challenge = oidc_authorization_login_challenge
-        result =
-          BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
-            surface: "com",
-            login_challenge: challenge,
-            actor: current_resource,
-            session_ref: current_session_public_id,
-            auth_method: Array(Actor.authn.access_claims&.dig("amr")).first || "unknown",
-            acr: Actor.authn.access_claims&.dig("acr"),
-            authentication_event_at: current_authentication_event_at,
-          )
-        result.resume_url
-      ensure
-        session.delete(:oidc_authorization_login_challenge)
-        session.delete(:oidc_authorization_intent)
+        auth_com_sign_oidc_handoff_path(
+          ri: current_region_identifier,
+          protocol: URI.parse(OidcIssuer.absolute_url(oidc_sign_host)).scheme,
+        )
       end
     end
   end

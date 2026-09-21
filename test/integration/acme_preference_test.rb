@@ -657,7 +657,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref.reload
 
       assert_equal preference_status_class(domain)::DELETED, pref.status_id
-      assert_operator pref.discarded_at, :<=, Time.current
+      assert_operator pref.discard_at, :<=, Time.current
       assert_not_equal old_token, cookies[cookie_name]
       assert_not_equal pref.id, find_preference_by_refresh_token(domain, cookies[cookie_name]).id
     end
@@ -684,7 +684,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       pref.reload
 
       assert_equal preference_status_class(domain)::DELETED, pref.status_id
-      assert_operator pref.discarded_at, :<=, Time.current
+      assert_operator pref.discard_at, :<=, Time.current
     end
 
     test "#{domain[:name]} domain creates a fresh preference after reset" do
@@ -1190,7 +1190,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       if session_public_id.present?
         ClientToken.find_by(public_id: session_public_id)
       else
-        ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+        ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
       end
     token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -1210,7 +1210,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
         OperatorToken.find_by(public_id: session_public_id)
       else
         OperatorToken.where(staff_id: staff.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end
@@ -1234,7 +1234,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
         VisitorToken.find_by(public_id: session_public_id)
       else
         VisitorToken.where(visitor_id: visitor.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end

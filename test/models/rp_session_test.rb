@@ -129,7 +129,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session refresh expiry cannot exceed its root session" do
       root = rp_session_case[:root_builder].call
       absolute_expiry = 1.hour.from_now
-      root.update!(discarded_at: absolute_expiry)
+      root.update!(discard_at: absolute_expiry)
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-next-rp",

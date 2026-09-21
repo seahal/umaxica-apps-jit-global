@@ -519,7 +519,7 @@ class SignFlowTest < ActiveSupport::TestCase
     assert_equal now, cycle.completed_at
   end
 
-  test "expired reflects expires_at and discarded_at boundaries" do
+  test "expired reflects expires_at and discard_at boundaries" do
     cycle = build_cycle(ClientSignInFlow, expires_at: 1.second.from_now)
 
     assert_not cycle.expired?

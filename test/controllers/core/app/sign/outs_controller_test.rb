@@ -28,7 +28,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "sign-out completion clears this origin's cache and storage" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
     state = Rack::Utils.parse_nested_query(URI.parse(handoff_form["action"]).query.to_s).fetch("state")
@@ -53,7 +53,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "post sign out redirects to base oidc logout with completion state" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
@@ -65,13 +65,97 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "/oidc/logout", location.path
     assert_predicate handoff_input_value("logout_challenge"), :present?
     assert_equal "jp", handoff_input_value("ri")
-    assert_predicate token.reload, :revoked?
+    assert_predicate @rp_session.reload, :revoked?
+  end
+
+  test "post sign out revokes only the RP Session authenticated by RP cookies" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    oidc_client = OidcClientRegistry.find!("core-app")
+    rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    refresh_token = rp_session.issue_refresh_token!
+    access_token = AuthenticationTokenService.encode(
+      user,
+      host: @host,
+      resource_type: "client",
+      session_public_id: token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(user, resource_type: "client"),
+      client_id: oidc_client.client_id,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh_token
+
+    post core_app_sign_out_url(ri: "jp")
+
+    assert_response :success
+    assert_predicate rp_session.reload, :revoked?
+    assert_predicate token.reload, :currently_usable?
+  end
+
+  test "post sign out rejects a sibling RP credential without revoking either session" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    oidc_client = OidcClientRegistry.find!("side-app")
+    sibling_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      user,
+      host: @host,
+      resource_type: "client",
+      session_public_id: token.public_id,
+      oidc_sid: sibling_session.public_id,
+      oidc_jti: sibling_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(user, resource_type: "client"),
+      client_id: oidc_client.client_id,
+    )
+
+    post core_app_sign_out_url(ri: "jp")
+
+    assert_response :unauthorized
+    assert_predicate sibling_session.reload, :active?
+    assert_predicate token.reload, :currently_usable?
+  end
+
+  test "post sign out does not fall back to root Browser Session or Bearer credentials" do
+    user = clients(:one)
+    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+
+    post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+
+    assert_response :unauthorized
+    assert_predicate token.reload, :currently_usable?
   end
 
   test "post sign out accepts us region" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
@@ -84,13 +168,13 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "us", handoff_input_value("ri")
     assert_includes query.fetch("post_logout_redirect_uri"), "ri=us"
     assert_predicate handoff_input_value("logout_challenge"), :present?
-    assert_predicate token.reload, :revoked?
+    assert_predicate @rp_session.reload, :revoked?
   end
 
   test "post sign out canonicalizes unsupported region to default" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "xx"), headers: app_session_headers(user, token)
 
@@ -101,13 +185,13 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "/oidc/logout", location.path
     assert_equal RequestContextContract.default_region, handoff_input_value("ri")
     assert_includes query.fetch("post_logout_redirect_uri"), "ri=#{RequestContextContract.default_region}"
-    assert_predicate token.reload, :revoked?
+    assert_predicate @rp_session.reload, :revoked?
   end
 
   test "transaction issuance failure does not render success completion" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
     rejected = AcmeLogoutTransactionCoordinator::Result.new(
       transaction: nil,
       status: :rejected,
@@ -121,6 +205,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_predicate token.reload, :currently_usable?
+    assert_predicate @rp_session.reload, :active?
     assert_not_includes response.body, I18n.t("sign.shared.sign_out.completed_title")
     assert_includes response.body, I18n.t("sign.shared.sign_out.unavailable_title")
     assert_select "form[action*=?][method=?]", core_app_sign_out_path, "post"
@@ -129,7 +214,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "post sign out without region uses the default completion region" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
 
     post core_app_sign_out_url, headers: app_session_headers(user, token)
 
@@ -147,7 +232,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "post sign out relay advances to sign coordination hop" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
@@ -175,6 +260,34 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def authenticate_rp!(user, token)
+    oidc_client = OidcClientRegistry.find!("core-app")
+    @rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      user,
+      host: @host,
+      resource_type: "client",
+      session_public_id: token.public_id,
+      oidc_sid: @rp_session.public_id,
+      oidc_jti: @rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(user, resource_type: "client"),
+      client_id: oidc_client.client_id,
+    )
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @rp_session.issue_refresh_token!
+  end
 
   def app_session_headers(user, token)
     bearer_headers(

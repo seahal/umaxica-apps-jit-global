@@ -100,7 +100,7 @@ class BranchCoverageBatch29ServiceEasyArmsTest < ActiveSupport::TestCase
 
   test "RefreshTokenable concern currently_usable false arms" do
     token = ClientToken.new
-    token.define_singleton_method(:expired?) { true }
+    token.define_singleton_method(:expired?) { |*_args| true }
 
     assert_not token.currently_usable?
   end

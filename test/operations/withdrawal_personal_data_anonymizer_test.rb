@@ -7,7 +7,7 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   AnonymizedRecord =
-    Struct.new(:id, :updated_attrs, :discarded_at, :model_class, :destroyed) do
+    Struct.new(:id, :updated_attrs, :discard_at, :model_class, :destroyed) do
       def update!(attrs)
         self.updated_attrs = attrs
       end
@@ -76,14 +76,14 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
                  client_telephone.updated_attrs.fetch(:user_identity_telephone_status_id)
 
     assert_equal ClientPasskeyStatus::REVOKED, client_passkey.updated_attrs.fetch(:status_id)
-    assert_in_delta Time.current.to_f, Float(client_passkey.updated_attrs.fetch(:discarded_at)), 1
+    assert_in_delta Time.current.to_f, Float(client_passkey.updated_attrs.fetch(:discard_at)), 1
 
     assert_equal ClientSecretCredentialStatus::REVOKED, client_secret.updated_attrs.fetch(:user_secret_status_id)
-    assert_in_delta Time.current.to_f, Float(client_secret.updated_attrs.fetch(:discarded_at)), 1
+    assert_in_delta Time.current.to_f, Float(client_secret.updated_attrs.fetch(:discard_at)), 1
 
     assert_equal ClientTotpCredentialStatus::REVOKED,
                  client_totp.updated_attrs.fetch(:user_identity_totp_credential_status_id)
-    assert_in_delta Time.current.to_f, Float(client_totp.updated_attrs.fetch(:discarded_at)), 1
+    assert_in_delta Time.current.to_f, Float(client_totp.updated_attrs.fetch(:discard_at)), 1
 
     assert external_identity.destroyed
   end
@@ -123,11 +123,11 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     assert_equal VisitorTelephoneStatus::SUSPENDED, visitor_telephone.updated_attrs.fetch(:visitor_telephone_status_id)
 
     assert_equal VisitorPasskeyStatus::REVOKED, visitor_passkey.updated_attrs.fetch(:status_id)
-    assert_in_delta Time.current.to_f, Float(visitor_passkey.updated_attrs.fetch(:discarded_at)), 1
+    assert_in_delta Time.current.to_f, Float(visitor_passkey.updated_attrs.fetch(:discard_at)), 1
 
     assert_equal VisitorSecretCredentialStatus::REVOKED,
                  visitor_secret.updated_attrs.fetch(:visitor_secret_credential_status_id)
-    assert_in_delta Time.current.to_f, Float(visitor_secret.updated_attrs.fetch(:discarded_at)), 1
+    assert_in_delta Time.current.to_f, Float(visitor_secret.updated_attrs.fetch(:discard_at)), 1
   end
 
   private

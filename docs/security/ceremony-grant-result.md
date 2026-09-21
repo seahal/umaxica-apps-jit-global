@@ -35,6 +35,28 @@ session, preference, token, authorization, or freshness state.
 `acme/www` validates and consumes the result once. Only acme commits any user session, refresh,
 account, preference, downstream token, authorization, or step-up freshness change.
 
+## Current Base/Auth browser OIDC transport
+
+For the current Base/Auth browser OIDC flow, the Auth-to-Base result is never placed in a URL.
+After a successful Auth ceremony:
+
+1. Auth redirects the browser to a same-origin `GET /sign/oidc/handoff` page.
+2. That page submits a CSRF-protected same-origin `POST /sign/oidc/handoff`.
+3. Auth issues the one-shot opaque result and renders a form that submits it in the POST body to
+   the matching Base `POST /oauth/authorize` endpoint.
+
+The Base result endpoint accepts only the exact configured Auth origin (with the existing
+same-site/null-origin proxy case), validates and consumes the result once, and verifies its surface
+binding before resuming the Base authorization transaction. Rails forgery protection remains
+enabled; the cross-host form does not share an Auth-host CSRF token and is protected by the exact
+origin boundary, one-shot result consumption, and surface binding.
+
+`GET /oauth/authorize?result=...` is not a result consumer. A result value in a GET request is
+ignored by the result action and cannot consume or resume an authorization transaction. Auth
+ceremony continuity remains in the surface-specific `AuthCeremonySession`; no Rails-session
+pre-authentication map carries the result or RP transaction state. Base remains the authority for
+the authorization transaction, Browser Session, RP Session, and authorization code.
+
 ## Redirects Are Not Results
 
 Redirect targets, `rt`, `return_to`, OAuth `state`, and navigation parameters are navigation

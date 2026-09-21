@@ -6,34 +6,30 @@ module Base
     module Oauth
       class AuthorizationsController < Base::Org::ApplicationController
         include ::OauthAuthorizeRateLimit
+        include ::OidcAuthorizationResultPost
 
         AUTHENTICATION_MODE = :open
+        OIDC_RESULT_TRUSTED_ORIGINS = JitHostOriginEnv.trusted_origins(
+          ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        ).freeze
         declare_authentication_mode! :open
+
+        protect_from_forgery using: :header_or_legacy_token,
+                             trusted_origins: OIDC_RESULT_TRUSTED_ORIGINS,
+                             with: :exception,
+                             only: :create,
+                             if: -> { params[:result].present? }
         skip_before_action :set_region, raise: false
 
         def show
-          if params[:result].present?
-            payload = BaseAuthAdmissionCoordinator.consume_result!(
-              raw_code: params[:result].to_s,
-              surface: "org",
-            )
-            transaction =
-              OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-                surface: "org",
-                transaction_id: payload.fetch("subject_ref"),
-              )
-            validate_authorization_request!(transaction.authorize_params)
-            resume_authorization!(transaction)
-          else
-            validate_authorization_request!
+          validate_authorization_request!
 
-            if logged_in? && current_operator.present? && authorization_authentication_satisfied?
-              issue_authorization_code!(current_operator)
-            elsif prompt_none_requested?
-              redirect_login_required!
-            else
-              start_authorization_ceremony!
-            end
+          if logged_in? && current_operator.present? && authorization_authentication_satisfied?
+            issue_authorization_code!(current_operator)
+          elsif prompt_none_requested?
+            redirect_login_required!
+          else
+            start_authorization_ceremony!
           end
         rescue OidcAuthorizeRequestResolver::InvalidScope => e
           render json: { error: "invalid_scope", error_description: e.message }, status: :bad_request
@@ -61,6 +57,8 @@ module Base
         end
 
         private
+
+        def oidc_result_surface = "org"
 
         def validate_authorization_request!(params_hash = authorize_params)
           @validated_client = OidcAuthorizeRequestResolver.call(
@@ -99,12 +97,14 @@ module Base
               sign_org_sign_up_url(
                 ri: params[:ri],
                 host: oidc_sign_host,
+                protocol: oidc_sign_protocol,
                 admission: handoff.code,
               )
             else
               sign_org_sign_in_url(
                 ri: params[:ri],
                 host: oidc_sign_host,
+                protocol: oidc_sign_protocol,
                 admission: handoff.code,
               )
             end
@@ -152,7 +152,17 @@ module Base
         end
 
         def authorization_intent
+          return "authentication" if first_party_browser_rp?
+
           (params[:screen_hint].to_s == "signup") ? "sign_up" : "sign_in"
+        end
+
+        def first_party_browser_rp?
+          AuthBoundaryAuthorityMap.first_party_rp_client_ids.include?(authorize_params[:client_id].to_s)
+        end
+
+        def oidc_sign_protocol
+          URI.parse(OidcIssuer.absolute_url(oidc_sign_host)).scheme
         end
 
         def authorization_authentication_satisfied?

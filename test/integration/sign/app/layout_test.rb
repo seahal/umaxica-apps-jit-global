@@ -32,6 +32,15 @@ class SignAppLayoutTest < ActionDispatch::IntegrationTest
 
     assert_empty footer_hrefs.grep(%r{/sign/in\b}), "auth footer must not link the sign-in flow"
     assert_empty footer_hrefs.grep(%r{/sign/up\b}), "auth footer must not link the sign-up flow"
+    # Identity settings live on the www/base host and require an authenticated session. Linking
+    # them from the unauthenticated sign-in chrome sends people to a page they cannot use.
+    assert_empty footer_hrefs.grep(%r{/identity\b}), "auth footer must not link www identity"
+    # The auth root is itself the ceremony-service home. Linking it from the shared footer
+    # sends people back to https://auth.umaxica.app/?ri=... with no additional destination.
+    assert_empty(
+      footer_hrefs.select { |href| URI.parse(href).path == "/" },
+      "auth footer must not link the ceremony-service home",
+    )
   end
 
   test "cookie banner settings url is the base cookie preference edit" do

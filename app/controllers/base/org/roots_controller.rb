@@ -69,9 +69,18 @@ module Base
           title: t("base.shared.dashboard.title"),
           description: t("base.shared.dashboard.description"),
           sections: [
+            { heading: t("base.shared.dashboard.sections.menu_links"), items: menu_links },
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
           ],
         }
+      end
+
+      def menu_links
+        [
+          { label: t("base.shared.dashboard.links.selector"), href: base_org_selector_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.preference"), href: base_org_preference_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.logout"), href: new_base_org_sign_out_path(ri: params[:ri]) },
+        ]
       end
 
       def primary_links
@@ -81,10 +90,7 @@ module Base
           { label: t("base.shared.dashboard.links.organization"), href: base_org_organizations_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.avatar"), href: base_org_avatar_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.identity"), href: base_org_identity_path(ri: params[:ri]) },
-          { label: t("base.shared.dashboard.links.selector"), href: base_org_selector_path(ri: params[:ri]) },
-          { label: t("base.shared.dashboard.links.preference"), href: base_org_preference_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.offline"), href: base_org_pwa_offline_path(ri: params[:ri]) },
-          { label: t("base.shared.dashboard.links.logout"), href: new_base_org_sign_out_path(ri: params[:ri]) },
         ]
       end
 

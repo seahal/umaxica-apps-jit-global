@@ -51,43 +51,48 @@ module Auth::App::In
       assert_equal auth_app_sign_in_passkey_options_path(ri: "jp"), panel.fetch("options_url")
       assert_equal auth_app_sign_in_passkey_verification_path(ri: "jp"), panel.fetch("verification_url")
       assert_equal "jp", panel.fetch("region")
+      assert_nil panel.fetch("identifier_param")
+      assert_nil panel.fetch("field")
       assert_equal auth_app_sign_in_path(ri: "jp"), inertia_props.fetch("back_link").fetch("href")
     end
 
-    # Case F-1: Identifier does not exist
-    test "options returns an indistinguishable padded challenge if identifier is not found" do
+    test "options is anonymous and does not disclose credential descriptors" do
       post auth_app_sign_in_passkey_options_path(ri: "jp"),
-           params: options_params(identifier: "unknown@example.com")
+           params: { "cf-turnstile-response": "test_token" }
 
       assert_response :ok
-      assert_predicate response.parsed_body["challenge_id"], :present?
-      assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
+      json = response.parsed_body
+
+      assert_predicate json["challenge_id"], :present?
+      assert_predicate json.dig("options", "challenge"), :present?
+      assert_empty Array(json.dig("options", "allowCredentials"))
+      assert_nil session[:passkey_challenges].fetch(json.fetch("challenge_id"))["actor_global_key"]
+      assert_not_includes response.body, @passkey.webauthn_id
     end
 
-    test "options returns error if identifier missing" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: nil)
-
-      assert_response :unprocessable_content
-      assert_includes response.body, I18n.t("errors.webauthn.pii_required")
-    end
-
-    # Case F-2: Identifier exists but no passkey
-    test "options returns an indistinguishable padded challenge if the account has no passkeys" do
-      user_no_passkey = clients(:two)
-      user_no_passkey_email = ClientEmail.create!(user: user_no_passkey, address: "nopasskey@example.com")
-
+    test "options ignores a submitted identifier instead of using it for identity selection" do
       post auth_app_sign_in_passkey_options_path(ri: "jp"),
-           params: options_params(identifier: user_no_passkey_email.address)
+           params: options_params(identifier: @user_email.address)
 
       assert_response :ok
-      assert_predicate response.parsed_body["challenge_id"], :present?
-      assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
+      known = response.parsed_body
+
+      assert_empty Array(known.dig("options", "allowCredentials"))
+      assert_nil session[:passkey_challenges].fetch(known.fetch("challenge_id"))["actor_global_key"]
+
+      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+           params: options_params(identifier: "unknown-identifier@example.com")
+
+      assert_response :ok
+      unknown = response.parsed_body
+
+      assert_empty Array(unknown.dig("options", "allowCredentials"))
+      assert_nil session[:passkey_challenges].fetch(unknown.fetch("challenge_id"))["actor_global_key"]
     end
 
-    test "options returns challenge and allowCredentials for email identifier" do
-      email = ClientEmail.find_by(user: @user).address
-
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
+    test "options does not require an identifier or account lookup" do
+      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+           params: { "cf-turnstile-response": "test_token" }
 
       assert_response :ok
       json = response.parsed_body
@@ -95,23 +100,14 @@ module Auth::App::In
       assert_not_nil json["challenge_id"]
       options = json["options"]
 
-      assert_equal 4, options["allowCredentials"].size
-
-      Rails.logger.debug { "DEBUG: allowCredentials = #{options["allowCredentials"].inspect}" }
-      Rails.logger.debug { "DEBUG: allowCredentials = #{options["allowCredentials"].inspect}" }
-      Rails.logger.debug { "DEBUG: passkey_id = #{@passkey.webauthn_id}" }
-
-      # Verify allowCredentials contains our passkey ID
-      match = options["allowCredentials"].any? { |c| c["id"] == @passkey.webauthn_id }
-
-      assert match, "Expected allowCredentials to contain #{@passkey.webauthn_id}"
+      assert_empty Array(options["allowCredentials"])
 
       # Case F-4: Challenge saved with correct purpose
       assert_not_nil session[:passkey_challenges][json["challenge_id"]]
       assert_equal "authentication", session[:passkey_challenges][json["challenge_id"]]["purpose"]
     end
 
-    test "options returns challenge and allowCredentials for telephone identifier" do
+    test "options ignores a telephone identifier" do
       post auth_app_sign_in_passkey_options_path(ri: "jp"),
            params: options_params(identifier: @user_telephone.number)
 
@@ -119,7 +115,7 @@ module Auth::App::In
       json = response.parsed_body
 
       assert_not_nil json["challenge_id"]
-      assert_not_empty json.dig("options", "allowCredentials")
+      assert_empty Array(json.dig("options", "allowCredentials"))
     end
 
     # Case F-3b: JSON response format validation for authentication options (regression test)
@@ -148,15 +144,7 @@ module Auth::App::In
       assert_equal 1, challenge_count,
                    "JSON should contain exactly one 'challenge' key (found #{challenge_count})"
 
-      # Verify allowCredentials IDs are properly encoded
-      options["allowCredentials"].each_with_index do |credential, index|
-        cred_id = credential["id"]
-
-        assert_match(
-          /\A[A-Za-z0-9_-]+\z/, cred_id,
-          "allowCredentials[#{index}].id should be Base64URL format",
-        )
-      end
+      assert_empty Array(options["allowCredentials"])
     end
 
     # Case G-1: Verification success
@@ -281,34 +269,51 @@ module Auth::App::In
       assert_equal mismatch_body, response.body
     end
 
-    test "verification returns unauthorized when challenge actor and passkey owner mismatch" do
+    test "verification uses credential ownership and ignores a forged userHandle" do
       post auth_app_sign_in_passkey_options_path(ri: "jp"),
-           params: options_params(identifier: @user_email.address)
-      challenge_id = response.parsed_body["challenge_id"]
-
-      other_user = create_verified_user_with_email(email_address: "passkey_other_#{SecureRandom.hex(4)}@example.com")
-      other_passkey = ClientPasskey.create!(
-        user: other_user,
-        webauthn_id: Base64.urlsafe_encode64("other_user_key_#{SecureRandom.hex(4)}", padding: false),
-        external_id: SecureRandom.uuid,
-        public_key: "other_user_key",
-        description: "Other Client Key",
-        status_id: ClientPasskeyStatus::ACTIVE,
-      )
+           params: options_params
+      body = response.parsed_body
+      credential = fake_assertion(@fake_client, challenge: body.dig("options", "challenge"))
+      credential["response"]["userHandle"] = Base64.urlsafe_encode64("forged-user-handle", padding: false)
 
       post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: {
-        challenge_id: challenge_id,
-        credential: {
-          id: other_passkey.webauthn_id,
-          response: { clientDataJSON: "e30=",
-                      authenticatorData: "e30=",
-                      signature: "sig",
-                      userHandle: "h", },
-        },
+        challenge_id: body.fetch("challenge_id"),
+        credential: credential,
       }
+
+      assert_response :ok
+      assert_equal "ok", response.parsed_body["status"]
+      assert_operator ClientToken.where(user_id: @user.id).count, :>, 0
+    end
+
+    test "verification rejects a disabled discoverable credential" do
+      @passkey.update!(status_id: ClientPasskeyStatus::DISABLED)
+      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params
+      body = response.parsed_body
+
+      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: assertion_params_for(
+        challenge_id: body.fetch("challenge_id"),
+        challenge: body.dig("options", "challenge"),
+      )
 
       assert_response :unauthorized
       assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+      assert_empty ClientToken.where(user_id: @user.id)
+    end
+
+    test "verification rejects a discoverable credential owned by a suspended client" do
+      @user.update!(deactivated_at: Time.current)
+      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params
+      body = response.parsed_body
+
+      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: assertion_params_for(
+        challenge_id: body.fetch("challenge_id"),
+        challenge: body.dig("options", "challenge"),
+      )
+
+      assert_response :unauthorized
+      assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+      assert_empty ClientToken.where(user_id: @user.id)
     end
 
     test "verification returns 422 when login result status is unknown" do
@@ -367,7 +372,7 @@ module Auth::App::In
         create_rotated_active_user_session(@user, rotations: 3)
       end
       restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-      restricted.rotate_refresh_token!(discarded_at: 15.minutes.from_now)
+      restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
 
       post auth_app_sign_in_passkey_options_path(ri: "jp"),
            params: options_params(identifier: @user_email.address),
@@ -375,7 +380,7 @@ module Auth::App::In
 
       assert_response :ok
       assert_predicate response.parsed_body["challenge_id"], :present?
-      assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
+      assert_empty Array(response.parsed_body.dig("options", "allowCredentials"))
     end
 
     test "options returns turnstile error when response token is missing" do
@@ -408,11 +413,10 @@ module Auth::App::In
       }
     end
 
-    def options_params(identifier:)
-      {
-        identifier: identifier,
-        "cf-turnstile-response": "test_token",
-      }
+    def options_params(identifier: nil)
+      params = { "cf-turnstile-response": "test_token" }
+      params[:identifier] = identifier unless identifier.nil?
+      params
     end
 
     def create_rotated_active_user_session(user, rotations:)
@@ -772,7 +776,7 @@ class Auth::App::In::PasskeysControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -798,7 +802,7 @@ class Auth::App::In::PasskeysControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -826,7 +830,7 @@ class Auth::App::In::PasskeysControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

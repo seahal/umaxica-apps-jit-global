@@ -19,7 +19,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)

@@ -75,7 +75,7 @@ class SideRouteContractTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "side leftover oidc authorize and callback paths are unroutable" do
+  test "side neutral sign entry and callback paths are routable" do
     with_boot_config(
       side_service_host: "side-jp.example.test",
       side_corporate_host: "side-com.example.test",
@@ -86,12 +86,18 @@ class SideRouteContractTest < ActionDispatch::IntegrationTest
         "http://side-com.example.test" => "side/com",
         "http://side-org.example.test" => "side/org",
       }.each do |origin, prefix|
-        recognized = Rails.application.routes.recognize_path("#{origin}/sign/in", method: :get)
+        recognized = Rails.application.routes.recognize_path("#{origin}/sign", method: :get)
 
-        assert_equal "#{prefix}/oidc/authorizations", recognized[:controller], origin
-        recognized = Rails.application.routes.recognize_path("#{origin}/sign/in/callback", method: :get)
+        assert_equal "#{prefix}/sign/entries", recognized[:controller], origin
+        recognized = Rails.application.routes.recognize_path("#{origin}/sign/callback", method: :get)
 
         assert_equal "#{prefix}/oidc/callbacks", recognized[:controller], origin
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("#{origin}/sign/in", method: :get)
+        end
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("#{origin}/sign/in/callback", method: :get)
+        end
         ["/oidc/authorization", "/oidc/callback"].each do |path|
           assert_raises(ActionController::RoutingError) do
             Rails.application.routes.recognize_path("#{origin}#{path}", method: :get)

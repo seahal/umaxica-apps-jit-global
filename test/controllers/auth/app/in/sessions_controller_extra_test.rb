@@ -35,7 +35,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.month.from_now,
+      discard_at: 1.month.from_now,
     )
     active3.save!(validate: false)
     active3.rotate_refresh_token!
@@ -65,7 +65,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
     assert_includes response.body, I18n.t("sign.app.in.session.session_revoked")
     active.reload
 
-    assert_not_nil active.discarded_at
+    assert_not_nil active.discard_at
   end
 
   test "pending cycle promotion consumes legacy gate but preserves pending actor id" do
@@ -111,7 +111,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
       user: user,
       user_token_status_id: ClientTokenStatus::RESTRICTED,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.month.from_now,
+      discard_at: 1.month.from_now,
     )
     token.save!(validate: false)
     token.rotate_refresh_token!
@@ -123,7 +123,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.month.from_now,
+      discard_at: 1.month.from_now,
     )
     token.save!(validate: false)
     token.rotate_refresh_token!
@@ -178,7 +178,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
         if session_public_id.present?
           ClientToken.find_by(public_id: session_public_id)
         else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
         end
       token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -204,7 +204,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
           OperatorToken.find_by(public_id: session_public_id)
         else
           OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end
@@ -234,7 +234,7 @@ class Auth::App::Sign::In::SessionsControllerExtraTest < ActionDispatch::Integra
           VisitorToken.find_by(public_id: session_public_id)
         else
           VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end

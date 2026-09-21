@@ -1,6 +1,6 @@
 # ADR: Org Entra ID Sign-In Boundary
 
-**Status:** Accepted (2026-06-30), partially superseded (2026-08-11, 2026-09-09)
+**Status:** Accepted (2026-06-30), partially superseded (2026-08-11, 2026-09-09, 2026-09-20)
 
 **Partially superseded by:** `adr/org-entra-single-tenant-credential-configuration.md`, which
 replaces certificate-based `private_key_jwt` with a client secret held in Rails credentials, and
@@ -141,12 +141,13 @@ a restricted session. See `docs/security/org-emergency-access.md`.
 Entra ID sign-in does not bypass local MFA. `AuthenticationBase#mfa_bypassed_for_auth_method?`
 (`app/controllers/concerns/authentication_base.rb:2858-2860`) returns `true` only for `"passkey"`;
 `"entra_id"` falls through to `false`, matching `"secret_credential"`. An external IdP assertion is
-not treated as equivalent to local strong evidence of presence. An operator who signs in via Entra
-ID and has TOTP enrolled is still required to complete the TOTP step-up before the session is
-established. Since 2026-09-09 the callback establishes no session at all, so the question is settled
-a stage earlier: the session is established by the passkey or secret stage that follows, through the
-same `establish_signed_in_session!` path, with the same MFA gate. This keeps Entra ID at AAL1 unless
-and until an explicit trust policy is introduced for it.
+not treated as equivalent to local strong evidence of presence. Org's actor-known local completion
+stage is Passkey (or the existing restricted emergency/secret path where applicable); TOTP is
+app-only and is not an org enrollment, sign-in, or Step-Up method. Since 2026-09-09 the callback
+establishes no session at all, so the question is settled a stage earlier: the session is established
+by the actor-bound stage that follows, through the same `establish_signed_in_session!` path, with the
+same MFA gate. This keeps Entra ID at AAL1 unless and until an explicit trust policy is introduced
+for it.
 
 ### Scope of this ADR
 

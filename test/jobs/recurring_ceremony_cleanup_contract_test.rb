@@ -24,7 +24,7 @@ class RecurringCeremonyCleanupContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "ceremony transaction cleanup remains separate from purged_at retention cleanup" do
+  test "ceremony transaction cleanup remains separate from purge_eligible_at retention cleanup" do
     recurring = YAML.load_file(Rails.root.join("config/recurring.yml"))
     production = recurring.fetch("production")
 

@@ -31,7 +31,7 @@ class Base::App::Identity::Mfa::ResetsControllerTest < ActionDispatch::Integrati
   def client_headers(step_up_scope:)
     token = ClientToken.create!(
       user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     BaseSelectorAuthority.prepare(surface: :app, principal: @client, session: token)

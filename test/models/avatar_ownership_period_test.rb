@@ -18,6 +18,7 @@
 #
 # Indexes
 #
+#  idx_avatar_ownership_periods_avatar_id_all_rows               (avatar_id)
 #  index_avatar_ownership_periods_on_avatar_id                   (avatar_id) UNIQUE WHERE (valid_to = 'infinity'::timestamp with time zone)
 #  index_avatar_ownership_periods_on_avatar_ownership_status_id  (avatar_ownership_status_id)
 #  index_avatar_ownership_periods_on_owner_organization_id       (owner_organization_id) WHERE (valid_to = 'infinity'::timestamp with time zone)
@@ -31,6 +32,24 @@
 require "test_helper"
 
 class AvatarOwnershipPeriodTest < ActiveSupport::TestCase
+  test "has the approved all-rows avatar lookup index alongside the current-row unique index" do
+    indexes = AvatarOwnershipPeriod.lease_connection.indexes(AvatarOwnershipPeriod.table_name)
+
+    all_rows_index = indexes.find { |index| index.name == "idx_avatar_ownership_periods_avatar_id_all_rows" }
+    current_row_index = indexes.find { |index| index.name == "index_avatar_ownership_periods_on_avatar_id" }
+
+    assert_not_nil all_rows_index
+    assert_equal ["avatar_id"], all_rows_index.columns
+    assert_not all_rows_index.unique
+    assert_nil all_rows_index.where
+    assert_predicate all_rows_index, :valid
+
+    assert_not_nil current_row_index
+    assert_equal ["avatar_id"], current_row_index.columns
+    assert_predicate current_row_index, :unique
+    assert_match(/valid_to\s*=\s*'infinity'/, current_row_index.where)
+  end
+
   test "validations" do
     period = AvatarOwnershipPeriod.new
 

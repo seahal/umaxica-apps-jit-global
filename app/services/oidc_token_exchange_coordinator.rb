@@ -134,6 +134,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
     precheck = prevalidate_payload(peeked)
     return precheck if precheck
 
+    bound_session_failure = prevalidate_bound_session(peeked)
+    return bound_session_failure if bound_session_failure
+
     dpop_jkt = validate_dpop_proof(resource_type: peeked["resource_type"])
     return dpop_jkt if dpop_jkt.is_a?(Result)
 
@@ -142,6 +145,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
       expected: {
         client_id: client_id,
         redirect_uri: redirect_uri,
+        subject: peeked["subject"],
+        base_session_ref: peeked["base_session_ref"],
         code_challenge: peeked["code_challenge"],
         code_challenge_method: peeked["code_challenge_method"],
         resource_type: expected_resource_type,
@@ -308,6 +313,26 @@ class OidcTokenExchangeCoordinator < ApplicationService
     nil
   end
 
+  # The authorization code is an opaque capability, but it is not sufficient by
+  # itself to authorize issuance. Validate the exact Base Browser Session and
+  # its actor before the destructive Valkey CAS so an already stale session does
+  # not burn a code that could never produce credentials.
+  def prevalidate_bound_session(payload)
+    authorization_code = wrap_payload(payload)
+    resource = resolve_resource(authorization_code)
+    return failure("invalid_grant", "resource is not active") unless resource&.active?
+
+    root_token = resolve_root_token(authorization_code)
+    return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
+    return failure("invalid_grant", "root session is not active") unless root_token.currently_usable?
+    return failure("invalid_grant", "root session actor mismatch") unless root_token_actor_matches?(
+      root_token,
+      resource,
+    )
+
+    nil
+  end
+
   def payload_expired?(payload)
     expires_at = payload["expires_at"]
     return false if expires_at.blank?
@@ -368,21 +393,25 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def issue_tokens_for_consumed!(payload, dpop_jkt:)
     authorization_code = wrap_payload(payload)
     resource = resolve_resource(authorization_code)
-    return failure("invalid_grant", "resource is not active") unless resource&.active?
 
     root_token = resolve_root_token(authorization_code)
     return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
-    return failure("invalid_grant", "root session is not active") unless root_token.currently_usable?
-    return failure("invalid_grant", "root session actor mismatch") unless root_token_actor_matches?(
-      root_token,
-      resource,
-    )
 
     client = OidcClientRegistry.find!(client_id)
     connection_class = connection_class_for(authorization_code.resource_type)
 
     connection_class.connected_to(role: :writing) do
+      issuance_result = nil
       connection_class.transaction do
+        # The code CAS is outside PostgreSQL. Re-lock and re-read the parent
+        # after the CAS so a revoke racing with exchange wins before any RP
+        # Session, refresh token, or access token authority is created.
+        locked_root_token = root_token.class.lock.find_by(id: root_token.id)
+        unless bound_session_usable_after_code_cas?(locked_root_token, resource)
+          issuance_result = failure("invalid_grant", "root session is not active")
+          next
+        end
+
         OidcConnectionRecorder.call(
           resource: resource,
           client: client,
@@ -392,7 +421,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
         )
 
         usage = create_or_resolve_active_usage!(
-          root_token: root_token,
+          root_token: locked_root_token,
           client: client,
           scope: authorization_code.scope,
           dpop_jkt: dpop_jkt,
@@ -404,17 +433,28 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
         refresh_plain = issue_or_rotate_usage_refresh_token!(usage)
         link_consumed_family!(authorization_code, usage)
-        issue_exchanged_token_result(
+        issuance_result = issue_exchanged_token_result(
           authorization_code: authorization_code,
           resource: resource,
           client: client,
-          root_token: root_token,
+          root_token: locked_root_token,
           usage: usage,
           refresh_plain: refresh_plain,
           dpop_jkt: dpop_jkt,
         )
       end
+      issuance_result
     end
+  end
+
+  def bound_session_usable_after_code_cas?(root_token, resource)
+    return false unless root_token&.currently_usable?
+    return false unless resource
+
+    resource.reload
+    resource.active? && root_token_actor_matches?(root_token, resource)
+  rescue ActiveRecord::RecordNotFound
+    false
   end
 
   def wrap_payload(payload)
@@ -508,7 +548,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     payload = marked.payload if marked.status == :marked && marked.payload.present?
 
     rp_ref = payload["rp_session_ref"].presence
-    family_ref = payload["refresh_family_ref"].presence
+    return if rp_ref.blank?
+
     resource_type = payload["resource_type"].to_s
     session_class = rp_session_class_for(resource_type)
     return unless session_class
@@ -517,13 +558,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
       if rp_ref.present?
         session = session_class.find_by(public_id: rp_ref)
         RpSessionRevoker.call(scope: :rp_session, record: session, status: "failed") if session
-        next
-      end
-
-      next if family_ref.blank?
-
-      session_class.where(refresh_token_family_id: family_ref).find_each do |rp_session|
-        RpSessionRevoker.call(scope: :rp_session, record: rp_session, status: "failed")
       end
     end
   rescue StandardError => e
@@ -703,7 +737,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       issued_at: now,
       expires_at: SessionAbsoluteExpiryValue.cap(
         proposed_expiry: now + OidcIdTokenIssuer::TOKEN_TTL,
-        absolute_expiry: root_token.discarded_at,
+        absolute_expiry: root_token.discard_at,
       ),
       acr: usage.oidc_acr,
       amr: amr,
@@ -756,7 +790,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       issued_at: now,
       expires_at: SessionAbsoluteExpiryValue.cap(
         proposed_expiry: now + OidcIdTokenIssuer::TOKEN_TTL,
-        absolute_expiry: root_token.discarded_at,
+        absolute_expiry: root_token.discard_at,
       ),
       acr: authorization_code.acr,
       amr: Array(authorization_code.auth_method),
@@ -810,14 +844,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
       end
     SessionAbsoluteExpiryValue.cap(
       proposed_expiry: ttl.from_now,
-      absolute_expiry: root_token.discarded_at,
+      absolute_expiry: root_token.discard_at,
     )
   end
 
   def session_token_expiry(now, root_token)
     SessionAbsoluteExpiryValue.cap(
       proposed_expiry: now + AuthenticationBase::ACCESS_TOKEN_TTL,
-      absolute_expiry: root_token.discarded_at,
+      absolute_expiry: root_token.discard_at,
     )
   end
 

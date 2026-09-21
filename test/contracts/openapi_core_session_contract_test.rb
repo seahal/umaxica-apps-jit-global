@@ -35,7 +35,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
   end
 
   test "an authenticated session summary conforms" do
-    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = core_browser_access_token
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(clients(:one))
 
     get "/api/v0/session", headers: json_headers
 
@@ -60,7 +60,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
     # The cookie boundary rejects a bearer token outright; the schema documents 403 for this path,
     # so this also pins which status that refusal uses.
     get "/api/v0/session",
-        headers: json_headers.merge("Authorization" => "Bearer #{core_browser_access_token}")
+        headers: json_headers.merge("Authorization" => "Bearer #{oidc_access_token_for(clients(:one))}")
 
     assert_response :unauthorized
     assert_equal "application/problem+json", response.media_type
@@ -68,7 +68,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
 
   test "a successful credential rotation conforms" do
     csrf = fetch_csrf_token
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh", headers: json_headers.merge("X-CSRF-Token" => csrf)
 
@@ -79,7 +79,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
   end
 
   test "a rotation without a csrf token conforms" do
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh", headers: json_headers
 
@@ -108,19 +108,35 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
     }
   end
 
-  def core_browser_access_token(audiences: [CoreBrowserCredentialContract::ACCESS_AUDIENCE])
-    token_record = client_tokens(:one)
+  def oidc_access_token_for(client, audiences: nil)
+    oidc_client = OidcClientRegistry.find!("core-app")
     AuthenticationTokenService.encode(
-      clients(:one),
-      host: HOST,
+      client,
+      host: OidcIssuer.host_for_resource_type("client"),
       resource_type: "client",
-      session_public_id: token_record.public_id,
-      session_id: token_record.public_id,
+      session_public_id: "rp-session-public-id",
+      oidc_sid: "rp-session-public-id",
+      oidc_jti: SecureRandom.uuid,
       expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile:read self:read),
-      issuer: AuthenticationJwtConfiguration.issuer,
-      audiences: audiences,
-      jwt_issuer_id: CoreBrowserCredentialContract.core_jwt_issuer_id("client"),
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: audiences || [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(client, resource_type: "client"),
+      client_id: oidc_client.client_id,
     )
+  end
+
+  def oidc_refresh_token_for_client
+    session = ClientRpSession.create!(
+      client_token: client_tokens(:one),
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    session.issue_refresh_token!
   end
 end

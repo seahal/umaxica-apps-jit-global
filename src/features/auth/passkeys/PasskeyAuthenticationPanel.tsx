@@ -1,11 +1,11 @@
 // React port of `src/controllers/passkey_authentication_controller.js`.
 //
-// The ceremony is unchanged: solve an invisible Turnstile token, POST it with the identifier to the
-// options endpoint, run `navigator.credentials.get`, POST the assertion to the verification
+// The ceremony is unchanged: solve an invisible Turnstile token, POST it to the anonymous options
+// endpoint, run `navigator.credentials.get`, POST the assertion to the verification
 // endpoint, and follow the redirect the server returns. Both endpoints are the same server-side
 // routes with the same rate limits and the same CSRF header; only the code that drives them moved
 // out of Stimulus.
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 import Button from "@/components/ui/Button";
 import { csrfToken } from "@/lib/csrf";
@@ -75,11 +75,9 @@ export default function PasskeyAuthenticationPanel({
   identifier_param: identifierParam,
   turnstile_site_key: turnstileSiteKey,
   turnstile_error_message: turnstileErrorMessage,
-  field,
   submit_label: submitLabel,
 }: PasskeyAuthenticationPanelProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const [identifier, setIdentifier] = useState("");
   const { error, status, showError, showStatus, clearMessages } = useCeremonyMessages();
 
   const authenticate = async () => {
@@ -87,12 +85,6 @@ export default function PasskeyAuthenticationPanel({
 
     if (!passkeysSupported()) {
       showError(PASSKEY_MESSAGES.unsupported);
-      return;
-    }
-
-    const trimmed = identifier.trim();
-    if (identifierParam !== null && !trimmed) {
-      showError(PASSKEY_MESSAGES.identifierRequired);
       return;
     }
 
@@ -105,7 +97,7 @@ export default function PasskeyAuthenticationPanel({
       showStatus(PASSKEY_MESSAGES.fetchingOptions);
 
       const optionsResponse = await postJson(optionsUrl, {
-        ...(identifierParam === null ? {} : { [identifierParam]: trimmed }),
+        ...(identifierParam === null ? {} : { [identifierParam]: "" }),
         "cf-turnstile-response": token,
         ri: region || undefined,
       });
@@ -169,38 +161,6 @@ export default function PasskeyAuthenticationPanel({
       ref={hostRef}
       className="flex flex-col gap-4"
     >
-      {/*
-        A plain, hand-styled input rather than the shared `TextField`: `TextField` has no prop for
-        `autoCapitalize`, and dropping it would change the mobile keyboard behaviour this identifier
-        relies on.
-      */}
-      {field === null ? null : (
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor="identifier"
-            className="text-sm font-medium text-fg"
-          >
-            {field.label}
-          </label>
-          <input
-            type="text"
-            id="identifier"
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
-            placeholder={field.placeholder}
-            autoComplete="username webauthn"
-            autoCapitalize="characters"
-            minLength={field.min_length}
-            maxLength={field.max_length}
-            pattern={field.pattern}
-            spellCheck={false}
-            required
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
-            placeholder:text-fg-muted"
-          />
-        </div>
-      )}
-
       {error ? (
         <p
           role="alert"

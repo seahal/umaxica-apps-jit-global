@@ -26,8 +26,12 @@ sharing requires an explicit existing abstraction; cross-surface leakage is a se
 
 ## Task Rule Index
 
-Rule paths are relative to `.agents/harnesses/rules/`; documentation paths are relative to the
-repository root. Load only the entries matching the task.
+Rule paths are relative to `.agents/harnesses/rules/`; documentation and ADR paths are relative
+to the repository root. This root `AGENTS.md` is the sole harness-routing entry point; nested
+`AGENTS.md` files are not used for rule loading.
+
+Always load `generic/model-behavior-calibration.mdc` — it applies to every task. Then load only
+the remaining entries matching the task.
 
 - Controllers or endpoints: `generic/controllers.mdc`, `generic/routing.mdc`,
   `project/surfaces.mdc`, `project/controller-inheritance.mdc`,
@@ -43,8 +47,13 @@ repository root. Load only the entries matching the task.
 - Migrations: `generic/migrations.mdc`
 - Persistent data or API shape, including JSON and database schemas: `generic/data-shape-design.mdc`
 - Security-sensitive work or broad refactors: `generic/absolute-rules.mdc`,
-  `generic/no-silent-fallback.mdc`, `project/regression-guards.mdc`
-- Configuration or environment variables: `generic/no-silent-fallback.mdc`
+  `generic/no-silent-fallback.mdc`, `generic/fail-fast.mdc`, `project/regression-guards.mdc`
+- Configuration or environment variables: `generic/no-silent-fallback.mdc`, `generic/fail-fast.mdc`
+- Invariants, preconditions, unexpected state, or strict-vs-lenient behavior:
+  `generic/fail-fast.mdc` — complements `generic/no-silent-fallback.mdc` (raise on broken
+  invariants; do not swallow or guess a substitute)
+- Renaming, moving, replacing, removing, restructuring, or migrating an existing implementation:
+  `generic/no-compatibility-layer.mdc`
 - Compose files, container ports, or devcontainer configuration:
   `docs/operations/development-host-port-exposure.md`
 - Routing or authentication workflows: `project/surfaces.mdc`, `generic/routing.mdc`,
@@ -59,7 +68,8 @@ repository root. Load only the entries matching the task.
 - `README.md` changes: `project/readme-authoring.mdc`, `generic/repository-language.mdc`
 - Logging, audit records, telemetry, or analytics: `adr/application-logging-boundary.md`,
   `docs/security/observability-boundary.md`
-- Concerns, method visibility, or `included do` hooks: `generic/rails-concerns.mdc`,
+- Rails Concern creation, modification, review, or refactoring (controller or model concerns),
+  including method visibility or `included do` hooks: `generic/rails-concerns.mdc`,
   `docs/architecture/method-visibility-and-concerns.md`
 - Non-trivial decisions, plan deviations, or handoff context: `generic/implementation-notes.mdc`,
   `project/repository-knowledge-tree.mdc`
@@ -169,6 +179,21 @@ conflicts through the governing principles above.
   - **SHOULD:** keep transitional mechanisms bounded to the requirement that makes them necessary.
   - **MAY:** use transitional compatibility mechanisms when safe deployment or migration requires a
     temporary compatibility boundary.
+
+- **(H) Tests**
+
+  - **MUST:** when a public contract includes a range, limit, format, or classification, verify each
+    identified boundary at the nearest representable value immediately below it, at the boundary, and
+    immediately above it. When a neighboring value is not representable, valid, or reachable, use the
+    nearest available value and record that exception in the test name or a comment on that test.
+  - **SHOULD:** take one representative value from each equivalence partition. Add further points
+    inside a partition only when the contract distinguishes values inside that partition.
+  - **MUST:** verify sentinel and edge inputs that can reach the tested public interface, using
+    values that belong to that interface's types (missing, empty, zero, and other type-appropriate
+    sentinels). Do not import sentinels from another language's type system.
+  - **SHOULD:** make the required technique, boundary, partition, and any boundary exception
+    recoverable from the test name and assertion, without a separate traceability matrix.
+
 
 ## Repository Content
 

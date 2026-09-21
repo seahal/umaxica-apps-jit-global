@@ -14,7 +14,7 @@ module Core
         declare_authentication_mode! :open
         skip_before_action :transparent_refresh_access_token, raise: false
 
-        before_action :authenticate!, only: :create
+        before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -37,6 +37,7 @@ module Core
             client_id: "core-app",
             issuer_resource_type: "client",
             token_issuer: "client",
+            session_authority: :rp_session,
           )
         end
 

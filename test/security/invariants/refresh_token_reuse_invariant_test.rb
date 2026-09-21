@@ -22,16 +22,16 @@ module Security
         user = create_client
         original = ClientToken.create!(
           user: user,
-          discarded_at: 1.day.from_now,
-          purged_at: 2.days.from_now,
+          discard_at: 1.day.from_now,
+          purge_eligible_at: 2.days.from_now,
         )
         reused_refresh = original.rotate_refresh_token!
         rotated = SignRefreshTokenIssuer.call(refresh_token: reused_refresh).fetch(:token)
 
         other_family = ClientToken.create!(
           user: user,
-          discarded_at: 1.day.from_now,
-          purged_at: 2.days.from_now,
+          discard_at: 1.day.from_now,
+          purge_eligible_at: 2.days.from_now,
         )
         other_family.rotate_refresh_token!
 
@@ -40,8 +40,8 @@ module Security
         assert_not result.success?
         assert_equal :refresh_token_reuse_detected, result.reason
 
-        assert_operator original.reload.discarded_at, :<=, Time.current
-        assert_operator rotated.reload.discarded_at, :<=, Time.current
+        assert_operator original.reload.discard_at, :<=, Time.current
+        assert_operator rotated.reload.discard_at, :<=, Time.current
         assert_not other_family.reload.revoked?,
                    "Reuse detection must not be confused with ordinary logout or revoke unrelated families"
       end
@@ -55,8 +55,8 @@ module Security
         user = create_client
         root_token = ClientToken.create!(
           user: user,
-          discarded_at: 1.day.from_now,
-          purged_at: 2.days.from_now,
+          discard_at: 1.day.from_now,
+          purge_eligible_at: 2.days.from_now,
         )
         usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
         reused_refresh = usage.issue_refresh_token!
@@ -79,8 +79,8 @@ module Security
         user = create_client
         root_token = ClientToken.create!(
           user: user,
-          discarded_at: 1.day.from_now,
-          purged_at: 2.days.from_now,
+          discard_at: 1.day.from_now,
+          purge_eligible_at: 2.days.from_now,
         )
         usage = ClientRpSession.create!(client_token: root_token, oidc_client_id: "base-rails-rp")
         first_refresh = usage.issue_refresh_token!
@@ -102,8 +102,8 @@ module Security
         user = create_client
         current = ClientToken.create!(
           user: user,
-          discarded_at: 1.day.from_now,
-          purged_at: 2.days.from_now,
+          discard_at: 1.day.from_now,
+          purge_eligible_at: 2.days.from_now,
         )
         refresh = current.rotate_refresh_token!
         sibling = SignRefreshTokenIssuer.call(refresh_token: refresh).fetch(:token)
@@ -483,7 +483,7 @@ class Security::Invariants::RefreshTokenReuseInvariantTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -501,7 +501,7 @@ class Security::Invariants::RefreshTokenReuseInvariantTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -521,7 +521,7 @@ class Security::Invariants::RefreshTokenReuseInvariantTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

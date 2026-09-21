@@ -25,9 +25,18 @@ session, the result consumer must fail closed.
 5. `acme/www` validates and consumes the result.
 6. `acme/www` commits or rejects step-up freshness for the session.
 
+The `sign/id` completion boundary is one-time as well: the surface-local pending step-up row is
+locked in PostgreSQL, the result is issued inside that transaction, and the row is destroyed before
+commit. A concurrent request cannot issue a second result from the same ticket.
+
 ## Non-Goals
 
-- Do not treat credential registration as step-up freshness.
+- Do not treat credential registration as step-up freshness: a credential that is just being
+  registered does not silently satisfy a later sensitive action. The credential-management
+  mutation itself is still behind the existing Step-Up boundary on every Base surface. The first
+  credential may use the documented bootstrap path; subsequent create, update, and destroy
+  requests require fresh, session-bound `settings_secret_credential` Step-Up. The direct secret
+  credential routes and the dedicated removal routes share this requirement.
 - Do not let policy code perform ceremony side effects.
 - Do not use redirects or return targets as proof that step-up succeeded.
 

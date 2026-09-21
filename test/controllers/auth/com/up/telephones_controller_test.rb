@@ -217,7 +217,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_response :unprocessable_content
   end
 
-  test "create rejects duplicate unverified telephone inside overwrite window" do
+  test "create keeps duplicate unverified telephone inside overwrite window non-disclosing" do
     post auth_com_sign_up_telephone_url(ri: "jp"),
          params: {
            visitor_telephone: {
@@ -248,9 +248,83 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
       end
     end
 
-    assert_response :too_many_requests
+    assert_redirected_to auth_com_sign_up_check_telephone_otp_url(ri: "jp")
     assert VisitorTelephone.exists?(first_telephone.id)
     assert Visitor.exists?(first_visitor.id)
+  end
+
+  test "fresh sessions cannot distinguish pending and registered telephone sign-up" do
+    registered_visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    registered_telephone = VisitorTelephone.create!(
+      visitor: registered_visitor,
+      raw_number: "+819012300006",
+      confirm_policy: true,
+      confirm_using_mfa: true,
+      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+    )
+
+    registered_response = nil
+    open_session do |session|
+      session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+      session.post(
+        auth_com_sign_up_telephone_url(ri: "jp"),
+        params: {
+          visitor_telephone: {
+            raw_number: registered_telephone.number,
+            confirm_policy: "1",
+            confirm_using_mfa: "1",
+          },
+          "cf-turnstile-response": "test",
+        },
+      )
+      registered_response = {
+        status: session.response.status,
+        location: session.response.headers["Location"],
+        body: session.response.body,
+      }
+    end
+
+    pending_number = "+819012300007"
+    open_session do |session|
+      session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+      session.post(
+        auth_com_sign_up_telephone_url(ri: "jp"),
+        params: {
+          visitor_telephone: {
+            raw_number: pending_number,
+            confirm_policy: "1",
+            confirm_using_mfa: "1",
+          },
+          "cf-turnstile-response": "test",
+        },
+      )
+
+      assert_equal 302, session.response.status
+    end
+
+    pending_response = nil
+    open_session do |session|
+      session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+      session.post(
+        auth_com_sign_up_telephone_url(ri: "jp"),
+        params: {
+          visitor_telephone: {
+            raw_number: pending_number,
+            confirm_policy: "1",
+            confirm_using_mfa: "1",
+          },
+          "cf-turnstile-response": "test",
+        },
+      )
+      pending_response = {
+        status: session.response.status,
+        location: session.response.headers["Location"],
+        body: session.response.body,
+      }
+    end
+
+    assert_equal 302, registered_response.fetch(:status)
+    assert_equal registered_response, pending_response
   end
 
   test "create after overwrite window replaces duplicate unverified telephone" do
@@ -846,7 +920,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -868,7 +942,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -892,7 +966,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

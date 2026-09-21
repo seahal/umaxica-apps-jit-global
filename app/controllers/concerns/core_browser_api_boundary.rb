@@ -20,7 +20,7 @@ module CoreBrowserApiBoundary
     response.set_header("Cache-Control", "no-store")
   end
 
-  attr_reader :current_resource, :current_token_payload, :current_token_record
+  attr_reader :current_resource, :current_token_payload
 
   def require_core_browser_api_enabled!
     return if CoreBrowserCredentialContract.enabled?
@@ -36,26 +36,26 @@ module CoreBrowserApiBoundary
       return false
     end
 
-    token = cookies[CoreBrowserCredentialContract::ACCESS_COOKIE].to_s.presence
+    token = cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.presence
     unless token
       install_unauthenticated_actor!
       return false
     end
 
-    payload = CoreBrowserCredentialContract.decode_access_token(
+    payload = OidcRpBrowserCredentialContract.decode_access_token(
       token: token,
       host: request.host,
       resource_type: core_resource_type,
+      client_id: core_rp_client_id,
     )
-    if payload.blank? || CoreBrowserCredentialContract.native_or_side_audience?(payload)
+    if payload.blank?
       render_problem(:authentication_required)
       return false
     end
 
     @current_token_payload = payload
-    @current_token_record = find_core_token_record(payload)
     @current_resource = find_core_resource(payload)
-    unless current_token_record&.active? && current_resource&.active?
+    unless current_resource&.active?
       render_problem(:authentication_required)
       return false
     end
@@ -78,34 +78,41 @@ module CoreBrowserApiBoundary
       return
     end
 
-    refresh_plain = cookies[CoreBrowserCredentialContract::REFRESH_COOKIE].to_s.presence
+    refresh_plain = cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].to_s.presence
     unless refresh_plain
       render_problem(:authentication_required)
       return
     end
 
-    result = AcmeRefreshTokenIssuer.call(refresh_token: refresh_plain)
-    unless result.success? && result.token.is_a?(core_token_class)
+    token_endpoint_uri = OidcIssuer.token_endpoint(core_resource_type)
+    client_assertion = OidcClientAssertionJwt.issue(
+      client_id: core_rp_client_id,
+      token_url: token_endpoint_uri,
+    )
+    result = OidcTokenExchangeCoordinator.call(
+      grant_type: "refresh_token",
+      refresh_token: refresh_plain,
+      client_id: core_rp_client_id,
+      client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: client_assertion,
+      token_endpoint_uri: token_endpoint_uri,
+      expected_resource_type: core_resource_type,
+    )
+    unless result.success?
       render_problem(:token_expired)
       return
     end
 
-    resource = result.token.public_send(core_token_resource_method)
-    access_expires_at = CoreBrowserCredentialContract.access_token_expires_at_for(
-      token_record: result.token,
-    )
-    access_token = CoreBrowserCredentialContract.encode_access_token(
-      resource: resource,
-      token_record: result.token,
-      host: request.host,
-      resource_type: core_resource_type,
-      expires_at: access_expires_at,
-    )
+    access_token = result.token_response.fetch(:access_token)
+    new_refresh_token = result.token_response.fetch(:refresh_token)
+    access_expires_at = OidcRpBrowserCredentialContract.access_expires_at(access_token)
 
-    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] =
-      auth_cookie_service.auth_cookie_options(expires: access_expires_at).merge(value: access_token)
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] =
-      auth_cookie_service.auth_cookie_options(expires: result.token.discarded_at).merge(value: result.refresh_token)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      OidcRpBrowserCredentialContract.access_cookie_options(expires_at: access_expires_at).merge(
+        value: access_token,
+      )
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] =
+      OidcRpBrowserCredentialContract.refresh_cookie_options.merge(value: new_refresh_token)
 
     # The rotated credentials travel as `Set-Cookie`, so there is no representation to return.
     # RFC 9110 15.3.5 and docs/reference/api-design-standards.md both call for 204 rather than a
@@ -152,13 +159,13 @@ module CoreBrowserApiBoundary
       transport: :cookie,
       channel: :browser,
       authn: Actor::Authentication.new(
-        login_public_id: current_token_record.public_id,
+        login_public_id: AuthorizationTokenClaims.session_id(current_token_payload),
         access_claims: current_token_payload,
         acr: current_token_payload["acr"],
         amr: current_token_payload["amr"],
         actor_type: core_actor_type,
         actor_id: current_resource.id,
-        restricted: current_token_record.respond_to?(:restricted?) && current_token_record.restricted?,
+        restricted: false,
       ),
       authz: Actor::Authz.new(
         policy_user: current_resource,
@@ -175,18 +182,21 @@ module CoreBrowserApiBoundary
     Actor.install_context!(**context.to_h)
   end
 
-  def find_core_token_record(payload)
-    sid = AuthorizationTokenClaims.session_id(payload).to_s
-    return nil if sid.blank?
-
-    core_token_class.find_by(public_id: sid) || core_token_class.find_by(oidc_sid: sid)
-  end
-
   def find_core_resource(payload)
-    subject = AuthorizationTokenClaims.subject(payload).to_s
+    subject = OidcSubject.public_id_from(
+      AuthorizationTokenClaims.subject(payload), resource_type: core_resource_type,
+    )
     return nil if subject.blank?
 
-    core_resource_class.find_by(id: subject)
+    core_resource_class.find_by(public_id: subject)
+  end
+
+  def core_rp_client_id
+    case core_resource_type.to_s
+    when "operator" then "core-org"
+    when "visitor" then "core-com"
+    else "core-app"
+    end
   end
 
   def core_actor_tld

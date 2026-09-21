@@ -25,7 +25,7 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     Operator.where.not(id: target.id).update_all(
       deactivated_at: Time.current,
       withdrawn_at: Time.current,
-      discarded_at: 1.day.ago,
+      discard_at: 1.day.ago,
     )
 
     result = OrgOperatorLifecycleExecute.call(request: request, actor: actor)

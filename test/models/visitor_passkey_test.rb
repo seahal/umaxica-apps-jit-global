@@ -12,12 +12,12 @@
 #  backup_eligible          :boolean
 #  backup_state             :boolean
 #  description              :string           default(""), not null
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  last_used_at             :datetime
 #  metadata_source          :string
 #  provider_name            :string
 #  public_key               :text             not null
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  sign_count               :bigint           default(0), not null
 #  transports               :jsonb
 #  created_at               :datetime         not null
@@ -30,9 +30,9 @@
 #
 # Indexes
 #
-#  index_visitor_passkeys_on_discarded_at  (discarded_at)
+#  index_visitor_passkeys_on_discard_at  (discard_at)
 #  index_visitor_passkeys_on_public_id     (public_id) UNIQUE
-#  index_visitor_passkeys_on_purged_at     (purged_at)
+#  index_visitor_passkeys_on_purge_eligible_at     (purge_eligible_at)
 #  index_visitor_passkeys_on_status_id     (status_id)
 #  index_visitor_passkeys_on_visitor_id    (visitor_id)
 #  index_visitor_passkeys_on_webauthn_id   (webauthn_id) UNIQUE
@@ -473,7 +473,7 @@ class VisitorPasskeyTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -491,7 +491,7 @@ class VisitorPasskeyTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -511,7 +511,7 @@ class VisitorPasskeyTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

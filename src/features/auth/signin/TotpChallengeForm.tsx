@@ -31,6 +31,13 @@ export type TotpChallengeFormProps = {
     action: string;
     method: string;
     token_field: TotpChallengeField;
+    credential_selector?: {
+      name: string;
+      field: string;
+      scope: string;
+      label: string;
+      options: { value: string; label: string }[];
+    };
     submit_label: string;
   };
   error_heading: string;
@@ -49,16 +56,19 @@ export default function TotpChallengeForm({
   back_link: backLink,
 }: TotpChallengeFormProps) {
   const field = form.token_field;
+  const selector = form.credential_selector;
   const { data, setData, post, processing } = useForm<{
     [key: string]: string | null | Record<string, string>;
     "cf-turnstile-response": string;
   }>({
-    [field.scope]: { [field.field]: "" },
+    [field.scope]: { [field.field]: "", ...(selector ? { [selector.field]: "" } : {}) },
     "cf-turnstile-response": "",
   });
 
-  /* v8 ignore next -- useForm always initialises the scoped field as a string */
-  const value = readString(data[field.scope], field.field) ?? "";
+  const scopedValue = data[field.scope];
+  const scopedData: Record<string, string> =
+    scopedValue && typeof scopedValue === "object" ? scopedValue : {};
+  const value = readString(scopedData, field.field) ?? "";
 
   return (
     <Page
@@ -92,11 +102,34 @@ export default function TotpChallengeForm({
           description={field.help}
           name={field.name}
           value={value}
-          onChange={(next) => setData(field.scope, { [field.field]: next })}
+          onChange={(next) => setData(field.scope, { ...scopedData, [field.field]: next })}
           placeholder={field.placeholder}
           maxLength={field.max_length}
           inputMode={field.inputmode}
         />
+
+        {selector ? (
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            <span>{selector.label}</span>
+            <select
+              name={selector.name}
+              value={readString(scopedData, selector.field) ?? selector.options[0]?.value ?? ""}
+              onChange={(event) =>
+                setData(field.scope, { ...scopedData, [selector.field]: event.target.value })
+              }
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg"
+            >
+              {selector.options.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <TurnstileWidget
           site_key={turnstile.site_key}

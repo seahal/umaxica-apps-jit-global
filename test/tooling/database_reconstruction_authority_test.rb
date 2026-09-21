@@ -2,50 +2,48 @@
 
 require "test_helper"
 
-# Committed `db/*_structure.sql` files are currently session-setting stubs.
-# Reconstruction of development and test databases is from version-controlled
-# migrations (`db/*_migrate`), not from those dumps. This test pins that
-# authority so a stub dump cannot silently become the load path.
+# Committed `db/*_structure.sql` files are generated SQL schema authorities.
+# Version-controlled migrations remain the authoring path; the dump must be a
+# complete, schema-only replay artifact and must not silently become a mixed
+# data export.
 class DatabaseReconstructionAuthorityTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  STUB_MARKER = "PostgreSQL database dump complete"
+  SCHEMA_TABLE_MARKER = /CREATE (?:UNLOGGED )?TABLE public\./
 
-  test "committed structure dumps contain no CREATE TABLE statements" do
+  def structure_dumps
     dumps = Rails.root.glob("db/*_structure.sql")
     dumps << Rails.root.join("db/structure.sql") if Rails.root.join("db/structure.sql").exist?
+    dumps.uniq
+  end
 
-    assert_predicate dumps, :any?
-
+  test "committed structure dumps contain real table definitions" do
     offenders =
-      dumps.filter_map do |path|
+      structure_dumps.filter_map do |path|
         content = path.read
-        next unless content.match?(/\bCREATE TABLE\b/i)
+        next if content.match?(SCHEMA_TABLE_MARKER)
 
         path.relative_path_from(Rails.root).to_s
       end
 
     assert_empty offenders,
-                 "structure.sql dumps currently are not schema authority; " \
-                 "CREATE TABLE in a dump means dumps must be regenerated as a separate decision:\n" \
+                 "structure.sql dumps must contain table definitions:\n" \
                  "#{offenders.join("\n")}"
   end
 
-  test "structure dumps are header stubs rather than reconstructable schemas" do
-    dumps = Rails.root.glob("db/*_structure.sql")
-    dumps << Rails.root.join("db/structure.sql") if Rails.root.join("db/structure.sql").exist?
-
-    dumps.each do |path|
+  test "structure dumps contain no business data" do
+    structure_dumps.each do |path|
       content = path.read
 
-      assert_includes content, STUB_MARKER, "#{path.basename} is not a pg_dump stub"
+      business_inserts = content.lines.grep(/^INSERT INTO /).reject { |line| line.match?(/schema_migrations/) }
+      assert_empty business_inserts, "#{path.basename} contains business data"
     end
   end
 
   test "publishing reconstructs from migrations rather than publishing_structure.sql" do
     dump = Rails.root.join("db/publishing_structure.sql").read
 
-    assert_no_match(/\bCREATE TABLE\b/i, dump)
+    assert_match(SCHEMA_TABLE_MARKER, dump)
 
     migration_bodies =
       (Rails.root.glob("db/publishing_migrate/*.rb") + Rails.root.glob("db/migration_support/publishing_schema.rb"))
@@ -73,6 +71,6 @@ class DatabaseReconstructionAuthorityTest < ActiveSupport::TestCase
   test "primary uses the conventional db/structure.sql dump path" do
     assert_predicate Rails.root.join("db/structure.sql"), :exist?
     assert_not Rails.root.join("db/platform_structure.sql").exist?
-    assert_includes Rails.root.join("db/structure.sql").read, STUB_MARKER
+    assert_match(SCHEMA_TABLE_MARKER, Rails.root.join("db/structure.sql").read)
   end
 end

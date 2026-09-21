@@ -30,7 +30,8 @@ module Auth
 
       include AuthenticationBase
 
-      attr_accessor :actor_type, :checkpoint_participant, :dashboard_participant
+      attr_accessor :actor_type, :checkpoint_participant, :dashboard_participant,
+                    :oidc_authorization_login_challenge
       attr_writer :resource, :logged_in, :current_session_record, :allowed_policy
 
       def resource_type

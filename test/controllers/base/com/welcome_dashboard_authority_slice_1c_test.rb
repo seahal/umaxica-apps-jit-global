@@ -41,9 +41,28 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
     assert_no_match(/id\.umaxica/, response.body)
 
-    links = inertia_props.fetch("sections").flat_map { |section| section.fetch("items") }
+    sections = inertia_props.fetch("sections")
+    expected_headings = [
+      I18n.t("base.shared.dashboard.sections.menu_links", locale: :ja),
+      I18n.t("base.shared.dashboard.sections.primary_links", locale: :ja),
+    ]
+
+    assert_equal expected_headings,
+                 sections.map { |section| section.fetch("heading") }
+
+    menu_links = sections.first.fetch("items")
+    primary_links = sections.second.fetch("items")
+    links = sections.flat_map { |section| section.fetch("items") }
     hrefs = links.map { |link| link.fetch("href") }
     labelled = links.to_h { |link| [link.fetch("label"), link.fetch("href")] }
+    primary_hrefs = primary_links.map { |link| link.fetch("href") }
+
+    assert_equal [
+      base_com_selector_path(ri: "jp"),
+      base_com_preference_path(ri: "jp"),
+      new_base_com_sign_out_path(ri: "jp"),
+    ], menu_links.map { |link| link.fetch("href") }
+    menu_links.each { |link| assert_not_includes primary_hrefs, link.fetch("href") }
 
     assert_includes hrefs, base_com_root_path(ri: "jp")
     assert_equal base_com_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
@@ -71,6 +90,24 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal "base/com/identities/show", inertia_component
     assert_equal I18n.t("base.shared.identity.up_link", locale: :ja), inertia_props.dig("up_link", "label")
     assert_equal base_com_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
+  end
+
+  test "menu links preserve the full request context" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+
+    get base_com_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
+        headers: session_headers(token)
+
+    menu_hrefs = inertia_props.fetch("sections").first.fetch("items").map { |item| item.fetch("href") }
+    menu_hrefs.each do |href|
+      query = Rack::Utils.parse_nested_query(URI.parse(href).query.to_s)
+
+      assert_equal "jp", query.fetch("ri")
+      assert_equal "dr", query.fetch("ct")
+      assert_equal "en", query.fetch("lx")
+      assert_equal "asia/tokyo", query.fetch("tz")
+    end
   end
 
   test "identity_show_links_to_identity_pages" do
@@ -443,7 +480,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -466,7 +503,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -491,7 +528,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

@@ -14,20 +14,29 @@ module Webauthn
 
     class UserPresenceRequiredError < VerificationError; end
 
-    RESIDENT_KEY = "discouraged"
+    RESIDENT_KEY_BY_SURFACE = {
+      app: "required",
+      com: "required",
+      org: "discouraged",
+    }.freeze
     ATTESTATION = "none"
 
-    def self.options_for(config:, user_id:, user_name:, exclude_ids: [])
+    def self.options_for(config:, user_id:, user_name:, exclude_ids: [], surface: :org)
       config.relying_party.options_for_registration(
         user: { id: user_id, name: user_name, display_name: user_name },
         exclude: exclude_ids,
         authenticator_selection: {
-          resident_key: RESIDENT_KEY,
+          resident_key: resident_key_for(surface),
           user_verification: UvPolicy.for(:registration).client_value,
         },
         attestation: ATTESTATION,
       )
     end
+
+    def self.resident_key_for(surface)
+      RESIDENT_KEY_BY_SURFACE.fetch(Webauthn::Surface.for(surface).key)
+    end
+    private_class_method :resident_key_for
 
     def self.verify!(credential_params:, challenge:, config:)
       policy = UvPolicy.for(:registration)

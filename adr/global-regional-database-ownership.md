@@ -313,9 +313,9 @@ that trusts acme-issued tokens.
   repositories may keep `db/queues_migrate` and start from the same history; after the split each
   owns its history and the two are not synchronized. The same applies to `chronicle`, `occurrence`,
   `primary`, and `queue`.
-- Because `db/*_structure.sql` are stubs and migrations are the reconstruction authority
-  (`docs/operations/db-workflow.md`), each side can prune its own `db/*_migrate/` history and
-  rebuild from migrations.
+- Because migrations remain the reconstruction authority and `db/*_structure.sql` are generated
+  schema-only artifacts (`docs/operations/db-workflow.md`), each side can prune its own
+  `db/*_migrate/` history and rebuild from migrations after clean-database verification.
 - No data migration crosses a logical database boundary today (`adr/cross-db-reference-policy.md`),
   so no cross-boundary data migration is created by the split.
 - Actual deletion of `search`, `storage`, `db/audit_schema.rb`, the orphaned trigger functions, and

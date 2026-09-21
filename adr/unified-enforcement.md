@@ -111,7 +111,7 @@ this ADR's authoring session). Load-bearing facts:
 - `AccountAccessEvent` (chronicle DB) has NOT NULL, two-valued `previous_access_state` /
   `next_access_state` columns and cannot carry enforcement event types without a schema change, and
   already carries a cross-DB `account_id :bigint` that must not be repeated.
-- `ClientTotpCredential` and `ClientExternalIdentity` have neither `discarded_at` nor `purged_at`
+- `ClientTotpCredential` and `ClientExternalIdentity` have neither `discard_at` nor `purge_eligible_at`
   and are absent from `RetentionPurgeJob::RETAINABLE_MODELS`; `ClientExternalIdentity` is being
   actively rewritten in the working tree behind a `IdentityRepositoryFactory.common_storage?`
   runtime branch.
@@ -720,8 +720,8 @@ and shipping one would be a silent fallback forbidden by
 `.agents/harnesses/rules/generic/no-silent-fallback.mdc`. `mutation_locked` and `unusable` need no
 trigger and are available for `google` / `apple` from v1.
 
-`client_totp_credentials` and `client_external_identities` have neither `discarded_at` nor
-`purged_at` and are absent from `RETAINABLE_MODELS`, so no `delete_all` route reaches them; their
+`client_totp_credentials` and `client_external_identities` have neither `discard_at` nor
+`purge_eligible_at` and are absent from `RETAINABLE_MODELS`, so no `delete_all` route reaches them; their
 trigger's justification rests on `dependent: :destroy` and direct SQL only, weaker than the
 justification for the other fourteen tables.
 

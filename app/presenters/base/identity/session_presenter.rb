@@ -14,7 +14,7 @@ module Base
           device: I18n.t("base.shared.identity.sessions.unknown_device"),
           last_activity: localized_session_timestamp(session.last_used_at || session.created_at),
           created: localized_session_timestamp(session.created_at),
-          expires_at: localized_session_timestamp(session.discarded_at),
+          expires_at: localized_session_timestamp(session.discard_at),
           status: I18n.t(status_key),
         }
         attributes[:mode] = emergency_mode(session) if surface.to_sym == :org

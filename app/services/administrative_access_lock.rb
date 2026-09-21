@@ -132,7 +132,7 @@ class AdministrativeAccessLock < ApplicationService
       Operator
         .where(access_state: AdministrativeAccessLockable::ACCESS_STATE_ENABLED)
         .where(deactivated_at: nil, withdrawn_at: nil)
-        .where(Operator.arel_table[:discarded_at].gt(Time.current))
+        .where(Operator.arel_table[:discard_at].gt(Time.current))
         .where.not(id: account.id)
         .exists?
     return if remaining_enabled_operator_exists

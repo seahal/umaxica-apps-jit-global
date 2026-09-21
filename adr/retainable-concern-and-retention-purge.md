@@ -18,13 +18,13 @@ Applications require retention management in many models, but the current challe
 
 ### Column unification
 
-1. **`discarded_at`** - Logical deletion time (time when access becomes impossible)
-2. **`purged_at`** - Physical deletion candidate time (time when data can actually be deleted)
+1. **`discard_at`** - Logical deletion time (time when access becomes impossible)
+2. **`purge_eligible_at`** - Physical deletion candidate time (time when data can actually be deleted)
 
-`discarded_at` is the standard column name for the `discard` gem, so `self.discard_column = ...` for
-each model. Not set. In this migration, in order to maintain the time window semantics of the
-existing Retainable, `discarded_at = Float::INFINITY` equivalent to unrevoked sentinel,
-`discarded_at <= Time.current` be treated as inaccessible. discard gem `NULL = kept` Switching to
+`discard_at` is intentionally a domain-specific retention name rather than a `discard` gem
+integration. In order to maintain the time window semantics of the existing Retainable,
+`discard_at = Float::INFINITY` is equivalent to the unrevoked sentinel, and
+`discard_at <= Time.current` is treated as inaccessible. Switching to discard gem `NULL = kept`
 semantics is a separate task after the time window usage has been separated into separate columns.
 
 ### Introducing Retainable Concern
@@ -38,46 +38,46 @@ module Retainable
   SENTINEL = ::Float::INFINITY
 
   included do
-    attribute :discarded_at, :datetime, default: -> { SENTINEL }
-    attribute :purged_at, :datetime, default: -> { SENTINEL }
+    attribute :discard_at, :datetime, default: -> { SENTINEL }
+    attribute :purge_eligible_at, :datetime, default: -> { SENTINEL }
 
-    validates :discarded_at, presence: true
-    validates :purged_at, presence: true
-    validate :discarded_at_not_after_purged_at
+    validates :discard_at, presence: true
+    validates :purge_eligible_at, presence: true
+    validate :retention_order_valid
     validate :retention_times_not_before_created_at, on: :update
   end
 
   def accessible?
-    discarded_at > Time.current
+    discard_at > Time.current
   end
 
   def lapsed?
-    discarded_at <= Time.current
+    discard_at <= Time.current
   end
 
   def purgeable?
-    purged_at <= Time.current
+    purge_eligible_at <= Time.current
   end
 
-  def schedule_retention!(discarded_at:, purged_at:)
-    raise ArgumentError, 'discarded_at must be in the future' if discarded_at <= Time.current
-    raise ArgumentError, 'purged_at must be in the future' if purged_at <= Time.current
-    raise ArgumentError, 'discarded_at must be <= purged_at' if discarded_at > purged_at
-    update!(discarded_at: discarded_at, purged_at: purged_at)
+  def schedule_retention!(discard_at:, purge_eligible_at:)
+    raise ArgumentError, 'discard_at must be in the future' if discard_at <= Time.current
+    raise ArgumentError, 'purge_eligible_at must be in the future' if purge_eligible_at <= Time.current
+    raise ArgumentError, 'discard_at must be <= purge_eligible_at' if discard_at > purge_eligible_at
+    update!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
   end
 end
 ```
 
 ### Consolidated map of columns
 
-#### Columns to be integrated into `discarded_at`
+#### Columns to be integrated into `discard_at`
 
 - `revoked_at`
 - `expires_at` (credential variant)
 - `refresh_expires_at`
 - `compromised_at`
 
-#### Columns to be integrated into `purged_at`
+#### Columns to be integrated into `purge_eligible_at`
 
 - `deletable_at`
 - `shreddable_at`
@@ -98,7 +98,7 @@ end
 
 ### Solid Queue retention job
 
-Create a RetentionPurgeJob to periodically delete records that are `purged_at` old.
+Create a RetentionPurgeJob to periodically delete records that are `purge_eligible_at` old.
 
 ```ruby
 class RetentionPurgeJob < ApplicationJob
@@ -117,7 +117,7 @@ class RetentionPurgeJob < ApplicationJob
   def perform(batch_size: 500)
     now = Time.current
     RETAINABLE_MODELS.each do |klass|
-      klass.where('purged_at <= ?', now).in_batches(of: batch_size).delete_all
+      klass.where('purge_eligible_at <= ?', now).in_batches(of: batch_size).delete_all
     end
   end
 end
@@ -129,11 +129,11 @@ and signed `rt` tokens.
 ## reason
 
 1. By unifying columns, the complexity of retention management is significantly reduced.
-2. `discarded_at` is a standard column name for the `discard` gem, making
-   `self.discard_column = ...` unnecessary
+2. `discard_at` and `purge_eligible_at` make the two retention meanings explicit without
+   coupling the schema to a discard-gem convention
 3. `Retainable` concern provides consistent interface across all models
 4. Efficiently perform physical deletion processing with Solid Queue job
-5. `discarded_at` / `purged_at` is `Float::INFINITY` can be used as the sentinel value to simplify
+5. `discard_at` / `purge_eligible_at` use `Float::INFINITY` as the sentinel value to simplify
    the query while preserving the existing time window semantics.
 
 ## influence
@@ -141,5 +141,6 @@ and signed `rt` tokens.
 - Column name change and data migration required for models with 24 or more
 - Change references in existing controllers and services to new column names
 - The test code also needs to be adapted to the new column names.
-- The existing implementation `lapses_at` will be migrated to `discarded_at`
-- As a migration strategy, rename existing columns to `discarded_at` / `purged_at`
+- The existing implementation `lapses_at` is exposed as an alias for `discard_at`
+- Because the schema is unreleased, existing Retainable columns were renamed directly to
+  `discard_at` / `purge_eligible_at`; no compatibility columns or double writes are retained.

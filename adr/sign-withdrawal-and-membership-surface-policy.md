@@ -39,7 +39,7 @@ handled operationally:
 - Another operator coordinates, approves, and performs the change through the appropriate
   operational channel.
 - Operator withdrawal uses the same persisted state columns as app and com actors:
-  `withdrawal_started_at`, `deactivated_at`, `discarded_at`, and `purged_at`.
+  `withdrawal_started_at`, `deactivated_at`, `discard_at`, and `purge_eligible_at`.
 - Operator lifecycle requests are org-specific and must not share the app/com self-service
   withdrawal service.
 - The sign org surface must not expose a self-service destructive withdrawal flow for operators.
@@ -56,7 +56,7 @@ App and com account withdrawal should follow one shared business model.
 - The underlying withdrawal state machine, recovery window, validations, timestamp updates, and
   recovery behavior should be implemented once or through a shared local abstraction.
 - Completing app or com withdrawal is staged. `withdrawal_started_at` represents `closing`;
-  `deactivated_at` and `discarded_at` represent `suspended`; `terminated_at` represents irreversible
+  `deactivated_at` and `discard_at` represent `suspended`; `terminated_at` represents irreversible
   termination.
 - Withdrawal handling revokes other sessions while preserving the current MFA-verified session as
   the withdrawal-continuation session, because no separate withdrawal ticket exists yet.
@@ -69,7 +69,7 @@ App and com account withdrawal should follow one shared business model.
 - The ID surface may keep enough authenticated behavior to show withdrawal status, recovery, and
   actor-initiated early termination, but RP/OIDC actions must reject the actor while closing,
   suspended, or terminated.
-- `discarded_at` marks the point where normal access stops. `purged_at` marks the end of the
+- `discard_at` marks the point where normal access stops. `purge_eligible_at` marks the end of the
   recovery window and is the deadline used by retention jobs for anonymization. App/com account rows
   are not physically deleted by self-service withdrawal retention.
 - Direct messages, audit records, activity history, and legal-hold-sensitive records are not purged

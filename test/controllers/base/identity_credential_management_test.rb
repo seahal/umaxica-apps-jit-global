@@ -39,7 +39,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     )
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
@@ -95,7 +95,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     )
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:com",
@@ -136,7 +136,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     )
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
@@ -167,7 +167,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     client = clients(:one)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)

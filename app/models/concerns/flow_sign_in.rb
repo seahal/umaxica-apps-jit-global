@@ -175,7 +175,7 @@ module FlowSignIn
   end
 
   def discard_sign_in!(now: Time.current)
-    discard_cycle!(discarded_at: now, purged_at: purged_at)
+    discard_cycle!(discard_at: now, purge_eligible_at: purge_eligible_at)
   end
 
   private

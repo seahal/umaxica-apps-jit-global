@@ -634,8 +634,8 @@ module PreferenceCore
     now = Time.current
     with_preference_connection(:writing) do
       preference.update!(
-        discarded_at: [preference.created_at, now].compact.max,
-        purged_at: now + PreferenceBase::REFRESH_TOKEN_TTL,
+        discard_at: [preference.created_at, now].compact.max,
+        purge_eligible_at: now + PreferenceBase::REFRESH_TOKEN_TTL,
         status_id: preference_status_class::DELETED,
         token_digest: nil,
         jti: JitSecurityJwtJtiGenerator.generate,

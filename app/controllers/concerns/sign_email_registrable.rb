@@ -120,8 +120,7 @@ module SignEmailRegistrable
     if allow_existing && existing_email && !pending_email_status?(existing_email) &&
         (uniqueness_only || !has_errors)
       cleanup_pending_signup!
-      session[DUMMY_EXISTING_EMAIL_SESSION_KEY] = dummy_existing_email_session_payload
-      @user_email.errors.clear
+      mark_dummy_existing_email_flow!
       return { status: :dummy_existing }
     end
 
@@ -132,13 +131,15 @@ module SignEmailRegistrable
 
     if pending_email_status?(existing_email) &&
         existing_email.reregistration_window_active?
-      return { status: :cooldown }
+      mark_dummy_existing_email_flow!
+      return { status: :dummy_existing }
     end
 
     if pending_email_status?(existing_email)
       locked = ClientEmail.lock.find_by(id: existing_email.id)
       if locked&.reregistration_window_active?
-        return { status: nil, cooldown: true }
+        mark_dummy_existing_email_flow!
+        return { status: :dummy_existing }
       end
     end
 
@@ -288,6 +289,11 @@ module SignEmailRegistrable
       "dummy" => true,
       "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
     }
+  end
+
+  def mark_dummy_existing_email_flow!
+    session[DUMMY_EXISTING_EMAIL_SESSION_KEY] = dummy_existing_email_session_payload
+    @user_email.errors.clear
   end
 
   def email_uniqueness_only_error?(user_email)

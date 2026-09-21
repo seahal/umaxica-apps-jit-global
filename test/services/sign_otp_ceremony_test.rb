@@ -5,11 +5,13 @@ require "test_helper"
 
 class SignOtpCeremonyTest < ActiveSupport::TestCase
   test "rejects an app email sign-up ticket with no bound contact record" do
+    flow = create_email_flow
     result = SignOtpCeremony.issue!(
       purpose: :sign_up,
       surface: :app,
       channel: :email,
-      subject: create_email_flow,
+      subject: flow,
+      session_nonce: flow.public_id,
     )
 
     assert_not result.success?
@@ -31,6 +33,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
         channel: :email,
         subject: flow,
         destination: "other-address@example.test",
+        session_nonce: flow.public_id,
       )
 
       assert_not mismatch.success?
@@ -42,6 +45,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
         channel: :email,
         subject: flow,
         destination: email.address,
+        session_nonce: flow.public_id,
       )
 
       assert_predicate issued, :success?
@@ -56,6 +60,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
         subject: flow,
         destination: email.address,
         code: issued.code,
+        session_nonce: flow.public_id,
       )
 
       assert_predicate verified, :success?
@@ -74,6 +79,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       OtpAdapter.stub(:for, adapter) do
         SignOtpCeremony.issue!(
           purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+          session_nonce: flow.public_id,
         )
       end
 
@@ -82,6 +88,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     result = SignOtpCeremony.verify!(
       purpose: :sign_up, surface: :app, channel: :email, subject: flow,
       destination: "someone-else@example.test", code: issued.code,
+      session_nonce: flow.public_id,
     )
 
     assert_not result.success?
@@ -100,6 +107,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       OtpAdapter.stub(:for, adapter) do
         SignOtpCeremony.issue!(
           purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+          session_nonce: flow.public_id,
         )
       end
 
@@ -108,10 +116,79 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     result = SignOtpCeremony.verify!(
       purpose: :sign_up, surface: :app, channel: :email, subject: flow,
       destination: email.address, code: "12345",
+      session_nonce: flow.public_id,
     )
 
     assert_not result.success?
     assert_equal :invalid_code, result.status
+    assert_not_nil email.reload.get_otp
+  end
+
+  test "issuing a new sign-up OTP does not reset failed attempts" do
+    email = create_verified_client_email("sign-otp-attempts@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    first =
+      OtpAdapter.stub(:for, adapter) do
+        SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+          session_nonce: flow.public_id,
+        )
+      end
+
+    invalid_code = (first.code == "000000") ? "000001" : "000000"
+    failed = SignOtpCeremony.verify!(
+      purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+      destination: email.address, code: invalid_code, session_nonce: flow.public_id,
+    )
+
+    assert_equal :invalid_code, failed.status
+    assert_equal 1, email.reload.otp_attempts_count
+
+    email.update!(otp_last_sent_at: CommonOtpPolicy::SEND_COOLDOWN.ago - 1.second)
+    reissued =
+      OtpAdapter.stub(:for, adapter) do
+        SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+          session_nonce: flow.public_id,
+        )
+      end
+
+    assert_predicate reissued, :success?
+    assert_equal 1, email.reload.otp_attempts_count
+
+    verified = SignOtpCeremony.verify!(
+      purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+      destination: email.address, code: reissued.code, session_nonce: flow.public_id,
+    )
+
+    assert_predicate verified, :success?
+    assert_equal 0, email.reload.otp_attempts_count
+  end
+
+  test "does not verify or consume a code under a different sign-up session nonce" do
+    email = create_verified_client_email("sign-otp-session-binding@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    issued =
+      OtpAdapter.stub(:for, adapter) do
+        SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+          session_nonce: flow.public_id,
+        )
+      end
+
+    result = SignOtpCeremony.verify!(
+      purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+      destination: email.address, code: issued.code, session_nonce: "another-flow",
+    )
+
+    assert_not result.success?
+    assert_equal :session_mismatch, result.status
     assert_not_nil email.reload.get_otp
   end
 
@@ -143,12 +220,15 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**| delivery_attempted = true }
 
+    fake_subject = Object.new
+    fake_subject.define_singleton_method(:public_id) { "fake-flow" }
     ceremony = SignOtpCeremony.new(
       purpose: :sign_up,
       surface: :app,
       channel: :email,
-      subject: Object.new,
+      subject: fake_subject,
       destination: "sign-otp@example.test",
+      session_nonce: "fake-flow",
     )
     ceremony.define_singleton_method(:validate_scope!) { nil }
     ceremony.define_singleton_method(:bound_record) { record }
@@ -163,6 +243,25 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
     assert_equal 2, cooldown_checks
     assert_not delivery_attempted
+  end
+
+  test "sign-up OTP expiry stays within the ten-minute confirmation bound" do
+    email = create_verified_client_email("sign-otp-expiry@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    issued =
+      OtpAdapter.stub(:for, adapter) do
+        SignOtpCeremony.issue!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow, destination: email.address,
+          session_nonce: flow.public_id,
+        )
+      end
+
+    assert_predicate issued, :success?
+    assert_operator email.reload.otp_counter.to_i, :<, 1 << 64
+    assert_operator email.reload.otp_expires_at, :<=, 10.minutes.from_now + 1.second
   end
 
   private

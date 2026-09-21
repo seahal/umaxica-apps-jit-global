@@ -39,11 +39,16 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "the sign-in entry stores the login challenge for the rest of the ceremony" do
+  test "the sign-in entry stores the authorization transaction in Auth continuity" do
     admit_sign_in!
 
     assert_response :success
-    assert_equal @transaction.login_challenge, session[:oidc_authorization_login_challenge]
+    record = ClientAuthCeremonySession.order(created_at: :desc).first
+
+    assert_predicate record, :admitted?
+    assert_equal @transaction.transaction_id, record.authorization_transaction_ref
+    assert_nil session[:oidc_authorization_login_challenge]
+    assert_nil session[:oidc_authorization_intent]
   end
 
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
@@ -55,11 +60,12 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal auth_app_sign_in_check_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
-  test "the checkpoint binds the signed-in actor to the authorization transaction" do
+  test "the local handoff POST binds the signed-in actor to the authorization transaction" do
     admit_sign_in!
     submit_secret_credential!
 
     follow_redirect!
+    post_oidc_handoff!
 
     transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: @transaction.login_challenge)
 
@@ -68,19 +74,23 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_nil transaction.consumed_at, "the authorization endpoint consumes it, not the checkpoint"
   end
 
-  test "the checkpoint hands the browser back to the authorization endpoint" do
+  test "the local handoff POST hands the browser to the Base authorization endpoint" do
     admit_sign_in!
     submit_secret_credential!
 
     follow_redirect!
+    post_oidc_handoff!
 
-    assert_response :redirect
-    authorize_uri = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(authorize_uri.query)
+    assert_response :success
+    assert_select "form#oidc-authorization-result-form[method=post]", 1
+    assert_select "input[name=result][value]", 1
+    assert_select "form#oidc-authorization-result-form" do |forms|
+      result_uri = URI.parse(forms.first.attributes.fetch("action").value)
+      base_uri = URI.parse(OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")))
 
-    assert_equal "/oauth/authorize", authorize_uri.path
-    assert_predicate query["result"], :present?
-    assert_nil query["login_challenge"]
+      assert_equal "/oauth/authorize", result_uri.path
+      assert_equal base_uri.host, result_uri.host
+    end
   end
 
   test "the checkpoint clears the login challenge from the session" do
@@ -117,6 +127,13 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
         },
         "cf-turnstile-response": "test_token",
       }, headers: { "Host" => @host },
+    )
+  end
+
+  def post_oidc_handoff!
+    post(
+      auth_app_sign_oidc_handoff_path(ri: "jp"),
+      headers: { "Host" => @host },
     )
   end
 

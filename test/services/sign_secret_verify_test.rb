@@ -119,8 +119,8 @@ class SignSecretVerifyTest < ActiveSupport::TestCase
     assert_equal :secret_credential_revoked, result.reason
   end
 
-  test "fails with expired when discarded_at has lapsed" do
-    credential = build_credential(discarded_at: @now - 1.minute)
+  test "fails with expired when discard_at has lapsed" do
+    credential = build_credential(discard_at: @now - 1.minute)
 
     result = SignSecretVerify.call(secret_credential: credential, raw_secret_credential: "raw-1", now: @now)
 
@@ -230,7 +230,7 @@ class SignSecretVerifyTest < ActiveSupport::TestCase
   end
 
   class FakeCredential
-    attr_accessor :id, :lookup_digest, :usage_policy, :revoked_at, :discarded_at, :not_before_at,
+    attr_accessor :id, :lookup_digest, :usage_policy, :revoked_at, :discard_at, :not_before_at,
                   :max_uses, :max_failures, :secret_kind, :active_value, :authenticate_result,
                   :raise_on_authenticate
     attr_reader :reloads, :saved, :columns, :locked_at, :consumed_at, :last_used_at, :last_failed_at,

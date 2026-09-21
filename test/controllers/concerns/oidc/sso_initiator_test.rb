@@ -13,7 +13,16 @@ class OidcSsoInitiatorTestController < ApplicationController
   end
 
   def fresh
-    redirect_to_oidc_authorization_url(initiate_oidc_session!(pt: "/fresh", prompt: "login", max_age: 60))
+    redirect_to_oidc_authorization_url(
+      initiate_oidc_session!(pt: params[:pt].presence || "/fresh", prompt: "login", max_age: 60),
+    )
+  end
+
+  def burst
+    params.fetch(:count, "1").to_i.times do |index|
+      initiate_oidc_session!(pt: "/burst-#{index}")
+    end
+    head :no_content
   end
 
   def logged_in?
@@ -54,6 +63,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     Rails.application.routes.draw do
       get "/oidc/sso" => "oidc_sso_initiator_test#index"
       get "/oidc/sso/fresh" => "oidc_sso_initiator_test#fresh"
+      get "/oidc/sso/burst" => "oidc_sso_initiator_test#burst"
     end
   end
 
@@ -139,6 +149,38 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     assert_equal "login", query.fetch("prompt")
     assert_equal "60", query.fetch("max_age")
     assert_equal 60, session.fetch("oidc_pending_flows").fetch(query.fetch("state")).fetch("max_age")
+  end
+
+  test "pending flows remain independent and are bounded to two entries" do
+    get "/oidc/sso/burst", params: { count: 3 },
+                           headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+    assert_response :no_content
+
+    flows = session.fetch("oidc_pending_flows")
+
+    assert_equal 2, flows.size
+    assert_equal ["/burst-1", "/burst-2"], flows.values.map { |flow| flow.fetch("pt") }
+    assert_not_equal flows.values[0].fetch("code_verifier"), flows.values[1].fetch("code_verifier")
+    assert_not_equal flows.values[0].fetch("nonce"), flows.values[1].fetch("nonce")
+  end
+
+  test "unsafe return targets are reduced to the local root" do
+    [
+      "https://evil.example/after",
+      "//evil.example/after",
+      "/dashboard?next=https://evil.example/after",
+      "/dashboard%2fevil",
+      "/dashboard\u0000",
+    ].each do |target|
+      get "/oidc/sso/fresh", params: { pt: target },
+                             headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+      assert_response :redirect
+      state = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("state")
+
+      assert_equal "/", session.fetch("oidc_pending_flows").fetch(state).fetch("pt"), target
+    end
   end
 
   test "authenticate! keeps using jump for cross-site oidc authorize urls" do
@@ -242,7 +284,7 @@ class OidcSsoInitiatorTestController
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -261,7 +303,7 @@ class OidcSsoInitiatorTestController
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -282,7 +324,7 @@ class OidcSsoInitiatorTestController
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(
@@ -731,7 +773,7 @@ class OidcSsoInitiatorTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -749,7 +791,7 @@ class OidcSsoInitiatorTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -769,7 +811,7 @@ class OidcSsoInitiatorTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

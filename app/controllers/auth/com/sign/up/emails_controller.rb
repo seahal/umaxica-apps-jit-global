@@ -313,6 +313,15 @@ module Auth
             payload["expires_at"].to_i > Time.current.to_i
           end
 
+          def mark_dummy_existing_email_flow!
+            session[DUMMY_EXISTING_EMAIL_SESSION_KEY] = {
+              "existing" => true,
+              "dummy" => true,
+              "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
+            }
+            @user_email.errors.clear
+          end
+
           def session_existing_email_id
             session[EXISTING_EMAIL_SESSION_KEY]
           end
@@ -347,18 +356,14 @@ module Auth
                   existing_email.visitor_email_status_id != VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP &&
                   (uniqueness_only || @user_email.errors.empty?)
                 cleanup_pending_visitor_signup!
-                @user_email.errors.clear
-                session[DUMMY_EXISTING_EMAIL_SESSION_KEY] = {
-                  "existing" => true,
-                  "dummy" => true,
-                  "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
-                }
+                mark_dummy_existing_email_flow!
                 next true
               end
 
               if existing_email&.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP &&
                   existing_email.reregistration_window_active?
-                next :cooldown
+                mark_dummy_existing_email_flow!
+                next true
               end
 
               next false if @user_email.errors.details.except(:visitor, :visitor_id).any? && !uniqueness_only

@@ -9,7 +9,7 @@
 #  id                        :bigint           not null, primary key
 #  address                   :string           default(""), not null
 #  address_digest            :string
-#  discarded_at              :datetime         default(Infinity), not null
+#  discard_at              :datetime         default(Infinity), not null
 #  locked_at                 :datetime         default(Infinity), not null
 #  notifiable                :boolean          default(TRUE), not null
 #  otp_attempts_count        :integer          default(0), not null
@@ -18,7 +18,7 @@
 #  otp_last_sent_at          :datetime         default(-Infinity), not null
 #  otp_private_key           :string           default(""), not null
 #  promotional               :boolean          default(TRUE), not null
-#  purged_at                 :datetime         default(Infinity), not null
+#  purge_eligible_at                 :datetime         default(Infinity), not null
 #  subscribable              :boolean          default(TRUE), not null
 #  undeletable               :boolean          default(FALSE), not null
 #  verification_token_digest :binary
@@ -31,10 +31,10 @@
 # Indexes
 #
 #  index_visitor_emails_on_active_address_digest    (address_digest) UNIQUE WHERE ((address_digest IS NOT NULL) AND (visitor_email_status_id <> 4))
-#  index_visitor_emails_on_discarded_at             (discarded_at)
+#  index_visitor_emails_on_discard_at             (discard_at)
 #  index_visitor_emails_on_otp_last_sent_at         (otp_last_sent_at)
 #  index_visitor_emails_on_public_id                (public_id) UNIQUE
-#  index_visitor_emails_on_purged_at                (purged_at)
+#  index_visitor_emails_on_purge_eligible_at                (purge_eligible_at)
 #  index_visitor_emails_on_visitor_email_status_id  (visitor_email_status_id)
 #  index_visitor_emails_on_visitor_id               (visitor_id)
 #

@@ -42,9 +42,9 @@ module RestrictedSessionGuard
     return false unless session&.restricted?
 
     expired =
-      session.discarded_at.present? &&
-      !session.discarded_at.respond_to?(:infinite?) &&
-      session.discarded_at <= Time.current
+      session.discard_at.present? &&
+      !session.discard_at.respond_to?(:infinite?) &&
+      session.discard_at <= Time.current
     return false unless expired
 
     return true if session.respond_to?(:revoked?) && session.revoked?

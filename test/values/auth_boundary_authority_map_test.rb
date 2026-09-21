@@ -27,7 +27,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
       assert_equal client_id.split("-").first, meta.fetch(:surface)
       assert_equal client_id.split("-").last, meta.fetch(:face)
       assert_includes %w(client visitor operator), meta.fetch(:actor)
-      assert_equal "/sign/in/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
+      assert_equal "/sign/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
       assert_equal "/sign/out", AuthBoundaryAuthorityMap.sign_out_path_for(client_id)
     end
   end
@@ -38,6 +38,8 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_includes paths, "/dashboard"
     assert_includes paths, "/lobby"
     assert_includes paths, "/sign/out/complete"
+    assert_includes paths, "/sign/in"
+    assert_includes paths, "/sign/in/callback"
   end
 
   test "Base is the authority surface and Auth is the ceremony surface" do

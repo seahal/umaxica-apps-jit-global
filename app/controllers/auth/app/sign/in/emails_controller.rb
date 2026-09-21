@@ -23,6 +23,8 @@ module Auth
 
           AUTHENTICATION_MODE = :guest
 
+          before_action :cache_sign_in_turnstile_validation, only: :create
+
           rate_limit(
             to: 5,
             within: 1.minute,
@@ -42,6 +44,19 @@ module Auth
             store: rate_limit_store,
             only: :create,
             with: -> { render_rate_limited(retry_after: 900) },
+          )
+          rate_limit(
+            to: 1,
+            within: CommonOtpPolicy::SEND_COOLDOWN,
+            by: -> { sign_in_identifier_rate_limit_key },
+            scope: "auth_app_sign_in",
+            name: "email_create_identifier_cooldown",
+            store: rate_limit_store,
+            only: :create,
+            with: -> {
+              render plain: I18n.t("sign.app.authentication.email.create.cooldown"),
+                     status: :too_many_requests
+            },
           )
           rate_limit(
             to: 5,
@@ -83,7 +98,7 @@ module Auth
 
           def create
             address = email_params(:address)[:address]
-            unless cloudflare_turnstile_validation["success"] && address.present?
+            unless sign_in_turnstile_valid? && address.present?
               @user_email = ClientEmail.new(address: address)
               return render_email_new(status: :unprocessable_content)
             end
@@ -159,6 +174,24 @@ module Auth
           end
 
           private
+
+          def cache_sign_in_turnstile_validation
+            @sign_in_turnstile_valid = cloudflare_turnstile_validation["success"] == true
+          end
+
+          def sign_in_turnstile_valid?
+            @sign_in_turnstile_valid == true
+          end
+
+          def sign_in_identifier_rate_limit_key
+            return "invalid:#{request.remote_ip}" unless sign_in_turnstile_valid?
+
+            raw_address = params.dig(:user_email, :address).to_s
+            normalized_address = validate_and_normalize_email(raw_address)
+            return "invalid:#{request.remote_ip}" if normalized_address.blank?
+
+            "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address)}"
+          end
 
           # The two ceremony pages are rendered from more than one action, so the component name is
           # named rather than derived: `render inertia: true` would derive it from `create`/`update`.

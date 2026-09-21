@@ -27,8 +27,8 @@ class StaffSecretCredentialsDestroyTest < ActiveSupport::TestCase
       OperatorSecretCredentialsDestroy.call(actor: @staff, secret_credential: @secret_credential)
     end
 
-    assert_not_equal Retainable::SENTINEL, @secret_credential.reload.discarded_at
-    assert_operator @secret_credential.purged_at, :>, Time.current
+    assert_not_equal Retainable::SENTINEL, @secret_credential.reload.discard_at
+    assert_operator @secret_credential.purge_eligible_at, :>, Time.current
     assert_equal OperatorSecretCredentialStatus::DELETED, @secret_credential.staff_secret_status_id
   end
 

@@ -96,7 +96,7 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
 
   test "the body media type is settled before csrf verification" do
     host! CORE_HOST
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh",
          params: "not json",
@@ -111,7 +111,7 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
     host! CORE_HOST
     get "/api/v0/session", headers: { "Accept" => "application/json" }
     csrf_token = response.parsed_body.fetch("csrf_token")
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh", headers: { "Accept" => "application/json", "X-CSRF-Token" => csrf_token }
 
@@ -124,7 +124,7 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
     host! CORE_HOST
     get "/api/v0/session", headers: { "Accept" => "application/json" }
     csrf_token = response.parsed_body.fetch("csrf_token")
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh",
          params: {}.to_json,
@@ -135,5 +135,20 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
          }
 
     assert_response :success
+  end
+
+  private
+
+  def oidc_refresh_token_for_client
+    session = ClientRpSession.create!(
+      client_token: client_tokens(:one),
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    session.issue_refresh_token!
   end
 end

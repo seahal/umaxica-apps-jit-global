@@ -8,9 +8,9 @@
 #
 #  id           :bigint           not null, primary key
 #  body         :string           default(""), not null
-#  discarded_at :datetime         default(Infinity), not null
+#  discard_at :datetime         default(Infinity), not null
 #  memo         :string           default(""), not null
-#  purged_at    :datetime         default(Infinity), not null
+#  purge_eligible_at    :datetime         default(Infinity), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  public_id    :string(21)       default(""), not null
@@ -20,7 +20,7 @@
 #
 #  index_zip_occurrences_on_body       (body) UNIQUE
 #  index_zip_occurrences_on_public_id  (public_id) UNIQUE
-#  index_zip_occurrences_on_purged_at  (purged_at)
+#  index_zip_occurrences_on_purge_eligible_at  (purge_eligible_at)
 #  index_zip_occurrences_on_status_id  (status_id)
 #
 # Foreign Keys

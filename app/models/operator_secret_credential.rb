@@ -9,7 +9,7 @@
 #  id                              :bigint           not null, primary key
 #  consumed_at                     :datetime
 #  delivery_method                 :string
-#  discarded_at                    :datetime         default(Infinity), not null
+#  discard_at                    :datetime         default(Infinity), not null
 #  failure_count                   :integer          default(0), not null
 #  issued_at                       :datetime
 #  issued_by_ref                   :string
@@ -23,7 +23,7 @@
 #  name                            :string           not null
 #  not_before_at                   :datetime
 #  password_digest                 :string
-#  purged_at                       :datetime         default(Infinity), not null
+#  purge_eligible_at                       :datetime         default(Infinity), not null
 #  revoked_at                      :datetime
 #  safe_prefix                     :string
 #  scope                           :string
@@ -151,9 +151,9 @@ class OperatorSecretCredential < OrgPrincipalRecord
       return now > expires_at
     end
 
-    return false if discarded_at.nil?
-    return false if discarded_at.respond_to?(:infinite?) && discarded_at.infinite?
+    return false if discard_at.nil?
+    return false if discard_at.respond_to?(:infinite?) && discard_at.infinite?
 
-    now > discarded_at
+    now > discard_at
   end
 end

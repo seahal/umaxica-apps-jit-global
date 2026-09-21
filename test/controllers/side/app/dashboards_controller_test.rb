@@ -30,7 +30,7 @@ class Side::App::DashboardsControllerTest < ActionDispatch::IntegrationTest
         ["Dashboard", side_app_dashboard_path(ri: "jp")],
         ["Settings", side_app_settings_path(ri: "jp")],
         ["Sign out", new_side_app_sign_out_path(ri: "jp")],
-        ["Authorize", side_app_sign_in_path(ri: "jp")],
+        ["Authorize", side_app_sign_show_path(ri: "jp")],
       ],
       inertia_props.fetch("sections").flat_map { |section| section.fetch("links") }
         .map { |link| [link.fetch("label"), link.fetch("href")] },
@@ -405,7 +405,7 @@ class Side::App::DashboardsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -425,7 +425,7 @@ class Side::App::DashboardsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

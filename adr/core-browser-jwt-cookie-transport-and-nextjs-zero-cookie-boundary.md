@@ -4,6 +4,23 @@
 
 Accepted (2026-06-14)
 
+## RP Credential Authority Amendment (2026-09-20)
+
+The Base/Auth/RP authority decision supersedes the credential issuance and audience portions of
+this ADR for Rails Core browser authentication. Base remains the sole physical OIDC Authorization
+Server and owns the Base Browser Session and RP Session. Core's OIDC callback uses the Access and
+Refresh credentials returned by Base for the exact Core RP (`core-app`, `core-com`, or `core-org`)
+and stores them in the host-only `oidc_rp_access` and `oidc_rp_refresh` cookie slots (with the
+`__Host-` prefix in secure contexts). It never calls the generic root `log_in` path and never
+creates a second root Browser Session.
+
+The old `core-browser` audience/root-browser-cookie contract below is historical for the Core RP
+path and is not an accepted credential for the current Core browser API. The Core API still keeps
+cookie-only transport, rejects `Authorization: Bearer`, keeps Rails CSRF protection, uses
+`Cache-Control: no-store`, and validates the exact RP issuer/audience/client binding. Palm remains
+an independent bearer-token boundary. The zero-cookie Next.js/edge contract is unchanged and its
+TanStack SSR boundary remains a separate follow-up decision.
+
 ## Amendment (2026-08-09)
 
 The Rails Core path list in "Decision" below — `/api/v0/*`, `/auth/*`, `/sso/*` — does not match
@@ -55,7 +72,7 @@ This repository does not contain deployable Cloudflare ruleset or Worker code. E
 therefore recorded as an operational contract and production rollout blocker until the external
 Cloudflare configuration is deployed and verified.
 
-## Decision
+## Historical Decision (superseded for RP credentials)
 
 Core browser credential transport is cookie-carried JWT access plus opaque refresh. Core uses the
 same Rails auth cookie concern and cookie names as the existing Acme/Sign relying-party flows; it

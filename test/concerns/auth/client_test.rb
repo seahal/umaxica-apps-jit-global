@@ -180,8 +180,8 @@ class AuthClientTest < ActiveSupport::TestCase
       token.rotate_refresh_token!
     end
     restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted.rotate_refresh_token!(discarded_at: 15.minutes.from_now)
-    before_ids = ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discarded_at)
+    restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
+    before_ids = ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discard_at)
 
     result = @obj.send(:log_in, @user, require_totp_check: false, skip_login_cooldown: true)
 
@@ -189,7 +189,7 @@ class AuthClientTest < ActiveSupport::TestCase
     assert_equal :forbidden, result[:http_status]
     assert_equal AuthenticationBase::SESSION_LIMIT_HARD_REJECT_MESSAGE, result[:message]
     assert_equal before_ids,
-                 ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discarded_at)
+                 ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discard_at)
   end
 
   test "log_in issues restricted session with 15 minute ttl when active sessions reach limit" do
@@ -207,7 +207,7 @@ class AuthClientTest < ActiveSupport::TestCase
       restricted = ClientToken.where(user_id: @user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).order(:created_at).last
 
       assert_not_nil restricted
-      assert_in_delta 15.minutes.from_now.to_i, restricted.discarded_at.to_i, 1
+      assert_in_delta 15.minutes.from_now.to_i, restricted.discard_at.to_i, 1
     end
   end
 end

@@ -77,7 +77,7 @@ module Authentication
       end
 
       def self.column_names
-        %w(id public_id discarded_at oidc_sid)
+        %w(id public_id discard_at oidc_sid)
       end
 
       def self.arel_table

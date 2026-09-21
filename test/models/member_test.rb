@@ -5,9 +5,9 @@
 # Database name: app_principal
 #
 #  id           :bigint           not null, primary key
-#  discarded_at :datetime         default(Infinity), not null
+#  discard_at :datetime         default(Infinity), not null
 #  moniker      :string
-#  purged_at    :datetime         default(Infinity), not null
+#  purge_eligible_at    :datetime         default(Infinity), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  division_id  :bigint
@@ -19,7 +19,7 @@
 #
 #  index_members_on_division_id  (division_id)
 #  index_members_on_public_id    (public_id) UNIQUE
-#  index_members_on_purged_at    (purged_at)
+#  index_members_on_purge_eligible_at    (purge_eligible_at)
 #  index_members_on_status_id    (status_id)
 #  index_members_on_user_id      (user_id)
 #

@@ -41,7 +41,7 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
         token.rotate_refresh_token!
       end
       restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-      restricted.rotate_refresh_token!(discarded_at: 15.minutes.from_now)
+      restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
     end
 
     Rails.application.routes.draw do

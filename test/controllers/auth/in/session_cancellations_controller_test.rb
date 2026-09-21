@@ -51,7 +51,6 @@ class AuthInSessionCancellationsControllerTest < ActiveSupport::TestCase
 
     session_hash = {
       :pending_login_user_id => actor.id,
-      :oidc_authorization_login_challenge => challenge,
       SessionLimitGate::GATE_SESSION_KEY => {
         "nonce" => "legacy",
         "issued_at" => Time.current.to_i,
@@ -70,6 +69,7 @@ class AuthInSessionCancellationsControllerTest < ActiveSupport::TestCase
     controller.define_singleton_method(:log_out) { nil }
     controller.define_singleton_method(:redirect_to) { |path| redirects << path }
     controller.define_singleton_method(:resolve_session_limit_cancellation_actor) { actor }
+    controller.define_singleton_method(:oidc_authorization_login_challenge) { challenge }
     controller.define_singleton_method(:url_options) { { host: "auth.app.localhost" } }
 
     controller.create
@@ -85,7 +85,6 @@ class AuthInSessionCancellationsControllerTest < ActiveSupport::TestCase
 
     session_hash = {
       :pending_login_staff_id => actor.id,
-      :oidc_authorization_login_challenge => challenge,
       SessionLimitGate::GATE_SESSION_KEY => {
         "nonce" => "legacy",
         "issued_at" => Time.current.to_i,
@@ -105,6 +104,7 @@ class AuthInSessionCancellationsControllerTest < ActiveSupport::TestCase
     controller.define_singleton_method(:log_out) { nil }
     controller.define_singleton_method(:redirect_to) { |path| redirects << path }
     controller.define_singleton_method(:resolve_session_limit_cancellation_actor) { actor }
+    controller.define_singleton_method(:oidc_authorization_login_challenge) { challenge }
     controller.define_singleton_method(:url_options) {
       { host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost") }
     }

@@ -13,19 +13,21 @@ class BaseAuthAdmissionCoordinator < ApplicationService
   }.freeze
 
   HANDOFF_PURPOSE = {
-    "sign_in" => "sign_in_handoff",
-    "sign_up" => "sign_up_handoff",
-    "invitation" => "sign_up_handoff",
+    "authentication" => "authentication_handoff",
+    "sign_in" => "authentication_handoff",
+    "sign_up" => "authentication_handoff",
+    "invitation" => "invitation_handoff",
     "step_up" => "step_up_handoff",
-    "reauthentication" => "step_up_handoff",
+    "reauthentication" => "reauthentication_handoff",
   }.freeze
 
   RESULT_PURPOSE = {
-    "sign_in" => "sign_in_result",
-    "sign_up" => "sign_up_result",
-    "invitation" => "sign_up_result",
+    "authentication" => "authentication_result",
+    "sign_in" => "authentication_result",
+    "sign_up" => "authentication_result",
+    "invitation" => "invitation_result",
     "step_up" => "step_up_result",
-    "reauthentication" => "step_up_result",
+    "reauthentication" => "reauthentication_result",
   }.freeze
 
   LOCAL_ENTRY_PURPOSE = {
@@ -39,13 +41,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     "org" => OperatorAuthCeremonySession,
   }.freeze
 
-  BASE_HOST_KEY = {
-    "app" => :base_service,
-    "com" => :base_corporate,
-    "org" => :base_staff,
-  }.freeze
-
-  Issuance = Data.define(:transaction, :code, :resume_url)
+  Issuance = Data.define(:transaction, :code)
 
   class << self
     public
@@ -58,7 +54,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         surface: transaction.surface,
         subject_ref: transaction.transaction_id,
       )
-      Issuance.new(transaction: transaction, code: code, resume_url: nil)
+      Issuance.new(transaction: transaction, code: code)
     end
 
     def consume_handoff!(raw_code:, surface:, expected_intent:, store: default_store)
@@ -78,7 +74,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         actor_type: SURFACE_ACTOR.fetch(surface.to_s),
         surface: surface,
       )
-      Issuance.new(transaction: nil, code: code, resume_url: nil)
+      Issuance.new(transaction: nil, code: code)
     end
 
     def consume_local_entry!(raw_code:, surface:, expected_intent:, store: default_store)
@@ -103,11 +99,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         base_session_ref: transaction.session_ref,
         ceremony_session_ref: ceremony_session_ref,
       )
-      Issuance.new(
-        transaction: transaction,
-        code: code,
-        resume_url: resume_url(transaction: transaction, result_code: code),
-      )
+      Issuance.new(transaction: transaction, code: code)
     end
 
     def consume_result!(raw_code:, surface:, store: default_store)
@@ -133,8 +125,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise(last_error || Denied.new("admission missing"))
     end
 
-    def register_result_and_issue_resume!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
-                                          authentication_event_at: nil, ceremony_session_ref: nil)
+    def register_result_and_issue!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
+                                   authentication_event_at: nil, ceremony_session_ref: nil)
       issuance = OidcAuthorizationTransactionCoordinator.register_result!(
         surface: surface,
         login_challenge: login_challenge,
@@ -145,14 +137,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         authentication_event_at: authentication_event_at,
       )
       issue_result!(transaction: issuance.transaction, ceremony_session_ref: ceremony_session_ref)
-    end
-
-    def resume_url(transaction:, result_code:)
-      origin = Oidc::AcmeServiceOrigin.from(
-        Rails.configuration.x.boot_config.fetch(:hosts).public_send(BASE_HOST_KEY.fetch(transaction.surface)).to_s,
-        default_scheme: "https",
-      )
-      origin.authorization_endpoint(query: { result: result_code })
     end
 
     def ceremony_session_class(surface)

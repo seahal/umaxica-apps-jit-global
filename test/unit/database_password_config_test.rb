@@ -47,6 +47,7 @@ class DatabasePasswordConfigTest < ActiveSupport::TestCase
     assert_equal 18, database_yml.scan(channel_binding_pattern).size
     assert_includes database_yml, 'sslmode: <%= production_value.call("NEON_PGSSLMODE") %>'
     assert_includes database_yml, 'channel_binding: <%= production_value.call("NEON_PGCHANNELBINDING") %>'
+    assert_includes database_yml, 'name.end_with?("PGSSLMODE") && value != "verify-full"'
     assert_includes database_yml, "Rails.env.production? ? ENV.fetch(name) : ENV[name]"
   end
 end

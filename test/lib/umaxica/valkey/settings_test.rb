@@ -59,6 +59,24 @@ class UmaxicaValkeySettingsTest < ActiveSupport::TestCase
     assert_not_equal 5, settings.auth_state.db
   end
 
+  test "production rejects plaintext Valkey URLs for every responsibility" do
+    %w(CACHE_REDIS_URL RATE_LIMIT_REDIS_URL AUTH_STATE_REDIS_URL).each do |variable|
+      environment = {
+        "CACHE_REDIS_URL" => "rediss://cache.example.invalid:6380/0",
+        "RATE_LIMIT_REDIS_URL" => "rediss://kvs.example.invalid:6380/9",
+        "AUTH_STATE_REDIS_URL" => "rediss://kvs.example.invalid:6380/11",
+      }
+      environment[variable] = "redis://plaintext.example.invalid:6379/0"
+
+      error =
+        assert_raises(Umaxica::Valkey::ConfigurationError) do
+          Umaxica::Valkey::Settings.load(rails_env: "production", environment: environment)
+        end
+
+      assert_match(/#{variable} must use rediss:\/\/ in production/, error.message)
+    end
+  end
+
   test "production fails fast when a responsibility URL is missing" do
     error =
       assert_raises(Umaxica::Valkey::ConfigurationError) do

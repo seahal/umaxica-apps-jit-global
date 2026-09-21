@@ -25,7 +25,7 @@ class IdentityCoverageTest < ActiveSupport::TestCase
 
     now = Time.current
     deadline = now + 31.days
-    @user.update!(deactivated_at: now, discarded_at: now, purged_at: deadline)
+    @user.update!(deactivated_at: now, discard_at: now, purge_eligible_at: deadline)
     @user.reload
 
     assert_equal deadline.to_i, @user.recovery_deadline.to_i

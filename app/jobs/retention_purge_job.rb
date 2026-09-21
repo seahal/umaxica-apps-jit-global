@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Periodic physical deletion of records past their `purged_at` window.
+# Periodic physical deletion of records past their `purge_eligible_at` window.
 #
 # The set-based `delete_all` here is the Accepted, ADR-sanctioned exception to
 # the forbidden-method rule on `delete_all`: see
@@ -13,14 +13,12 @@
 class RetentionPurgeJob < ApplicationJob
   queue_as :retention
 
-  # Order matters: rows are deleted with `delete_all`, which fires DB-level FK
-  # cascades but not AR callbacks. Tables that hold FK references with
-  # ON DELETE CASCADE to other RETAINABLE rows MUST be listed *before* the
-  # referenced parent -- otherwise the cascade will silently delete rows whose
-  # `purged_at` is still Infinity. Concretely: `client_sign_up_flows.token_id`
-  # -> `client_tokens.id` ON DELETE CASCADE, so ClientSignUpFlow/VisitorSignUpFlow
-  # must precede ClientToken/VisitorToken. Verified by
-  # `test/jobs/retention_purge_job_test.rb`.
+  # Rows are deleted with `delete_all`, which applies database-level FK actions
+  # but not AR callbacks. Sign-up flows retain their token references until
+  # their own retention window is complete; the corresponding FKs are
+  # ON DELETE RESTRICT, so a parent token cannot silently delete a child.
+  # Child-before-parent ordering remains explicit for retention readability and
+  # for any independently cascading relations that are added under review.
   RETAINABLE_MODELS = %w(
     AppPreferenceChronicle ComPreferenceChronicle OrgPreferenceChronicle
     ClientChronicle OperatorChronicle
@@ -47,7 +45,7 @@ class RetentionPurgeJob < ApplicationJob
   # Operational kill switch, not a retention rule: the flag exists so an
   # operator can stop irreversible deletion during an incident, a data
   # migration, or a legal hold that is not yet expressed as a hold record.
-  # Every unit of work below is selected by a time window (`purged_at: ..now`),
+  # Every unit of work below is selected by a time window (`purge_eligible_at: ..now`),
   # so a skipped run is inherently catch-up safe -- the next unsuspended run
   # processes the accumulated backlog. Returning normally keeps the recurring
   # schedule (config/recurring.yml, every 15 minutes) as the retry mechanism;
@@ -60,10 +58,11 @@ class RetentionPurgeJob < ApplicationJob
       return
     end
 
-    now = Time.current
-    SignUpArtifactCleanup.cleanup_pending!(now: now, batch_size: batch_size)
+    SignUpArtifactCleanup.cleanup_pending!(batch_size: batch_size)
 
     RETAINABLE_MODELS.each do |klass|
+      now = klass.database_now
+
       if [Client, Visitor].include?(klass)
         anonymize_accounts(klass, now: now, batch_size: batch_size)
         next
@@ -74,9 +73,9 @@ class RetentionPurgeJob < ApplicationJob
         next
       end
 
-      next unless klass.column_names.include?("purged_at")
+      next unless klass.column_names.include?("purge_eligible_at")
 
-      klass.where(purged_at: ..now).in_batches(of: batch_size).delete_all
+      klass.where(purge_eligible_at: ..now).in_batches(of: batch_size).delete_all
     end
   end
 
@@ -87,7 +86,7 @@ class RetentionPurgeJob < ApplicationJob
   # Enforcement-blocked rows (D3 principal_hard_delete_blocked /
   # withdrawal_purge_blocked) are excluded from the batch delete entirely.
   def purge_operators(now:, batch_size:)
-    Operator.where(purged_at: ..now).in_batches(of: batch_size) do |batch|
+    Operator.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
       blocked_ids = []
       batch.find_each do |operator|
         if enforcement_blocks_purge?(operator)
@@ -123,7 +122,7 @@ class RetentionPurgeJob < ApplicationJob
   # and subsequent runs skip the row via `where(terminated_at: nil)`, freezing
   # partial anonymization permanently -- a GDPR / PII compliance failure mode.
   def anonymize_accounts(klass, now:, batch_size:)
-    klass.where(purged_at: ..now).where(terminated_at: nil).in_batches(of: batch_size) do |batch|
+    klass.where(purge_eligible_at: ..now).where(terminated_at: nil).in_batches(of: batch_size) do |batch|
       batch.find_each do |actor|
         if active_retention_hold_for(actor, now: now)
           handle_actor_purge_skipped_by_hold(actor, now: now)

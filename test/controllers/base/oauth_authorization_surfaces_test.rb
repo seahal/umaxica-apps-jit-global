@@ -137,8 +137,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   test "com authorize rejects an unknown result code as an invalid request" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 
-    get base_com_oauth_authorization_url(host: host, result: "no-such-challenge"),
-        headers: { "Host" => host }
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: "no-such-challenge" },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
     assert_equal "invalid_request", response.parsed_body.fetch("error")
@@ -150,20 +151,22 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
     )
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "com", login_challenge: issuance.transaction.login_challenge,
       actor: visitors(:reserved_visitor), session_ref: "com-resume-session", auth_method: "passkey",
       authentication_event_at: Time.current,
     )
 
-    get base_com_oauth_authorization_url(host: host, result: result.code),
-        headers: { "Host" => host }
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :redirect
     assert_predicate issuance.transaction.reload, :consumed?
 
-    get base_com_oauth_authorization_url(host: host, result: result.code),
-        headers: { "Host" => host }
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
     assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
@@ -174,20 +177,22 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
     )
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "org", login_challenge: issuance.transaction.login_challenge,
       actor: operators(:one), session_ref: "org-resume-session", auth_method: "passkey",
       authentication_event_at: Time.current,
     )
 
-    get base_org_oauth_authorization_url(host: host, result: result.code),
-        headers: { "Host" => host }
+    post base_org_oauth_authorization_url(host: host),
+         params: { result: result.code },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :redirect
     assert_predicate issuance.transaction.reload, :consumed?
 
-    get base_org_oauth_authorization_url(host: host, result: result.code),
-        headers: { "Host" => host }
+    post base_org_oauth_authorization_url(host: host),
+         params: { result: result.code },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :bad_request
     assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
@@ -200,8 +205,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     )
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction: issuance.transaction)
 
-    get base_com_oauth_authorization_url(host: host, result: result.code),
-        headers: { "Host" => host }
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
     assert_equal "authorization transaction is not ready", response.parsed_body.fetch("error_description")
@@ -215,8 +221,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     )
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction: issuance.transaction)
 
-    get base_org_oauth_authorization_url(host: host, result: result.code),
-        headers: { "Host" => host }
+    post base_org_oauth_authorization_url(host: host),
+         params: { result: result.code },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :bad_request
     assert_equal "authorization transaction is not ready", response.parsed_body.fetch("error_description")
@@ -232,7 +239,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
         login_challenge_ttl: 1.second, now: now,
       )
-      result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+      result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface: "com", login_challenge: issuance.transaction.login_challenge,
         actor: visitors(:reserved_visitor), session_ref: "com-expired-session", auth_method: "passkey",
         authentication_event_at: now,
@@ -240,8 +247,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     end
 
     travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
-      get base_com_oauth_authorization_url(host: host, result: result.code),
-          headers: { "Host" => host }
+      post base_com_oauth_authorization_url(host: host),
+           params: { result: result.code },
+           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
     end
 
     assert_response :bad_request
@@ -257,7 +265,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
         surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
         login_challenge_ttl: 1.second, now: now,
       )
-      result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+      result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface: "org", login_challenge: issuance.transaction.login_challenge,
         actor: operators(:one), session_ref: "org-expired-session", auth_method: "passkey",
         authentication_event_at: now,
@@ -265,8 +273,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     end
 
     travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
-      get base_org_oauth_authorization_url(host: host, result: result.code),
-          headers: { "Host" => host }
+      post base_org_oauth_authorization_url(host: host),
+           params: { result: result.code },
+           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
     end
 
     assert_response :bad_request
@@ -274,6 +283,14 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def cross_surface_result_headers(base_host, auth_host_env)
+    {
+      "Host" => base_host,
+      "Origin" => "https://#{ENV.fetch(auth_host_env)}",
+      "Sec-Fetch-Site" => "same-site",
+    }
+  end
 
   def authorize_params(realm:)
     {

@@ -29,15 +29,15 @@ module Preference
         status_id: AppPreferenceStatus::NOTHING,
         binding_method_id: AppPreferenceBindingMethod::NOTHING,
         dbsc_status_id: AppPreferenceDbscStatus::NOTHING,
-        discarded_at: 20.years.from_now,
-        purged_at: 20.years.from_now,
+        discard_at: 20.years.from_now,
+        purge_eligible_at: 20.years.from_now,
       )
       @new_preference = AppPreference.create!(
         status_id: AppPreferenceStatus::NOTHING,
         binding_method_id: AppPreferenceBindingMethod::NOTHING,
         dbsc_status_id: AppPreferenceDbscStatus::NOTHING,
-        discarded_at: 20.years.from_now,
-        purged_at: 20.years.from_now,
+        discard_at: 20.years.from_now,
+        purge_eligible_at: 20.years.from_now,
       )
       @adoption = build_adoption_context(@preference)
 

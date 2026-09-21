@@ -235,7 +235,7 @@ strings. Server-side enforcement (`verify(..., user_verification: true)` plus ex
 | Purpose             | Flow                                          | Policy   |
 | ------------------- | --------------------------------------------- | -------- |
 | `registration`      | sign-up and settings passkey registration     | required |
-| `direct_sign_in`    | identifier-first passkey sign-in              | required |
+| `direct_sign_in`    | discoverable app/com sign-in; actor-known org sign-in | required |
 | `mfa_challenge`     | passkey as second factor after another factor | required |
 | `ordinary_step_up`  | step-up verification for sensitive settings   | required |
 | `high_risk_step_up` | reserved for future high-risk operations      | required |

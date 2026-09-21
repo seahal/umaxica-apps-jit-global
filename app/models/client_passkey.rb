@@ -12,12 +12,12 @@
 #  backup_eligible          :boolean
 #  backup_state             :boolean
 #  description              :string           default(""), not null
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  last_used_at             :datetime
 #  metadata_source          :string
 #  provider_name            :string
 #  public_key               :text             not null
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  sign_count               :bigint           default(0), not null
 #  transports               :jsonb
 #  created_at               :datetime         not null
@@ -30,9 +30,9 @@
 #
 # Indexes
 #
-#  index_client_passkeys_on_discarded_at    (discarded_at)
+#  index_client_passkeys_on_discard_at    (discard_at)
 #  index_client_passkeys_on_public_id       (public_id) UNIQUE
-#  index_client_passkeys_on_purged_at       (purged_at)
+#  index_client_passkeys_on_purge_eligible_at       (purge_eligible_at)
 #  index_client_passkeys_on_status_id       (status_id)
 #  index_client_passkeys_on_webauthn_id     (webauthn_id) UNIQUE
 #  index_user_identity_passkeys_on_user_id  (user_id)

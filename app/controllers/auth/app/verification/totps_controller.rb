@@ -57,6 +57,7 @@ class Auth::App::Verification::TotpsController < ::Auth::App::Verification::Base
         csrf_token: form_authenticity_token,
         scope: scope,
         pt: pt,
+        credential_selector: totp_credential_selector_props,
         code_label: t("sign.app.verification.edit.code_label"),
         code_placeholder: t("sign.app.verification.edit.code_placeholder"),
         submit_label: t("sign.app.verification.edit.submit"),
@@ -66,6 +67,22 @@ class Auth::App::Verification::TotpsController < ::Auth::App::Verification::Base
         label: t("sign.app.verification.edit.back"),
         href: auth_app_verification_path(ri: params[:ri], scope: scope, pt: pt),
       },
+    }
+  end
+
+  def totp_credential_selector_props
+    credentials = active_totp_credentials.to_a
+    return unless credentials.length > 1
+
+    {
+      name: "verification[credential_public_id]",
+      label: t("messages.totp_credential_label"),
+      options: credentials.each_with_index.map do |credential, index|
+        {
+          value: credential.public_id,
+          label: credential.title.presence || t("messages.totp_credential_default_label", count: index + 1),
+        }
+      end,
     }
   end
 end

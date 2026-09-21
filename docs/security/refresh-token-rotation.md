@@ -66,6 +66,14 @@ updating the child row. Back-channel logout records a successful RP-session revo
 client-bound, surface-local lookup succeeds. A legacy UUID `sid` that identifies a Base Browser
 Session remains on the existing parent logout primitive; it is not reinterpreted as an RP Session.
 
+First-party browser RPs use the same child-only authority for their normal POST `/sign/out` flow.
+The RP validates its host-bound Access/Refresh cookie pair against the registered client, resource
+realm, RP Session `sid`, JTI, and subject before creating the logout handoff. It then revokes only
+that RP Session and clears the RP cookies; it does not accept a Bearer header or a root Browser
+Session cookie as a fallback and does not revoke the parent or sibling RP Sessions. GET sign-out
+navigation remains non-mutating. Revoke and logout stop refresh and new Access JWT issuance, but an
+already-issued Access JWT remains valid until its natural `exp` and verifier clock-skew boundary.
+
 Logical authority moves now; physical storage may remain where it is. Existing sign-side tables,
 models, services, controllers, namespaces, and tests do not imply sign-side authority.
 
@@ -103,7 +111,7 @@ Base refresh rotation must:
 
 Refresh-token expiry is an internal token lifetime. **Session Expires At** is the absolute session
 lifetime ceiling: successful refresh rotation MUST NOT extend it. The current root-token schema has
-no second timestamp: `discarded_at` is initialized at session establishment, used to reject refresh
+no second timestamp: `discard_at` is initialized at session establishment, used to reject refresh
 after that instant, and copied unchanged across rotation. Its user-facing meaning is therefore the
 fixed session ceiling, never a sliding refresh expiry. OIDC usage rows retain their separate
 `refresh_token_expires_at` internally, clamped to the root session ceiling. Newly issued Access and

@@ -61,7 +61,13 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
 
     assert_response :success
-    assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
+    transaction_ref = auth_ceremony_record.authorization_transaction_ref
+    transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+      surface: "org",
+      transaction_id: transaction_ref,
+    )
+
+    assert_equal issuance.transaction.login_challenge, transaction.login_challenge
   end
 
   test "local ceremony does not show registration method choices" do
@@ -165,6 +171,11 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   def admission_code(issuance)
     BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  end
+
+  def auth_ceremony_record
+    raw_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+    OperatorAuthCeremonySession.find_active_by_raw_sid(raw_sid)
   end
 
   def authorize_params(screen_hint: nil)
@@ -543,7 +554,7 @@ class Auth::Org::SignUpsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -561,7 +572,7 @@ class Auth::Org::SignUpsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -586,7 +597,7 @@ class Auth::Org::SignUpsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

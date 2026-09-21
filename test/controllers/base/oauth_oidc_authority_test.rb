@@ -751,6 +751,65 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "/sign/up", uri.path
   end
 
+  test "first-party browser RPs keep ordinary authentication intent neutral" do
+    [
+      {
+        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+        client_id: "core-app",
+        resource_type: "client",
+        surface: "app",
+        transaction_model: ClientOidcAuthorizationTransaction,
+      },
+      {
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+        client_id: "core-com",
+        resource_type: "visitor",
+        surface: "com",
+        transaction_model: VisitorOidcAuthorizationTransaction,
+      },
+      {
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+        client_id: "core-org",
+        resource_type: "operator",
+        surface: "org",
+        transaction_model: OperatorOidcAuthorizationTransaction,
+      },
+    ].each do |surface|
+      host!(surface.fetch(:host))
+      recognized_route = Rails.application.routes.recognize_path(
+        "https://#{surface.fetch(:host)}/oauth/authorize",
+        method: :get,
+      )
+
+      assert_equal "base/#{surface.fetch(:surface)}/oauth/authorizations", recognized_route.fetch(:controller)
+      params = oidc_authorize_params(
+        client_id: surface.fetch(:client_id),
+        resource_type: surface.fetch(:resource_type),
+        screen_hint: "signup",
+      )
+      last_transaction_id = surface.fetch(:transaction_model).order(id: :desc).first&.id
+
+      get "/oauth/authorize", params: params, headers: browser_headers.merge("Host" => surface.fetch(:host))
+
+      assert_response :redirect
+      transaction =
+        surface.fetch(:transaction_model).where("id > ?", last_transaction_id || 0).order(id: :desc).first
+
+      assert_not_nil transaction
+      assert_equal "authentication", transaction.intent
+
+      uri = URI.parse(jump_rt_url_from_location(response.location))
+      query = Rack::Utils.parse_nested_query(uri.query.to_s)
+      admission = BaseAuthAdmissionCoordinator.consume_handoff!(
+        raw_code: query.fetch("admission"),
+        surface: surface.fetch(:surface),
+        expected_intent: "authentication",
+      )
+
+      assert_equal transaction.transaction_id, admission.fetch("subject_ref")
+    end
+  end
+
   test "base app authorize returns login_required for prompt none without a session" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host!(host)
@@ -795,7 +854,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       params: oidc_authorize_params,
     )
 
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "app",
       login_challenge: issuance.transaction.login_challenge,
       actor: clients(:one),
@@ -804,7 +863,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       auth_method: "passkey",
     )
 
-    get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
+    post "/oauth/authorize", params: { result: result.code }, headers: browser_headers.merge(
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
+      "Sec-Fetch-Site" => "same-site",
+    )
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
@@ -814,7 +876,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal oidc_authorize_params[:state], query["state"]
     assert_predicate issuance.transaction.reload, :consumed?
 
-    get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
+    post "/oauth/authorize", params: { result: result.code }, headers: browser_headers.merge(
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
+      "Sec-Fetch-Site" => "same-site",
+    )
 
     assert_response :bad_request
     assert_equal "invalid authorization request", response.parsed_body["error_description"]
@@ -831,7 +896,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         login_challenge_ttl: 1.minute,
         now: Time.current,
       )
-    result = BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "app",
       login_challenge: issuance.transaction.login_challenge,
       actor: clients(:one),
@@ -841,7 +906,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     )
 
     travel 2.minutes do
-      get "/oauth/authorize", params: { result: result.code }, headers: browser_headers
+      post "/oauth/authorize", params: { result: result.code }, headers: browser_headers.merge(
+        "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
+        "Sec-Fetch-Site" => "same-site",
+      )
     end
 
     assert_response :bad_request
@@ -850,11 +918,16 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
   private
 
-  def oidc_authorize_params(screen_hint: nil, scope: "openid profile", resource_type: "client")
+  def oidc_authorize_params(
+    screen_hint: nil,
+    scope: "openid profile",
+    resource_type: "client",
+    client_id: "core-next-rp"
+  )
     params = {
       response_type: "code",
-      client_id: "core-next-rp",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris_by_realm.fetch(resource_type).first,
+      client_id: client_id,
+      redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(resource_type).first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",
@@ -1014,7 +1087,7 @@ class BaseOauthOidcAuthorityTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1041,7 +1114,7 @@ class BaseOauthOidcAuthorityTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -1073,7 +1146,7 @@ class BaseOauthOidcAuthorityTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

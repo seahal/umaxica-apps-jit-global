@@ -15,7 +15,7 @@ unresolved gaps explicit.
 | F5/F6 | Route terminology and TODOs | Route comments no longer describe Base as a credential gateway, and stale degraded-entrypoint text is removed. | None for the comments changed in this slice.       |
 | F4    | Session commit seam         | App sign-in and app social completion route through `AuthenticationSessionCommitter`.                          | Full authority migration remains transitional.     |
 | F7b   | Admission control key shape | Telephone verification pacing uses IP plus telephone blind-index digest, never the raw number.                 | Other credential rate-limit keys need review.      |
-| F8    | Auth security events        | `AuthenticationSecurityEventEmitter` defines taxonomy and redaction-backed log emission.                       | Not a retained audit datastore.                    |
+| F8    | Auth security events        | `AuthenticationSecurityEventEmitter` writes sanitized events to `Chronicle` under the existing security retention policy and also emits a redacted operational log; the existing SMS transport records enqueue/provider acceptance/failure facts without recipient or message content. | Email provider receipts, provider callback/retry contracts, and taxonomy-wide caller migration remain separate follow-up work. |
 
 ## Current Route Matrix
 
@@ -42,7 +42,7 @@ entry/callback routes stay under `/social`.
 
 Dedicated ceremony purge jobs reclaim expired or abandoned ceremony transaction rows using each
 transaction table's expiration semantics. `RetentionPurgeJob` remains responsible for retention rows
-that expose `purged_at`; it is not the ceremony transaction scheduler.
+that expose `purge_eligible_at`; it is not the ceremony transaction scheduler.
 
 Cleanup must preserve active, non-expired ceremonies and be safe to run repeatedly. After cleanup,
 retry starts a new ceremony and must not reuse stale nonce, verifier, challenge, token, or candidate
@@ -78,17 +78,22 @@ Deferred checks:
 
 ## Logging And Audit Evidence And Gaps
 
-The repository has chronicle policies, JWT anomaly logging, CSP violation logging, social nonce
-failure logging, and Redis credential masking tests. `AuthenticationSecurityEventEmitter` now
-defines the current authentication security-event taxonomy and uses `JitLogEvent` redaction before
-writing to logs. It is a logging seam, not a retained audit store.
+The repository has chronicle policies, JWT anomaly persistence, CSP violation logging, social nonce
+failure logging, and Redis credential masking tests. `AuthenticationSecurityEventEmitter` defines the
+current authentication security-event taxonomy, writes the sanitized event to `Chronicle` using the
+existing `security` retention policy, and emits a separately redacted operational log. Chronicle is
+the retained audit record; the application log remains diagnostic and is not a substitute for it.
 
 Deferred checks:
 
-- wire all taxonomy events to their current controllers/services;
+- wire remaining taxonomy events to their current controllers/services where a real security event
+  exists; do not manufacture events for code paths that do not currently emit them;
 - add leakage tests proving logs and audit payloads exclude tokens, cookies, verifiers, challenges,
   TOTP secrets, recovery secrets, and full request parameters;
-- document retention, masking, SIEM export readiness, and incident-response ownership.
+- document retention, masking, SIEM export readiness, and incident-response ownership;
+- add email/provider delivery receipt records only after a concrete provider callback, retry, and
+  retention contract is approved. Enqueue or provider acceptance must not be reported as delivery
+  completion;
 
 ## Standards Evidence Map
 

@@ -13,11 +13,11 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -38,11 +38,11 @@
 #  index_clients_on_access_state           (access_state)
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_clients_on_discarded_at           (discarded_at)
+#  index_clients_on_discard_at           (discard_at)
 #  index_clients_on_mfa_level_id           (mfa_level_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
-#  index_clients_on_purged_at              (purged_at) WHERE (purged_at IS NOT NULL)
+#  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
 #  index_clients_on_status_id              (status_id)
 #  index_clients_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_clients_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -234,7 +234,7 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_tokens" do
     token = ClientToken.create!(
       user: @user,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     assert_difference("ClientToken.count", -@user.client_tokens.count) do
       @user.destroy
@@ -255,25 +255,25 @@ class ClientTest < ActiveSupport::TestCase
     assert_includes @user.owned_avatars, avatar
   end
 
-  test "purged_at query picks clients with past purged_at" do
-    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", discarded_at: 2.hours.ago, purged_at: 1.hour.ago)
+  test "purge_eligible_at query picks clients with past purge_eligible_at" do
+    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
 
-    assert_includes Client.where(purged_at: ..Time.current), user
+    assert_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
-  test "purged_at query excludes clients with future purged_at" do
+  test "purge_eligible_at query excludes clients with future purge_eligible_at" do
     user = Client.create!(
-      public_id: "u_#{SecureRandom.hex(8)}", discarded_at: 30.minutes.from_now,
-      purged_at: 1.hour.from_now,
+      public_id: "u_#{SecureRandom.hex(8)}", discard_at: 30.minutes.from_now,
+      purge_eligible_at: 1.hour.from_now,
     )
 
-    assert_not_includes Client.where(purged_at: ..Time.current), user
+    assert_not_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
-  test "purged_at query excludes clients with default purged_at" do
+  test "purge_eligible_at query excludes clients with default purge_eligible_at" do
     user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}")
 
-    assert_not_includes Client.where(purged_at: ..Time.current), user
+    assert_not_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
   test "totp_enabled? returns false when no totp" do

@@ -66,7 +66,7 @@ module Auth
             class TotpChallengeForm
               include ActiveModel::Model
 
-              attr_accessor :token
+              attr_accessor :token, :credential_public_id
 
               validates :token, presence: true, length: { is: 6 }
 
@@ -96,17 +96,17 @@ module Auth
               end
 
               user = pending_mfa_user
-              result = consume_totp_for(user, @totp_form.token)
+              result = consume_totp_for(user, @totp_form.token, @totp_form.credential_public_id)
 
-              if result.locked?
-                SignRiskEmitter.emit("auth_failed", user_id: user&.id, ip: request.remote_ip, reason: "totp_locked")
-                render_rate_limited(retry_after: (result.locked_until - Time.current).ceil)
-              elsif result.accepted?
+              if result.accepted?
                 handle_totp_success(user)
               else
                 reason = result.replay? ? "totp_replay" : "totp_mismatch"
                 SignRiskEmitter.emit("auth_failed", user_id: user&.id, ip: request.remote_ip, reason: reason)
-                @totp_form.errors.add(:token, t("sign.app.in.mfa.verification_failed"))
+                message =
+                  result.credential_required? ? t("messages.totp_credential_required") :
+                                   t("sign.app.in.mfa.verification_failed")
+                @totp_form.errors.add(:base, message)
                 render_totp_new(status: :unprocessable_content)
               end
             end
@@ -137,6 +137,7 @@ module Auth
                     inputmode: "numeric",
                     help: page_t("#{scope}.help"),
                   },
+                  credential_selector: totp_credential_selector_props(pending_mfa_user),
                   submit_label: page_t("#{scope}.submit"),
                 },
                 error_heading: t("errors.messages.validation_failed"),
@@ -156,13 +157,35 @@ module Auth
               )
             end
 
-            def consume_totp_for(user, token)
+            def consume_totp_for(user, token, credential_public_id)
               TotpWindowConsumer.call(
                 credentials: user.client_totp_credentials
                   .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
                   .order(created_at: :desc),
                 token: token,
+                credential_public_id: credential_public_id,
               )
+            end
+
+            def totp_credential_selector_props(user)
+              credentials = user.client_totp_credentials
+                .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+                .order(created_at: :asc)
+                .to_a
+              return unless credentials.length > 1
+
+              {
+                name: "totp_challenge_form[credential_public_id]",
+                field: "credential_public_id",
+                scope: "totp_challenge_form",
+                label: t("messages.totp_credential_label"),
+                options: credentials.each_with_index.map do |credential, index|
+                  {
+                    value: credential.public_id,
+                    label: credential.title.presence || t("messages.totp_credential_default_label", count: index + 1),
+                  }
+                end,
+              }
             end
 
             def handle_totp_success(user)
@@ -185,7 +208,7 @@ module Auth
             end
 
             def totp_params
-              params.fetch(:totp_challenge_form, {}).permit(:token)
+              params.fetch(:totp_challenge_form, {}).permit(:token, :credential_public_id)
             end
           end
         end

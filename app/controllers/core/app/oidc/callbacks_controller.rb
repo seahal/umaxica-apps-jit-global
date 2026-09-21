@@ -20,6 +20,10 @@ module Core
 
         private
 
+        def oidc_rp_credentials_only?
+          true
+        end
+
         def oidc_client_id
           "core-app"
         end

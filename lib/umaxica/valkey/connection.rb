@@ -10,6 +10,14 @@ module Umaxica
     # The only application-owned entry point for auth-state Valkey commands. Higher-level stores
     # use this adapter rather than constructing Redis clients or issuing commands themselves.
     class Connection
+      AUTH_STATE_CLIENT_OPTIONS = {
+        driver: :hiredis,
+        connect_timeout: 0.25,
+        read_timeout: 0.25,
+        write_timeout: 0.25,
+        reconnect_attempts: 0,
+      }.freeze
+
       public
 
       def initialize(url: nil, namespace:, client: nil)
@@ -65,7 +73,7 @@ module Umaxica
       private
 
       def build_client(url)
-        Redis.new(url: url, driver: :hiredis)
+        Redis.new(url: url, **AUTH_STATE_CLIENT_OPTIONS)
       end
 
       def forbid_flush!(command)

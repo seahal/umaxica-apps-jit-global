@@ -13,7 +13,7 @@ class OidcRpSessionLogoutTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     rp_session = OperatorRpSession.create!(operator_token: browser_session, oidc_client_id: "org-console-rp")
     rp_session.issue_refresh_token!
@@ -36,7 +36,7 @@ class OidcRpSessionLogoutTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       oidc_client_id: "org-console-rp",
     )
     rp_session = OperatorRpSession.create!(operator_token: browser_session, oidc_client_id: "org-console-rp")
@@ -59,7 +59,7 @@ class OidcRpSessionLogoutTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       oidc_client_id: "org-console-rp",
       oidc_sid: SecureRandom.uuid,
     )
@@ -80,7 +80,7 @@ class OidcRpSessionLogoutTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     rp_session = OperatorRpSession.create!(
       operator_token: browser_session,

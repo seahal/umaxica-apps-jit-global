@@ -152,7 +152,7 @@ visible in tests and documentation.
 ## Ceremony Cleanup
 
 Sign-in credential ceremonies store short-lived transaction rows keyed by `expires_at`. These rows
-are not part of the account-retention `purged_at` model handled by `RetentionPurgeJob`, so
+are not part of the account-retention `purge_eligible_at` model handled by `RetentionPurgeJob`, so
 production recurring cleanup registers the dedicated ceremony transaction purge jobs in
 `config/recurring.yml`.
 

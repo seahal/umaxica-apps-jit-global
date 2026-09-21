@@ -9,7 +9,7 @@
 #  id                             :bigint           not null, primary key
 #  consumed_at                    :datetime
 #  delivery_method                :string
-#  discarded_at                   :datetime         default(Infinity), not null
+#  discard_at                   :datetime         default(Infinity), not null
 #  failure_count                  :integer          default(0), not null
 #  issued_at                      :datetime
 #  issued_by_ref                  :string
@@ -23,7 +23,7 @@
 #  name                           :string           default(""), not null
 #  not_before_at                  :datetime
 #  password_digest                :string           default(""), not null
-#  purged_at                      :datetime         default(Infinity), not null
+#  purge_eligible_at                      :datetime         default(Infinity), not null
 #  revoked_at                     :datetime
 #  safe_prefix                    :string
 #  scope                          :string
@@ -136,7 +136,7 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
       user: @user,
       user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
     )
-    record.update_columns(discarded_at: 1.minute.ago, created_at: 2.minutes.ago)
+    record.update_columns(discard_at: 1.minute.ago, created_at: 2.minutes.ago)
 
     assert_not record.verify_and_consume!(raw_secret_credential)
     assert_equal ClientSecretCredentialStatus::EXPIRED, record.reload.user_secret_status_id
@@ -235,11 +235,11 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
     assert_not record.usable_for_secret_credential_sign_in?
 
     record.user_secret_kind_id = ClientSecretCredentialKind::LOGIN
-    record.define_singleton_method(:discarded_at) { 1.minute.ago }
+    record.define_singleton_method(:discard_at) { 1.minute.ago }
 
     assert_not record.usable_for_secret_credential_sign_in?
 
-    record.define_singleton_method(:discarded_at) { nil }
+    record.define_singleton_method(:discard_at) { nil }
 
     assert_predicate record, :usable_for_secret_credential_sign_in?
   end

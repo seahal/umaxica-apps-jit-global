@@ -10,11 +10,11 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -35,11 +35,11 @@
 #  index_clients_on_access_state           (access_state)
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_clients_on_discarded_at           (discarded_at)
+#  index_clients_on_discard_at           (discard_at)
 #  index_clients_on_mfa_level_id           (mfa_level_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
-#  index_clients_on_purged_at              (purged_at) WHERE (purged_at IS NOT NULL)
+#  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
 #  index_clients_on_status_id              (status_id)
 #  index_clients_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_clients_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -65,8 +65,8 @@ zero:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::NOTHING %>
   public_id: "zero_id"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 placeholder:
@@ -75,8 +75,8 @@ placeholder:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::NOTHING %>
   public_id: "placeholder_id"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 one:
@@ -85,8 +85,8 @@ one:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::NOTHING %>
   public_id: "one_id"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 none_user:
@@ -95,8 +95,8 @@ none_user:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::NOTHING %>
   public_id: "none_id"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 two:
@@ -105,8 +105,8 @@ two:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::NOTHING %>
   public_id: "two_id"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 sample_user:
@@ -115,8 +115,8 @@ sample_user:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::NOTHING %>
   public_id: "sample_user"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 reserved_user:
@@ -125,7 +125,7 @@ reserved_user:
   mfa_status_id: <%= ClientMfaStatus::UNCONFIGURED %>
   status_id: <%= ClientStatus::RESERVED %>
   public_id: "reserved_user"
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 20.years.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>

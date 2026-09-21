@@ -17,7 +17,13 @@ module Auth
         include ::VerificationClient
 
         AUTHENTICATION_MODE = :private
-        MAX_TOTPS = 2
+        TOTP_STATUS_TRANSLATION_KEYS = {
+          ClientTotpCredentialStatus::ACTIVE => "messages.totp_status.active",
+          ClientTotpCredentialStatus::INACTIVE => "messages.totp_status.inactive",
+          ClientTotpCredentialStatus::REVOKED => "messages.totp_status.revoked",
+          ClientTotpCredentialStatus::DELETED => "messages.totp_status.deleted",
+          ClientTotpCredentialStatus::NOTHING => "messages.totp_status.nothing",
+        }.freeze
         # `SignRequiresRecoveryPasscodes` still answers with the shared ERB template, and the slim
         # Inertia shell has no `yield` to render one into, so the layout follows the render kind.
         layout :settings_totps_layout
@@ -35,8 +41,11 @@ module Auth
 
         def new
           authorize!(ClientTotpCredential, to: :new?)
-          if current_client.client_totp_credentials.count >= MAX_TOTPS
-            return render plain: t("session_limit.totp_limit_reached", count: MAX_TOTPS)
+          if ClientTotpCredential.slot_consuming.where(user_id: current_client.id).count >=
+              ClientTotpCredential::MAX_TOTP_SLOTS
+            return render plain: t(
+              "session_limit.totp_limit_reached", count: ClientTotpCredential::MAX_TOTP_SLOTS,
+            )
           end
 
           @totp = ClientTotpCredential.new
@@ -76,6 +85,10 @@ module Auth
           else
             handle_failure
           end
+        rescue ClientTotpCredential::SlotLimitExceeded
+          render plain: t(
+            "session_limit.totp_limit_reached", count: ClientTotpCredential::MAX_TOTP_SLOTS,
+          ), status: :unprocessable_content
         end
 
         def initialize_totp
@@ -184,6 +197,7 @@ module Auth
             columns: {
               title: t("activerecord.attributes.user_totp_credential.title"),
               last_otp_at: t("activerecord.attributes.user_totp_credential.last_otp_at"),
+              status: t("messages.totp_status_label"),
               actions: "Actions",
             },
             empty_message: t("messages.no_totp_found"),
@@ -197,8 +211,17 @@ module Auth
             public_id: credential.public_id,
             title: credential.title.presence,
             last_otp_at: formatted_last_otp_at(credential),
+            status: totp_status_label(credential),
             edit_href: edit_auth_app_settings_totp_path(credential.public_id, ri: params[:ri]),
           }
+        end
+
+        def totp_status_label(credential)
+          translation_key = TOTP_STATUS_TRANSLATION_KEYS.fetch(
+            credential.user_identity_totp_credential_status_id,
+            TOTP_STATUS_TRANSLATION_KEYS.fetch(ClientTotpCredentialStatus::NOTHING),
+          )
+          t(translation_key)
         end
 
         # A credential that has never produced a code carries the epoch rather than nil, so it reads

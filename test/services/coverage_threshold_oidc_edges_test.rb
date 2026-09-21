@@ -21,6 +21,8 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
       "issued_at" => Time.current.iso8601,
       "code_challenge" => "verifier",
       "code_challenge_method" => "S256",
+      "subject" => OidcSubject.for(clients(:one), resource_type: "client"),
+      "base_session_ref" => client_tokens(:one).public_id,
     }
 
     OidcClientRegistry.stub(:find, client) do

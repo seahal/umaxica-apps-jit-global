@@ -78,20 +78,30 @@ class IdentityTotpCeremonyFinalCommitter
   end
 
   def validate_enrollment_policy!
-    return if actor.client_totp_credentials.count < ClientTotpCredential::MAX_TOTPS_PER_USER
+    credentials = actor.client_totp_credentials
+    slot_count =
+      if credentials.respond_to?(:where)
+        credentials.where(
+          user_identity_totp_credential_status_id: ClientTotpCredential.slot_consuming_status_ids,
+        ).count
+      else
+        credentials.count
+      end
+    return if slot_count < ClientTotpCredential::MAX_TOTP_SLOTS
 
     raise IdentityTotpCeremonyContract::Error, "TOTP credential limit is reached"
   end
 
   def commit_totp!(candidate)
-    ClientTotpCredential.transaction do
-      actor.client_totp_credentials.create!(
-        private_key: candidate.private_key,
-        last_otp_at: candidate.last_otp_at,
-        title: candidate.title,
-        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-      )
-    end
+    ClientTotpCredential.create_for_user!(
+      user: actor,
+      private_key: candidate.private_key,
+      last_otp_at: candidate.last_otp_at,
+      title: candidate.title,
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+  rescue ClientTotpCredential::SlotLimitExceeded
+    raise IdentityTotpCeremonyContract::Error, "TOTP credential limit is reached"
   end
 
   def record_audit!

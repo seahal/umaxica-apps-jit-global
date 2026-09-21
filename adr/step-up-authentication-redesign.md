@@ -38,7 +38,7 @@ result was a half-built system with multiple regressions:
   honor `params[:rt]`, so the "setup → register → return to the original sensitive action" loop is
   silently broken. The user lands on `/settings` instead of the action they were trying to do.
 - `ClientStepUpSession` / `VisitorStepUpSession` / `OperatorStepUpSession` exist with full schemas
-  (`status, attempt_count, verified_at, discarded_at, method`, `Retainable`) but no controllers wire
+  (`status, attempt_count, verified_at, discard_at, method`, `Retainable`) but no controllers wire
   them. Controllers store step-up state in cookie sessions instead. Two parallel mechanisms, only
   the cookie one is alive.
 - Orphan views under `app/views/sign/{app,org}/step_up/` (8 files) reference `@step_up_session` /
@@ -79,12 +79,17 @@ redesign decisions agreed in the 2026-05-11 design dialogue.
 - **B3.** `UNIQUE(<token>_id)` constraint enforces the singleton at the DB layer (replaces the
   previous non-unique `(<actor>_id, status)` index).
 - **B4.** `STATUSES` reduced to `%w(PENDING VERIFIED)`. `CANCELLED` is unnecessary because overwrite
-  replaces the old ticket; `EXPIRED` is unnecessary because `discarded_at < Time.current` is
+  replaces the old ticket; `EXPIRED` is unnecessary because `discard_at < Time.current` is
   computed at read time.
 - **B5.** Email OTP secret/counter state lives in cache, keyed by
   `step_up_session:{step_up_session_id}:email_otp`, with TTL ≤ `STEP_UP_TTL`. WebAuthn challenge
   bytes remain in the Rails session store and continue to use the existing one-time-use / TTL
   challenge lifecycle.
+
+- **B6.** Step-up completion consumes the token-bound row under a PostgreSQL row lock. The
+  completion result is issued only inside the pending-row transaction, and the row is destroyed
+  before that transaction commits. A concurrent completion therefore observes no pending ticket
+  and cannot issue a second ceremony result.
 
 ### C. Judgement logic
 
@@ -112,7 +117,7 @@ redesign decisions agreed in the 2026-05-11 design dialogue.
   a new ticket via overwrite is required. Account-wide lockout is intentionally out of scope and may
   be layered on later if abuse is observed.
 - **C5.** TTL is unified at **15 minutes** for `STEP_UP_TTL` (token freshness for repeat operations)
-  and `STEP_UP_TTL` (`step_up_session.discarded_at` window). The previous
+  and `STEP_UP_TTL` (`step_up_session.discard_at` window). The previous
   `VERIFICATION_POST_TTL = 30.minutes` and `VERIFICATION_GET_TTL = 15.minutes` distinction is
   dropped in favor of one value.
 - **C6.** `ConfiguredMethods` and `AvailableMethods` results are recomputed every request and not

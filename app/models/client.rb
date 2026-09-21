@@ -13,11 +13,11 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -38,11 +38,11 @@
 #  index_clients_on_access_state           (access_state)
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_clients_on_discarded_at           (discarded_at)
+#  index_clients_on_discard_at           (discard_at)
 #  index_clients_on_mfa_level_id           (mfa_level_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
-#  index_clients_on_purged_at              (purged_at) WHERE (purged_at IS NOT NULL)
+#  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
 #  index_clients_on_status_id              (status_id)
 #  index_clients_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_clients_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -61,7 +61,7 @@
 
 # Lifecycle column reference (see adr/retention-lifecycle-column-boundary.md):
 #
-# * `discarded_at` / `purged_at` -- Retainable retention contract. The only
+# * `discard_at` / `purge_eligible_at` -- Retainable retention contract. The only
 #   columns the `RetentionPurgeJob` consults for delete eligibility.
 # * `withdrawal_started_at` -- Sign-out / withdrawal flow started.
 # * `withdrawn_at` -- Withdrawal flow finalized. Retention is independent.
@@ -70,10 +70,12 @@
 #   `access_state: "admin_locked"` plus the `admin_locked_*` metadata columns.
 # * `terminated_at` -- Set by `RetentionPurgeJob#anonymize_accounts` AFTER
 #   `WithdrawalPersonalDataAnonymizer` finishes. Marks "PII has been scrubbed
-#   on this row"; distinct from `discarded_at` (logical hide) and `purged_at`
+#   on this row"; distinct from `discard_at` (logical hide) and `purge_eligible_at`
 #   (physical delete). Anonymized rows are retained for audit linkage with
 #   anonymous PII placeholders.
 class Client < AppPrincipalRecord
+  encrypts :admin_locked_reason_note
+
   include Retainable
   include Withdrawable
   include HasBirthdate

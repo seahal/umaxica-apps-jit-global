@@ -157,12 +157,12 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/app/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_APP_HOST}/sign/in/callback", method: :get },
+      { path: "http://#{CORE_APP_HOST}/sign/callback", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/app/oidc/authorizations", action: "show" },
-      { path: "http://#{CORE_APP_HOST}/sign/in", method: :get },
+      { controller: "core/app/sign/entries", action: "show" },
+      { path: "http://#{CORE_APP_HOST}/sign", method: :get },
     )
 
     assert_raises(ActionController::RoutingError) do
@@ -291,12 +291,12 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/com/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/sign/in/callback", method: :get },
+      { path: "http://#{CORE_COM_HOST}/sign/callback", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/com/oidc/authorizations", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/sign/in", method: :get },
+      { controller: "core/com/sign/entries", action: "show" },
+      { path: "http://#{CORE_COM_HOST}/sign", method: :get },
     )
 
     assert_raises(ActionController::RoutingError) do
@@ -426,12 +426,12 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/org/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_ORG_HOST}/sign/in/callback", method: :get },
+      { path: "http://#{CORE_ORG_HOST}/sign/callback", method: :get },
     )
 
     assert_recognizes(
-      { controller: "core/org/oidc/authorizations", action: "show" },
-      { path: "http://#{CORE_ORG_HOST}/sign/in", method: :get },
+      { controller: "core/org/sign/entries", action: "show" },
+      { path: "http://#{CORE_ORG_HOST}/sign", method: :get },
     )
 
     assert_raises(ActionController::RoutingError) do

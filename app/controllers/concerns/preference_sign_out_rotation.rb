@@ -146,7 +146,7 @@ module PreferenceSignOutRotation
   # and expire it immediately so it also drops out of the `active` scope used
   # by every other lookup.
   def retire_preference_after_sign_out!(old_preference)
-    old_preference.update!(used_at: Time.current, discarded_at: Time.current)
+    old_preference.update!(used_at: Time.current, discard_at: Time.current)
   end
 
   # Never logs the raw token/digest/cookie value or any PII -- only the

@@ -145,6 +145,7 @@ module Umaxica
 
         url = constructed_url(name, entry)
         parsed = ResponsibilityUrls.parse(url, responsibility: name)
+        ResponsibilityUrls.assert_production_tls!(parsed, env: @rails_env, variable: entry[:url_key])
         if NONPROD_ENVIRONMENTS.include?(@rails_env) && entry[:db]
           expected = entry.fetch(:db)
           if parsed.db != expected

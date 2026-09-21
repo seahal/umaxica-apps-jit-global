@@ -20,7 +20,17 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     @secret.reload
 
     assert_equal VisitorSecretCredential.status_id_for(:deleted), @secret.visitor_secret_credential_status_id
-    assert_predicate @secret.discarded_at, :present?
+    assert_predicate @secret.discard_at, :present?
+  end
+
+  test "direct secret credential deletion without fresh step-up is refused" do
+    create_active_secret_credential(@visitor)
+
+    delete base_com_identity_secret_url(@secret.public_id, ri: "jp", host: @host),
+           headers: as_visitor_headers(@visitor, host: @host)
+
+    assert_response :unauthorized
+    assert_equal VisitorSecretCredentialStatus::ACTIVE, @secret.reload.visitor_secret_credential_status_id
   end
 
   test "refuses to remove the credential that carries the only remaining AAL1 method" do

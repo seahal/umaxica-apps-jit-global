@@ -18,6 +18,8 @@ module Base
         AUTHENTICATION_MODE = :private
 
         before_action :authenticate_operator!
+        step_up only: %i(new create), bootstrap: true
+        step_up only: %i(edit update destroy)
         before_action :set_no_store_for_secret_credential_pages
         before_action :set_secret_credential, only: %i(show edit update destroy)
         before_action :verify_secret_credential_turnstile!, only: :create

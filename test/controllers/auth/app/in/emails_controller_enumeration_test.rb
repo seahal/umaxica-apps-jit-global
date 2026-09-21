@@ -26,6 +26,7 @@ module Auth
           TurnstileVerifierStub.challenge_enabled = true
           TurnstileVerifierStub.challenge_response = { "success" => true }
 
+          clients(:one).update!(status_id: ClientStatus::ACTIVE)
           ClientEmail.create!(user: clients(:one), address: REGISTERED_ADDRESS, confirm_policy: true)
         end
 
@@ -47,25 +48,56 @@ module Auth
                        "Registered: #{registered[:body].inspect}, unregistered: #{unregistered[:body].inspect}"
         end
 
-        private
-
-        # Submits an address twice in one session: the first request records the
-        # cooldown, the second hits it.
-        def cooldown_response_for(address)
+        test "a failed Turnstile request does not reserve the address-wide bucket" do
+          TurnstileVerifierStub.challenge_response = { "success" => false }
           open_session do |session|
             session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+            session.post(
+              auth_app_sign_in_email_url(ri: "jp"), params: {
+                :user_email => { address: REGISTERED_ADDRESS },
+                "cf-turnstile-response" => "invalid_token",
+              },
+            )
 
-            2.times do
-              session.post(
-                auth_app_sign_in_email_url(ri: "jp"), params: {
-                  :user_email => { address: address },
-                  "cf-turnstile-response" => "test_token",
-                },
-              )
+            assert_equal 422, session.response.status
+          end
+
+          TurnstileVerifierStub.challenge_response = { "success" => true }
+          open_session do |session|
+            session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+            session.post(
+              auth_app_sign_in_email_url(ri: "jp"), params: {
+                :user_email => { address: REGISTERED_ADDRESS },
+                "cf-turnstile-response" => "valid_token",
+              },
+            )
+
+            assert_equal 302, session.response.status
+          end
+        end
+
+        private
+
+        # Submits each request in a fresh session so a browser cookie cannot hide
+        # a server-side registered/unregistered difference.
+        def cooldown_response_for(address)
+          responses =
+            2.times.map do
+              response = nil
+              open_session do |session|
+                session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+                session.post(
+                  auth_app_sign_in_email_url(ri: "jp"), params: {
+                    :user_email => { address: address },
+                    "cf-turnstile-response" => "test_token",
+                  },
+                )
+                response = { status: session.response.status, body: session.response.body }
+              end
+              response
             end
 
-            return { status: session.response.status, body: session.response.body }
-          end
+          responses.last
         end
       end
     end

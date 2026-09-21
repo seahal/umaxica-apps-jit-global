@@ -52,6 +52,25 @@ previously shipped as defects, so static tests reject their reintroduction.
   surface. Cross-surface credential sharing and duplication do not occur within this architecture;
   see `docs/security/webauthn-rp-id-origin-boundary.md`.
 
+## Discoverable Direct Sign-in
+
+- App and com direct Passkey options are anonymous and do not accept an identifier as an account
+  selection input. Their `allowCredentials` response is empty (or omitted by the serializer), so
+  no real credential ID, credential count, credential length, or account/Passkey existence is
+  disclosed during options issuance.
+- Direct app/com verification resolves the surface-local passkey from the assertion credential ID,
+  then verifies the assertion with that row's saved public key. The browser's `userHandle`, any
+  submitted identifier, and client-side metadata are not identity authorities.
+- Verification rechecks ACTIVE credential status, active actor state, verified-PII and existing
+  session-limit or restricted-session rules before establishing a session. A disabled, revoked,
+  unknown, or cross-surface credential fails with the existing generic unauthorized contract.
+- App and com registration require a discoverable credential (`residentKey: "required"`) while org
+  registration keeps its existing policy. Existing non-discoverable app/com credentials are not
+  migrated or supported by a compatibility path; users must register again.
+- Org normal sign-in, Emergency Access, MFA, and Step-Up remain actor-known ceremonies. Their
+  actor-scoped descriptor behavior and security checks are not replaced by this direct-sign-in
+  change.
+
 ## User Handle
 
 - WebAuthn `user.id` uses the actor's `webauthn_user_handle`, generated with

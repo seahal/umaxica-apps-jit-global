@@ -702,8 +702,8 @@ ja:
         number: 電話番号
         status: ステータス
       staff_token:
-        discarded_at: 有効期限
-        purged_at: 削除予定日時
+        discard_at: 有効期限
+        purge_eligible_at: 削除予定日時
         refresh_expires_at: リフレッシュトークン有効期限
       user_email:
         address: メールアドレス
@@ -727,8 +727,8 @@ ja:
         number: 電話番号
         status: ステータス
       user_token:
-        discarded_at: 有効期限
-        purged_at: 削除予定日時
+        discard_at: 有効期限
+        purge_eligible_at: 削除予定日時
         refresh_expires_at: リフレッシュトークン有効期限
       user_totp_credential:
         created_at: 作成日時
@@ -764,8 +764,8 @@ ja:
         otp_private_key: OTP秘密鍵
         status: ステータス
       visitor_token:
-        discarded_at: 有効期限
-        purged_at: 削除予定日時
+        discard_at: 有効期限
+        purge_eligible_at: 削除予定日時
         refresh_expires_at: リフレッシュトークン有効期限
       visitor_totp_credential:
         created_at: 作成日時
@@ -889,7 +889,7 @@ ja:
     cooldown_until: クールダウン終了日時
     current_refresh_token: 現在のリフレッシュトークン
     description: 説明
-    discarded_at: 失効日時
+    discard_at: 失効日時
     divisions: 部門
     domain_occurrence_id: ドメイン発生ID
     email: メールアドレス
@@ -1556,6 +1556,7 @@ ja:
         title: ダッシュボード
         description: サインイン済み
         sections:
+          menu_links: メニューリンク
           primary_links: 主なリンク
           protocol_links: プロトコルのリンク
           publishing: 公開管理
@@ -2554,6 +2555,16 @@ ja:
     totp_successfully_deleted: TOTPを削除しました。
     totp_successfully_updated: TOTP の設定が更新されました。
     totp_title_placeholder: タイトル（任意）
+    totp_credential_label: 認証アプリ
+    totp_credential_default_label: 認証アプリ %{count}
+    totp_credential_required: 使用する認証アプリを選択してください。
+    totp_status_label: 状態
+    totp_status:
+      active: 有効
+      inactive: 無効
+      revoked: 失効
+      deleted: 削除済み
+      nothing: 未設定
     user_registration_error: ユーザー登録中にエラーが発生しました。
   model:
     concern:

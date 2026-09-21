@@ -398,13 +398,11 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       )
     end
 
-    # P4 ("require opaque Base admission at Auth ceremony entry"): a cycle that started from an
-    # OIDC admission resumes straight to Base's /oauth/authorize with a one-shot result code
-    # (AuthenticationSequenceGate#bind_session_and_register_oidc!), bypassing the general
-    # sign-in sequence's own /sign/in/check step (docs/security/sign-up-sequence.md describes
-    # that step for a sign-in that did not start from an OIDC admission).
+    # An OIDC-admitted cycle resumes at Auth's local, CSRF-protected handoff page. The result is
+    # issued only by its POST and then sent to Base in a POST body, never in the redirect URL.
     assert_response :redirect
-    assert_match %r{\Ahttps://www\.umaxica\.app/oauth/authorize\?result=}, response.location
+    assert_equal "/sign/oidc/handoff", URI.parse(response.location).path
+    assert_nil Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)["result"]
     assert_predicate response.headers["Set-Cookie"].to_s, :present?
     assert_nil session[:oidc_authorization_login_challenge]
 
@@ -412,15 +410,14 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     issued_session = ClientToken.find(cycle.token_id)
     transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: login_challenge)
 
-    # P4 registers the result inline (OidcAuthorizationTransactionable#register_authentication!),
-    # so the transaction is already authenticated here rather than staying "pending" for a later
-    # step to claim.
+    # Result registration is deliberately deferred to the CSRF-protected local handoff POST;
+    # this redirect must not mutate the Base transaction merely by rendering or navigating.
     assert_predicate cycle, :sign_in_dashboard_pending?
     assert_predicate issued_session, :active?
-    assert_equal "authenticated", transaction.status
-    assert_equal @user.public_id, transaction.actor_ref
-    assert_equal issued_session.public_id, transaction.session_ref
-    assert_equal "email", transaction.auth_method
+    assert_equal "pending", transaction.status
+    assert_nil transaction.actor_ref
+    assert_nil transaction.session_ref
+    assert_nil transaction.auth_method
     assert_equal 2, ClientToken.not_revoked.where(user_id: @user.id, rotated_at: nil).count
   ensure
     TurnstileVerifierStub.challenge_enabled = false
@@ -625,7 +622,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   # ===================================================================
 
   test "restricted session at 14 minutes is still accessible (boundary: within TTL)" do
-    token = create_restricted_session(@user, discarded_at: 15.minutes.from_now)
+    token = create_restricted_session(@user, discard_at: 15.minutes.from_now)
     headers = as_user_headers_with_token(@user, token, host: @host, expires_at: 30.minutes.from_now)
 
     travel 14.minutes do
@@ -641,7 +638,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   end
 
   test "restricted session expires after 15 minutes and is locked on in/session" do
-    token = create_restricted_session(@user, discarded_at: 15.minutes.from_now)
+    token = create_restricted_session(@user, discard_at: 15.minutes.from_now)
     headers = as_user_headers_with_token(@user, token, host: @host)
     logs = []
 
@@ -682,13 +679,13 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   private
 
-  def create_restricted_session(user, discarded_at: nil)
+  def create_restricted_session(user, discard_at: nil)
     token = ClientToken.create!(
       user: user,
       user_token_status_id: ClientTokenStatus::RESTRICTED,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
-    token.rotate_refresh_token!(discarded_at: discarded_at)
+    token.rotate_refresh_token!(discard_at: discard_at)
     token
   end
 
@@ -798,7 +795,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
         if session_public_id.present?
           ClientToken.find_by(public_id: session_public_id)
         else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
         end
       token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -824,7 +821,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
           OperatorToken.find_by(public_id: session_public_id)
         else
           OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end
@@ -854,7 +851,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
           VisitorToken.find_by(public_id: session_public_id)
         else
           VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end

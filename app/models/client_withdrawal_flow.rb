@@ -9,9 +9,9 @@
 #  id           :bigint           not null, primary key
 #  began_at     :datetime         not null
 #  completed_at :datetime
-#  discarded_at :datetime         default(Infinity), not null
+#  discard_at :datetime         default(Infinity), not null
 #  failed_at    :datetime
-#  purged_at    :datetime         default(Infinity), not null
+#  purge_eligible_at    :datetime         default(Infinity), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  client_id    :bigint           not null
@@ -23,9 +23,9 @@
 #  index_client_withdrawal_flows_on_began_at      (began_at)
 #  index_client_withdrawal_flows_on_client_id     (client_id)
 #  index_client_withdrawal_flows_on_completed_at  (completed_at)
-#  index_client_withdrawal_flows_on_discarded_at  (discarded_at)
+#  index_client_withdrawal_flows_on_discard_at  (discard_at)
 #  index_client_withdrawal_flows_on_public_id     (public_id) UNIQUE
-#  index_client_withdrawal_flows_on_purged_at     (purged_at)
+#  index_client_withdrawal_flows_on_purge_eligible_at     (purge_eligible_at)
 #  index_client_withdrawal_flows_on_status_id     (status_id)
 #
 # Foreign Keys

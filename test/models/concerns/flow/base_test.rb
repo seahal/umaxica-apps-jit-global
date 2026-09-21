@@ -31,8 +31,8 @@ class FlowBaseTest < ActiveSupport::TestCase
     @connection = ActiveRecord::Base.connection
     @connection.create_table(:cycle_base_test_records, force: true) do |t|
       t.integer(:cycle_status_id, null: false)
-      t.datetime(:discarded_at, null: false)
-      t.datetime(:purged_at, null: false)
+      t.datetime(:discard_at, null: false)
+      t.datetime(:purge_eligible_at, null: false)
       t.datetime(:expires_at)
       t.timestamps
     end
@@ -56,8 +56,8 @@ class FlowBaseTest < ActiveSupport::TestCase
   test "cycle_status_id requires an explicit status column configuration" do
     record = UnconfiguredCycleBaseTestRecord.create!(
       cycle_status_id: 10,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
 
     error = assert_raises(FlowConfigurationError) { record.cycle_status_id }
@@ -69,7 +69,7 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now + 1.hour)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now + 1.hour)
       record.transition_cycle_to!(20, allowed_from: [10])
 
       assert_equal 20, record.reload.cycle_status_id
@@ -80,7 +80,7 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now + 1.hour)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now + 1.hour)
       record.transition_cycle_to!(20, allowed_from: [10], changes: { expires_at: now + 2.hours })
       record.reload
 
@@ -93,7 +93,7 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now + 1.hour)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now + 1.hour)
       error =
         assert_raises(FlowInvalidTransition) do
           record.transition_cycle_to!(30, allowed_from: [20])
@@ -108,7 +108,7 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now, purged_at: now + 1.day)
+      record = build_record(cycle_status_id: 10, discard_at: now, purge_eligible_at: now + 1.day)
       error =
         assert_raises(FlowInvalidTransition) do
           record.transition_cycle_to!(20, allowed_from: [10])
@@ -123,7 +123,7 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now)
       error =
         assert_raises(FlowInvalidTransition) do
           record.transition_cycle_to!(20, allowed_from: [10])
@@ -138,12 +138,12 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, purged_at: now + 2.days)
-      record.discard_cycle!(discarded_at: now + 1.second, purged_at: now + 30.days)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, purge_eligible_at: now + 2.days)
+      record.discard_cycle!(discard_at: now + 1.second, purge_eligible_at: now + 30.days)
       record.reload
 
-      assert_equal now + 1.second, record.discarded_at
-      assert_equal now + 30.days, record.purged_at
+      assert_equal now + 1.second, record.discard_at
+      assert_equal now + 30.days, record.purge_eligible_at
     end
   end
 
@@ -151,14 +151,14 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, purged_at: now + 2.days)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, purge_eligible_at: now + 2.days)
       error =
         assert_raises(ArgumentError) do
-          record.discard_cycle!(discarded_at: now + 2.days, purged_at: now + 1.day)
+          record.discard_cycle!(discard_at: now + 2.days, purge_eligible_at: now + 1.day)
         end
 
-      assert_match(/discarded_at must be <= purged_at/, error.message)
-      assert_equal now + 1.day, record.reload.discarded_at
+      assert_match(/discard_at must be <= purge_eligible_at/, error.message)
+      assert_equal now + 1.day, record.reload.discard_at
     end
   end
 
@@ -166,8 +166,8 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
     record = MisconfiguredCycleBaseTestRecord.create!(
       cycle_status_id: 10,
-      discarded_at: now + 1.day,
-      purged_at: now + 2.days,
+      discard_at: now + 1.day,
+      purge_eligible_at: now + 2.days,
     )
 
     error = assert_raises(FlowConfigurationError) { record.cycle_status_id }
@@ -179,8 +179,8 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
     record = UnconfiguredCycleBaseTestRecord.create!(
       cycle_status_id: 10,
-      discarded_at: now + 1.day,
-      purged_at: now + 2.days,
+      discard_at: now + 1.day,
+      purge_eligible_at: now + 2.days,
     )
 
     error = assert_raises(FlowConfigurationError) { record.cycle_accessible? }
@@ -197,7 +197,11 @@ class FlowBaseTest < ActiveSupport::TestCase
   end
 
   test "with_cycle_lock rejects unpersisted records" do
-    record = CycleBaseTestRecord.new(cycle_status_id: 10, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    record = CycleBaseTestRecord.new(
+      cycle_status_id: 10,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
 
     error = assert_raises(FlowInvalidTransition) { record.send(:with_cycle_lock) { nil } }
 
@@ -209,8 +213,8 @@ class FlowBaseTest < ActiveSupport::TestCase
   def build_record(**attrs)
     defaults = {
       cycle_status_id: 10,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     }
     CycleBaseTestRecord.create!(defaults.merge(attrs))
   end

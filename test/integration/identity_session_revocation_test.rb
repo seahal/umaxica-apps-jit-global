@@ -174,7 +174,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "revoke_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     token.update!(created_at: 1.hour.ago)
     token
@@ -186,7 +186,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
       visitor_token_status_id: VisitorTokenStatus::NOTHING,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       public_id: "revoke_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     token.update!(created_at: 1.hour.ago)
     token

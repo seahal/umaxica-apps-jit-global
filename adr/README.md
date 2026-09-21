@@ -23,6 +23,11 @@ Current identity authority decision:
   sole IdP/AS, Auth is ceremony-only, seven first-party RPs (`core-*`/`side-*`/`edit-org`), opaque
   handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.
 
+Current backend transport decision:
+
+- `adr/backend-transport-tls-enforcement.md` — production Rails PostgreSQL requires `verify-full`
+  and production Valkey requires `rediss://`; local development/test transport remains unchanged.
+
 Legacy identity authority notes (superseded where they conflict):
 
 - `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` — current source of

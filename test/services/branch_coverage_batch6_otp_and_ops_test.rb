@@ -5,13 +5,16 @@ require "test_helper"
 
 class BranchCoverageBatch6OtpAndOpsTest < ActiveSupport::TestCase
   test "SignOtpCeremony issue and verify cover missing destination rate limit lock and blank code" do
+    fake_subject = Object.new
+    fake_subject.define_singleton_method(:public_id) { "fake-flow" }
     ceremony = SignOtpCeremony.new(
       purpose: :sign_in,
       surface: :app,
       channel: :email,
-      subject: Object.new,
+      subject: fake_subject,
       destination: "a@b.c",
       code: nil,
+      session_nonce: "fake-flow",
     )
     ceremony.define_singleton_method(:validate_scope!) { true }
     ceremony.define_singleton_method(:bound_record) { nil }
@@ -51,9 +54,10 @@ class BranchCoverageBatch6OtpAndOpsTest < ActiveSupport::TestCase
       purpose: :sign_in,
       surface: :app,
       channel: :email,
-      subject: Object.new,
+      subject: fake_subject,
       destination: "a@b.c",
       code: "123456",
+      session_nonce: "fake-flow",
     )
     ceremony2.define_singleton_method(:validate_scope!) { true }
     ceremony2.define_singleton_method(:bound_record) { record }

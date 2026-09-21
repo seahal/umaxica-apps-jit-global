@@ -8,11 +8,11 @@
 #
 #  id                    :bigint           not null, primary key
 #  completed_at          :datetime
-#  discarded_at          :datetime         default(Infinity), not null
+#  discard_at          :datetime         default(Infinity), not null
 #  expires_at            :datetime         not null
 #  issued_at             :datetime         not null
 #  nonce_digest          :string           not null
-#  purged_at             :datetime         default(Infinity), not null
+#  purge_eligible_at             :datetime         default(Infinity), not null
 #  return_to             :text
 #  selector_completed_at :datetime
 #  session_issued_at     :datetime
@@ -29,7 +29,7 @@
 #
 # Indexes
 #
-#  index_operator_sign_in_flows_on_discarded_at         (discarded_at)
+#  index_operator_sign_in_flows_on_discard_at         (discard_at)
 #  index_operator_sign_in_flows_on_expires_at           (expires_at)
 #  index_operator_sign_in_flows_on_principal_id         (principal_id)
 #  index_operator_sign_in_flows_on_public_id            (public_id) UNIQUE

@@ -3,7 +3,7 @@
 
 # Assigns an OTP to a telephone record and enqueues the matching SMS payload.
 class SignTelephoneOtpDelivery
-  OTP_EXPIRATION_MINUTES = 12
+  OTP_EXPIRATION = CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL
 
   def self.assign(telephone, now: Time.current)
     new(telephone, now: now).assign
@@ -28,7 +28,7 @@ class SignTelephoneOtpDelivery
 
     @telephone.otp_private_key = otp_private_key
     @telephone.otp_counter = otp_count_number
-    @telephone.otp_expires_at = OTP_EXPIRATION_MINUTES.minutes.from_now
+    @telephone.otp_expires_at = @now + OTP_EXPIRATION
     @telephone.otp_last_sent_at = @now if @telephone.respond_to?(:otp_last_sent_at=)
 
     otp_code
@@ -37,6 +37,6 @@ class SignTelephoneOtpDelivery
   private
 
   def otp_counter
-    Integer([Time.now.to_i, SecureRandom.random_number(1 << 64)].map(&:to_s).join, 10)
+    SecureRandom.random_number(1 << 64)
   end
 end

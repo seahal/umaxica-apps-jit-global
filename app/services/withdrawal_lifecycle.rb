@@ -49,19 +49,19 @@ class WithdrawalLifecycle
       actor.update!(
         withdrawal_started_at: actor.withdrawal_started_at.presence || now,
         deactivated_at: deactivated,
-        discarded_at: deactivated,
-        purged_at: if actor.purged_at.present? && finite_future_time?(actor.purged_at)
-                     actor.purged_at
-                   else
-                     deactivated + RECOVERY_PERIOD
-                   end,
+        discard_at: deactivated,
+        purge_eligible_at: if actor.purge_eligible_at.present? && finite_future_time?(actor.purge_eligible_at)
+                             actor.purge_eligible_at
+                           else
+                             deactivated + RECOVERY_PERIOD
+                           end,
       )
       revoke_sessions
     end
 
     notify(
-      "suspended", deactivated_at: actor.deactivated_at, discarded_at: actor.discarded_at,
-                   purged_at: actor.purged_at,
+      "suspended", deactivated_at: actor.deactivated_at, discard_at: actor.discard_at,
+                   purge_eligible_at: actor.purge_eligible_at,
     )
     record_occurrence!("withdrawal.deactivated")
     actor
@@ -78,8 +78,8 @@ class WithdrawalLifecycle
       actor.update!(
         withdrawal_started_at: nil,
         deactivated_at: nil,
-        discarded_at: Float::INFINITY,
-        purged_at: Float::INFINITY,
+        discard_at: Float::INFINITY,
+        purge_eligible_at: Float::INFINITY,
         withdrawn_at: nil,
       )
     end

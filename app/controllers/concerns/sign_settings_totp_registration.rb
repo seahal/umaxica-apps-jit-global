@@ -24,7 +24,8 @@ module SignSettingsTotpRegistration
   def create_settings_totp!(surface:, actor:, private_key:, title:, last_otp_at:)
     raise IdentityTotpCeremonyContract::Error, "surface is invalid" unless surface.to_s == "app"
 
-    totp = actor.client_totp_credentials.create!(
+    totp = ClientTotpCredential.create_for_user!(
+      user: actor,
       private_key: private_key,
       last_otp_at: last_otp_at,
       title: title,

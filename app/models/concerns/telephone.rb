@@ -47,6 +47,7 @@ module Telephone
     end
 
     encrypts :number
+    encrypts :otp_private_key
 
     validate :validate_telephone_number
 

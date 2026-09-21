@@ -94,12 +94,26 @@ class RefreshTokenableTest < ActiveSupport::TestCase
 
   test "expired_refresh? and active? reflect discarding time" do
     token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    token.define_singleton_method(:discarded_at) { 1.day.from_now }
+    token.define_singleton_method(:discard_at) { 1.day.from_now }
 
     assert_not_predicate token, :expired_refresh?
     assert_predicate token, :active?
 
-    token.define_singleton_method(:discarded_at) { 1.minute.ago }
+    token.define_singleton_method(:discard_at) { 1.minute.ago }
+
+    assert_predicate token, :expired_refresh?
+    assert_not_predicate token, :active?
+  end
+
+  test "negative infinity or nil expiry cannot make a refresh token active" do
+    token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    token.define_singleton_method(:discard_at) { -Float::INFINITY }
+
+    assert_predicate token, :expired_refresh?
+    assert_not_predicate token, :active?
+
+    token.define_singleton_method(:discard_at) { nil }
 
     assert_predicate token, :expired_refresh?
     assert_not_predicate token, :active?

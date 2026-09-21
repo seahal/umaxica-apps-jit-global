@@ -19,7 +19,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     client = clients(:one)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
@@ -49,7 +49,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     client = clients(:one)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
@@ -80,7 +80,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     operator = operators(:one)
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
@@ -110,7 +110,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     operator = operators(:one)
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
@@ -139,7 +139,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     operator = operators(:one)
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
@@ -172,7 +172,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     client = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)

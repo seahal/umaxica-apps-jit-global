@@ -438,14 +438,12 @@ describe("passkey sign-in panel", () => {
     options_url: "/sign/in/passkey/options?ri=jp",
     verification_url: "/sign/in/passkey/verification?ri=jp",
     region: "jp",
-    identifier_param: "identifier",
+    identifier_param: null,
     turnstile_site_key: "stealth-key",
     turnstile_error_message: "検証に失敗しました",
-    field: { label: "メールアドレス", placeholder: "name@example.com" },
+    field: null,
     submit_label: "パスキーでログイン",
   };
-
-  const typeIdentifier = (value: string) => type("input#identifier", value);
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -458,17 +456,6 @@ describe("passkey sign-in panel", () => {
     await flush();
 
     expect(container.querySelector("[role=alert]")?.textContent).toBe(PASSKEY_MESSAGES.unsupported);
-  });
-
-  it("refuses to start without an identifier", async () => {
-    mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("   ");
-    click("button");
-    await flush();
-
-    expect(container.querySelector("[role=alert]")?.textContent).toBe(
-      PASSKEY_MESSAGES.identifierRequired,
-    );
   });
 
   it("uses the default challenge copy when the page supplied none", async () => {
@@ -486,7 +473,6 @@ describe("passkey sign-in panel", () => {
         turnstile_error_message=""
       />,
     );
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -495,7 +481,7 @@ describe("passkey sign-in panel", () => {
       expect.stringMatching(/./u),
       expect.anything(),
     );
-    expect(requestBody(fetchMock, 0)).toMatchObject({ identifier: "someone@example.com" });
+    expect(requestBody(fetchMock, 0)).not.toHaveProperty("identifier");
   });
 
   it("falls back when a failed options response carries no content type", async () => {
@@ -511,7 +497,6 @@ describe("passkey sign-in panel", () => {
     );
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -535,7 +520,6 @@ describe("passkey sign-in panel", () => {
         region=""
       />,
     );
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -556,7 +540,6 @@ describe("passkey sign-in panel", () => {
     );
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -570,7 +553,6 @@ describe("passkey sign-in panel", () => {
     stubFetchQueue(httpJsonResponse({ options: { a: 1 } }));
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -591,15 +573,14 @@ describe("passkey sign-in panel", () => {
     vi.stubGlobal("location", location);
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
     expect(requestBody(fetchMock, 0)).toMatchObject({
-      identifier: "someone@example.com",
       "cf-turnstile-response": "turnstile-token",
       ri: "jp",
     });
+    expect(requestBody(fetchMock, 0)).not.toHaveProperty("identifier");
     expect(requestBody(fetchMock, 1)).toMatchObject({
       challenge_id: "challenge-1",
       credential: { id: "credential-1" },
@@ -628,7 +609,6 @@ describe("passkey sign-in panel", () => {
     vi.stubGlobal("location", { href: "", reload: vi.fn() });
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -656,7 +636,6 @@ describe("passkey sign-in panel", () => {
     vi.stubGlobal("location", { href: "", reload: vi.fn() });
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -673,16 +652,15 @@ describe("passkey sign-in panel", () => {
         ok: false,
         status: 422,
         headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({ error: "識別子が必要です" }),
+        json: async () => ({ error: "認証を開始できません" }),
       }),
     );
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
-    expect(container.querySelector("[role=alert]")?.textContent).toBe("識別子が必要です");
+    expect(container.querySelector("[role=alert]")?.textContent).toBe("認証を開始できません");
   });
 
   it("reloads when the session is gone rather than reporting a ceremony failure", async () => {
@@ -700,7 +678,6 @@ describe("passkey sign-in panel", () => {
     vi.stubGlobal("location", { href: "", reload });
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -721,7 +698,6 @@ describe("passkey sign-in panel", () => {
     );
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -751,7 +727,6 @@ describe("passkey sign-in panel", () => {
     );
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -783,7 +758,6 @@ describe("passkey sign-in panel", () => {
     vi.stubGlobal("location", { href: "", reload });
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 
@@ -794,7 +768,6 @@ describe("passkey sign-in panel", () => {
     solveInvisibleTurnstile.mockRejectedValue(new Error("検証に失敗しました"));
 
     mount(<PasskeySignInPanel {...props} />);
-    typeIdentifier("someone@example.com");
     click("button");
     await flush();
 

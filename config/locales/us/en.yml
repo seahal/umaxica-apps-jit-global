@@ -607,8 +607,8 @@ en:
         provider_name: Provider
         sign_count: Usage count
       staff_token:
-        discarded_at: Lapses at
-        purged_at: Purge at
+        discard_at: Lapses at
+        purge_eligible_at: Purge at
         refresh_expires_at: Refresh expires at
       user_email:
         address: Email address
@@ -624,8 +624,8 @@ en:
         provider_name: Provider
         sign_count: Usage count
       user_token:
-        discarded_at: Lapses at
-        purged_at: Purge at
+        discard_at: Lapses at
+        purge_eligible_at: Purge at
         refresh_expires_at: Refresh expires at
       visitor_email:
         address: Email address
@@ -642,8 +642,8 @@ en:
         otp_counter: OTP counter
         otp_private_key: OTP private key
       visitor_token:
-        discarded_at: Lapses at
-        purged_at: Purge at
+        discard_at: Lapses at
+        purge_eligible_at: Purge at
         refresh_expires_at: Refresh expires at
     errors:
       messages:
@@ -755,7 +755,7 @@ en:
     cooldown_until: Cooldown until
     current_refresh_token: Current refresh token
     description: Description
-    discarded_at: Discarded at
+    discard_at: Discarded at
     divisions: Divisions
     domain_occurrence_id: Domain occurrence
     email: Email address
@@ -1216,6 +1216,7 @@ en:
         title: Dashboard
         description: Signed in
         sections:
+          menu_links: Menu links
           primary_links: Primary links
           protocol_links: Protocol links
           publishing: Publishing
@@ -3017,6 +3018,16 @@ en:
     sessions_revoked: Sessions revoked. Please continue logging in.
     staff_not_found: Staff not found. Please log in again.
     totp_limit_reached: You cannot register more than %{count} TOTP credentials.
+    totp_credential_label: Authenticator app
+    totp_credential_default_label: Authenticator app %{count}
+    totp_credential_required: Select an authenticator app.
+    totp_status_label: Status
+    totp_status:
+      active: Active
+      inactive: Inactive
+      revoked: Revoked
+      deleted: Deleted
+      nothing: Not configured
     turnstile_failed: Verification failed. Please try again.
     user_not_found: User not found. Please log in again.
   shared:

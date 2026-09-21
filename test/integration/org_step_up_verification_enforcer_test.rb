@@ -20,7 +20,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       staff: @staff,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       public_id: "stepup_org_#{SecureRandom.hex(4)}",
     )
     @base_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @token.public_id)
@@ -190,7 +190,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       if session_public_id.present?
         ClientToken.find_by(public_id: session_public_id)
       else
-        ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+        ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
       end
     token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -210,7 +210,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
         OperatorToken.find_by(public_id: session_public_id)
       else
         OperatorToken.where(staff_id: staff.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end
@@ -234,7 +234,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
         VisitorToken.find_by(public_id: session_public_id)
       else
         VisitorToken.where(visitor_id: visitor.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end

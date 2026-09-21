@@ -26,7 +26,7 @@ class Side::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal(
       [
         ["Settings", side_app_settings_path(ri: "jp")],
-        ["Sign up", side_app_sign_in_path(ri: "jp")],
+        ["Continue", side_app_sign_show_path(ri: "jp")],
       ],
       inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
     )
@@ -399,7 +399,7 @@ class Side::App::RootsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -419,7 +419,7 @@ class Side::App::RootsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

@@ -22,6 +22,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     assert_not_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
   end
 
+  test "direct secret credential deletion without fresh step-up is refused" do
+    target = create_active_secret_credential(@operator)
+    create_active_secret_credential(@operator)
+
+    delete base_org_identity_secret_url(target.public_id, ri: "jp", host: @host),
+           headers: as_staff_headers(@operator, host: @host)
+
+    assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
+    assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
+  end
+
   test "refuses to remove the credential that carries the only remaining sign-in method" do
     only = create_active_secret_credential(@operator)
 
@@ -61,7 +72,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     create_active_secret_credential(@operator)
     emergency_token = OperatorToken.create!(
       staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 30.days.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
       authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
     )

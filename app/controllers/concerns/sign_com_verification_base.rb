@@ -16,7 +16,7 @@ module SignComVerificationBase
 
     def valid_step_up_session?(rs)
       rs.present? &&
-        rs.discarded_at > Time.current &&
+        rs.discard_at > Time.current &&
         rs.visitor_token_id == actor_token.id &&
         rs.status == "PENDING" &&
         rs.scope.present? &&

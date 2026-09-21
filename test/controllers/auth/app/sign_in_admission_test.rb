@@ -31,7 +31,13 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_equal "/sign/in", location.path
     assert_nil Rack::Utils.parse_nested_query(location.query.to_s)["admission"]
-    assert_equal transaction.login_challenge, session[:oidc_authorization_login_challenge]
+
+    record = ClientAuthCeremonySession.order(created_at: :desc).first
+
+    assert_predicate record, :admitted?
+    assert_equal transaction.transaction_id, record.authorization_transaction_ref
+    assert_nil session[:oidc_authorization_login_challenge]
+    assert_nil session[:oidc_authorization_intent]
     assert_includes response.headers["Cache-Control"], "no-store"
     assert_equal "no-referrer", response.headers["Referrer-Policy"]
 
@@ -49,7 +55,12 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_equal "sign_in", session[:auth_ceremony_admitted_intent]
+
+    record = ClientAuthCeremonySession.order(created_at: :desc).first
+
+    assert_predicate record, :admitted?
+    assert_nil record.authorization_transaction_ref
+    assert_nil session[:auth_ceremony_admitted_intent]
 
     follow_redirect!
 

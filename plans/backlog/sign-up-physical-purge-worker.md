@@ -6,9 +6,9 @@ Backlog. The current expiry sweep is not this physical-purge worker and does not
 
 ## Problem
 
-`SignUpTermination` and `SignUpArtifactCleanup` schedule logical deletion by writing `discarded_at`,
-`purged_at`, deleted status ids, and cleanup state. They do not physically delete rows whose
-`purged_at <= now`.
+`SignUpTermination` and `SignUpArtifactCleanup` schedule logical deletion by writing `discard_at`,
+`purge_eligible_at`, deleted status ids, and cleanup state. They do not physically delete rows whose
+`purge_eligible_at <= now`.
 
 Without a dedicated purge worker, cancelled sign-up artifacts can remain in the database
 indefinitely and continue to carry personal data after the intended retention window.
@@ -28,7 +28,7 @@ The worker must cover:
 
 ## Requirements
 
-- Purge only records with `purged_at <= now` and a deleted or terminal cleanup status.
+- Purge only records with `purge_eligible_at <= now` and a deleted or terminal cleanup status.
 - Preserve audit history in Chronicle or another audit store before purge.
 - Use small batches with `FOR UPDATE SKIP LOCKED`.
 - Use per-record or per-aggregate retry with bounded backoff.

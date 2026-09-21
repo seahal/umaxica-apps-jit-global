@@ -9,7 +9,7 @@
 #  id                              :bigint           not null, primary key
 #  consumed_at                     :datetime
 #  delivery_method                 :string
-#  discarded_at                    :datetime         default(Infinity), not null
+#  discard_at                    :datetime         default(Infinity), not null
 #  failure_count                   :integer          default(0), not null
 #  issued_at                       :datetime
 #  issued_by_ref                   :string
@@ -23,7 +23,7 @@
 #  name                            :string           not null
 #  not_before_at                   :datetime
 #  password_digest                 :string
-#  purged_at                       :datetime         default(Infinity), not null
+#  purge_eligible_at                       :datetime         default(Infinity), not null
 #  revoked_at                      :datetime
 #  safe_prefix                     :string
 #  scope                           :string
@@ -243,7 +243,7 @@ class OperatorSecretCredentialTest < ActiveSupport::TestCase
     assert_not_includes OperatorSecretCredential.allowed_for_secret_credential_sign_in, non_login_secret_credential
   end
 
-  test "usable_for_secret_credential_sign_in? allows records until discarded_at" do
+  test "usable_for_secret_credential_sign_in? allows records until discard_at" do
     secret_credential, = OperatorSecretCredential.issue!(name: "Permanent Key", staff: @staff, staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN)
 
     assert_predicate secret_credential, :usable_for_secret_credential_sign_in?

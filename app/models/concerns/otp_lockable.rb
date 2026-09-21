@@ -60,10 +60,7 @@ module OtpLockable
     }
     attrs[:otp_last_sent_at] = Time.current if respond_to?(:otp_last_sent_at=)
 
-    unless locked?
-      attrs[:otp_attempts_count] = 0
-      attrs[:locked_at] = OTP_UNLOCKED_SENTINEL
-    end
+    attrs[:locked_at] = OTP_UNLOCKED_SENTINEL unless locked?
 
     update!(attrs)
   end
@@ -82,13 +79,13 @@ module OtpLockable
   # Clears OTP credential after verification, leaving the record unlocked.
   # otp_private_key is intentionally kept (the column is NOT NULL and the key is
   # safe to reuse).
-  def clear_otp
+  def clear_otp(reset_attempts: true)
     attrs = {
       otp_counter: "0",
       otp_expires_at: -Float::INFINITY,
-      otp_attempts_count: 0,
-      locked_at: OTP_UNLOCKED_SENTINEL,
     }
+    attrs[:otp_attempts_count] = 0 if reset_attempts
+    attrs[:locked_at] = OTP_UNLOCKED_SENTINEL if reset_attempts
     attrs[:otp_last_sent_at] = -Float::INFINITY if respond_to?(:otp_last_sent_at=)
 
     update!(attrs)

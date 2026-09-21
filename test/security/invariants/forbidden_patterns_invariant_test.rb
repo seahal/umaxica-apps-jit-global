@@ -178,27 +178,9 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/sign/app/sign/ins_controller.rb",
-          line: /redirect_to\(result\.resume_url, allow_other_host: true\)/,
-          reason: "Sign-in completion returns through the reviewed RP resume URL.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/auth/app/sign/in/sessions_controller.rb",
-          line: /redirect_to\(resume_url, allow_other_host: true\)/,
-          reason: "Sign-in completion returns through the reviewed RP resume URL.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/ins_controller.rb",
           line: /\A\s*allow_other_host: true,\s*\z/,
           reason: "Auth app sign-in sends authenticated browsers to the reviewed Base dashboard host.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/auth/app/sign/ins_controller.rb",
-          line: /redirect_to\(result\.resume_url, allow_other_host: true\)/,
-          reason: "Sign-in completion returns through the reviewed RP resume URL.",
         },
         {
           pattern: "cross-host redirect escape hatch",
@@ -265,6 +247,11 @@ module Security
           path: "app/controllers/base/org/oauth/authorizations_controller.rb",
           line: /Actor\.authn\.access_claims/,
           reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
+        },
+        {
+          path: "app/controllers/concerns/auth_oidc_result_handoff.rb",
+          line: /Actor\.authn\.access_claims/,
+          reason: "OIDC result handoff forwards the authenticated ceremony assurance metadata to Base.",
         },
         {
           path: "app/controllers/concerns/actor_support.rb",

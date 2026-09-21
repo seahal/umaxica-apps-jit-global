@@ -228,7 +228,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     ClientSignOutFlow.stub(
       :create!, ->(attrs) {
                   cycle = original_create.call(attrs)
-                  cycle.update_columns(discarded_at: 1.hour.ago)
+                  cycle.update_columns(discard_at: 1.hour.ago)
                   def cycle.mark_access_discarded!(*)
                     raise StandardError, "boom"
                   end
@@ -556,17 +556,17 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   end
 
   # ------------------------------------------------------------------
-  # sign_out_refresh_expires_at: mirrors a future discarded_at, or falls
+  # sign_out_refresh_expires_at: mirrors a future discard_at, or falls
   # back to the current time. Targets then@289 and else@288/else@289.
   # ------------------------------------------------------------------
-  test "sign-out cycle refresh expiry mirrors the token's future discarded_at" do
+  test "sign-out cycle refresh expiry mirrors the token's future discard_at" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
-    expected_discarded_at = token.reload.discarded_at
+    expected_discard_at = token.reload.discard_at
 
-    assert_predicate expected_discarded_at, :present?
-    assert_operator expected_discarded_at, :>, Time.current
+    assert_predicate expected_discard_at, :present?
+    assert_operator expected_discard_at, :>, Time.current
 
     AuthenticationLogoutCurrentSession.call(
       resource: user,
@@ -577,15 +577,15 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
     cycle = ClientSignOutFlow.recent_first.find_by!(token: token)
 
-    assert_in_delta Float(expected_discarded_at), Float(cycle.refresh_expires_at), 1.0
+    assert_in_delta Float(expected_discard_at), Float(cycle.refresh_expires_at), 1.0
   end
 
-  test "sign-out cycle refresh expiry falls back to the current time when discarded_at is not in the future" do
+  test "sign-out cycle refresh expiry falls back to the current time when discard_at is not in the future" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.revoke!
 
-    assert_operator token.reload.discarded_at, :<, Time.current
+    assert_operator token.reload.discard_at, :<, Time.current
 
     before_call = Time.current
     AuthenticationLogoutCurrentSession.call(
@@ -600,18 +600,18 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert_operator cycle.refresh_expires_at, :>=, before_call
   end
 
-  # Targets then@288: a token whose discarded_at is still at its raw
+  # Targets then@288: a token whose discard_at is still at its raw
   # Float::INFINITY default (i.e. it has not yet gone through the
   # before_validation callback that assigns a concrete lapse time) must get
   # a concrete far-future refresh expiry instead of an unusable
   # Float::INFINITY value. `token:` is passed directly (bypassing lookup),
   # matching how a caller holding an in-memory, not-yet-persisted token
   # object would invoke this concern.
-  test "sign-out cycle refresh expiry is set 100 years out when the token's discarded_at is infinite" do
+  test "sign-out cycle refresh expiry is set 100 years out when the token's discard_at is infinite" do
     user = clients(:one)
     token = ClientToken.new(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
-    assert token.discarded_at.respond_to?(:infinite?) && token.discarded_at.infinite?
+    assert token.discard_at.respond_to?(:infinite?) && token.discard_at.infinite?
 
     AuthenticationLogoutCurrentSession.call(resource: user, token: token, reason: "user_logout")
 
@@ -620,16 +620,16 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert_in_delta 100.years.from_now.to_f, Float(cycle.refresh_expires_at), 5.0
   end
 
-  # Targets else@287: the token record does not expose discarded_at via
+  # Targets else@287: the token record does not expose discard_at via
   # respond_to? (a singleton override on this one instance; the underlying
   # attribute keeps working normally so ActiveRecord internals are
   # unaffected), so the cycle's refresh expiry must fall back to the
   # current time rather than raising.
-  test "sign-out cycle refresh expiry falls back to the current time when the token cannot report discarded_at" do
+  test "sign-out cycle refresh expiry falls back to the current time when the token cannot report discard_at" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:respond_to?) do |name, include_all = false|
-      next false if name == :discarded_at
+      next false if name == :discard_at
 
       super(name, include_all)
     end

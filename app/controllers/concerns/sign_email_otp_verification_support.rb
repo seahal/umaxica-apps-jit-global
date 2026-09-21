@@ -93,7 +93,7 @@ module SignEmailOtpVerificationSupport
       return false
     end
 
-    if current_step_up_session.discarded_at <= Time.current
+    if current_step_up_session.discard_at <= Time.current
       @verification_errors = [I18n.t("sign.app.verification.errors.code_expired")]
       return false
     end
@@ -111,7 +111,7 @@ module SignEmailOtpVerificationSupport
 
     session[email_otp_session_key] = data.merge(
       "step_up_session_id" => current_step_up_session.id,
-      "expires_at" => current_step_up_session.discarded_at.to_i,
+      "expires_at" => current_step_up_session.discard_at.to_i,
     )
   end
 

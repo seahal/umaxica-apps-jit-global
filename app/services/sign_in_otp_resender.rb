@@ -113,7 +113,7 @@ class SignInOtpResender
     return if records.any?(&:locked?)
 
     records.find_each do |record|
-      clear_otp(record)
+      record.clear_otp(reset_attempts: false)
     rescue StandardError => e
       Rails.error.report(
         e, handled: true, context: {

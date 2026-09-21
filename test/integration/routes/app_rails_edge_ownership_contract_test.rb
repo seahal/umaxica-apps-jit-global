@@ -5,8 +5,8 @@ require "test_helper"
 class AppRailsEdgeOwnershipContractTest < ActiveSupport::TestCase
   RAILS_OWNED = [
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/", "core/app/roots", "index"],
-    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign/in", "core/app/oidc/authorizations", "show"],
-    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign/in/callback", "core/app/oidc/callbacks", "show"],
+    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign", "core/app/sign/entries", "show"],
+    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign/callback", "core/app/oidc/callbacks", "show"],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :post, "/oidc/backchannel/logout", "core/app/oidc/backchannel/logouts",
      "create",],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/api/v0/session", "core/app/api/v0/sessions", "show"],

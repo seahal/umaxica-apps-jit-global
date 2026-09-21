@@ -68,9 +68,18 @@ module Base
         {
           title: t("base.shared.dashboard.title"),
           sections: [
+            { heading: t("base.shared.dashboard.sections.menu_links"), items: menu_links },
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
           ],
         }
+      end
+
+      def menu_links
+        [
+          { label: t("base.shared.dashboard.links.switcher"), href: base_app_switcher_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.preference"), href: base_app_preference_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.logout"), href: new_base_app_sign_out_path(ri: params[:ri]) },
+        ]
       end
 
       def primary_links
@@ -79,13 +88,10 @@ module Base
           { label: t("base.shared.dashboard.links.account"), href: base_app_accounts_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.organization"), href: base_app_organizations_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.avatar"), href: base_app_avatars_path(ri: params[:ri]) },
-          { label: t("base.shared.dashboard.links.switcher"), href: base_app_switcher_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.identity"), href: base_app_identity_path(ri: params[:ri]) },
-          { label: t("base.shared.dashboard.links.preference"), href: base_app_preference_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.billings"), href: base_app_billings_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.groups"), href: base_app_groups_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.offline"), href: base_app_pwa_offline_path(ri: params[:ri]) },
-          { label: t("base.shared.dashboard.links.logout"), href: new_base_app_sign_out_path(ri: params[:ri]) },
         ]
       end
 

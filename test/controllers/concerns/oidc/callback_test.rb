@@ -7,7 +7,7 @@ require "test_helper"
 class OidcCallbackTestController < ApplicationController
   class << self
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
-    attr_accessor :login_result_for_test, :last_login_kwargs, :hard_reject_payload
+    attr_accessor :login_result_for_test, :last_login_kwargs, :hard_reject_payload, :use_rp_credentials
     # rubocop:enable ThreadSafety/ClassAndModuleAttributes
   end
 
@@ -73,6 +73,10 @@ class OidcCallbackTestController < ApplicationController
     "client"
   end
 
+  def oidc_rp_credentials_only?
+    self.class.use_rp_credentials == true
+  end
+
   def sign_in_url_with_pt(_return_to)
     "https://#{Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host}/sign/in"
   end
@@ -107,6 +111,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     OidcCallbackTestController.login_result_for_test = nil
     OidcCallbackTestController.last_login_kwargs = nil
     OidcCallbackTestController.hard_reject_payload = nil
+    OidcCallbackTestController.use_rp_credentials = false
 
     Rails.application.routes.draw do
       get "/oidc/callback/session" => "oidc_callback_test#seed"
@@ -147,6 +152,38 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/after"
     assert_not OidcCallbackTestController.last_login_kwargs.fetch(:bootstrap_actor, false)
     assert OidcCallbackTestController.last_login_kwargs.fetch(:skip_login_cooldown)
+  end
+
+  test "RP callback stores Base-issued credentials without creating a root Browser Session" do
+    OidcCallbackTestController.use_rp_credentials = true
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    result = Result.new(
+      success?: true,
+      token_response: { access_token: "rp-access", refresh_token: "rp-refresh", id_token: "id-token" },
+      error: nil,
+      error_description: nil,
+    )
+    id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
+      success?: true,
+      payload: { "sub" => "42", "nonce" => "nonce", "auth_time" => @authentication_event_at },
+      error: nil,
+    )
+
+    OidcRpTokenClient.stub(:call, result) do
+      OidcIdTokenVerifier.stub(:call, id_token_result) do
+        get "/oidc/callback", params: { code: "abc", state: "state" }
+      end
+    end
+
+    assert_response :redirect
+    assert_redirected_to "/after"
+    assert_nil OidcCallbackTestController.last_login_kwargs
+    set_cookie = Array(response.headers.fetch("Set-Cookie")).join("\n")
+
+    assert_includes set_cookie, "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=rp-access"
+    assert_includes set_cookie, "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=rp-refresh"
   end
 
   test "forwards the ID Token authentication event time into the local session" do
@@ -534,7 +571,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "show rejects mismatched state before token exchange" do
+  test "show rejects mismatched state before token exchange without deleting other pending flows" do
     get "/oidc/callback/session",
         params: {
           state: "expected",
@@ -572,7 +609,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     get "/oidc/callback/snapshot"
     snapshot = response.parsed_body
 
-    assert_nil snapshot["oidc_pending_flows"]
+    assert_includes snapshot.fetch("oidc_pending_flows").keys, "pending-state"
   end
 
   test "show raises unexpected provisioning errors" do
@@ -642,7 +679,7 @@ class OidcCallbackTestController
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -661,7 +698,7 @@ class OidcCallbackTestController
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -682,7 +719,7 @@ class OidcCallbackTestController
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(
@@ -1167,7 +1204,7 @@ class OidcCallbackTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1185,7 +1222,7 @@ class OidcCallbackTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -1205,7 +1242,7 @@ class OidcCallbackTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

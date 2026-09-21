@@ -73,8 +73,8 @@ class ClientTokenDbscStatusTest < ActiveSupport::TestCase
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_dbsc_status_id: status.id,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
     )
 
     assert_includes status.client_tokens, user_token

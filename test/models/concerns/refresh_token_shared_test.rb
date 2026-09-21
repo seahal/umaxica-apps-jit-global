@@ -75,20 +75,20 @@ class RefreshTokenSharedTest < ActiveSupport::TestCase
     expired_digest = AppPreference.digest_refresh_token("expired-refresh")
     eligible = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.hour.from_now,
+      discard_at: 1.hour.from_now,
       token_digest: eligible_digest,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.hour.from_now,
+      discard_at: 1.hour.from_now,
       token_digest: used_digest,
       used_at: Time.current,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.minute.ago,
+      discard_at: 1.minute.ago,
       token_digest: expired_digest,
       jti: SecureRandom.uuid,
     )
@@ -97,7 +97,7 @@ class RefreshTokenSharedTest < ActiveSupport::TestCase
       eligible_digest,
       digest_column: :token_digest,
       unused_column: :used_at,
-      expires_at_column: :discarded_at,
+      expires_at_column: :discard_at,
     )
 
     assert_equal eligible.id, record.id
@@ -105,13 +105,13 @@ class RefreshTokenSharedTest < ActiveSupport::TestCase
       used_digest,
       digest_column: :token_digest,
       unused_column: :used_at,
-      expires_at_column: :discarded_at,
+      expires_at_column: :discard_at,
     )
     assert_nil AppPreference.lock_refresh_token_record_by_digest(
       expired_digest,
       digest_column: :token_digest,
       unused_column: :used_at,
-      expires_at_column: :discarded_at,
+      expires_at_column: :discard_at,
     )
   end
 

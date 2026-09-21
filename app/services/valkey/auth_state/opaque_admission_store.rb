@@ -13,9 +13,10 @@ module Valkey
       CODE_TTL = 60.seconds
       VERSION = 1
       PURPOSES = %w(
-        sign_in_handoff sign_in_result
-        sign_up_handoff sign_up_result
+        authentication_handoff authentication_result
+        invitation_handoff invitation_result
         step_up_handoff step_up_result
+        reauthentication_handoff reauthentication_result
         local_sign_in local_sign_up
       ).freeze
       STATES = %w(issued consumed).freeze

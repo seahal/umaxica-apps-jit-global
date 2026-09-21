@@ -22,7 +22,7 @@ module SingleUseToken
   ).freeze
 
   included do
-    scope :active, -> { where(arel_table[:discarded_at].gt(Time.current)) }
+    scope :active, -> { where(arel_table[:discard_at].gt(Time.current)) }
     scope :unconsumed, -> { where(used_at: nil) }
   end
 
@@ -72,7 +72,7 @@ module SingleUseToken
         digest,
         digest_column: :token_digest,
         unused_column: :used_at,
-        expires_at_column: :discarded_at,
+        expires_at_column: :discard_at,
         now: now,
       )
     end
@@ -90,7 +90,7 @@ module SingleUseToken
 
       attrs = {
         status_id: consumed.status_id,
-        discarded_at: now + PREFERENCE_REFRESH_TTL,
+        discard_at: now + PREFERENCE_REFRESH_TTL,
         jti: JitSecurityJwtJtiGenerator.generate,
         binding_method_id: consumed.binding_method_id,
         dbsc_status_id: consumed.dbsc_status_id,

@@ -164,7 +164,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
 
     assert_redirected_to auth_com_sign_up_url(ri: "jp")
     assert_equal VisitorSignUpFlowStatus::CANCELLED, cycle.reload.status_id
-    assert_operator cycle.discarded_at, :<=, Time.current
+    assert_operator cycle.discard_at, :<=, Time.current
     assert_nil session[:com_sign_up_flow_locator]
   end
 

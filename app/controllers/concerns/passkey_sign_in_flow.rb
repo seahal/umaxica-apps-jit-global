@@ -1,16 +1,19 @@
 # typed: false
 # frozen_string_literal: true
 
-# Identifier-first passkey sign-in: the #options action issues a bound
-# one-time challenge for an account's active passkeys, and the #verification
-# action consumes it, verifies the assertion through
+# Passkey sign-in: the #options action issues a surface-bound one-time
+# challenge, and the #verification action consumes it, resolves the
+# surface-local credential from the assertion id, and verifies it through
 # Webauthn::AssertionVerifier (signature, RP ID, origin, UV=required), and
 # commits the login. Surface specifics come from the declared webauthn_surface
 # and a small set of controller hooks.
 module PasskeySignInFlow
   extend ActiveSupport::Concern
 
-  ANONYMIZED_ALLOW_CREDENTIALS_COUNT = 4
+  # Actor-known ceremonies may still need a padded descriptor list to preserve
+  # their existing privacy contract. Direct app/com sign-in does not use this
+  # path: its request options are discoverable and identifier-free.
+  ACTOR_BOUND_ALLOW_CREDENTIALS_COUNT = 4
 
   include PasskeyCeremonyContext
   include MinimumResponseBudget
@@ -19,19 +22,25 @@ module PasskeySignInFlow
   def options
     return unless before_passkey_options_request!
 
-    identifier = normalized_passkey_identifier
-    return render_error(passkey_identifier_required_error_key, :unprocessable_content) if identifier.blank?
+    if discoverable_direct_passkey_sign_in?
+      actor = nil
+      passkeys = []
+    else
+      identifier = normalized_passkey_identifier
+      return render_error(passkey_identifier_required_error_key, :unprocessable_content) if identifier.blank?
 
-    return render_error(
-      passkey_identifier_invalid_error_key,
-      :unprocessable_content,
-    ) unless valid_passkey_identifier?(identifier)
+      return render_error(
+        passkey_identifier_invalid_error_key,
+        :unprocessable_content,
+      ) unless valid_passkey_identifier?(identifier)
 
-    actor = find_active_passkey_actor(identifier)
-    passkeys = actor ? active_passkeys_for_actor(actor).to_a : []
+      actor = find_active_passkey_actor(identifier)
+      passkeys = actor ? active_passkeys_for_actor(actor).to_a : []
+    end
 
     challenge_id, request_options = issue_passkey_authentication_challenge(
-      allow_credentials: anonymized_passkey_allow_credentials(passkeys), actor: actor,
+      allow_credentials: discoverable_direct_passkey_sign_in? ? [] : anonymized_passkey_allow_credentials(passkeys),
+      actor: actor,
       purpose: passkey_ceremony_purpose,
     )
 
@@ -98,7 +107,8 @@ module PasskeySignInFlow
       return render_error("errors.webauthn.credential_not_found", :unauthorized)
     end
 
-    return unless allow_passkey_sign_in?(passkey)
+    @_risk_actor_id = passkey.public_send(webauthn_surface.actor_foreign_key)
+    return unless passkey_eligible_for_sign_in?(passkey)
 
     context = Webauthn::AssertionVerifier.verify!(
       credential_params: credential_params.to_h,
@@ -221,7 +231,7 @@ module PasskeySignInFlow
   # identifier receives the same number of opaque credential descriptors.
   # Persisted model limits cap real credentials at this count.
   def anonymized_passkey_allow_credentials(passkeys)
-    padding_count = [ANONYMIZED_ALLOW_CREDENTIALS_COUNT - passkeys.size, 0].max
+    padding_count = [ACTOR_BOUND_ALLOW_CREDENTIALS_COUNT - passkeys.size, 0].max
     dummy_credentials = Array.new(padding_count) { { id: SecureRandom.urlsafe_base64(32) } }
 
     (passkeys + dummy_credentials).shuffle
@@ -238,7 +248,29 @@ module PasskeySignInFlow
   end
 
   def passkey_belongs_to_challenge_actor?(passkey, actor_id)
+    return true if actor_id.blank? && discoverable_direct_passkey_sign_in?
+
     actor_id.present? && passkey.public_send(webauthn_surface.actor_foreign_key) == actor_id
+  end
+
+  def discoverable_direct_passkey_sign_in?
+    %i(app com).include?(webauthn_surface.key)
+  end
+
+  def passkey_eligible_for_sign_in?(passkey)
+    actor = passkey.public_send(webauthn_surface.actor_association_name)
+    status_class = webauthn_surface.passkey_status_class
+
+    return reject_passkey_sign_in unless passkey.status_id == status_class::ACTIVE
+    return reject_passkey_sign_in unless actor&.active?
+
+    allow_passkey_sign_in?(passkey)
+  end
+
+  def reject_passkey_sign_in
+    emit_passkey_auth_failed(reason: "credential_not_found")
+    render_error("errors.webauthn.credential_not_found", :unauthorized)
+    false
   end
 
   def passkey_owner_mismatch_log_message

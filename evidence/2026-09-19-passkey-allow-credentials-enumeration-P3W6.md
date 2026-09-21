@@ -21,7 +21,32 @@ The original F8 concern (the order is shuffled with a non-cryptographic PRNG) is
 irrelevant next to these two findings: once real and dummy IDs can be told apart, their order hides
 nothing.
 
-No change was made. This record describes the review only.
+The original review was read-only. Remediation was implemented on 2026-09-20 under the accepted
+discoverable-credential design recorded in `adr/webauthn-discoverable-direct-sign-in.md`.
+
+## Remediation status (2026-09-20)
+
+App and com direct options no longer perform identifier/account lookup and return an empty
+`allowCredentials` list. Verification resolves the surface-local passkey by the assertion
+credential ID, uses that row's saved public key, ignores browser `userHandle` as an identity
+authority, and rechecks credential and actor eligibility before login. App/com registration options
+now require `residentKey: "required"`; org remains on its existing resident-key policy.
+
+The actor-bound descriptor helper remains only for org normal, org Emergency, MFA, and Step-Up
+ceremonies. No app/com dummy credential compatibility path remains, and existing non-discoverable
+app/com credentials are not migrated.
+
+Repository verification completed so far:
+
+- Focused Rails WebAuthn/controller tests: 46 runs, 222 assertions, 0 failures, 0 errors, 0 skips.
+- Focused Passkey frontend tests: 93 tests, 3 files passed.
+- Actor-known org/MFA/Step-Up and WebAuthn regressions: 115 runs, 602 assertions, 0 failures,
+  0 errors, 0 skips.
+- Rails full suite after the implementation and architecture-baseline fix: 11,379 runs, 72,689
+  assertions, 0 failures, 0 errors, 5 skips.
+- Passkey frontend focused tests: 3 files, 93 tests passed; frontend full suite: 85 files, 1,062
+  tests passed; `bun run typecheck`, `bun run lint`, and `bun run format:check` passed.
+- Targeted Ruby RuboCop: 15 files inspected, no offenses.
 
 ## Scope
 

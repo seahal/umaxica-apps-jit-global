@@ -16,7 +16,7 @@ class VerificationI18nTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "verify_i18n_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     @headers = as_user_headers(@user, host: @host, headers: browser_headers, session_public_id: @token.public_id).freeze
 
@@ -87,7 +87,7 @@ class VerificationI18nTest < ActionDispatch::IntegrationTest
       if session_public_id.present?
         ClientToken.find_by(public_id: session_public_id)
       else
-        ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+        ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
       end
     token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -107,7 +107,7 @@ class VerificationI18nTest < ActionDispatch::IntegrationTest
         OperatorToken.find_by(public_id: session_public_id)
       else
         OperatorToken.where(staff_id: staff.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end
@@ -131,7 +131,7 @@ class VerificationI18nTest < ActionDispatch::IntegrationTest
         VisitorToken.find_by(public_id: session_public_id)
       else
         VisitorToken.where(visitor_id: visitor.id).where(
-          "discarded_at > ?",
+          "discard_at > ?",
           Time.current,
         ).order(created_at: :desc).first
       end

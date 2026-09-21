@@ -10,7 +10,7 @@
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -22,7 +22,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -52,12 +52,12 @@
 #  index_client_tokens_on_created_at                     (created_at)
 #  index_client_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_client_tokens_on_device_session_id              (device_session_id)
-#  index_client_tokens_on_discarded_at                   (discarded_at)
+#  index_client_tokens_on_discard_at                   (discard_at)
 #  index_client_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_client_tokens_on_oidc_jti                       (oidc_jti)
 #  index_client_tokens_on_oidc_sid                       (oidc_sid)
 #  index_client_tokens_on_public_id                      (public_id) UNIQUE
-#  index_client_tokens_on_purged_at                      (purged_at)
+#  index_client_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_client_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_client_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_client_tokens_on_rotated_at                     (rotated_at)
@@ -107,6 +107,10 @@ class ClientToken < AppTicketRecord
   belongs_to :user_token_dbsc_status, class_name: "ClientTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "ClientOidcConnection"
   belongs_to :device_session, class_name: "ClientDeviceSession", inverse_of: :client_tokens
+  has_many :client_sign_up_flows,
+           foreign_key: :token_id,
+           inverse_of: :token,
+           dependent: :restrict_with_exception
   has_many :client_rp_sessions, inverse_of: :client_token, dependent: :delete_all
   has_many :client_verifications, dependent: :delete_all, inverse_of: :user_token
   has_one :step_up_session,

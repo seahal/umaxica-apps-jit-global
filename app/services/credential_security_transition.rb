@@ -108,7 +108,7 @@ class CredentialSecurityTransition
     session = token.step_up_session
     return if session.blank? || session.expired?
 
-    session.update!(discarded_at: Time.current)
+    session.update!(discard_at: Time.current)
   end
 
   def record_audit!(revoked_sessions:, revoked_step_up:)

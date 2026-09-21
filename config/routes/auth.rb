@@ -57,6 +57,7 @@ scope(module: :auth, as: :auth) do
       namespace :sign do
         resource :registration, only: :show, path: "up", controller: :ups, as: :up
         resource :session, only: :show, path: "in", controller: :ins, as: :in
+        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
@@ -272,6 +273,7 @@ scope(module: :auth, as: :auth) do
       namespace :sign do
         resource :registration, only: :show, path: "up", controller: :ups, as: :up
         resource :session, only: :show, path: "in", controller: :ins, as: :in
+        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
@@ -437,6 +439,7 @@ scope(module: :auth, as: :auth) do
       namespace :sign do
         resource :registration, only: :show, path: "up", controller: :ups, as: :up
         resource :session, only: :show, path: "in", controller: :ins, as: :in
+        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 

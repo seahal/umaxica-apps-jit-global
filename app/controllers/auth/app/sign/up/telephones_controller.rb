@@ -129,7 +129,7 @@ module Auth
 
             if existing_telephone&.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP &&
                 existing_telephone.reregistration_window_active?
-              return render_otp_resend_too_soon
+              return dispatch_existing_telephone_verification!(existing_telephone)
             end
 
             begin

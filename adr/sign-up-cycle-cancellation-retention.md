@@ -46,8 +46,8 @@ Cancellation writes both lifecycle and retention fields:
 
 - `status_id = CANCELLED`
 - `cancelled_at = now` when the cycle has the column
-- `discarded_at = now` for logical deletion
-- `purged_at = now + retention delay` for later physical cleanup eligibility
+- `discard_at = now` for logical deletion
+- `purge_eligible_at = now + retention delay` for later physical cleanup eligibility
 
 The controller may initiate cancellation through a service, clear its local sequence carrier, and
 redirect. It must not perform physical deletion or decide cleanup eligibility.

@@ -21,6 +21,10 @@ module Edit
 
         private
 
+        def oidc_rp_credentials_only?
+          true
+        end
+
         def oidc_client_id
           "edit-org"
         end

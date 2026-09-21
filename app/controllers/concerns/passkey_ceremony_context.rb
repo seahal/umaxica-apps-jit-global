@@ -40,6 +40,7 @@ module PasskeyCeremonyContext
       user_id: resource.webauthn_user_handle,
       user_name: passkey_resource_display_name(resource),
       exclude_ids: webauthn_credential_ids(exclude_credentials),
+      surface: webauthn_surface.key,
     )
 
     challenge_id = passkey_challenge_store.issue!(
@@ -99,8 +100,9 @@ module PasskeyCeremonyContext
     )
   end
 
-  # One-time consumption for identifier-first sign-in: returns the actor
-  # binding recorded at issue time for the caller to enforce ownership.
+  # One-time consumption for sign-in flows whose actor may be learned from the
+  # challenge or from the assertion: returns the optional actor binding recorded
+  # at issue time for the caller to enforce ownership when it is present.
   def consume_passkey_challenge_with_actor!(challenge_id, purpose: :authentication)
     config = webauthn_relying_party_config
     passkey_challenge_store.consume_with_actor!(

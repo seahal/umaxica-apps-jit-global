@@ -146,14 +146,14 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
     assert_not_empty record.errors[:private_key]
   end
 
-  test "enforces maximum totp records per user" do
+  test "enforces the maximum number of slot-consuming totp credentials" do
     new_user = Client.create!(
       status_id: ClientStatus::NOTHING,
     )
-    status = ClientTotpCredentialStatus.find(ClientTotpCredentialStatus::NOTHING)
+    status = ClientTotpCredentialStatus.find(ClientTotpCredentialStatus::ACTIVE)
 
-    ClientTotpCredential::MAX_TOTPS_PER_USER.times do
-      ClientTotpCredential.create!(
+    ClientTotpCredential::MAX_TOTP_SLOTS.times do
+      ClientTotpCredential.create_for_user!(
         user: new_user,
         user_totp_credential_status: status,
         private_key: ROTP::Base32.random_base32,
@@ -161,15 +161,82 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
       )
     end
 
-    extra_totp = ClientTotpCredential.new(
-      user: new_user,
-      user_totp_credential_status: status,
-      private_key: ROTP::Base32.random_base32,
-      last_otp_at: Time.current,
+    assert_raises(ClientTotpCredential::SlotLimitExceeded) do
+      ClientTotpCredential.create_for_user!(
+        user: new_user,
+        user_totp_credential_status: status,
+        private_key: ROTP::Base32.random_base32,
+        last_otp_at: Time.current,
+      )
+    end
+  end
+
+  test "revoked, deleted, and nothing credentials do not consume slots" do
+    new_user = Client.create!(status_id: ClientStatus::NOTHING)
+
+    [ClientTotpCredentialStatus::REVOKED, ClientTotpCredentialStatus::DELETED,
+     ClientTotpCredentialStatus::NOTHING,].each do |status_id|
+      ClientTotpCredential.create!(
+        user: new_user,
+        user_identity_totp_credential_status_id: status_id,
+        private_key: ROTP::Base32.random_base32,
+        last_otp_at: Time.current,
+      )
+    end
+
+    assert_nothing_raised do
+      ClientTotpCredential.create_for_user!(
+        user: new_user,
+        user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+        private_key: ROTP::Base32.random_base32,
+        last_otp_at: Time.current,
+      )
+    end
+  end
+
+  test "active and inactive credentials together consume both slots" do
+    new_user = Client.create!(status_id: ClientStatus::NOTHING)
+    [ClientTotpCredentialStatus::ACTIVE, ClientTotpCredentialStatus::INACTIVE].each do |status_id|
+      ClientTotpCredential.create_for_user!(
+        user: new_user,
+        user_identity_totp_credential_status_id: status_id,
+        private_key: ROTP::Base32.random_base32,
+        last_otp_at: Time.current,
+      )
+    end
+
+    assert_raises(ClientTotpCredential::SlotLimitExceeded) do
+      ClientTotpCredential.create_for_user!(
+        user: new_user,
+        user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+        private_key: ROTP::Base32.random_base32,
+        last_otp_at: Time.current,
+      )
+    end
+  end
+
+  test "revoked status is terminal through the model write path" do
+    record = ClientTotpCredential.create!(
+      user: @user,
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::REVOKED,
+      otp_attempts_count: ClientTotpCredential::MAX_CONSECUTIVE_FAILURES,
     )
 
-    assert_not extra_totp.valid?
-    assert_includes extra_totp.errors[:base], "exceeds maximum totps per user (#{ClientTotpCredential::MAX_TOTPS_PER_USER})"
+    record.user_identity_totp_credential_status_id = ClientTotpCredentialStatus::ACTIVE
+
+    assert_not record.valid?
+    assert_includes record.errors[:user_identity_totp_credential_status_id], "cannot leave REVOKED"
+  end
+
+  test "the database rejects failure counters outside the terminal range" do
+    record = ClientTotpCredential.create!(user: @user)
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ClientTotpCredential.transaction(requires_new: true) { record.update_columns(otp_attempts_count: 101) }
+    end
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ClientTotpCredential.transaction(requires_new: true) { record.update_columns(otp_attempts_count: -1) }
+    end
   end
 
   test "association deletion: destroys when user is destroyed" do

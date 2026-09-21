@@ -26,7 +26,7 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     assert_predicate request.reload, :executed?
     assert_not_nil target.reload.withdrawal_started_at
     assert_not_nil target.deactivated_at
-    assert_operator target.purged_at, :>, target.deactivated_at
+    assert_operator target.purge_eligible_at, :>, target.deactivated_at
     assert_predicate token.reload, :revoked?
   end
 
@@ -96,7 +96,7 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     assert_predicate request.reload, :executed?
     assert_not_nil target.reload.withdrawn_at
     assert_not_nil target.deactivated_at
-    assert_equal target.discarded_at, target.purged_at
+    assert_equal target.discard_at, target.purge_eligible_at
     assert_predicate token.reload, :revoked?
   end
 
@@ -107,8 +107,8 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
       withdrawal_started_at: now,
       deactivated_at: now,
       withdrawn_at: now,
-      discarded_at: now,
-      purged_at: now,
+      discard_at: now,
+      purge_eligible_at: now,
     )
     request = approved_request(
       action: OperatorLifecycleRequest::ACTION_RESTORE,
@@ -125,7 +125,7 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     # Restore resets the discard sentinel to the far-future value (Float::INFINITY),
     # which OrgOperatorLifecycleExecute uses to mark an operator active. Comparing
     # Float::INFINITY with a TimeWithZone via :> raises, so assert the sentinel directly.
-    assert_equal Float::INFINITY, target.discarded_at
+    assert_equal Float::INFINITY, target.discard_at
   end
 
   # A leave of absence is not a departure. This used to share the withdrawal
@@ -152,8 +152,8 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     # The record must survive a leave of any length.
     assert_nil target.withdrawal_started_at
     assert_nil target.withdrawn_at
-    assert_equal Float::INFINITY, target.discarded_at
-    assert_equal Float::INFINITY, target.purged_at
+    assert_equal Float::INFINITY, target.discard_at
+    assert_equal Float::INFINITY, target.purge_eligible_at
   end
 
   test "a suspended operator is restored by restore" do
@@ -189,8 +189,8 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     target.reload
 
     assert_not_nil target.withdrawal_started_at
-    assert_operator target.purged_at, :>, target.deactivated_at
-    assert_not_equal Float::INFINITY, target.purged_at
+    assert_operator target.purge_eligible_at, :>, target.deactivated_at
+    assert_not_equal Float::INFINITY, target.purge_eligible_at
   end
 
   # Offboarding has to reach the federated credential too. The operator gate
@@ -235,7 +235,7 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     now = Time.current
     target.update!(
       withdrawal_started_at: now, deactivated_at: now, withdrawn_at: now,
-      discarded_at: now, purged_at: now,
+      discard_at: now, purge_eligible_at: now,
     )
     request = approved_request(
       action: OperatorLifecycleRequest::ACTION_RESTORE,

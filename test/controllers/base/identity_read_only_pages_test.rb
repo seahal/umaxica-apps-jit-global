@@ -23,7 +23,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     client = clients(:one)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
@@ -52,7 +52,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -80,7 +80,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     operator = operators(:one)
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
@@ -108,7 +108,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     client = clients(:one)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     ChronicleRecord.connected_to(role: :writing) do
       ClientChronicle.create!(
@@ -162,7 +162,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     ChronicleRecord.connected_to(role: :writing) do
       ClientChronicle.create!(
@@ -222,7 +222,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     operator = operators(:one)
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     ChronicleRecord.connected_to(role: :writing) do
       OperatorChronicle.create!(
@@ -283,7 +283,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     client = Client.create!
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
@@ -314,7 +314,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -361,7 +361,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
@@ -401,7 +401,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -436,7 +436,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)

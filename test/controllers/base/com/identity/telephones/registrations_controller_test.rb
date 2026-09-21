@@ -19,7 +19,7 @@ class Base::Com::Identity::Telephones::RegistrationsControllerTest < ActionDispa
       visitor: @visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: @visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: @visitor, session: @token)

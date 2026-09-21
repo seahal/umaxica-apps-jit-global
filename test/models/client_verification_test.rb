@@ -7,9 +7,9 @@
 # Database name: app_ticket
 #
 #  id            :bigint           not null, primary key
-#  discarded_at  :datetime         default(Infinity), not null
+#  discard_at  :datetime         default(Infinity), not null
 #  last_used_at  :datetime
-#  purged_at     :datetime         default(Infinity), not null
+#  purge_eligible_at     :datetime         default(Infinity), not null
 #  token_digest  :string           not null
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
@@ -34,7 +34,7 @@ class ClientVerificationTest < ActiveSupport::TestCase
     first, = ClientVerification.issue_for_token!(token: token)
     second, raw = ClientVerification.issue_for_token!(token: token)
 
-    assert_predicate first.reload.discarded_at, :present?
+    assert_predicate first.reload.discard_at, :present?
     assert_predicate second, :active?
     assert_equal ClientVerification.digest_token(raw), second.token_digest
   end
@@ -45,7 +45,7 @@ class ClientVerificationTest < ActiveSupport::TestCase
     expired = ClientVerification.create!(
       user_token: token,
       token_digest: SecureRandom.hex(48),
-      discarded_at: 1.minute.ago,
+      discard_at: 1.minute.ago,
     )
 
     ids = ClientVerification.active.pluck(:id)

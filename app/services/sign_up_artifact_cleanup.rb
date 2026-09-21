@@ -28,9 +28,10 @@ class SignUpArtifactCleanup
     new(cycle: cycle, now: now).call
   end
 
-  def self.cleanup_pending!(now: Time.current, batch_size: BATCH_SIZE)
+  def self.cleanup_pending!(now: nil, batch_size: BATCH_SIZE)
     [ClientSignUpFlow, VisitorSignUpFlow].each do |cycle_class|
-      cleanup_pending_for(cycle_class, now: now, batch_size: batch_size)
+      cycle_now = now || cycle_class.database_now
+      cleanup_pending_for(cycle_class, now: cycle_now, batch_size: batch_size)
     end
   end
 
@@ -278,11 +279,11 @@ class SignUpArtifactCleanup
   # but Client/Visitor for example use bespoke lifecycle columns rather than
   # the Retainable contract.
   def retention_attrs(record)
-    discarded_at = [record.created_at, now].compact.max
-    purged_at = now + PHYSICAL_PURGE_DELAY
+    discard_at = [record.created_at, now].compact.max
+    purge_eligible_at = now + PHYSICAL_PURGE_DELAY
     attrs = {}
-    attrs[:discarded_at] = discarded_at if record.has_attribute?(:discarded_at)
-    attrs[:purged_at] = purged_at if record.has_attribute?(:purged_at)
+    attrs[:discard_at] = discard_at if record.has_attribute?(:discard_at)
+    attrs[:purge_eligible_at] = purge_eligible_at if record.has_attribute?(:purge_eligible_at)
     attrs
   end
 end

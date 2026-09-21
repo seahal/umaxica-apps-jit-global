@@ -32,11 +32,8 @@
       <ul>
         <% if logged_in? %>
           <li><%= link_to t("sign.com.preferences.footer.dashboard"), base_com_root_url(ri: current_region_identifier, host: base_authority_host) %></li>
-        <% else %>
-          <li><%= link_to t("sign.com.preferences.footer.home"), auth_com_root_url %></li>
         <% end %>
         <li><%= link_to t("sign.com.preferences.footer.preference"), base_com_preference_url(ri: current_region_identifier, host: base_authority_host) %></li>
-        <li><%= link_to t("sign.com.preferences.footer.settings"), base_com_identity_url(ri: current_region_identifier, host: base_authority_host) %></li>
       </ul>
     </nav>
     <aside aria-label="Preferences">

@@ -102,7 +102,7 @@ scope(module: :base, as: :base) do
       # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
       # OIDC Core; resource names stay nouns.
       namespace(:oauth) do
-        resource(:authorization, only: :show, path: "authorize", controller: :authorizations)
+        resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
         resource(:userinfo, only: :show, controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
@@ -351,7 +351,7 @@ scope(module: :base, as: :base) do
       # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
       # OIDC Core; resource names stay nouns.
       namespace(:oauth) do
-        resource(:authorization, only: :show, path: "authorize", controller: :authorizations)
+        resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
         resource(:userinfo, only: :show, controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
@@ -571,7 +571,7 @@ scope(module: :base, as: :base) do
       # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
       # OIDC Core; resource names stay nouns.
       namespace(:oauth) do
-        resource(:authorization, only: :show, path: "authorize", controller: :authorizations)
+        resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
         resource(:userinfo, only: :show, controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)

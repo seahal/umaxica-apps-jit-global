@@ -8,9 +8,9 @@
 #
 #  id            :bigint           not null, primary key
 #  attempt_count :integer          default(0), not null
-#  discarded_at  :datetime         default(Infinity), not null
+#  discard_at  :datetime         default(Infinity), not null
 #  method        :string
-#  purged_at     :datetime         default(Infinity), not null
+#  purge_eligible_at     :datetime         default(Infinity), not null
 #  return_to     :text             not null
 #  scope         :string           not null
 #  status        :string           not null
@@ -29,6 +29,7 @@
 #
 class ClientStepUpSession < AppTicketRecord
   include Retainable
+  include StepUpSessionConsumable
 
   STATUSES = %w(PENDING VERIFIED).freeze
   METHODS = %w(passkey totp email_otp).freeze
@@ -40,7 +41,7 @@ class ClientStepUpSession < AppTicketRecord
   validates :user_token_id, uniqueness: true
   validates :method, inclusion: { in: METHODS }, allow_nil: true
   validates :status, presence: true, inclusion: { in: STATUSES }
-  validates :discarded_at, presence: true
+  validates :discard_at, presence: true
   validates :attempt_count, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   scope :for_user_token, ->(user_token) { where(user_token_id: user_token.id) }
@@ -48,6 +49,6 @@ class ClientStepUpSession < AppTicketRecord
   scope :pending, -> { where(status: "PENDING") }
 
   def expired?
-    discarded_at <= Time.current
+    discard_at <= Time.current
   end
 end

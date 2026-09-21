@@ -346,6 +346,32 @@ describe("totp challenge form", () => {
     expect(markup).toContain("認証アプリを開いてください");
   });
 
+  it("renders an actor-scoped credential selector without database identifiers", () => {
+    const markup = renderToStaticMarkup(
+      <TotpChallengeForm
+        {...props}
+        form={{
+          ...props.form,
+          credential_selector: {
+            name: "totp_challenge_form[credential_public_id]",
+            field: "credential_public_id",
+            scope: "totp_challenge_form",
+            label: "認証アプリ",
+            options: [
+              { value: "client-totp-a", label: "仕事用" },
+              { value: "client-totp-b", label: "個人用" },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(markup).toContain('name="totp_challenge_form[credential_public_id]"');
+    expect(markup).toContain('value="client-totp-a"');
+    expect(markup).toContain('value="client-totp-b"');
+    expect(markup).not.toContain('name="totp_challenge_form[credential_id]"');
+  });
+
   it("shows the verification failure the server returned", () => {
     const markup = renderToStaticMarkup(
       <TotpChallengeForm
@@ -359,7 +385,7 @@ describe("totp challenge form", () => {
 });
 
 describe("passkey sign-in screen", () => {
-  it("renders the identifier field and the ceremony button", () => {
+  it("renders a discoverable passkey ceremony without an identifier field", () => {
     const markup = renderToStaticMarkup(
       <PasskeySignInScreen
         title="パスキーでログイン"
@@ -368,17 +394,19 @@ describe("passkey sign-in screen", () => {
           options_url: "/sign/in/passkey/options?ri=jp",
           verification_url: "/sign/in/passkey/verification?ri=jp",
           region: "jp",
-          identifier_param: "identifier",
+          identifier_param: null,
           turnstile_site_key: "stealth-key",
           turnstile_error_message: "検証に失敗しました",
-          field: { label: "メールアドレス", placeholder: "name@example.com" },
+          field: null,
           submit_label: "パスキーでログイン",
         }}
         back_link={backLink}
       />,
     );
 
-    expect(markup).toContain('autoComplete="username webauthn"');
+    expect(markup).not.toContain("identifier");
+    expect(markup).not.toContain("メールアドレス");
+    expect(markup).toContain("パスキーでログイン");
     expect(markup).toContain('href="/sign/in?ri=jp"');
   });
 });

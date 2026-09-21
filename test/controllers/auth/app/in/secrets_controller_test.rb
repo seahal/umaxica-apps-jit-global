@@ -75,7 +75,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       end
     end
     restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted.rotate_refresh_token!(discarded_at: 15.minutes.from_now)
+    restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
 
     post auth_app_sign_in_secret_url(ri: "jp"),
          params: login_params(identifier: @raw_email, secret_credential_value: raw_secret_credential),
@@ -487,7 +487,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
   end
 
   test "expired secret_credential fails authentication" do
-    _secret_credential, raw_secret_credential = issue_secret_credential!(discarded_at: 1.minute.ago)
+    _secret_credential, raw_secret_credential = issue_secret_credential!(discard_at: 1.minute.ago)
 
     post auth_app_sign_in_secret_url(ri: "jp"),
          params: login_params(identifier: @raw_email, secret_credential_value: raw_secret_credential),
@@ -577,13 +577,13 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     end
   end
 
-  def issue_secret_credential!(kind: ClientSecretCredentialKind::PERMANENT, uses: 1, discarded_at: nil, status: :active)
+  def issue_secret_credential!(kind: ClientSecretCredentialKind::PERMANENT, uses: 1, discard_at: nil, status: :active)
     ClientSecretCredential.issue!(
       name: "Secret-#{SecureRandom.hex(4)}",
       user_id: @user.id,
       user_secret_kind_id: kind,
       uses: uses,
-      discarded_at: discarded_at,
+      discard_at: discard_at,
       status: status,
     )
   end

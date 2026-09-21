@@ -111,7 +111,33 @@ module Sign
         assert_predicate delivery.fetch(:otp_code), :present?
         assert_equal :app, requested_surface
         assert_equal :sign_in, delivery.fetch(:purpose)
+        assert_operator email.reload.otp_counter.to_i, :<, 1 << 64
         assert_predicate email.reload.get_otp, :present?
+      end
+
+      test "known email resend does not reset failed OTP attempts" do
+        email = ClientEmail.create!(
+          user: clients(:one),
+          address: "known-resend-attempts@example.test",
+          confirm_policy: "1",
+          user_email_status_id: ClientEmailStatus::VERIFIED,
+        )
+        email.store_otp(SecureRandom.base64(20), 123, 10.minutes.from_now.to_i)
+        email.increment_attempts!
+
+        assert_equal 1, email.reload.otp_attempts_count
+
+        state = SignInOtpResendState.issue(kind: :email, target: email.address, surface: :app)
+        adapter = Object.new
+        adapter.define_singleton_method(:deliver) { |**| nil }
+
+        OtpAdapter.stub(:for, adapter) do
+          result = SignInOtpResender.new(kind: :email, state: state, surface: :app).call
+
+          assert_equal :ok, result.status
+        end
+
+        assert_equal 1, email.reload.otp_attempts_count
       end
 
       test "a failed delivery still consumes the resend slot" do

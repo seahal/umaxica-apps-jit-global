@@ -105,9 +105,9 @@ This document fixes the remaining ambiguous points and is the source of truth fo
 ### Behavior
 
 - Withdrawal scheduling starts the account lifecycle with `withdrawal_started_at`.
-- Suspension/logical deletion sets `deactivated_at` and `discarded_at`, and sets `purged_at` to the
+- Suspension/logical deletion sets `deactivated_at` and `discard_at`, and sets `purge_eligible_at` to the
   31-day recovery deadline.
-- Recovery is available only after the one-hour recovery delay and before `purged_at`; it clears the
+- Recovery is available only after the one-hour recovery delay and before `purge_eligible_at`; it clears the
   withdrawal lifecycle timestamps and restores the retention sentinels.
 - `withdrawn_at` is terminal history only. It must not drive recovery or withdrawal-gate decisions.
 - Withdrawal gates are based on the current lifecycle and retention columns, not

@@ -473,7 +473,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       name: "deleted",
       status_id: ClientSecretCredentialStatus::DELETED,
     )
-    create_client_recovery_passcode!(@user, name: "expired", discarded_at: 1.minute.ago)
+    create_client_recovery_passcode!(@user, name: "expired", discard_at: 1.minute.ago)
     create_client_recovery_passcode!(@other_user, name: "other 1")
     create_client_recovery_passcode!(@other_user, name: "other 2")
 
@@ -734,7 +734,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     name:,
     status_id: ClientSecretCredentialStatus::ACTIVE,
     last_used_at: nil,
-    discarded_at: nil,
+    discard_at: nil,
     validate: true
   )
     credential = user.client_secret_credentials.new(
@@ -743,7 +743,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       user_identity_secret_status_id: status_id,
       last_used_at: last_used_at,
     )
-    credential.discarded_at = discarded_at if discarded_at
+    credential.discard_at = discard_at if discard_at
     credential.password = ClientSecretCredential.generate_raw_secret_credential
     credential.save!(validate: validate)
     credential
@@ -1118,7 +1118,7 @@ class Auth::App::Settings::PasskeysControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1144,7 +1144,7 @@ class Auth::App::Settings::PasskeysControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -1172,7 +1172,7 @@ class Auth::App::Settings::PasskeysControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

@@ -165,7 +165,7 @@ module Security
           user: user,
           user_token_status_id: ClientTokenStatus::NOTHING,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-          discarded_at: 1.day.from_now,
+          discard_at: 1.day.from_now,
         )
         satisfy_user_verification(token)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
@@ -188,7 +188,7 @@ module Security
           visitor: visitor,
           visitor_token_status_id: VisitorTokenStatus::NOTHING,
           visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-          discarded_at: 1.day.from_now,
+          discard_at: 1.day.from_now,
         )
         satisfy_visitor_verification(token)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "withdrawal")
@@ -215,15 +215,15 @@ module Security
           user.update!(
             withdrawal_started_at: 2.hours.ago,
             deactivated_at: 1.hour.ago,
-            discarded_at: 1.day.from_now,
-            purged_at: 31.days.from_now,
+            discard_at: 1.day.from_now,
+            purge_eligible_at: 31.days.from_now,
           )
         when :terminated
           user.update_columns(
             withdrawal_started_at: 3.hours.ago,
             deactivated_at: 2.hours.ago,
-            discarded_at: 2.hours.ago,
-            purged_at: 1.hour.ago,
+            discard_at: 2.hours.ago,
+            purge_eligible_at: 1.hour.ago,
             withdrawn_at: 1.hour.ago,
             terminated_at: 30.minutes.ago,
           )
@@ -630,7 +630,7 @@ class Security::Invariants::WithdrawalGateInvariantTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -648,7 +648,7 @@ class Security::Invariants::WithdrawalGateInvariantTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -668,7 +668,7 @@ class Security::Invariants::WithdrawalGateInvariantTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

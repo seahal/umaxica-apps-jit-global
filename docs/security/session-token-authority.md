@@ -1,12 +1,29 @@
 # Session And Token Authority
 
-> **Supersession (2026-06-12):** Use `adr/acme-sign-core-base-port-boundary.md` and
-> `docs/architecture/acme-sign-core-base-port.md` for the target component model. Acme is the only
-> IdP / Authorization Server, Core owns the browser web session, Base does not share Core cookies or
-> sessions, and Palm uses bearer access tokens only. Older `acme/www` session/token language is
-> historical where it conflicts with that boundary.
+## Current Base/RP Authority (2026-09-20)
 
-## Current Authority
+Base is the sole physical OIDC Identity Provider and Authorization Server. Base owns the Base
+Browser Session and the surface-local RP Session beneath it. The seven first-party browser RPs
+(`core-app`, `core-com`, `core-org`, `side-app`, `side-com`, `side-org`, and `edit-org`) receive
+their Access and Refresh credentials from Base's token endpoint and store those credentials only in
+host-only RP cookies on the RP host. A browser RP callback does not call the generic root
+`log_in` path and does not create a second ClientToken, VisitorToken, or OperatorToken.
+
+Auth owns credential ceremony continuity only. Auth does not act as an OIDC RP, exchange RP codes,
+or issue Base Browser Session or RP Session authority. The RP Access JWT is validated locally at
+the browser API boundary using the exact registered RP audience/client binding; normal requests do
+not perform an RP Session database lookup. Refresh, revoke, and logout remain Base/RP-Session
+operations.
+
+The older `acme/www` and `sign/id` wording below is retained as migration history. It must not be
+used to infer current physical ownership where it conflicts with the Base/Auth/RP boundary above.
+
+> **Historical note:** The earlier Acme/Core/Sign component model is retained in the lower sections
+> for migration traceability. The current physical authority is defined by
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the only IdP/Authorization Server,
+> Auth is ceremony-only, and each first-party RP owns only its host-local credential transport.
+
+## Historical Migration Authority
 
 `acme/www` owns all user sessions, refresh token families, OAuth/OIDC token authority, access-token
 issuance, downstream token issuance, session management, logout, revoke, compromise state, and

@@ -7,6 +7,7 @@ module AuthCeremonyAdmission
   extend ActiveSupport::Concern
 
   include AuthCeremonySidCookie
+  include AuthCeremonyContext
 
   private
 
@@ -22,10 +23,8 @@ module AuthCeremonyAdmission
     end
 
     if ceremony_admission_present?
-      stored = session[:oidc_authorization_intent].to_s
-      local_intent = session[:auth_ceremony_admitted_intent].to_s
-      if (stored.blank? || stored == expected_intent) && (local_intent.blank? || local_intent == expected_intent)
-        @oidc_authorization_intent = session[:oidc_authorization_intent]
+      if auth_ceremony_matches_intent?(expected_intent)
+        @oidc_authorization_intent = auth_ceremony_authorization_transaction&.intent
         return yield
       end
 
@@ -43,7 +42,6 @@ module AuthCeremonyAdmission
         expected_intent: expected_intent,
       )
       rotate_auth_ceremony_session!
-      session[:auth_ceremony_admitted_intent] = expected_intent
       return redirect_to(auth_ceremony_clean_url, status: :see_other)
     rescue BaseAuthAdmissionCoordinator::Denied => e
       raise unless e.message == "local admission missing"
@@ -66,38 +64,36 @@ module AuthCeremonyAdmission
       raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction already consumed"
     end
 
-    unless transaction.intent == expected_intent
+    unless auth_ceremony_intent_matches?(transaction.intent, expected_intent)
       raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction intent mismatch"
     end
 
-    rotate_auth_ceremony_session!
-    session.delete(:auth_ceremony_admitted_intent)
-    session[:oidc_authorization_login_challenge] = transaction.login_challenge
-    session[:oidc_authorization_intent] = transaction.intent
+    rotate_auth_ceremony_session!(authorization_transaction_ref: transaction.transaction_id)
     redirect_to(auth_ceremony_clean_url, status: :see_other)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
-  def rotate_auth_ceremony_session!
+  def rotate_auth_ceremony_session!(authorization_transaction_ref: nil)
     model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
     raw = read_auth_ceremony_sid_cookie
     if raw.present?
       existing = model.find_active_by_raw_sid(raw)
       existing&.revoke!
     end
-    _record, sid = model.issue!
+    record, sid = model.issue!
+    record.admit!(authorization_transaction_ref: authorization_transaction_ref)
     write_auth_ceremony_sid_cookie!(sid)
+    record
   end
 
   def ceremony_admission_present?
     # Ceremony cookie is continuity only and cannot start a protected flow.
-    session[:oidc_authorization_login_challenge].present? || session[:auth_ceremony_admitted_intent].present?
+    auth_ceremony_admission_present?
   end
 
   def admitted_ceremony_present?(expected_intent:)
-    session[:oidc_authorization_login_challenge].present? ||
-      session[:auth_ceremony_admitted_intent].to_s == expected_intent.to_s
+    auth_ceremony_admission_present? && auth_ceremony_matches_intent?(expected_intent)
   end
 
   def bridge_to_base_admission!
@@ -118,16 +114,6 @@ module AuthCeremonyAdmission
     response.headers["Referrer-Policy"] = "no-referrer"
   end
 
-  def auth_ceremony_surface
-    case self.class.name
-    when /::App::/ then "app"
-    when /::Com::/ then "com"
-    when /::Org::/ then "org"
-    else
-      raise ArgumentError, "unsupported auth ceremony surface"
-    end
-  end
-
   def auth_ceremony_clean_url
     ri = params[:ri]
     case auth_ceremony_surface
@@ -142,5 +128,10 @@ module AuthCeremonyAdmission
 
   def expected_sign_up?
     action_name == "show" && controller_path.end_with?("/sign/ups")
+  end
+
+  def auth_ceremony_intent_matches?(actual, expected)
+    actual.to_s == expected.to_s ||
+      (actual.to_s == "authentication" && %w(sign_in sign_up).include?(expected.to_s))
   end
 end

@@ -10,6 +10,7 @@ type TotpRow = {
   public_id: string;
   title: string | null;
   last_otp_at: string;
+  status: string;
   edit_href: string;
 };
 
@@ -17,7 +18,7 @@ type Props = {
   title: string;
   back_link: SettingsLink;
   new_link: SettingsLink;
-  columns: { title: string; last_otp_at: string; actions: string };
+  columns: { title: string; last_otp_at: string; status: string; actions: string };
   empty_message: string;
   edit_label: string;
   totps: TotpRow[];
@@ -44,6 +45,7 @@ export default function TotpsIndex({
           <tr>
             <th scope="col">{columns.title}</th>
             <th scope="col">{columns.last_otp_at}</th>
+            <th scope="col">{columns.status}</th>
             <th scope="col">
               <span>{columns.actions}</span>
             </th>
@@ -54,6 +56,7 @@ export default function TotpsIndex({
             <tr key={totp.public_id}>
               <td>{totp.title}</td>
               <td>{totp.last_otp_at}</td>
+              <td>{totp.status}</td>
               <td>
                 <a href={totp.edit_href}>{editLabel}</a>
               </td>
@@ -61,7 +64,7 @@ export default function TotpsIndex({
           ))}
           {totps.length === 0 ? (
             <tr>
-              <td colSpan={3}>
+              <td colSpan={4}>
                 <p>{emptyMessage}</p>
               </td>
             </tr>

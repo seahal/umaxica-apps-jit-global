@@ -186,7 +186,7 @@ module AuthenticationHarness
   def authentication_harness_latest_token(resource)
     authentication_harness_token_model(resource)
       .where(authentication_harness_token_owner_column(resource) => resource.id)
-      .where("discarded_at > ?", Time.current)
+      .where("discard_at > ?", Time.current)
       .order(created_at: :desc)
       .first
   end

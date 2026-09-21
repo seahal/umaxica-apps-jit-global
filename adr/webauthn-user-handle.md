@@ -28,6 +28,8 @@ this implementation has not been deployed.
 
 - The handle satisfies WebAuthn's opaque byte-sequence requirement and removes exposure and
   enumeration of internal IDs. Each surface has an independent handle namespace.
-- A future discoverable-credential or usernameless flow will not require another handle redesign.
+- The current discoverable-credential and usernameless flow uses this handle only as authenticator
+  registration metadata; direct app/com verification selects the stored credential by assertion
+  credential ID and does not trust the browser-supplied handle as account authority.
 - Verification: `test/models/webauthn_duplicate_registration_test.rb` covers opacity, uniqueness,
   and inequality with the primary key.

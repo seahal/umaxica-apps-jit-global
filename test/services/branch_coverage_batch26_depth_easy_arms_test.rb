@@ -8,8 +8,8 @@ class BranchCoverageBatch26DepthEasyArmsTest < ActiveSupport::TestCase
 
   test "TokenStatusManagement discarded arm" do
     token = ClientToken.new
-    if token.has_attribute?(:discarded_at)
-      token.discarded_at = 1.minute.ago
+    if token.has_attribute?(:discard_at)
+      token.discard_at = 1.minute.ago
 
       assert_not token.currently_usable?
     else

@@ -146,6 +146,18 @@ class ChronicleRecordPolicyTest < ActiveSupport::TestCase
     assert_not_includes result, "token"
   end
 
+  test "sanitize preserves bounded categorical reason codes" do
+    result = ChronicleRecordPolicy.sanitize(
+      {
+        reason_code: "telephone_verification_rate_limit",
+        unsafe_reason_code: "a" * 64,
+      },
+    )
+
+    assert_equal "telephone_verification_rate_limit", result["reason_code"]
+    assert_equal "[FILTERED]", result["unsafe_reason_code"]
+  end
+
   test "sanitize filters reserved context keys" do
     input = { "request_id" => "123", "ip_address" => "127.0.0.1", "user_agent" => "Chrome", "custom" => "ok" }
     result = ChronicleRecordPolicy.sanitize(input)

@@ -60,6 +60,22 @@ class EmailTest < ActiveSupport::TestCase
     assert_not_equal raw1["address"], raw2["address"]
   end
 
+  test "encrypts the OTP private key at rest" do
+    email = create_email(address: "otp-secret@example.test", confirm_policy: true)
+    secret = "otp-private-key-#{SecureRandom.hex(12)}"
+
+    email.store_otp(secret, 123, 5.minutes.from_now.to_i)
+
+    raw = ClientEmail.connection.select_value(
+      "SELECT otp_private_key FROM #{ClientEmail.connection.quote_table_name(ClientEmail.table_name)} " \
+      "WHERE id = #{Integer(email.id)}",
+    )
+
+    assert_equal secret, email.reload.otp_private_key
+    assert_not_equal secret, raw
+    assert_not_includes raw.to_s, secret
+  end
+
   test "validates email format with basic formats" do
     assert_predicate build_email(address: "test@example.com", confirm_policy: true), :valid?
     assert_predicate build_email(address: "user+tag@example.co.jp", confirm_policy: true), :valid?

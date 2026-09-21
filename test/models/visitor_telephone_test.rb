@@ -7,7 +7,7 @@
 # Database name: com_principal
 #
 #  id                          :bigint           not null, primary key
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  locked_at                   :datetime         default(-Infinity), not null
 #  number                      :string           default(""), not null
 #  number_digest               :string
@@ -15,7 +15,7 @@
 #  otp_counter                 :text             default(""), not null
 #  otp_expires_at              :datetime         default(-Infinity), not null
 #  otp_private_key             :string           default(""), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  public_id                   :string(21)       not null
@@ -25,9 +25,9 @@
 # Indexes
 #
 #  index_visitor_telephones_on_active_number_digest         (number_digest) UNIQUE WHERE ((number_digest IS NOT NULL) AND (visitor_telephone_status_id <> 4))
-#  index_visitor_telephones_on_discarded_at                 (discarded_at)
+#  index_visitor_telephones_on_discard_at                 (discard_at)
 #  index_visitor_telephones_on_public_id                    (public_id) UNIQUE
-#  index_visitor_telephones_on_purged_at                    (purged_at)
+#  index_visitor_telephones_on_purge_eligible_at                    (purge_eligible_at)
 #  index_visitor_telephones_on_visitor_id                   (visitor_id)
 #  index_visitor_telephones_on_visitor_telephone_status_id  (visitor_telephone_status_id)
 #
@@ -109,8 +109,8 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor_telephone_status_id: VisitorTelephoneStatus::DELETED,
       otp_counter: "0",
       otp_private_key: "secret_credential",
-      discarded_at: 1.minute.ago,
-      purged_at: 29.minutes.from_now,
+      discard_at: 1.minute.ago,
+      purge_eligible_at: 29.minutes.from_now,
     )
     retry_telephone = VisitorTelephone.new(
       visitor: @visitor,
@@ -488,7 +488,7 @@ class VisitorTelephoneTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -506,7 +506,7 @@ class VisitorTelephoneTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -526,7 +526,7 @@ class VisitorTelephoneTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

@@ -264,7 +264,7 @@ describe("totp settings screens", () => {
     title: "Totps",
     back_link: { label: "もどる", href: "/settings" },
     new_link: { label: "追加", href: "/settings/totps/new?ri=jp" },
-    columns: { title: "名前", last_otp_at: "最終利用", actions: "Actions" },
+    columns: { title: "名前", last_otp_at: "最終利用", status: "状態", actions: "Actions" },
     empty_message: "登録がありません",
     edit_label: "編集",
   };
@@ -278,6 +278,7 @@ describe("totp settings screens", () => {
             public_id: "totp_1",
             title: "iPhone",
             last_otp_at: "-",
+            status: "有効",
             edit_href: "/settings/totps/totp_1/edit?ri=jp",
           },
         ]}
@@ -285,6 +286,7 @@ describe("totp settings screens", () => {
     );
 
     expect(html).toContain("iPhone");
+    expect(html).toContain("有効");
     expect(html).toContain('href="/settings/totps/totp_1/edit?ri=jp"');
     expect(html).not.toContain("登録がありません");
   });

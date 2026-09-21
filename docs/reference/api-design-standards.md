@@ -120,6 +120,7 @@ The table is authoritative. Each row is a permanent public contract.
 | `method-not-allowed`                  | 405    | The method is not supported on this resource; see `Allow`.             |
 | `not-acceptable`                      | 406    | No representation satisfies the request's `Accept`.                    |
 | `unsupported-media-type`              | 415    | The request body media type is not `application/json`.                 |
+| `content-too-large`                   | 413    | The JSON request body exceeds the Rails-side pre-parse limit.          |
 | `validation-failed`                   | 422    | Well-formed but semantically invalid; see the `errors` member.         |
 | `rate-limited`                        | 429    | A rate limit was exceeded; see `Retry-After`.                          |
 | `server-error`                        | 500    | An unhandled failure. Carries no `detail`; correlate by `request_id`.  |
@@ -156,6 +157,9 @@ RFC 9110 §15 semantics and vocabulary.
 - `406` — no representation acceptable under the request's `Accept` (§15.5.7).
 - `409` — a state conflict the caller can resolve (§15.5.10).
 - `415` — unsupported request media type (§15.5.16).
+- `413` — the request content exceeds the server's willingness or ability to process it
+  (§15.5.14). JSON body limits are enforced before parameter parsing; the configured Rails limit is
+  documented in `docs/security/request-size-limits.md`.
 - `422` — well-formed but semantically invalid. **RFC 9110 §15.5.21 names this "Unprocessable
   Content"**, not "Unprocessable Entity". Use Rails' `:unprocessable_content` exclusively;
   `:unprocessable_entity` is the deprecated alias and must not appear in new code.

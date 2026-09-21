@@ -26,7 +26,11 @@
   # connection settings only for production so development and test do not need
   # production credentials merely to parse their own database configuration.
   production_value = lambda do |name|
-    Rails.env.production? ? ENV.fetch(name) : ENV[name]
+    value = Rails.env.production? ? ENV.fetch(name) : ENV[name]
+    if Rails.env.production? && name.end_with?("PGSSLMODE") && value != "verify-full"
+      raise KeyError, "#{name} must be verify-full in production"
+    end
+    value
   end
 %>
 default: &default

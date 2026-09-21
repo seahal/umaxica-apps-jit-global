@@ -6,7 +6,7 @@ require "test_helper"
 class BaseIdentitySessionsTimestampTest < ActiveSupport::TestCase
   SessionTimestampRecord =
     Struct.new(
-      :id, :public_id, :created_at, :last_used_at, :discarded_at,
+      :id, :public_id, :created_at, :last_used_at, :discard_at,
       keyword_init: true,
     ) do
       def emergency_authentication_context? = false
@@ -24,7 +24,7 @@ class BaseIdentitySessionsTimestampTest < ActiveSupport::TestCase
     @record = SessionTimestampRecord.new(
       created_at: Time.utc(2026, 9, 13, 1, 8),
       last_used_at: Time.utc(2026, 9, 13, 2, 8),
-      discarded_at: Time.utc(2026, 10, 13, 1, 8),
+      discard_at: Time.utc(2026, 10, 13, 1, 8),
     )
   end
 

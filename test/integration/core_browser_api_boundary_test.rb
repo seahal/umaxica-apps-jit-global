@@ -51,7 +51,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "a csrf failure answers with the csrf-verification-failed problem type" do
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh", headers: json_headers
 
@@ -64,11 +64,29 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal response.status, body.fetch("status")
   end
 
+  test "an oversized JSON request is rejected before API authentication and parameter parsing" do
+    body = "x" * (RequestBodySizeLimit::MAX_JSON_BODY_BYTES + 1)
+
+    post "/api/v0/token/refresh",
+         params: body,
+         headers: json_headers.merge(
+           "CONTENT_TYPE" => "application/json",
+           "CONTENT_LENGTH" => body.bytesize.to_s,
+         )
+
+    assert_response :content_too_large
+    assert_equal "application/problem+json", response.media_type
+    assert_equal "urn:umaxica:problem:content-too-large", response.parsed_body.fetch("type")
+  end
+
   # ApiV0LegacyErrorMember used to merge a nested `error` object into every problem document here.
   # It was removed on 2026-08-22 once an audit established that neither named consumer read it; this
   # asserts the document is now the RFC 9457 members and nothing else.
   test "no transitional error member remains in the problem document" do
-    get("/api/v0/session", headers: json_headers.merge("Authorization" => "Bearer #{core_browser_access_token}"))
+    get(
+      "/api/v0/session",
+      headers: json_headers.merge("Authorization" => "Bearer #{oidc_access_token_for(clients(:one))}"),
+    )
 
     assert_response :unauthorized
 
@@ -80,7 +98,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "every response on this boundary is uncacheable" do
-    get "/api/v0/session", headers: json_headers
+    get("/api/v0/session", headers: json_headers)
 
     assert_response :success
     # The body carries a CSRF token and per-subject state; a shared cache must never hold it.
@@ -100,9 +118,9 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
 
   test "an authenticated actor is identified by public id, never by the database key" do
     client = clients(:one)
-    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = core_browser_access_token
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(client)
 
-    get "/api/v0/session", headers: json_headers
+    get("/api/v0/session", headers: json_headers)
 
     assert_response :success
 
@@ -113,14 +131,19 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, %("#{client.id}")
   end
 
-  test "a blank public id fails loudly rather than falling back to the database key" do
+  test "a blank public id is rejected without falling back to the database key" do
     client = clients(:one)
+    access_token = oidc_access_token_for(client)
+    original_public_id = client.public_id
     client.update_columns(public_id: "")
-    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = core_browser_access_token
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
 
-    assert_raises(BlankPublicIdentifierError) do
-      get "/api/v0/session", headers: json_headers
-    end
+    get("/api/v0/session", headers: json_headers)
+
+    assert_response :unauthorized
+    assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
+  ensure
+    clients(:one).update_columns(public_id: original_public_id) if defined?(original_public_id)
   end
 
   # A routing miss never reaches a controller, so only the exceptions app can answer it. The test
@@ -165,12 +188,12 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_not body.fetch("authenticated")
     assert_predicate body.fetch("csrf_token"), :present?
-    assert_not_includes response.body, CoreBrowserCredentialContract::ACCESS_COOKIE
-    assert_not_includes response.body, CoreBrowserCredentialContract::REFRESH_COOKIE
+    assert_not_includes response.body, OidcRpBrowserCredentialContract::ACCESS_COOKIE
+    assert_not_includes response.body, OidcRpBrowserCredentialContract::REFRESH_COOKIE
   end
 
   test "core-browser access token is rejected from authorization header transport" do
-    access_token = core_browser_access_token
+    access_token = oidc_access_token_for(clients(:one))
 
     get "/api/v0/session", headers: json_headers.merge("Authorization" => "Bearer #{access_token}")
 
@@ -182,8 +205,8 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "palm audience token is rejected from core browser cookie transport" do
-    token = core_browser_access_token(audiences: ["palm-api"])
-    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = token
+    token = oidc_access_token_for(clients(:one), audiences: ["palm-api"])
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = token
 
     get "/api/v0/session", headers: json_headers
 
@@ -193,8 +216,23 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal "urn:umaxica:problem:authentication-required", body.fetch("type")
   end
 
+  test "a legacy root Browser Session cookie is not accepted as an RP credential" do
+    root_cookie = CoreBrowserCredentialContract.encode_access_token(
+      resource: clients(:one),
+      token_record: client_tokens(:one),
+      host: HOST,
+      resource_type: "client",
+    )
+    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = root_cookie
+
+    get "/api/v0/session", headers: json_headers
+
+    assert_response :success
+    assert_not response.parsed_body.fetch("authenticated")
+  end
+
   test "authenticated session response is minimal and excludes raw credentials" do
-    cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = core_browser_access_token
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(clients(:one))
 
     get "/api/v0/session", headers: json_headers
 
@@ -206,11 +244,11 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal clients(:one).public_id, body.dig("actor", "id")
     assert_not body.key?("access_token")
     assert_not body.key?("refresh_token")
-    assert_not_includes response.body, cookies[CoreBrowserCredentialContract::ACCESS_COOKIE].to_s
+    assert_not_includes response.body, cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s
   end
 
   test "unsafe refresh without csrf returns json csrf error contract" do
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = client_tokens(:one).rotate_refresh_token!
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = oidc_refresh_token_for_client
 
     post "/api/v0/token/refresh", headers: json_headers
 
@@ -225,13 +263,13 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   test "refresh rejects authorization header transport even when refresh cookie is present" do
     get "/api/v0/session", headers: json_headers
     csrf_token = response.parsed_body.fetch("csrf_token")
-    refresh = client_tokens(:one).rotate_refresh_token!
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = refresh
+    refresh = oidc_refresh_token_for_client
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh
 
     post "/api/v0/token/refresh",
          headers: json_headers.merge(
            "X-CSRF-Token" => csrf_token,
-           "Authorization" => "Bearer #{core_browser_access_token}",
+           "Authorization" => "Bearer #{oidc_access_token_for(clients(:one))}",
          )
 
     assert_response :unauthorized
@@ -245,9 +283,18 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     csrf_token = response.parsed_body.fetch("csrf_token")
     absolute_expiry = 2.minutes.from_now.change(usec: 0)
     token = client_tokens(:one)
-    token.update!(discarded_at: absolute_expiry)
-    refresh = token.rotate_refresh_token!
-    cookies[CoreBrowserCredentialContract::REFRESH_COOKIE] = refresh
+    token.update!(discard_at: absolute_expiry)
+    rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: absolute_expiry,
+    )
+    refresh = rp_session.issue_refresh_token!(expires_at: absolute_expiry)
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = refresh
 
     post "/api/v0/token/refresh", headers: json_headers.merge("X-CSRF-Token" => csrf_token)
 
@@ -256,32 +303,33 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_response :no_content
     assert_empty response.body
 
-    access_cookie = set_cookie_for(CoreBrowserCredentialContract::ACCESS_COOKIE)
-    refresh_cookie = set_cookie_for(CoreBrowserCredentialContract::REFRESH_COOKIE)
+    access_cookie = set_cookie_for(OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+    refresh_cookie = set_cookie_for(OidcRpBrowserCredentialContract::REFRESH_COOKIE)
 
     assert_includes access_cookie.downcase, "httponly"
-    assert_includes access_cookie.downcase, "secure"
-    assert_includes access_cookie.downcase, "samesite=strict"
+    assert_includes access_cookie.downcase, "secure" if JitSessionCookieConfig.force_secure?
+
+    assert_includes access_cookie.downcase, "samesite=lax"
     assert_includes access_cookie, "path=/"
     assert_no_match(/domain=/i, access_cookie)
     assert_includes refresh_cookie.downcase, "httponly"
-    assert_includes refresh_cookie.downcase, "secure"
-    assert_includes refresh_cookie.downcase, "samesite=strict"
+    assert_includes refresh_cookie.downcase, "secure" if JitSessionCookieConfig.force_secure?
+
+    assert_includes refresh_cookie.downcase, "samesite=lax"
     assert_includes refresh_cookie, "path=/"
     assert_no_match(/domain=/i, refresh_cookie)
 
     access_token = access_cookie.split(";", 2).first.split("=", 2).last
-    access_claims = CoreBrowserCredentialContract.decode_access_token(
+    access_claims = OidcRpBrowserCredentialContract.decode_access_token(
       token: access_token,
       host: HOST,
       resource_type: "client",
+      client_id: "core-app",
     )
 
     assert_operator Time.at(access_claims.fetch("exp")).utc, :<=, absolute_expiry
 
-    refresh_cookie_expiry = Time.httpdate(refresh_cookie[/expires=([^;]+)/i, 1])
-
-    assert_operator refresh_cookie_expiry, :<=, absolute_expiry
+    assert_no_match(/expires=/i, refresh_cookie)
   end
 
   private
@@ -296,20 +344,35 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     }
   end
 
-  def core_browser_access_token(audiences: [CoreBrowserCredentialContract::ACCESS_AUDIENCE])
-    token_record = client_tokens(:one)
+  def oidc_access_token_for(client, audiences: nil)
+    oidc_client = OidcClientRegistry.find!("core-app")
     AuthenticationTokenService.encode(
-      clients(:one),
-      host: HOST,
+      client,
+      host: OidcIssuer.host_for_resource_type("client"),
       resource_type: "client",
-      session_public_id: token_record.public_id,
-      session_id: token_record.public_id,
+      session_public_id: "rp-session-public-id",
+      oidc_sid: "rp-session-public-id",
+      oidc_jti: SecureRandom.uuid,
       expires_at: 10.minutes.from_now,
-      scopes: %w(openid profile:read self:read),
-      issuer: AuthenticationJwtConfiguration.issuer,
-      audiences: audiences,
-      jwt_issuer_id: CoreBrowserCredentialContract.core_jwt_issuer_id("client"),
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: audiences || [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(client, resource_type: "client"),
+      client_id: oidc_client.client_id,
     )
+  end
+
+  def oidc_refresh_token_for_client
+    session = ClientRpSession.create!(
+      client_token: client_tokens(:one),
+      oidc_client_id: "core-app",
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    session.issue_refresh_token!
   end
 
   def set_cookie_for(name)
@@ -663,7 +726,7 @@ class CoreBrowserApiBoundaryTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -681,7 +744,7 @@ class CoreBrowserApiBoundaryTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -701,7 +764,7 @@ class CoreBrowserApiBoundaryTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

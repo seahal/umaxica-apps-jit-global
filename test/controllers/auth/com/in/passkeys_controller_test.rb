@@ -44,43 +44,49 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal auth_com_sign_in_passkey_options_path(ri: "jp"), panel.fetch("options_url")
     assert_equal auth_com_sign_in_passkey_verification_path(ri: "jp"), panel.fetch("verification_url")
     assert_equal "jp", panel.fetch("region")
+    assert_nil panel.fetch("identifier_param")
+    assert_nil panel.fetch("field")
   end
 
-  test "options returns challenge for known identifier" do
+  test "options is anonymous and does not disclose credential descriptors" do
     post auth_com_sign_in_passkey_options_path(ri: "jp"),
-         params: { identifier: @visitor.visitor_emails.first.address },
+         params: { "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
     assert_response :ok
     json = response.parsed_body
 
     assert_not_nil json["challenge_id"]
+    assert_empty Array(json.dig("options", "allowCredentials"))
+    assert_nil session[:passkey_challenges].fetch(json.fetch("challenge_id"))["actor_global_key"]
+    assert_not_includes response.body, @passkey.webauthn_id
     assert_equal "authentication", session[:passkey_challenges][json["challenge_id"]]["purpose"]
-    assert_equal "com:#{@visitor.id}",
-                 session[:passkey_challenges][json["challenge_id"]]["actor_global_key"]
   end
 
-  test "options returns an indistinguishable padded challenge when identifier is unknown" do
+  test "options ignores a submitted identifier instead of using it for identity selection" do
     post auth_com_sign_in_passkey_options_path(ri: "jp"),
-         params: { identifier: "missing@example.com" },
+         params: { identifier: @visitor.visitor_emails.first.address, "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
     assert_response :ok
-    assert_predicate response.parsed_body["challenge_id"], :present?
-    assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
-  end
+    known = response.parsed_body
 
-  test "options returns error when identifier is missing" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp"), headers: @origin_headers
+    assert_empty Array(known.dig("options", "allowCredentials"))
+    assert_nil session[:passkey_challenges].fetch(known.fetch("challenge_id"))["actor_global_key"]
 
-    assert_response :unprocessable_content
-    assert_includes response.body, I18n.t("errors.webauthn.pii_required")
+    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+         params: { identifier: "missing@example.com", "cf-turnstile-response": "test_token" },
+         headers: @origin_headers
+
+    assert_response :ok
+    unknown = response.parsed_body
+
+    assert_empty Array(unknown.dig("options", "allowCredentials"))
+    assert_nil session[:passkey_challenges].fetch(unknown.fetch("challenge_id"))["actor_global_key"]
   end
 
   test "verification logs visitor in on success" do
-    post auth_com_sign_in_passkey_options_path(ri: "jp"),
-         params: { identifier: @visitor.visitor_emails.first.address },
-         headers: @origin_headers
+    post auth_com_sign_in_passkey_options_path(ri: "jp"), headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
 
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
@@ -117,15 +123,15 @@ class Auth::Com::Sign::In::PasskeysControllerTest
 
   test "options accepts a verified telephone number as the identifier" do
     post auth_com_sign_in_passkey_options_path(ri: "jp"),
-         params: { identifier: @visitor.visitor_telephones.first.number },
+         params: { identifier: @visitor.visitor_telephones.first.number, "cf-turnstile-response": "test_token" },
          headers: @origin_headers
 
     assert_response :ok
     json = response.parsed_body
 
     assert_not_nil json["challenge_id"]
-    assert_equal "com:#{@visitor.id}",
-                 session[:passkey_challenges][json["challenge_id"]]["actor_global_key"]
+    assert_empty Array(json.dig("options", "allowCredentials"))
+    assert_nil session[:passkey_challenges].fetch(json.fetch("challenge_id"))["actor_global_key"]
   end
 
   test "verification refuses a passkey whose visitor has no verified contact" do
@@ -155,7 +161,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
   end
 
-  test "verification rejects a credential that belongs to another visitor" do
+  test "verification uses credential ownership and ignores a forged userHandle" do
     other_visitor = create_verified_visitor_with_email(email_address: "com_other_passkey@example.com")
     other_passkey = VisitorPasskey.create!(
       visitor: other_visitor,
@@ -166,7 +172,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
     post auth_com_sign_in_passkey_options_path(ri: "jp"),
-         params: { identifier: @visitor.visitor_emails.first.address },
+         params: {},
          headers: @origin_headers
     challenge_id = response.parsed_body["challenge_id"]
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
@@ -184,7 +190,89 @@ class Auth::Com::Sign::In::PasskeysControllerTest
            }, headers: @origin_headers
     end
 
+    assert_response :ok
+    assert_equal "ok", response.parsed_body["status"]
+    assert_operator VisitorToken.where(visitor_id: other_visitor.id).count, :>, 0
+  end
+
+  test "verification rejects a disabled discoverable credential" do
+    @passkey.update!(status_id: VisitorPasskeyStatus::DISABLED)
+    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+         params: {},
+         headers: @origin_headers
+    challenge_id = response.parsed_body.fetch("challenge_id")
+    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+
+    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
+      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+           params: {
+             challenge_id: challenge_id,
+             credential: {
+               id: @passkey.webauthn_id,
+               response: {
+                 clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h",
+               },
+             },
+           }, headers: @origin_headers
+    end
+
     assert_response :unauthorized
+    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
+  end
+
+  test "verification rejects a discoverable credential owned by a suspended visitor" do
+    @visitor.update!(deactivated_at: Time.current)
+    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+         params: {},
+         headers: @origin_headers
+    challenge_id = response.parsed_body.fetch("challenge_id")
+    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+
+    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
+      post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+           params: {
+             challenge_id: challenge_id,
+             credential: {
+               id: @passkey.webauthn_id,
+               response: {
+                 clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h",
+               },
+             },
+           }, headers: @origin_headers
+    end
+
+    assert_response :unauthorized
+    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
+  end
+
+  test "verification rejects a credential id that exists only on the app surface" do
+    client = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    app_only_id = Base64.urlsafe_encode64("app_only_credential_#{SecureRandom.hex(8)}", padding: false)
+    ClientPasskey.create!(
+      user: client,
+      webauthn_id: app_only_id,
+      external_id: SecureRandom.uuid,
+      public_key: "app_only_public_key",
+      description: "App-only key",
+      status_id: ClientPasskeyStatus::ACTIVE,
+    )
+
+    post auth_com_sign_in_passkey_options_path(ri: "jp"),
+         params: {},
+         headers: @origin_headers
+    challenge_id = response.parsed_body.fetch("challenge_id")
+
+    post auth_com_sign_in_passkey_verification_path(ri: "jp"),
+         params: {
+           challenge_id: challenge_id,
+           credential: { id: app_only_id },
+         }, headers: @origin_headers
+
+    assert_response :unauthorized
+    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 
   test "verification rejects a challenge id that was never issued" do
@@ -534,7 +622,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -556,7 +644,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -580,7 +668,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

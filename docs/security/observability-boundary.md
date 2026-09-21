@@ -291,6 +291,14 @@ The repository already shows:
 This means the repository can support separation, but the product analytics layer is not yet fully
 defined.
 
+The authentication security-event emitter follows this boundary: it writes a sanitized Chronicle
+row using the existing security retention policy and may additionally write a redacted application
+log for operational correlation. The log line is never treated as the authoritative audit record.
+Provider delivery acceptance, delivery outcome, retry, and permanent failure remain distinct facts.
+The existing SMS transport records enqueue, provider acceptance, and provider failure facts in
+Chronicle without recipient or message content. The repository does not infer delivery from an
+enqueue result or introduce a generic delivery ledger without an approved provider contract.
+
 ## Minimum Rule For Implementation
 
 For now:

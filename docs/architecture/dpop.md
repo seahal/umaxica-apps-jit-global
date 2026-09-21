@@ -89,7 +89,7 @@ JTI replay rows and issued nonces are short-lived. Each row carries `expires_at`
 (`DpopProofStateable::TTL_SECONDS`, 300s). `DpopProofStatePurgeJob` deletes expired rows from
 `client_dpop_proof_states`, `operator_dpop_proof_states`, and `visitor_dpop_proof_states` in
 batches. It is scheduled from `config/recurring.yml` (`dpop_proof_state_purge`). These tables are
-**not** covered by `RetentionPurgeJob`, which is keyed on `purged_at`, not `expires_at`.
+**not** covered by `RetentionPurgeJob`, which is keyed on `purge_eligible_at`, not `expires_at`.
 
 ## Current Adoption Posture
 

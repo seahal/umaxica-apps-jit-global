@@ -83,7 +83,4 @@ CI.run do
 
   # Enable this after db/seeds.rb is intentionally valid as a CI contract.
   # step "Database: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
-
-  # Enable this after database_consistency has project configuration.
-  # step "Database consistency", "bundle exec database_consistency"
 end

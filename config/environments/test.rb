@@ -63,11 +63,12 @@ Rails.application.configure do
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable
 
-  # Off by default, permanently - this is the Rails-generated test default, and under
-  # `protect_from_forgery using: :header_or_legacy_token` a bare test request verifies
-  # successfully anyway, so enabling it suite-wide would buy appearance, not coverage.
-  # CSRF is asserted by targeted boundary tests that opt in with `with_forgery_protection`.
-  # Decision and the condition that would reopen it:
+  # Off by default, permanently - this is the Rails-generated test default, and the test
+  # environment is deliberately different from development and production here. Enabling it
+  # suite-wide would require threading authenticity tokens through a large number of tests whose
+  # subject is not CSRF, duplicating coverage the boundary tests already provide. Individual tests
+  # that need real CSRF verification are welcome to opt in with `with_forgery_protection`.
+  # Decision, and why a suite-wide flag is not revisited:
   # adr/csrf-protection-disabled-in-test-environment.md
   config.action_controller.allow_forgery_protection = false
 

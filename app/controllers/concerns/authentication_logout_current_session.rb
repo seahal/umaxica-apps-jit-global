@@ -284,9 +284,9 @@ class AuthenticationLogoutCurrentSession
   end
 
   def sign_out_refresh_expires_at(token_record)
-    discarded_at = token_record.discarded_at if token_record.respond_to?(:discarded_at)
-    return 100.years.from_now if discarded_at.respond_to?(:infinite?) && discarded_at.infinite?
-    return discarded_at if discarded_at.present? && discarded_at > Time.current
+    discard_at = token_record.discard_at if token_record.respond_to?(:discard_at)
+    return 100.years.from_now if discard_at.respond_to?(:infinite?) && discard_at.infinite?
+    return discard_at if discard_at.present? && discard_at > Time.current
 
     Time.current
   end

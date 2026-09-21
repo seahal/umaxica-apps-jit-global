@@ -78,7 +78,7 @@ module RpSession
 
       expires_at = SessionAbsoluteExpiryValue.cap(
         proposed_expiry: expires_at,
-        absolute_expiry: parent_token&.discarded_at,
+        absolute_expiry: parent_token&.discard_at,
       )
       raw_refresh_token, verifier = generate_refresh_token(public_id: public_id)
       update!(
@@ -98,7 +98,7 @@ module RpSession
 
       expires_at = SessionAbsoluteExpiryValue.cap(
         proposed_expiry: expires_at,
-        absolute_expiry: parent_token&.discarded_at,
+        absolute_expiry: parent_token&.discard_at,
       )
 
       previous_digest = refresh_token_digest
@@ -157,7 +157,7 @@ module RpSession
   def default_refresh_token_expires_at
     SessionAbsoluteExpiryValue.cap(
       proposed_expiry: Time.current + RefreshTokenable::REFRESH_TTL,
-      absolute_expiry: parent_token&.discarded_at,
+      absolute_expiry: parent_token&.discard_at,
     )
   end
 

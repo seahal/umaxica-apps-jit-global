@@ -48,6 +48,7 @@ module Email
     end
 
     encrypts :address, downcase: true
+    encrypts :otp_private_key
 
     validate :validate_email_address
     validates :confirm_policy, acceptance: true, on: :create,

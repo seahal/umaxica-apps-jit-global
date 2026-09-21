@@ -7,7 +7,7 @@
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -19,7 +19,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -47,12 +47,12 @@
 #  index_operator_tokens_on_created_at                     (created_at)
 #  index_operator_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_operator_tokens_on_device_session_id              (device_session_id)
-#  index_operator_tokens_on_discarded_at                   (discarded_at)
+#  index_operator_tokens_on_discard_at                   (discard_at)
 #  index_operator_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_operator_tokens_on_oidc_jti                       (oidc_jti)
 #  index_operator_tokens_on_oidc_sid                       (oidc_sid)
 #  index_operator_tokens_on_public_id                      (public_id) UNIQUE
-#  index_operator_tokens_on_purged_at                      (purged_at)
+#  index_operator_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_operator_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_operator_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_operator_tokens_on_rotated_at                     (rotated_at)
@@ -82,8 +82,8 @@ one:
   staff_token_status_id: 1
   staff_token_kind_id: 1
   public_id: one_staff_token_00001
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 1.day.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 1.day.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 two:
@@ -93,7 +93,7 @@ two:
   staff_token_status_id: 1
   staff_token_kind_id: 1
   public_id: two_staff_token_00001
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 1.day.from_now %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 1.day.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>

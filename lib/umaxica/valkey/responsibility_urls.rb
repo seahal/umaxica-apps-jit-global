@@ -48,6 +48,7 @@ module Umaxica
         raise ConfigurationError, "#{variable} is required" if url.to_s.strip.empty?
 
         parsed = parse(url, responsibility:)
+        assert_production_tls!(parsed, env:, variable:)
         assert_nonprod_db!(parsed, env:)
         parsed
       rescue KeyError => e
@@ -66,6 +67,14 @@ module Umaxica
 
         raise ConfigurationError,
               "#{parsed.responsibility} Valkey URL DB is #{parsed.db}, expected #{expected} in #{env}"
+      end
+
+      def assert_production_tls!(parsed, env:, variable: nil)
+        return unless env.to_s == "production"
+        return if parsed.url.start_with?("rediss://")
+
+        name = variable.presence || "#{parsed.responsibility} Valkey URL"
+        raise ConfigurationError, "#{name} must use rediss:// in production"
       end
 
       def extract_db(uri)

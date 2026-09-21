@@ -30,17 +30,17 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     assert_equal 60.seconds, Valkey::AuthState::OpaqueAdmissionStore::CODE_TTL
 
     raw = @store.issue!(
-      purpose: :sign_in_handoff,
+      purpose: :authentication_handoff,
       actor_type: "client",
       surface: "app",
       subject_ref: "client:1",
     )
-    first = @store.consume!(purpose: :sign_in_handoff, raw_code: raw)
+    first = @store.consume!(purpose: :authentication_handoff, raw_code: raw)
 
     assert_predicate first, :success?
-    assert_equal "sign_in_handoff", first.payload.fetch("purpose")
+    assert_equal "authentication_handoff", first.payload.fetch("purpose")
 
-    second = @store.consume!(purpose: :sign_in_handoff, raw_code: raw)
+    second = @store.consume!(purpose: :authentication_handoff, raw_code: raw)
 
     assert_predicate second, :replay?
   end

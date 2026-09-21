@@ -42,17 +42,17 @@ module Withdrawable
     return false unless deactivated?
     return false if terminated?
 
-    purged_at.blank? || infinite_time?(purged_at) || purged_at.future?
+    purge_eligible_at.blank? || infinite_time?(purge_eligible_at) || purge_eligible_at.future?
   end
 
   def terminated?
     return true if respond_to?(:terminated_at) && terminated_at.present?
 
-    purged_at.present? && !infinite_time?(purged_at) && !purged_at.future?
+    purge_eligible_at.present? && !infinite_time?(purge_eligible_at) && !purge_eligible_at.future?
   end
 
   def recovery_deadline
-    return purged_at if deactivated? && purged_at.present? && !infinite_time?(purged_at)
+    return purge_eligible_at if deactivated? && purge_eligible_at.present? && !infinite_time?(purge_eligible_at)
 
     nil
   end

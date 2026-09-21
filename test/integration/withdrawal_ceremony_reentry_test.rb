@@ -12,8 +12,8 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     email = ClientEmail.create!(
@@ -60,8 +60,8 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     email = ClientEmail.create!(
@@ -113,6 +113,49 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "app withdrawal reentry keeps eligible and unknown email responses equivalent across sessions" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    client = create_client
+    client.update!(
+      withdrawal_started_at: 2.hours.ago,
+      deactivated_at: 90.minutes.ago,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
+    )
+    ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
+    email = ClientEmail.create!(
+      user: client,
+      address: "reentry-equivalence-client@example.test",
+      confirm_policy: "1",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    deliveries = []
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**args| deliveries << args }
+    eligible_session = open_session
+    unknown_session = open_session
+
+    OtpAdapter.stub(:for, adapter) do
+      eligible_session.post(
+        base_app_identity_withdrawal_session_url(ri: "jp", host: host),
+        params: { withdrawal_reentry: { address: email.address } },
+      )
+      unknown_session.post(
+        base_app_identity_withdrawal_session_url(ri: "jp", host: host),
+        params: { withdrawal_reentry: { address: "reentry-equivalence-unknown@example.test" } },
+      )
+    end
+
+    assert_equal eligible_session.response.status, unknown_session.response.status
+    assert_equal eligible_session.response.headers["Content-Type"],
+                 unknown_session.response.headers["Content-Type"]
+    assert_equal eligible_session.response.headers["Cache-Control"],
+                 unknown_session.response.headers["Cache-Control"]
+    assert_match "pass_code_form", eligible_session.response.body
+    assert_match "pass_code_form", unknown_session.response.body
+    assert_equal 1, deliveries.length
+  end
+
   test "deactivated visitor obtains ceremony after valid email otp without normal auth cookies" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
     host! host
@@ -120,8 +163,8 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     visitor.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     email = VisitorEmail.create!(
@@ -157,6 +200,49 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
     assert_predicate VisitorOccurrence.where(event_type: "withdrawal.ceremony_issued"), :exists?
+  end
+
+  test "com withdrawal reentry keeps eligible and unknown email responses equivalent across sessions" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    visitor = create_visitor
+    visitor.update!(
+      withdrawal_started_at: 2.hours.ago,
+      deactivated_at: 90.minutes.ago,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
+    )
+    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
+    email = VisitorEmail.create!(
+      visitor: visitor,
+      address: "reentry-equivalence-visitor@example.test",
+      confirm_policy: "1",
+      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    )
+    deliveries = []
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**args| deliveries << args }
+    eligible_session = open_session
+    unknown_session = open_session
+
+    OtpAdapter.stub(:for, adapter) do
+      eligible_session.post(
+        base_com_identity_withdrawal_session_url(ri: "jp", host: host),
+        params: { withdrawal_reentry: { address: email.address } },
+      )
+      unknown_session.post(
+        base_com_identity_withdrawal_session_url(ri: "jp", host: host),
+        params: { withdrawal_reentry: { address: "reentry-equivalence-unknown@example.test" } },
+      )
+    end
+
+    assert_equal eligible_session.response.status, unknown_session.response.status
+    assert_equal eligible_session.response.headers["Content-Type"],
+                 unknown_session.response.headers["Content-Type"]
+    assert_equal eligible_session.response.headers["Cache-Control"],
+                 unknown_session.response.headers["Cache-Control"]
+    assert_match "pass_code_form", eligible_session.response.body
+    assert_match "pass_code_form", unknown_session.response.body
+    assert_equal 1, deliveries.length
   end
 
   private

@@ -415,6 +415,61 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal before_otp_attempts_count, existing_email.otp_attempts_count
   end
 
+  test "fresh sessions cannot distinguish pending and registered email sign-up" do
+    registered_email = ClientEmail.create!(
+      user: Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP),
+      address: "fresh-session-registered-signup@example.com",
+      confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    unregistered_address = "fresh-session-pending-signup@example.com"
+
+    registered_responses =
+      2.times.map do
+        response = nil
+        open_session do |session|
+          session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+          session.post(
+            auth_app_sign_up_email_url(ri: "jp"),
+            params: {
+              user_email: { raw_address: registered_email.address, confirm_policy: "1" },
+              "cf-turnstile-response": "test",
+            },
+          )
+          response = {
+            status: session.response.status,
+            location: session.response.headers["Location"],
+            body: session.response.body,
+          }
+        end
+        response
+      end
+
+    pending_responses =
+      2.times.map do
+        response = nil
+        open_session do |session|
+          session.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+          session.post(
+            auth_app_sign_up_email_url(ri: "jp"),
+            params: {
+              user_email: { raw_address: unregistered_address, confirm_policy: "1" },
+              "cf-turnstile-response": "test",
+            },
+          )
+          response = {
+            status: session.response.status,
+            location: session.response.headers["Location"],
+            body: session.response.body,
+          }
+        end
+        response
+      end
+
+    assert_equal 302, registered_responses.last.fetch(:status)
+    assert_equal registered_responses.last, pending_responses.last
+  end
+
   test "create with validation failure enqueues no emails and returns 422" do
     email = "invalid_email"
 
@@ -1556,7 +1611,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   # OTP Resend Cooldown Tests
-  test "create returns 429 when re-registering inside overwrite window for new signup" do
+  test "create keeps re-registration inside overwrite window non-disclosing" do
     email = "cooldown_test@example.com"
 
     # First registration attempt
@@ -1587,8 +1642,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
            headers: default_headers
     end
 
-    assert_response :too_many_requests
-    assert_includes @response.body, I18n.t("sign.app.registration.email.create.otp_resend_too_soon")
+    assert_redirected_to auth_app_sign_up_check_email_otp_url(ri: "jp")
   end
 
   test "create allows re-registration after overwrite window expires for new signup" do
@@ -2079,7 +2133,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -2105,7 +2159,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -2133,7 +2187,7 @@ class Auth::App::Sign::Up::EmailsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

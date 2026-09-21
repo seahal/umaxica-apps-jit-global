@@ -24,6 +24,7 @@ module Auth
       include ::VerificationClient
       include ActionPolicy::Controller
       include ::OidcSsoInitiator
+      include ::AuthCeremonyContext
       # Note: RestrictedSessionGuard is still needed to enforce session expiration
       # and block expired restricted sessions on the session management page itself.
       include ::RestrictedSessionGuard
@@ -32,6 +33,7 @@ module Auth
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+      AUTH_CEREMONY_SURFACE = "app"
 
       layout "auth/app/application"
 
@@ -99,7 +101,7 @@ module Auth
       def after_login_path
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
-        session.delete(:auth_ceremony_admitted_intent)
+        complete_auth_ceremony_session!
         base_app_root_url(ri: current_region_identifier, host: base_authority_host)
       end
 
@@ -127,27 +129,10 @@ module Auth
         oidc_acme_host
       end
 
-      def oidc_authorization_login_challenge
-        session[:oidc_authorization_login_challenge]
-      end
-
       def oidc_authorization_after_login_path
-        challenge = oidc_authorization_login_challenge
-        register_oidc_authorization_result!(challenge).resume_url
-      ensure
-        session.delete(:oidc_authorization_login_challenge)
-        session.delete(:oidc_authorization_intent)
-      end
-
-      def register_oidc_authorization_result!(login_challenge)
-        BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
-          surface: "app",
-          login_challenge: login_challenge,
-          actor: current_resource,
-          session_ref: current_session_public_id,
-          auth_method: Array(Actor.authn.access_claims&.dig("amr")).first || "unknown",
-          acr: Actor.authn.access_claims&.dig("acr"),
-          authentication_event_at: current_authentication_event_at,
+        auth_app_sign_oidc_handoff_path(
+          ri: current_region_identifier,
+          protocol: URI.parse(OidcIssuer.absolute_url(oidc_sign_host)).scheme,
         )
       end
 

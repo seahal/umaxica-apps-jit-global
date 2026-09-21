@@ -12,8 +12,8 @@
 # already spent, but deleting on `consumed_at` would add a second rule for no gain: the window is
 # fifteen minutes and the expiry sweep collects it either way.
 #
-# Not part of RetentionPurgeJob, which keys on `purged_at` (the account-retention lifecycle);
-# these rows have no `purged_at` and would otherwise grow without bound. The `expires_at` index
+# Not part of RetentionPurgeJob, which keys on `purge_eligible_at` (the account-retention lifecycle);
+# these rows have no `purge_eligible_at` and would otherwise grow without bound. The `expires_at` index
 # keeps the delete scan cheap.
 class SecurityOneTimeRevealPurgeJob < ApplicationJob
   queue_as :retention

@@ -164,8 +164,6 @@ group :development, :test do
   gem "prosopite"
   # SQL query parser.
   gem "pg_query", require: false
-  # Database consistency checks.
-  gem "database_consistency", require: false
   # OpenAPI contract checker.
   gem "committee-rails", require: false
   # Dead code detector.

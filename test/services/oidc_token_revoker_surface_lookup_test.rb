@@ -22,7 +22,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       staff: operators(:one),
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "docs_org")
     refresh_token = usage.issue_refresh_token!
@@ -44,7 +44,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       visitor: visitors(:reserved_visitor),
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     usage = VisitorRpSession.create!(visitor_token: token, oidc_client_id: "docs_com")
     refresh_token = usage.issue_refresh_token!
@@ -66,7 +66,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       staff: operators(:one),
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "docs_org")
     refresh_token = usage.issue_refresh_token!
@@ -87,7 +87,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       oidc_client_id: "docs_app",
       oidc_sid: SecureRandom.uuid,
       oidc_jti: SecureRandom.uuid,
@@ -112,7 +112,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       oidc_client_id: "docs_app",
       oidc_sid: SecureRandom.uuid,
       oidc_jti: SecureRandom.uuid,

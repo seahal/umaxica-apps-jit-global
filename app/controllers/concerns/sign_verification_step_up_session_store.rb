@@ -27,8 +27,8 @@ module SignVerificationStepUpSessionStore
       :status => "PENDING",
       :attempt_count => 0,
       :verified_at => nil,
-      :discarded_at => self.class::STEP_UP_TTL.from_now,
-      :purged_at => self.class::STEP_UP_TTL.from_now,
+      :discard_at => self.class::STEP_UP_TTL.from_now,
+      :purge_eligible_at => self.class::STEP_UP_TTL.from_now,
     }
     ActiveRecord::Base.connected_to(role: :writing) do
       step_up_session =

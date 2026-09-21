@@ -8,10 +8,10 @@
 #  dbsc_challenge           :text
 #  dbsc_challenge_issued_at :datetime
 #  dbsc_public_key          :jsonb
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  explicit_fields          :jsonb            not null
 #  jti                      :string
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  token_digest             :binary
 #  used_at                  :datetime
 #  created_at               :datetime         not null
@@ -30,7 +30,7 @@
 #  index_org_preferences_on_dbsc_status_id     (dbsc_status_id)
 #  index_org_preferences_on_jti                (jti) UNIQUE
 #  index_org_preferences_on_public_id          (public_id) UNIQUE
-#  index_org_preferences_on_purged_at          (purged_at)
+#  index_org_preferences_on_purge_eligible_at          (purge_eligible_at)
 #  index_org_preferences_on_replaced_by_id     (replaced_by_id)
 #  index_org_preferences_on_status_id          (status_id)
 #  index_org_preferences_on_token_digest       (token_digest)
@@ -158,7 +158,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     digest = OrgPreference.digest_refresh_token("org-consume-once")
     preference = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -175,18 +175,18 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     revoked = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
       token_digest: OrgPreference.digest_refresh_token("org-revoked"),
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     compromised = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
       token_digest: OrgPreference.digest_refresh_token("org-compromised"),
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     expired = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
-      discarded_at: 1.minute.ago,
+      discard_at: 1.minute.ago,
       token_digest: OrgPreference.digest_refresh_token("org-expired"),
       jti: SecureRandom.uuid,
     )
@@ -200,7 +200,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     digest = OrgPreference.digest_refresh_token("org-rotate")
     original = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )

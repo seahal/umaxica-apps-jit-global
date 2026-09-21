@@ -41,7 +41,8 @@ the active implementation slices move or redirect them.
 That compatibility allowance does not apply to the Auth settings to Base identity migration.
 Non-exception Auth settings routes for emails, telephones, birthdate, secrets, secret credentials,
 sessions, revocations, activities, and withdrawal must become unroutable. Auth settings may retain
-only app passkeys/TOTP/Google/Apple, com passkeys, and org passkeys/Entra.
+only app passkeys/TOTP/Google/Apple, com passkeys, and org passkeys/Entra. TOTP is app-only;
+com and org do not expose TOTP enrollment, sign-in, Step-Up, or settings routes.
 
 Compatibility routes must not be treated as new authority assignments. If implementation currently
 mutates session, refresh, preference, dashboard, withdrawal, token, account, or step-up freshness

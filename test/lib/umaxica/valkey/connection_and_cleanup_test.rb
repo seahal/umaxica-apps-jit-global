@@ -34,6 +34,15 @@ class UmaxicaValkeyConnectionAndCleanupTest < ActiveSupport::TestCase
     end
   end
 
+  test "uses the bounded auth-state network policy" do
+    options = Umaxica::Valkey::Connection::AUTH_STATE_CLIENT_OPTIONS
+
+    assert_in_delta 0.25, options.fetch(:connect_timeout), 0.0
+    assert_in_delta 0.25, options.fetch(:read_timeout), 0.0
+    assert_in_delta 0.25, options.fetch(:write_timeout), 0.0
+    assert_equal 0, options.fetch(:reconnect_attempts)
+  end
+
   test "cleanup deletes only the namespaced prefix" do
     key = @connection.key("probe")
     @connection.call("SET", key, "1", "EX", 30)

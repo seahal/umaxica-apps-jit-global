@@ -74,22 +74,16 @@ describe("PasskeyAuthenticationPanel", () => {
     options_url: "/sign/in/passkey/options",
     verification_url: "/sign/in/passkey/verification",
     region: "jp",
-    identifier_param: "identifier",
+    identifier_param: null,
     turnstile_site_key: "site-key",
     turnstile_error_message: "検証に失敗しました",
-    field: {
-      label: "メールアドレスまたはID",
-      placeholder: "someone@example.test",
-      min_length: 3,
-      max_length: 255,
-      pattern: ".+",
-    },
+    field: null,
     submit_label: "パスキーでログイン",
   };
 
   const start = async (
     overrides: Partial<PasskeyAuthenticationPanelProps> = {},
-    identifier = "someone@example.test",
+    identifier = "",
   ) => {
     const screen = mount(
       <PasskeyAuthenticationPanel
@@ -105,14 +99,10 @@ describe("PasskeyAuthenticationPanel", () => {
     return screen;
   };
 
-  it("renders the field the server described", () => {
+  it("renders the ceremony without an identifier field", () => {
     const screen = mount(<PasskeyAuthenticationPanel {...props} />);
-    const input = screen.container.querySelector<HTMLInputElement>("input#identifier");
-
-    expect(input?.placeholder).toBe("someone@example.test");
-    expect(input?.minLength).toBe(3);
-    expect(input?.maxLength).toBe(255);
-    expect(screen.text("label")).toBe("メールアドレスまたはID");
+    expect(screen.container.querySelector("input#identifier")).toBeNull();
+    expect(screen.container.querySelector("label")).toBeNull();
     expect(screen.text("button")).toBe("パスキーでログイン");
   });
 
@@ -158,13 +148,7 @@ describe("PasskeyAuthenticationPanel", () => {
     expect(solveInvisibleTurnstile).not.toHaveBeenCalled();
   });
 
-  it("refuses to start on a blank identifier", async () => {
-    const screen = await start({}, "   ");
-
-    expect(screen.text("[role=alert]")).toBe(PASSKEY_MESSAGES.identifierRequired);
-  });
-
-  it("carries the token, identifier and assertion to the server, then follows its redirect", async () => {
+  it("carries the token and assertion without an identifier, then follows its redirect", async () => {
     credentials.get.mockResolvedValue(assertionCredential());
     const fetchMock = stubFetchQueue(
       jsonResponse({ challenge_id: "challenge-1", options: REQUEST_OPTIONS }),
@@ -176,10 +160,10 @@ describe("PasskeyAuthenticationPanel", () => {
 
     expect(requestUrl(fetchMock, 0)).toBe("/sign/in/passkey/options");
     expect(requestBody(fetchMock, 0)).toEqual({
-      identifier: "someone@example.test",
       "cf-turnstile-response": "turnstile-token",
       ri: "jp",
     });
+    expect(requestBody(fetchMock, 0)).not.toHaveProperty("identifier");
     expect(requestUrl(fetchMock, 1)).toBe("/sign/in/passkey/verification");
     expect(requestBody(fetchMock, 1)).toMatchObject({
       challenge_id: "challenge-1",
@@ -260,11 +244,11 @@ describe("PasskeyAuthenticationPanel", () => {
   });
 
   it("surfaces the server's own message when the options request is refused", async () => {
-    stubFetchQueue(jsonResponse({ error: "識別子が必要です" }, 422));
+    stubFetchQueue(jsonResponse({ error: "認証を開始できません" }, 422));
 
     const screen = await start();
 
-    expect(screen.text("[role=alert]")).toBe("識別子が必要です");
+    expect(screen.text("[role=alert]")).toBe("認証を開始できません");
   });
 
   it("falls back to the ceremony message for a JSON refusal that names no reason", async () => {

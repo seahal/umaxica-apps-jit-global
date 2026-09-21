@@ -13,7 +13,7 @@ module Core
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
 
-        before_action :authenticate!, only: :create
+        before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -36,6 +36,7 @@ module Core
             client_id: "core-org",
             issuer_resource_type: "operator",
             token_issuer: "operator",
+            session_authority: :rp_session,
           )
         end
 

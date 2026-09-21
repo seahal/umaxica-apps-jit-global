@@ -63,6 +63,12 @@ Current surface terminology and inventory:
 The app/com sign-up checkpoint owns required registration setup before durable account finalization.
 Birthdate is a sign-up checkpoint requirement for app/com end-user registration.
 
+Email and telephone OTP verification is bound to the surface-local sign-up ticket. The app and com
+controllers pass the ticket `public_id` as the ceremony nonce, and `SignOtpCeremony` rejects a
+missing or mismatched nonce before looking up or consuming the contact OTP. The ticket and signed
+flow context, rather than a request-supplied contact identifier, remain authoritative for the
+checkpoint transition.
+
 ## Shared Completion Boundary
 
 All sign-up routes converge on the shared sign-up finalization boundary:
@@ -82,7 +88,7 @@ stops before durable completion.
 ## Ceremony Cleanup
 
 Credential ceremony transaction tables use short-lived `expires_at` windows, not the account
-retention `purged_at` lifecycle. Production recurring cleanup therefore registers the dedicated
+retention `purge_eligible_at` lifecycle. Production recurring cleanup therefore registers the dedicated
 `EmailCeremonyTransactionPurgeJob`, `PasskeyCeremonyTransactionPurgeJob`,
 `SecretCredentialCeremonyTransactionPurgeJob`, `SocialCeremonyTransactionPurgeJob`,
 `StepUpCeremonyTransactionPurgeJob`, `TelephoneCeremonyTransactionPurgeJob`, and

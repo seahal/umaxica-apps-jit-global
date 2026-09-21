@@ -37,7 +37,7 @@ class CoreBrowserCredentialContractTest < ActiveSupport::TestCase
   test "core browser access token expiry is capped by the root session deadline" do
     now = Time.utc(2026, 9, 13, 9, 0)
     absolute_expiry = now + 2.minutes
-    token = Struct.new(:discarded_at).new(absolute_expiry)
+    token = Struct.new(:discard_at).new(absolute_expiry)
 
     assert_equal absolute_expiry,
                  CoreBrowserCredentialContract.access_token_expires_at_for(token_record: token, now: now)

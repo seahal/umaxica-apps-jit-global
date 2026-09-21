@@ -44,7 +44,7 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
       host = surface.fetch(:host)
       token_record = surface.fetch(:build_token).call(self)
       absolute_expiry = 2.minutes.from_now.change(usec: 0)
-      token_record.update!(discarded_at: absolute_expiry)
+      token_record.update!(discard_at: absolute_expiry)
       refresh_plain = token_record.rotate_refresh_token!
 
       host! host
@@ -216,7 +216,7 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
       refresh_plain = token_record.rotate_refresh_token!
       token_record.update!(
         token_record.class.token_status_foreign_key => token_record.class.token_status_model::RESTRICTED,
-        :discarded_at => Time.current,
+        :discard_at => Time.current,
       )
 
       host!(host)

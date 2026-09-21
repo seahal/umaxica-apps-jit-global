@@ -202,37 +202,12 @@ module OidcSsoInitiator
     Integer(ENV.fetch("PORT"), exception: false) || 3000
   end
 
-  # Tighten the OIDC pt to a same-host internal path.
-  #
-  # Mirrors the shape of CommonRedirect#safe_internal_path (path?query
-  # only, no scheme / host / userinfo / control chars). Inlined here instead
-  # of delegated because OidcSsoInitiator is included on acme application
-  # controllers that already mix in CommonRedirect via other paths, and we
-  # want this validator to be self-contained while the broader unification
-  # is planned separately. Future work: share the helper.
+  # Tighten the OIDC pt to a same-host internal path using the repository's shared resolver.
+  # The resolver also rejects nested redirect parameters, encoded host escapes, and control
+  # characters that a URI-only check would otherwise accept.
   def safe_oidc_pt(pt)
-    target = pt.to_s
-    return "/" if target.blank?
-    return "/" if target.match?(/[[:cntrl:]]/)
-
-    begin
-      uri = URI.parse(target)
-    rescue URI::InvalidURIError
-      return "/"
-    end
-
-    return "/" if uri.user.present? || uri.password.present?
-
-    if uri.scheme.present? || uri.host.present?
-      scheme_ok = %w(http https).include?(uri.scheme)
-      host_ok = uri.host.present? && uri.host == request.host
-      return "/" unless scheme_ok && host_ok
-    end
-
-    path = uri.path.presence || "/"
-    return "/" unless path.start_with?("/")
-
-    uri.query.present? ? "#{path}?#{uri.query}" : path
+    result = RedirectsPathTargetResolver.call(pt.to_s, source: :oidc_return_target)
+    result.ok? ? result.value : "/"
   end
 
   def oidc_client_id

@@ -15,14 +15,14 @@
 #  cleanup_error_code              :string
 #  completed_at                    :datetime
 #  completed_requirements          :jsonb            not null
-#  discarded_at                    :datetime         default(Infinity), not null
+#  discard_at                    :datetime         default(Infinity), not null
 #  entry_method                    :string           not null
 #  expires_at                      :datetime         not null
 #  failed_at                       :datetime
 #  issued_at                       :datetime         not null
 #  nonce_digest                    :string           not null
 #  pending_contact_type            :string
-#  purged_at                       :datetime         default(Infinity), not null
+#  purge_eligible_at                       :datetime         default(Infinity), not null
 #  return_to                       :text
 #  social_provider                 :string
 #  state                           :string           not null
@@ -39,8 +39,8 @@
 #
 # Indexes
 #
-#  index_client_sign_up_flows_on_cleanup_status_id_and_purged_at  (cleanup_status_id,purged_at)
-#  index_client_sign_up_flows_on_discarded_at                     (discarded_at)
+#  index_client_sign_up_flows_on_cleanup_status_id_and_purge_eligible_at  (cleanup_status_id,purge_eligible_at)
+#  index_client_sign_up_flows_on_discard_at                     (discard_at)
 #  index_client_sign_up_flows_on_expires_at                       (expires_at)
 #  index_client_sign_up_flows_on_pending_contact_id               (pending_contact_id)
 #  index_client_sign_up_flows_on_pending_passkey_registration_id  (pending_passkey_registration_id)
@@ -54,7 +54,7 @@
 #
 #  fk_rails_...  (cleanup_status_id => client_sign_up_flow_cleanup_statuses.id)
 #  fk_rails_...  (status_id => client_sign_up_flow_statuses.id) ON DELETE => restrict
-#  fk_rails_...  (token_id => client_tokens.id) ON DELETE => cascade
+#  fk_rails_...  (token_id => client_tokens.id) ON DELETE => restrict
 #
 class ClientSignUpFlow < AppTicketRecord
   include SignFlow

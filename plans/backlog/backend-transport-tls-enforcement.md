@@ -1,5 +1,8 @@
 # Backend Transport TLS Enforcement
 
+Status: application-side fail-closed guards implemented on 2026-09-20. Provider values and live
+handshakes remain deployment verification items.
+
 ## Context
 
 The OWASP ASVS 5.0 review of 2026-09-19
@@ -19,7 +22,7 @@ values. The code does not refuse an unencrypted connection in production.
 The current production values were not inspected; this plan does not claim that production is
 unencrypted.
 
-## Proposal
+## Implemented application contract
 
 Make the transport requirement explicit and fail at boot when it is not met, following
 `no-silent-fallback`.
@@ -33,7 +36,7 @@ Make the transport requirement explicit and fail at boot when it is not met, fol
 3. Record the transport rule in an ADR and in `docs/operations/`, including which environment
    variables carry it.
 
-## Before implementation
+## Remaining deployment verification
 
 - Confirm the current production values of the four variables above, and that the managed
   PostgreSQL and Valkey providers support certificate verification.

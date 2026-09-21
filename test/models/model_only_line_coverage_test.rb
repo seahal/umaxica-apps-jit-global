@@ -85,8 +85,8 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
       record.discard_now!(purge_after: 1.day, now: now)
     end
 
-    assert_equal record.created_at, updates.last[:discarded_at]
-    assert_operator updates.last[:purged_at], :>, updates.last[:discarded_at]
+    assert_equal record.created_at, updates.last[:discard_at]
+    assert_operator updates.last[:purge_eligible_at], :>, updates.last[:discard_at]
   end
 
   test "preference value records apply their default option ids" do
@@ -496,19 +496,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
         result_jti: "collision-result", method: "totp", aal: "aal2",
         verified_at: now, consumed_at: now,
       )
-    end
-  end
-
-  test "oidc authorization resume URL delegates to the configured Acme origin" do
-    origin = Object.new
-    origin.define_singleton_method(:authorization_endpoint) do |query:|
-      "https://acme.example.test/authorize?login_challenge=#{query.fetch(:login_challenge)}"
-    end
-    transaction = ClientOidcAuthorizationTransaction.new(login_challenge: "login-challenge")
-
-    Oidc::AcmeServiceOrigin.stub(:from, origin) do
-      assert_equal "https://acme.example.test/authorize?login_challenge=login-challenge",
-                   transaction.acme_resume_url
     end
   end
 

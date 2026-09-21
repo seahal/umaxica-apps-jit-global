@@ -79,7 +79,7 @@ class WithdrawalPersonalDataAnonymizer
   def revoke_records(scope, status_column:, revoked_status:)
     scope.find_each do |record|
       attrs = { status_column => revoked_status }
-      attrs[:discarded_at] = Time.current if record.respond_to?(:discarded_at=)
+      attrs[:discard_at] = Time.current if record.respond_to?(:discard_at=)
       record.update!(attrs)
     end
   end

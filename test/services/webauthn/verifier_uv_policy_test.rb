@@ -38,9 +38,11 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
   test "registration options and every assertion purpose request required user verification" do
     registration_options = Webauthn::RegistrationVerifier.options_for(
       config: @config, user_id: SecureRandom.urlsafe_base64(32), user_name: "user@example.com",
+      surface: :app,
     )
 
     assert_equal "required", registration_options.authenticator_selection[:user_verification]
+    assert_equal "required", registration_options.authenticator_selection[:resident_key]
 
     %i(direct_sign_in mfa_challenge ordinary_step_up high_risk_step_up).each do |purpose|
       options = Webauthn::AssertionVerifier.options_for(config: @config, allow_ids: [], purpose: purpose)

@@ -5,7 +5,7 @@ require "test_helper"
 class RefreshTokenConcurrencyTest < ActiveSupport::TestCase
   test "concurrent refresh attempts cannot both rotate the same client token" do
     user = create_verified_user_with_email(email_address: "refresh-race-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     refresh = token.rotate_refresh_token!
     digest = ClientToken.digest_refresh_token(ClientToken.parse_refresh_token(refresh).last)
 
@@ -397,7 +397,7 @@ class RefreshTokenConcurrencyTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -415,7 +415,7 @@ class RefreshTokenConcurrencyTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -435,7 +435,7 @@ class RefreshTokenConcurrencyTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

@@ -78,7 +78,7 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     # Redirect to Base identity through Jump RT after restricted-session promotion.
     assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
     assert_includes response.location, "rt="
-    assert_not_nil active_token.reload.discarded_at
+    assert_not_nil active_token.reload.discard_at
     assert_equal VisitorTokenStatus::ACTIVE, @token.reload.visitor_token_status_id
   end
 
@@ -92,8 +92,8 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
           headers: headers
 
     assert_response :redirect
-    assert_not_nil first.reload.discarded_at
-    assert_not_nil second.reload.discarded_at
+    assert_not_nil first.reload.discard_at
+    assert_not_nil second.reload.discard_at
     assert_predicate @token.reload, :currently_usable?
   end
 
@@ -548,7 +548,7 @@ class Auth::Com::Sign::In::SessionsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -570,7 +570,7 @@ class Auth::Com::Sign::In::SessionsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -594,7 +594,7 @@ class Auth::Com::Sign::In::SessionsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

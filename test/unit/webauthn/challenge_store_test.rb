@@ -63,7 +63,7 @@ module Webauthn
 
           assert_raises(
             Webauthn::ChallengeStore::ChallengePurposeMismatchError,
-            "a #{issued} challenge was accepted by the identifier-first #{consumed} verifier",
+            "a #{issued} challenge was accepted by the actor-returning #{consumed} verifier",
           ) do
             @store.consume_with_actor!(id, purpose: consumed, **APP_BINDING.except(:actor_global_key))
           end

@@ -15,6 +15,11 @@ import VerificationFormFields from "./VerificationFormFields";
 export type TotpEntryForm = VerificationFormBase & {
   code_label: string;
   code_placeholder: string;
+  credential_selector?: {
+    name: string;
+    label: string;
+    options: { value: string; label: string }[];
+  };
 };
 
 export type TotpEntryTurnstile = {
@@ -71,6 +76,26 @@ export default function TotpEntry({
           inputMode="numeric"
           placeholder={form.code_placeholder}
         />
+
+        {form.credential_selector ? (
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            <span>{form.credential_selector.label}</span>
+            <select
+              name={form.credential_selector.name}
+              defaultValue={form.credential_selector.options[0]?.value}
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg"
+            >
+              {form.credential_selector.options.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <TurnstileWidget
           site_key={turnstile.site_key}

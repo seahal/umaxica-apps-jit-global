@@ -21,7 +21,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     connection = OperatorOidcConnection.create!(
       staff: operator, client_id: "org-console-rp", last_used_at: 3.days.ago,
@@ -42,7 +42,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "org-console-rp")
     replayed = usage.issue_refresh_token!
@@ -82,7 +82,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     connection = VisitorOidcConnection.create!(
       visitor: visitor, client_id: "com-portal-rp", last_used_at: 3.days.ago,
@@ -103,7 +103,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     usage = VisitorRpSession.create!(visitor_token: token, oidc_client_id: "com-portal-rp")
     replayed = usage.issue_refresh_token!
@@ -143,7 +143,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "org-console-rp")
     refresh_token = usage.issue_refresh_token!

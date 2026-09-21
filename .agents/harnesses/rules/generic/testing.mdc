@@ -18,11 +18,29 @@ Cover every case relevant to the change:
   access is redirected or rejected.
 - **Authorization** — when a policy, role, or actor context is involved, assert that an authorized
   actor is allowed and an unauthorized one is denied.
-- **Edge cases** — empty/nil values, invalid format, expired token, wrong host, wrong route, missing
-  cookie, restricted session, verification incomplete, already-existing record, idempotent re-entry.
+- **Edge cases** — type-appropriate sentinels and states that can reach the public interface under
+  test (missing or empty values, zero, invalid format, expired token, wrong host, wrong route,
+  missing cookie, restricted session, verification incomplete, already-existing record, idempotent
+  re-entry). Do not import sentinels from another language's type system.
 
-For model-layer validation or classification logic, include boundary value analysis and equivalence
-partitioning whenever validations, ranges, limits, formats, or categorizable inputs are involved.
+## Boundaries and partitions
+
+These obligations apply when a **public** contract includes a range, limit, format, or
+classification. They do not require extra cases on private or protected subroutines, and they do
+not replace success, failure, and authorization coverage.
+
+- **Boundaries (MUST):** for each identified boundary, verify the nearest representable value
+  immediately below it, the boundary itself, and the nearest representable value immediately above
+  it. When a neighboring value is not representable, valid, or reachable, use the nearest available
+  value and record that exception in the test name or a comment on that test.
+- **Partitions (SHOULD):** take one representative value from each equivalence partition. Add
+  further points inside a partition only when the contract distinguishes values inside that
+  partition. Three points around a cutoff are boundary cases, not extra partition representatives.
+- **Sentinels (MUST):** verify sentinel and edge inputs that can reach the tested public interface,
+  using values that belong to that interface's types.
+- **Traceability (SHOULD):** make the technique, boundary, partition, and any boundary exception
+  recoverable from the test name and assertion. Do not add a separate traceability matrix, helper,
+  or test-only wrapper to record it.
 
 ## Quality (FIRST, and readable)
 
@@ -79,5 +97,5 @@ hides business meaning.
 
 ## Tools
 
-Use Minitest for Ruby and `pnpm test` (Vitest) for JavaScript. When a change spans both languages, add
-coverage on both sides where behavior changes.
+Use Minitest for Ruby (`bin/rails test`) and Vitest for JavaScript (`bun run test`). When a change
+spans both languages, add coverage on both sides where behavior changes.

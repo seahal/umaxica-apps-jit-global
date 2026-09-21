@@ -114,7 +114,7 @@ module AuthenticationSequenceGate
 
         cycle.reload.update!(changes)
       end
-      if session[:oidc_authorization_login_challenge].present?
+      if oidc_authorization_login_challenge.present?
         redirect_to(after_login_path, allow_other_host: after_login_allows_other_host?)
         return
       end
@@ -507,9 +507,9 @@ module AuthenticationSequenceGate
     true
   end
 
-  def promote_current_session_limit_cycle_for_oidc_handoff!(actor, auth_method:)
+  def promote_current_session_limit_cycle_for_oidc_handoff!(actor)
     cycle = current_db_sign_in_flow_for_sequence
-    challenge = session[:oidc_authorization_login_challenge]
+    challenge = oidc_authorization_login_challenge
     return nil unless cycle&.sign_in_session_limit_pending?
     return nil if challenge.blank?
 
@@ -533,7 +533,7 @@ module AuthenticationSequenceGate
     )
     return nil unless session_result[:status] == :success && current_session
 
-    bind_session_and_register_oidc!(cycle, actor, challenge, auth_method, current_session)
+    bind_session_for_oidc_handoff!(cycle, actor, current_session)
   end
 
   def advance_oidc_session_promotion!(cycle, actor)
@@ -554,7 +554,7 @@ module AuthenticationSequenceGate
     true
   end
 
-  def bind_session_and_register_oidc!(cycle, actor, challenge, auth_method, issued_session)
+  def bind_session_for_oidc_handoff!(cycle, actor, issued_session)
     with_sign_in_flow_writing(cycle) do
       changes = {
         status_id: cycle.status_id_for("DASHBOARD_PENDING"),
@@ -566,22 +566,9 @@ module AuthenticationSequenceGate
       cycle.reload.update!(changes)
     end
 
-    issuance =
-      BaseAuthAdmissionCoordinator.register_result_and_issue_resume!(
-        surface: sign_in_sequence_surface.to_s,
-        login_challenge: challenge,
-        actor: actor,
-        session_ref: issued_session.public_id,
-        auth_method: auth_method,
-        acr: "aal1",
-        authentication_event_at: current_authentication_event_at,
-      )
-
-    session.delete(:oidc_authorization_login_challenge)
-    session.delete(:oidc_authorization_intent)
     sign_in_flow_locator_for(actor: actor, token: issued_session).issue!(cycle.reload)
     reset_current_db_sign_in_flow_for_sequence!
-    issuance.resume_url
+    oidc_authorization_after_login_path
   end
 
   def issue_active_session_for_selector!(cycle)

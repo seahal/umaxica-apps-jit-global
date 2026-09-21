@@ -22,7 +22,7 @@ module OidcAuthorizationTransactionable
               :nonce, :code_challenge, :code_challenge_method, :login_challenge, :login_challenge_expires_at,
               :expires_at, :status, presence: true
     validates :surface, inclusion: { in: %w(app com org) }
-    validates :intent, inclusion: { in: %w(sign_in sign_up invitation reauthentication step_up) }
+    validates :intent, inclusion: { in: %w(authentication sign_in sign_up invitation reauthentication step_up) }
     validates :response_type, inclusion: { in: ["code"] }
     validates :oidc_prompt, inclusion: { in: OidcAuthorizeRequestResolver::SUPPORTED_PROMPTS }, allow_nil: true
     validates :oidc_max_age, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
@@ -120,7 +120,7 @@ module OidcAuthorizationTransactionable
         locked = self.class.lock.find(id)
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: now)
         raise ArgumentError, "authorization transaction expired" if locked.login_challenge_expired?(now: now)
-        raise ArgumentError, "authorization transaction already consumed" if locked.consumed?
+        raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
 
         locked.update!(
           actor_ref: actor_ref.to_s,
@@ -150,14 +150,6 @@ module OidcAuthorizationTransactionable
         locked
       end
     end
-  end
-
-  def acme_resume_url
-    origin = Oidc::AcmeServiceOrigin.from(
-      Rails.configuration.x.boot_config.fetch(:hosts).base_service.to_s,
-      default_scheme: "https",
-    )
-    origin.authorization_endpoint(query: { login_challenge: login_challenge })
   end
 
   private

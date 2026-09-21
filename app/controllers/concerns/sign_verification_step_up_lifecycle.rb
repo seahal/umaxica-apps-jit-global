@@ -15,19 +15,28 @@ module SignVerificationStepUpLifecycle
 
   def consume_step_up_session!(method: nil)
     rs = current_step_up_session
+    return handle_invalid_step_up_session! unless rs
+
     scope = rs.scope
     method = method.presence || rs.try(:method).presence
 
     now = Time.current
     ActiveRecord::Base.connected_to(role: :writing) do
-      transaction = current_step_up_ceremony_transaction!(scope: scope, now: now)
-      result_token = issue_step_up_result!(transaction:, scope:, method:, rs:, now:)
-      record_step_up_success!
+      result_token =
+        rs.class.consume_pending!(id: rs.id, now: now) do |locked_rs|
+          next unless valid_step_up_session?(locked_rs)
 
-      clear_step_up_state!
-      rs.destroy!
-      clear_acme_step_up_completion_state! if respond_to?(:clear_acme_step_up_completion_state!, true)
-      return render_acme_step_up_completion!(result_token: result_token, ri: params[:ri])
+          transaction = current_step_up_ceremony_transaction!(scope:, now:)
+          result = issue_step_up_result!(transaction:, scope:, method:, rs: locked_rs, now:)
+          record_step_up_success!
+          clear_step_up_state!
+          clear_acme_step_up_completion_state! if respond_to?(:clear_acme_step_up_completion_state!, true)
+          result
+        end
+
+      return handle_invalid_step_up_session! unless result_token
+
+      return render_acme_step_up_completion!(result_token:, ri: params[:ri])
     end
   end
 
@@ -43,7 +52,7 @@ module SignVerificationStepUpLifecycle
       method: method,
       phishing_resistant: step_up_phishing_resistant?(method),
       challenge_id: rs.id,
-      expires_at: [transaction.expires_at, rs.discarded_at].compact.min,
+      expires_at: [transaction.expires_at, rs.discard_at].compact.min,
       attempt_count: rs.attempt_count,
       now: now,
     )

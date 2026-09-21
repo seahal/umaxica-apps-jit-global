@@ -36,8 +36,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::NOTHING,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_challenge: SecureRandom.hex(16),
       dbsc_challenge_issued_at: Time.current,
     )
@@ -77,8 +77,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::NOTHING,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_challenge: SecureRandom.hex(16),
       dbsc_challenge_issued_at: Time.current,
     )
@@ -104,8 +104,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::NOTHING,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
     )
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
@@ -133,8 +133,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::DBSC,
       user_token_dbsc_status_id: ClientTokenDbscStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_session_id: "session-abc",
       dbsc_public_key: @jwk.export,
     )
@@ -163,8 +163,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::DBSC,
       user_token_dbsc_status_id: ClientTokenDbscStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_session_id: "session-abc",
       dbsc_public_key: @jwk.export,
     )
@@ -191,8 +191,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::DBSC,
       user_token_dbsc_status_id: ClientTokenDbscStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_session_id: "session-abc",
       dbsc_public_key: @jwk.export,
       dbsc_challenge: SecureRandom.hex(16),
@@ -235,8 +235,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::NOTHING,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
     )
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
@@ -268,8 +268,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::NOTHING,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_challenge: SecureRandom.hex(16),
       dbsc_challenge_issued_at: Time.current,
     )
@@ -309,8 +309,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::NOTHING,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_challenge: SecureRandom.hex(16),
       dbsc_challenge_issued_at: Time.current,
     )
@@ -336,8 +336,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::NOTHING,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
     )
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
@@ -365,8 +365,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::DBSC,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_session_id: "session-abc",
       dbsc_public_key: @jwk.export,
     )
@@ -394,8 +394,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::DBSC,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_session_id: "session-abc",
       dbsc_public_key: @jwk.export,
     )
@@ -422,8 +422,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::DBSC,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
       dbsc_session_id: "session-abc",
       dbsc_public_key: @jwk.export,
       dbsc_challenge: SecureRandom.hex(16),
@@ -466,8 +466,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_binding_method_id: OperatorTokenBindingMethod::NOTHING,
       staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
     )
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
@@ -490,8 +490,8 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_binding_method_id: ClientTokenBindingMethod::NOTHING,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      purged_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 1.day.from_now,
     )
 
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = "invalid-token-format"

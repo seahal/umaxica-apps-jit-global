@@ -122,8 +122,8 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   def assert_expired_session_cannot_authenticate(surface)
     travel_to(Time.utc(2026, 9, 13, 9, 0))
     principal, token, host, resource_type = create_actor_session_token(surface)
-    token.update!(discarded_at: 1.hour.from_now)
-    absolute_expiry = token.discarded_at
+    token.update!(discard_at: 1.hour.from_now)
+    absolute_expiry = token.discard_at
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)
     BaseSelectorAuthority.prepare(surface: surface, principal: principal, session: token)
     access_token = AuthenticationToken.encode(
@@ -162,7 +162,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       principal.update!(status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(
         user: principal, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-        user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 30.days.from_now,
+        user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       )
       [principal, token, host, "client"]
     when :com
@@ -170,7 +170,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       principal = visitors(:reserved_visitor)
       token = VisitorToken.create!(
         visitor: principal, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 30.days.from_now,
+        visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       )
       [principal, token, host, "visitor"]
     when :org
@@ -178,7 +178,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       principal = operators(:one)
       token = OperatorToken.create!(
         staff: principal, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-        staff_token_status_id: OperatorTokenStatus::ACTIVE, discarded_at: 30.days.from_now,
+        staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
         staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
         authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
       )
@@ -189,18 +189,18 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   def create_other_com_session(visitor)
     VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
   end
 
   def create_other_org_session(operator, except:)
-    OperatorToken.where(staff_id: operator.id).where.not(id: except.id).update_all(discarded_at: Time.current)
+    OperatorToken.where(staff_id: operator.id).where.not(id: except.id).update_all(discard_at: Time.current)
     OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_binding_method_id: OperatorTokenBindingMethod::DBSC,
       authentication_context: AuthenticationContextValue::NORMAL_KEY,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
   end
 

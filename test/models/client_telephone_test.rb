@@ -7,7 +7,7 @@
 # Database name: app_principal
 #
 #  id                                :bigint           not null, primary key
-#  discarded_at                      :datetime         default(Infinity), not null
+#  discard_at                      :datetime         default(Infinity), not null
 #  locked_at                         :datetime         default(-Infinity), not null
 #  number                            :string           default(""), not null
 #  number_digest                     :string
@@ -15,7 +15,7 @@
 #  otp_counter                       :text             default(""), not null
 #  otp_expires_at                    :datetime         default(-Infinity), not null
 #  otp_private_key                   :string           default(""), not null
-#  purged_at                         :datetime         default(Infinity), not null
+#  purge_eligible_at                         :datetime         default(Infinity), not null
 #  created_at                        :datetime         not null
 #  updated_at                        :datetime         not null
 #  public_id                         :string(21)       not null
@@ -25,9 +25,9 @@
 # Indexes
 #
 #  index_client_telephones_on_active_number_digest               (number_digest) UNIQUE WHERE ((number_digest IS NOT NULL) AND (user_identity_telephone_status_id <> 4))
-#  index_client_telephones_on_discarded_at                       (discarded_at)
+#  index_client_telephones_on_discard_at                       (discard_at)
 #  index_client_telephones_on_public_id                          (public_id) UNIQUE
-#  index_client_telephones_on_purged_at                          (purged_at)
+#  index_client_telephones_on_purge_eligible_at                          (purge_eligible_at)
 #  index_client_telephones_on_user_id                            (user_id)
 #  index_client_telephones_on_user_identity_telephone_status_id  (user_identity_telephone_status_id)
 #
@@ -169,8 +169,8 @@ class ClientTelephoneTest < ActiveSupport::TestCase
       @valid_attributes.merge(
         raw_number: "+15557654322",
         user_telephone_status_id: ClientTelephoneStatus::DELETED,
-        discarded_at: 1.minute.ago,
-        purged_at: 29.minutes.from_now,
+        discard_at: 1.minute.ago,
+        purge_eligible_at: 29.minutes.from_now,
       ),
     )
     retry_telephone = ClientTelephone.new(@valid_attributes.merge(raw_number: "+1 (555) 765-4322"))
@@ -450,7 +450,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
             release.pop
             locked.update!(
               user_telephone_status_id: ClientTelephoneStatus::DELETED,
-              discarded_at: Time.current,
+              discard_at: Time.current,
             )
           end
           results << { status: :deleted }

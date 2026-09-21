@@ -12,8 +12,8 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
     cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
@@ -40,8 +40,8 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
     visitor.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ceremony = VisitorWithdrawalCeremony.issue!(subject: visitor, request: ActionDispatch::TestRequest.create)
     cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
@@ -66,8 +66,8 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     privacy_request = ClientPrivacyRequest.create!(client: client)
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
@@ -87,8 +87,8 @@ class PrivacyErasureRequestTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ClientPrivacyRequest.create!(client: client, status_id: ClientPrivacyRequest.status_id_for("PROCESSING"))
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)

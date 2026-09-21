@@ -9,7 +9,7 @@
 #  id                                  :bigint           not null, primary key
 #  consumed_at                         :datetime
 #  delivery_method                     :string
-#  discarded_at                        :datetime         default(Infinity), not null
+#  discard_at                        :datetime         default(Infinity), not null
 #  failure_count                       :integer          default(0), not null
 #  issued_at                           :datetime
 #  issued_by_ref                       :string
@@ -23,7 +23,7 @@
 #  name                                :string           default(""), not null
 #  not_before_at                       :datetime
 #  password_digest                     :string           default(""), not null
-#  purged_at                           :datetime         default(Infinity), not null
+#  purge_eligible_at                           :datetime         default(Infinity), not null
 #  revoked_at                          :datetime
 #  safe_prefix                         :string
 #  scope                               :string
@@ -65,7 +65,7 @@ class VisitorSecretCredentialTest < ActiveSupport::TestCase
       name: "My Secret",
       visitor_secret_credential_status_id: VisitorSecretCredentialStatus::ACTIVE,
       visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN,
-      discarded_at: 1.year.from_now,
+      discard_at: 1.year.from_now,
       uses_remaining: 1,
     }.freeze
   end
@@ -154,7 +154,7 @@ class VisitorSecretCredentialTest < ActiveSupport::TestCase
   test "expired_for_secret_credential_sign_in?" do
     secret_credential, _ = VisitorSecretCredential.issue!(
       name: "Expired", visitor: @visitor,
-      discarded_at: 1.second.ago,
+      discard_at: 1.second.ago,
     )
 
     assert_not secret_credential.usable_for_secret_credential_sign_in?
@@ -207,7 +207,7 @@ class VisitorSecretCredentialTest < ActiveSupport::TestCase
     )
     expired, expired_raw = VisitorSecretCredential.issue!(
       name: "Expired Secret", visitor: @visitor,
-      discarded_at: 1.second.ago,
+      discard_at: 1.second.ago,
     )
     exhausted, exhausted_raw = VisitorSecretCredential.issue!(
       name: "Exhausted",
@@ -570,7 +570,7 @@ class VisitorSecretCredentialTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -588,7 +588,7 @@ class VisitorSecretCredentialTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -608,7 +608,7 @@ class VisitorSecretCredentialTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

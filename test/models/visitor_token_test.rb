@@ -10,7 +10,7 @@
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -22,7 +22,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -50,12 +50,12 @@
 #  index_visitor_tokens_on_created_at                       (created_at)
 #  index_visitor_tokens_on_dbsc_session_id                  (dbsc_session_id) UNIQUE
 #  index_visitor_tokens_on_device_session_id                (device_session_id)
-#  index_visitor_tokens_on_discarded_at                     (discarded_at)
+#  index_visitor_tokens_on_discard_at                     (discard_at)
 #  index_visitor_tokens_on_oidc_connection_id               (oidc_connection_id)
 #  index_visitor_tokens_on_oidc_jti                         (oidc_jti)
 #  index_visitor_tokens_on_oidc_sid                         (oidc_sid)
 #  index_visitor_tokens_on_public_id                        (public_id) UNIQUE
-#  index_visitor_tokens_on_purged_at                        (purged_at)
+#  index_visitor_tokens_on_purge_eligible_at                        (purge_eligible_at)
 #  index_visitor_tokens_on_refresh_token_digest             (refresh_token_digest) UNIQUE
 #  index_visitor_tokens_on_refresh_token_family_id          (refresh_token_family_id)
 #  index_visitor_tokens_on_rotated_at                       (rotated_at)
@@ -100,6 +100,34 @@ class VisitorTokenTest < ActiveSupport::TestCase
 
     assert_not_nil association
     assert_equal :belongs_to, association.macro
+  end
+
+  test "does not delete a token while a sign-up flow still references it" do
+    VisitorSignUpFlowStatus.ensure_defaults!
+    VisitorSignUpFlowCleanupStatus.ensure_defaults!
+    flow = VisitorSignUpFlow.create!(
+      token: @token,
+      status_id: VisitorSignUpFlowStatus::CANCELLED,
+      step: "cancelled",
+      nonce_digest: VisitorSignUpFlow.digest_nonce("nonce"),
+      issued_at: 20.minutes.ago,
+      expires_at: 5.minutes.ago,
+      entry_method: "email",
+      cleanup_status_id: VisitorSignUpFlowCleanupStatus::COMPLETED,
+    )
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { @token.destroy }
+    assert VisitorToken.exists?(@token.id)
+    assert VisitorSignUpFlow.exists?(flow.id)
+
+    assert_raises(ActiveRecord::InvalidForeignKey) do
+      VisitorToken.transaction(requires_new: true) do
+        VisitorToken.where(id: @token.id).delete_all
+      end
+    end
+
+    assert VisitorToken.exists?(@token.id)
+    assert VisitorSignUpFlow.exists?(flow.id)
   end
 
   test "can be created with visitor" do
@@ -158,8 +186,8 @@ class VisitorTokenTest < ActiveSupport::TestCase
       token = VisitorToken.create!(
         visitor: @visitor,
         visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        discarded_at: 12.hours.from_now,
-        purged_at: 4.days.from_now,
+        discard_at: 12.hours.from_now,
+        purge_eligible_at: 4.days.from_now,
       )
       token.rotate_refresh_token!
 
@@ -170,8 +198,8 @@ class VisitorTokenTest < ActiveSupport::TestCase
       replacement = result[:token]
 
       assert_equal :rotated, result[:status]
-      assert_equal token.discarded_at.to_i, replacement.discarded_at.to_i
-      assert_equal token.purged_at.to_i, replacement.purged_at.to_i
+      assert_equal token.discard_at.to_i, replacement.discard_at.to_i
+      assert_equal token.purge_eligible_at.to_i, replacement.purge_eligible_at.to_i
     end
   end
 end
@@ -515,7 +543,7 @@ class VisitorTokenTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -533,7 +561,7 @@ class VisitorTokenTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -553,7 +581,7 @@ class VisitorTokenTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

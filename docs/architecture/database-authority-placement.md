@@ -13,6 +13,13 @@
 
 This document separates current storage naming from target authority placement.
 
+Business-time reads for state decisions use the writer connection of the model that owns the
+state. `ApplicationRecord.database_now` issues an uncached `SELECT clock_timestamp()` through
+that model's writing pool. A caller obtains the value after any required row lock and passes the
+same instant through the decision unit; Rails `created_at`/`updated_at` and a replica clock are
+not substitutes for a domain event time. This helper does not change Rails' record timestamp
+metadata or establish a cross-database global clock.
+
 ## Scope
 
 It describes the intended authority placement for the current global surfaces and their database

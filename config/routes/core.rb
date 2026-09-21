@@ -64,7 +64,7 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP back-channel receiver. Canonical browser start is /sign/in + /sign/in/callback.
+      # RP back-channel receiver. Browser entry is the neutral /sign contract.
       namespace :oidc do
         namespace :backchannel do
           resource :logout, only: :create
@@ -73,8 +73,9 @@ scope module: :core, as: :core do
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do
@@ -145,7 +146,7 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP back-channel receiver. Canonical browser start is /sign/in + /sign/in/callback.
+      # RP back-channel receiver. Browser entry is the neutral /sign contract.
       namespace :oidc do
         namespace :backchannel do
           resource :logout, only: :create
@@ -154,8 +155,9 @@ scope module: :core, as: :core do
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do
@@ -226,7 +228,7 @@ scope module: :core, as: :core do
         end
       end
 
-      # RP back-channel receiver. Canonical browser start is /sign/in + /sign/in/callback.
+      # RP back-channel receiver. Browser entry is the neutral /sign contract.
       namespace :oidc do
         namespace :backchannel do
           resource :logout, only: :create
@@ -235,8 +237,9 @@ scope module: :core, as: :core do
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do

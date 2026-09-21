@@ -13,10 +13,10 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  token_valid_after_at        :datetime
 #  webauthn_user_handle        :string           not null
@@ -36,11 +36,11 @@
 #  index_operators_on_access_state           (access_state)
 #  index_operators_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_operators_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_operators_on_discarded_at           (discarded_at)
+#  index_operators_on_discard_at           (discard_at)
 #  index_operators_on_mfa_level_id           (mfa_level_id)
 #  index_operators_on_mfa_status_id          (mfa_status_id)
 #  index_operators_on_public_id              (public_id) UNIQUE
-#  index_operators_on_purged_at              (purged_at)
+#  index_operators_on_purge_eligible_at              (purge_eligible_at)
 #  index_operators_on_status_id              (status_id)
 #  index_operators_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
 #  index_operators_on_visibility_id          (visibility_id)
@@ -494,21 +494,21 @@ class OperatorTest < ActiveSupport::TestCase
     staff = Operator.create!
     token = OperatorToken.create!(
       staff: staff,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     staff.destroy
     assert_raise(ActiveRecord::RecordNotFound) { token.reload }
   end
 
-  test "purged_at query excludes operators with default purged_at" do
+  test "purge_eligible_at query excludes operators with default purge_eligible_at" do
     staff = Operator.create!
 
-    assert_not_includes Operator.where(purged_at: ..Time.current), staff
+    assert_not_includes Operator.where(purge_eligible_at: ..Time.current), staff
   end
 
-  test "purged_at query includes operators with past purged_at" do
-    staff = Operator.create!(discarded_at: 2.days.ago, purged_at: 1.day.ago)
+  test "purge_eligible_at query includes operators with past purge_eligible_at" do
+    staff = Operator.create!(discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
 
-    assert_includes Operator.where(purged_at: ..Time.current), staff
+    assert_includes Operator.where(purge_eligible_at: ..Time.current), staff
   end
 end

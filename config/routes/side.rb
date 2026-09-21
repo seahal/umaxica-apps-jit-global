@@ -72,8 +72,9 @@ scope module: :side, as: :side do
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do
@@ -164,8 +165,9 @@ scope module: :side, as: :side do
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do
@@ -255,8 +257,9 @@ scope module: :side, as: :side do
 
       # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do

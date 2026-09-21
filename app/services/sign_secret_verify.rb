@@ -112,11 +112,11 @@ class SignSecretVerify
   end
 
   def lapsed?
-    return false if @secret_credential.discarded_at.blank?
-    return false if @secret_credential.discarded_at.respond_to?(:infinite?) &&
-      @secret_credential.discarded_at.infinite?
+    return false if @secret_credential.discard_at.blank?
+    return false if @secret_credential.discard_at.respond_to?(:infinite?) &&
+      @secret_credential.discard_at.infinite?
 
-    @now >= @secret_credential.discarded_at
+    @now >= @secret_credential.discard_at
   end
 
   def revoked?

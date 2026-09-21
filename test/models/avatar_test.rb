@@ -7,11 +7,11 @@
 # Database name: avatar
 #
 #  id                           :bigint           not null, primary key
-#  discarded_at                 :datetime         default(Infinity), not null
+#  discard_at                 :datetime         default(Infinity), not null
 #  image_data                   :jsonb
 #  lock_version                 :integer          default(0), not null
 #  moniker                      :string           not null
-#  purged_at                    :datetime         default(Infinity), not null
+#  purge_eligible_at                    :datetime         default(Infinity), not null
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
 #  active_handle_id             :bigint           not null
@@ -29,7 +29,7 @@
 #  index_avatars_on_client_id                     (client_id)
 #  index_avatars_on_owner_organization_id         (owner_organization_id)
 #  index_avatars_on_public_id                     (public_id) UNIQUE
-#  index_avatars_on_purged_at                     (purged_at)
+#  index_avatars_on_purge_eligible_at                     (purge_eligible_at)
 #  index_avatars_on_representing_organization_id  (representing_organization_id)
 #
 # Foreign Keys

@@ -13,10 +13,10 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -37,11 +37,11 @@
 #  index_visitors_on_access_state           (access_state)
 #  index_visitors_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_visitors_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_visitors_on_discarded_at           (discarded_at)
+#  index_visitors_on_discard_at           (discard_at)
 #  index_visitors_on_mfa_level_id           (mfa_level_id)
 #  index_visitors_on_mfa_status_id          (mfa_status_id)
 #  index_visitors_on_public_id              (public_id) UNIQUE
-#  index_visitors_on_purged_at              (purged_at)
+#  index_visitors_on_purge_eligible_at              (purge_eligible_at)
 #  index_visitors_on_status_id              (status_id)
 #  index_visitors_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_visitors_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -59,6 +59,8 @@
 #
 
 class Visitor < ComPrincipalRecord
+  encrypts :admin_locked_reason_note
+
   # rubocop:disable Rails/HasManyOrHasOneDependent
   include Retainable
   include Withdrawable

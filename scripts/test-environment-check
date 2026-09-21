@@ -6,6 +6,7 @@ require "redis"
 require "hiredis-client"
 require "active_support/core_ext/object/blank"
 require "active_support/core_ext/object/inclusion"
+require "active_support/core_ext/enumerable"
 require "active_support/core_ext/string/filters"
 
 required = %w(

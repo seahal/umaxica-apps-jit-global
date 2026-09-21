@@ -93,7 +93,6 @@ module AuthenticationBase
     oidc_state
     oidc_nonce
     oidc_pt
-    oidc_authorization_login_challenge
   ).freeze
 
   # AuthenticationToken TTLs
@@ -393,7 +392,7 @@ module AuthenticationBase
 
   def rotate_login_refresh_token!(token_record, restricted_expires_at)
     token_record_connection_owner(token_record.class).connected_to(role: :writing) do
-      token_record.rotate_refresh_token!(discarded_at: restricted_expires_at)
+      token_record.rotate_refresh_token!(discard_at: restricted_expires_at)
     end
   end
 
@@ -1029,9 +1028,9 @@ module AuthenticationBase
         now if expiry_column == :expired_at && token_record.class.column_names.include?("revoked_at")
       if family_id.present?
         scope = token_record.class.where(refresh_token_family_id: family_id)
-        if token_record.class.column_names.include?("discarded_at")
-          discarded_at = token_record.class.arel_table[:discarded_at]
-          scope = scope.where(discarded_at.eq(nil).or(discarded_at.gt(now)))
+        if token_record.class.column_names.include?("discard_at")
+          discard_at = token_record.class.arel_table[:discard_at]
+          scope = scope.where(discard_at.eq(nil).or(discard_at.gt(now)))
         end
         # rubocop:disable Rails/SkipsModelValidations
         scope.update_all(expiry_attrs)
@@ -1270,7 +1269,7 @@ module AuthenticationBase
   end
 
   def handle_restricted_refresh_rejected(token_record, refresh_public_id)
-    restricted_expires_at = token_record.discarded_at if token_record.respond_to?(:discarded_at)
+    restricted_expires_at = token_record.discard_at if token_record.respond_to?(:discard_at)
     expired = restricted_expires_at.present? && restricted_expires_at <= Time.current
 
     if expired && !token_record.revoked?
@@ -2580,10 +2579,10 @@ module AuthenticationBase
     return {} unless %w(operator visitor).include?(resource_type)
 
     ttl_class = (resource_type == "visitor") ? VisitorToken : OperatorToken
-    discarded_at = now + ttl_class::LOGIN_SESSION_TTL
+    discard_at = now + ttl_class::LOGIN_SESSION_TTL
     {
-      discarded_at: discarded_at,
-      purged_at: discarded_at + ttl_class::DELETION_GRACE_PERIOD,
+      discard_at: discard_at,
+      purge_eligible_at: discard_at + ttl_class::DELETION_GRACE_PERIOD,
     }
   end
 
@@ -2701,7 +2700,7 @@ module AuthenticationBase
   def dbsc_cookie_expires_at_for(token_record, now: Time.current)
     return unless token_record&.binding_method_dbsc?
 
-    [now + DBSC_COOKIE_TTL, token_record.discarded_at].compact.min
+    [now + DBSC_COOKIE_TTL, token_record.discard_at].compact.min
   end
 
   def issue_dbsc_registration_header_for(token_record)
@@ -2819,7 +2818,7 @@ module AuthenticationBase
 
   def token_expiry_column(klass)
     return :expired_at if klass.column_names.include?("expired_at")
-    return :discarded_at if klass.column_names.include?("discarded_at")
+    return :discard_at if klass.column_names.include?("discard_at")
     return :revoked_at if klass.column_names.include?("revoked_at")
 
     raise ArgumentError, "#{klass.name} does not have expired_at/revoked_at column"
@@ -2834,14 +2833,14 @@ module AuthenticationBase
   end
 
   def refresh_cookie_expires_at_for(token_record)
-    [token_record_expiry_at(token_record), token_record&.discarded_at].compact.min
+    [token_record_expiry_at(token_record), token_record&.discard_at].compact.min
   end
 
   def token_record_expiry_at(token_record)
     return unless token_record
     return token_record.revoked_at if token_record.respond_to?(:revoked_at)
 
-    token_record.discarded_at if token_record.respond_to?(:discarded_at)
+    token_record.discard_at if token_record.respond_to?(:discard_at)
   end
 
   def expires_in_for(expires_at, now: Time.current)

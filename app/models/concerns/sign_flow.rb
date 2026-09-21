@@ -30,7 +30,7 @@ module SignFlow
     scope :recent_first, -> { order(created_at: :desc) }
     scope :current,
           -> do
-            where(arel_table[:discarded_at].gt(Time.current))
+            where(arel_table[:discard_at].gt(Time.current))
               .where(arel_table[:expires_at].gt(Time.current))
           end
   end
@@ -124,7 +124,7 @@ module SignFlow
   end
 
   def discard!(now: Time.current)
-    update!(discarded_at: now)
+    update!(discard_at: now)
   end
 
   private

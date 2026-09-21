@@ -200,6 +200,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { controller: "base/app/oauth/authorizations", action: "show" },
       { path: "http://#{BASE_APP_HOST}/oauth/authorize", method: :get },
     )
+    assert_recognizes(
+      { controller: "base/app/oauth/authorizations", action: "create" },
+      { path: "http://#{BASE_APP_HOST}/oauth/authorize", method: :post },
+    )
 
     assert_recognizes(
       { controller: "base/app/oauth/tokens", action: "create" },
@@ -557,6 +561,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { controller: "base/com/oauth/authorizations", action: "show" },
       { path: "http://#{BASE_COM_HOST}/oauth/authorize", method: :get },
     )
+    assert_recognizes(
+      { controller: "base/com/oauth/authorizations", action: "create" },
+      { path: "http://#{BASE_COM_HOST}/oauth/authorize", method: :post },
+    )
 
     assert_recognizes(
       { controller: "base/com/oauth/tokens", action: "create" },
@@ -784,6 +792,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "base/org/oauth/authorizations", action: "show" },
       { path: "http://#{BASE_ORG_HOST}/oauth/authorize", method: :get },
+    )
+    assert_recognizes(
+      { controller: "base/org/oauth/authorizations", action: "create" },
+      { path: "http://#{BASE_ORG_HOST}/oauth/authorize", method: :post },
     )
 
     assert_recognizes(

@@ -168,8 +168,8 @@ class AuthStaffTest < ActiveSupport::TestCase
       @obj.send(:log_in, @staff)
       token = OperatorToken.where(staff_id: @staff.id).order(created_at: :desc).first
 
-      assert_in_delta 8.hours.from_now.to_i, token.discarded_at.to_i, 1
-      assert_in_delta 32.hours.from_now.to_i, token.purged_at.to_i, 1
+      assert_in_delta 8.hours.from_now.to_i, token.discard_at.to_i, 1
+      assert_in_delta 32.hours.from_now.to_i, token.purge_eligible_at.to_i, 1
     end
   end
 end

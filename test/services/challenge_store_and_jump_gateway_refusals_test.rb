@@ -4,7 +4,8 @@
 require "test_helper"
 
 # A WebAuthn challenge is bound to a surface, relying party, origin, purpose and
-# a single use, and the identifier-first path also carries the acting account.
+# a single use, and actor-known paths may carry the acting account while discoverable direct
+# sign-in leaves that binding nil until credential verification.
 # Every binding it fails has to raise its own type, because the caller answers
 # differently for a replayed challenge than for one issued for another purpose.
 # The jump gateway is the same idea for a token it is asked to forward.

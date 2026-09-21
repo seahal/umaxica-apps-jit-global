@@ -17,8 +17,8 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
       visibility_id: ClientVisibility::USER,
       withdrawal_started_at: 1.day.ago,
       deactivated_at: Time.current,
-      discarded_at: Time.current,
-      purged_at: 31.days.from_now,
+      discard_at: Time.current,
+      purge_eligible_at: 31.days.from_now,
     )
 
     @token = ClientToken.create!(
@@ -26,7 +26,7 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "deactivated_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "withdrawal")
@@ -84,7 +84,7 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "normal_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     satisfy_user_verification(normal_token)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: normal_user)
@@ -459,7 +459,7 @@ class WithdrawalGateTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -480,7 +480,7 @@ class WithdrawalGateTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -500,7 +500,7 @@ class WithdrawalGateTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

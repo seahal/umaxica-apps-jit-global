@@ -30,7 +30,7 @@ scope module: :edit, as: :edit do
         end
       end
 
-      # Independent edit-org first-party RP. Canonical start is /sign/in + /sign/in/callback.
+      # Independent edit-org first-party RP. Browser entry is the neutral /sign contract.
       namespace :oidc do
         namespace :backchannel do
           resource :logout, only: :create
@@ -38,8 +38,9 @@ scope module: :edit, as: :edit do
       end
 
       scope path: "sign", as: :sign do
-        get "in", to: "oidc/authorizations#show", as: :in
-        get "in/callback", to: "oidc/callbacks#show", as: :in_callback
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do

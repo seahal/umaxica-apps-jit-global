@@ -206,6 +206,30 @@ describe("authenticator code entry screen", () => {
     expect(html).toContain("※認証コードは一定時間ごとに更新されます。");
   });
 
+  it("renders the actor-scoped credential selector with public identifiers", () => {
+    const html = renderToStaticMarkup(
+      <TotpEntry
+        {...props}
+        form={{
+          ...props.form,
+          credential_selector: {
+            name: "verification[credential_public_id]",
+            label: "認証アプリ",
+            options: [
+              { value: "client-totp-a", label: "仕事用" },
+              { value: "client-totp-b", label: "個人用" },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain('name="verification[credential_public_id]"');
+    expect(html).toContain('value="client-totp-a"');
+    expect(html).toContain('value="client-totp-b"');
+    expect(html).not.toContain('name="verification[credential_id]"');
+  });
+
   it("is the component the auth/app page resolves", () => {
     expect(AppTotpsNew).toBe(TotpEntry);
   });

@@ -15,7 +15,7 @@ module SignAppVerificationBase
     # `slice` first: this reads a fixed set of keys out of the verification payload and
     # ignores anything else it carries. Permitting without narrowing would report those
     # extras as unpermitted, which they are not - they are simply not ours.
-    keys = %i(code challenge_id credential_json scope pt)
+    keys = %i(code challenge_id credential_json credential_public_id scope pt)
     params.fetch(:verification, {}).slice(*keys).permit(*keys)
   end
 
@@ -55,7 +55,7 @@ module SignAppVerificationBase
 
   def valid_step_up_session?(rs)
     rs.present? &&
-      rs.discarded_at > Time.current &&
+      rs.discard_at > Time.current &&
       rs.user_token_id == actor_token.id &&
       rs.status == "PENDING" &&
       rs.scope.present? &&
@@ -218,7 +218,7 @@ module SignAppVerificationBase
       return false
     end
 
-    if current_step_up_session.discarded_at <= Time.current
+    if current_step_up_session.discard_at <= Time.current
       @verification_errors = [I18n.t("sign.app.verification.errors.code_expired")]
       return false
     end
@@ -259,7 +259,7 @@ module SignAppVerificationBase
 
     session[email_otp_session_key] = data.merge(
       "step_up_session_id" => current_step_up_session.id,
-      "expires_at" => current_step_up_session.discarded_at.to_i,
+      "expires_at" => current_step_up_session.discard_at.to_i,
     )
   end
 

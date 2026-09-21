@@ -135,6 +135,33 @@ must keep the comparison operands at the generated code length; a short, oversiz
 nil value is invalid input and must not turn into a comparison exception or a successful consume.
 The sign-up ceremony applies the same boundary to its direct verifier.
 
+### Resend does not reset the failed-attempt budget
+
+Issuing a replacement OTP does not reset `otp_attempts_count`. The previous implementation cleared
+the record before resend and then `store_otp` initialized the counter again, allowing an attacker to
+obtain a fresh attempt budget by repeatedly requesting a new code. Resend now invalidates the old
+code while preserving the server-side failed-attempt history; only successful consumption or the
+existing bounded attempt-window policy may change that history.
+
+The replacement code remains bound to the same record and is written under the record lock. A locked
+record is not eligible for delivery, and the resend path does not alter the lockout state.
+
+### Sign-up ticket binding
+
+The app and com sign-up `SignOtpCeremony` requires the caller to present the `public_id` of the
+same `ClientSignUpFlow` or `VisitorSignUpFlow` ticket that owns the contact record. The service
+rejects a missing or mismatched `session_nonce` before contact lookup, OTP verification, or
+consumption. This is a transaction binding check, not an account identity claim: the ticket and
+its signed flow context remain the authority for progressing the sign-up ceremony.
+
+### OTP lifetime and secret storage
+
+Authentication OTPs and signup confirmation codes use the shared ten-minute policy. This keeps
+authentication and SMS confirmation within the applicable finite lifetime bound; shorter lifetimes
+remain valid for email confirmation. The HOTP private key is an encrypted Active Record attribute on
+the Email and Telephone concerns, so the database value is not the plaintext secret while the model
+continues to decrypt it for verification.
+
 ## Trade-offs
 
 - `with_lock` holds `SELECT ... FOR UPDATE` on the email row for the whole read-modify-write, which
@@ -151,5 +178,8 @@ The sign-up ceremony applies the same boundary to its direct verifier.
 - `app/models/concerns/email.rb` — `increment_attempts!`
 - `app/controllers/concerns/sign/email_registrable.rb` — `initiate_email_verification!`
 - `app/services/sign_otp_ceremony.rb` — locked cooldown recheck for sign-up resend
+- `app/services/sign_in_otp_resender.rb` — resend invalidation without failed-attempt reset
 - `app/controllers/concerns/common_otp.rb` — locked verification/consumption boundary and malformed
   input handling
+- `app/models/concerns/otp_lockable.rb` — bounded attempt history and resend invalidation
+- `app/models/concerns/email.rb` / `app/models/concerns/telephone.rb` — encrypted OTP secret storage

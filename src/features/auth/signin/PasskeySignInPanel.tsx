@@ -1,12 +1,12 @@
 // React port of `src/controllers/passkey_authentication_controller.js` for the app sign-in page.
 //
-// The ceremony is unchanged: solve an invisible Turnstile token, POST it with the identifier to the
-// options endpoint, run `navigator.credentials.get`, POST the assertion to the verification
+// The ceremony is unchanged: solve an invisible Turnstile token, POST it to the anonymous options
+// endpoint, run `navigator.credentials.get`, POST the assertion to the verification
 // endpoint, and follow the redirect the server returns. Both endpoints are the same routes with the
 // same rate limits and the same CSRF header; only the code that drives them left Stimulus. The
 // status and error strings were literals in that controller, so they stay literal here rather than
 // becoming new translation keys.
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 import Button from "@/components/ui/Button";
 import {
@@ -25,11 +25,11 @@ export type PasskeySignInPanelProps = {
   options_url: string;
   verification_url: string;
   region: string;
-  identifier_param: string;
+  identifier_param: string | null;
   /** Public site key; the secret half and the token verification stay server side. */
   turnstile_site_key: string;
   turnstile_error_message: string;
-  field: { label: string; placeholder: string };
+  field: { label: string; placeholder: string } | null;
   submit_label: string;
 };
 
@@ -67,11 +67,9 @@ export default function PasskeySignInPanel({
   identifier_param: identifierParam,
   turnstile_site_key: turnstileSiteKey,
   turnstile_error_message: turnstileErrorMessage,
-  field,
   submit_label: submitLabel,
 }: PasskeySignInPanelProps) {
   const host = useRef<HTMLDivElement>(null);
-  const [identifier, setIdentifier] = useState("");
   const { error, status, showError, showStatus, clearMessages } = useCeremonyMessages();
 
   const authenticate = async () => {
@@ -79,12 +77,6 @@ export default function PasskeySignInPanel({
 
     if (!passkeysSupported()) {
       showError(PASSKEY_MESSAGES.unsupported);
-      return;
-    }
-
-    const trimmed = identifier.trim();
-    if (!trimmed) {
-      showError(PASSKEY_MESSAGES.identifierRequired);
       return;
     }
 
@@ -97,7 +89,7 @@ export default function PasskeySignInPanel({
 
       showStatus(PASSKEY_MESSAGES.fetchingOptions);
       const optionsResponse = await postJson(optionsUrl, {
-        [identifierParam]: trimmed,
+        ...(identifierParam === null ? {} : { [identifierParam]: "" }),
         "cf-turnstile-response": token,
         ri: region || undefined,
       });
@@ -161,31 +153,6 @@ export default function PasskeySignInPanel({
       ref={host}
       className="flex flex-col gap-4"
     >
-      {/*
-        A hand-styled input rather than the shared `TextField`: `TextField` discards any `id` it is
-        given and generates its own, and this field's id is a stable, test-relied-upon contract for
-        the ceremony's markup.
-      */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="identifier"
-          className="text-sm font-medium text-fg"
-        >
-          {field.label}
-        </label>
-        <input
-          type="text"
-          id="identifier"
-          value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
-          placeholder={field.placeholder}
-          autoComplete="username webauthn"
-          required
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
-            placeholder:text-fg-muted"
-        />
-      </div>
-
       {error ? (
         <p
           role="alert"

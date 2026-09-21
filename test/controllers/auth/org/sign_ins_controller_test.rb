@@ -76,7 +76,13 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
 
     assert_response :success
-    assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
+    transaction_ref = auth_ceremony_record.authorization_transaction_ref
+    transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+      surface: "org",
+      transaction_id: transaction_ref,
+    )
+
+    assert_equal issuance.transaction.login_challenge, transaction.login_challenge
   end
 
   test "local ceremony renders authentication links only" do
@@ -190,6 +196,11 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
   end
 
+  def auth_ceremony_record
+    raw_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
+    OperatorAuthCeremonySession.find_active_by_raw_sid(raw_sid)
+  end
+
   def authorize_params
     {
       response_type: "code",
@@ -239,7 +250,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
         if session_public_id.present?
           ClientToken.find_by(public_id: session_public_id)
         else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
         end
       token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
@@ -257,7 +268,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
           OperatorToken.find_by(public_id: session_public_id)
         else
           OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end
@@ -282,7 +293,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
           VisitorToken.find_by(public_id: session_public_id)
         else
           VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
+            "discard_at > ?",
             Time.current,
           ).order(created_at: :desc).first
         end

@@ -24,7 +24,7 @@ module WithdrawalFlow
     scope :active,
           -> do
             where(status_id: status_ids_for("REQUESTED", "CLOSING", "DISCARDED"))
-              .where(arel_table[:discarded_at].gt(Time.current))
+              .where(arel_table[:discard_at].gt(Time.current))
           end
   end
 

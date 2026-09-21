@@ -9,8 +9,6 @@ module Auth
           class VerificationsController < ::Auth::App::ApplicationController
             include ::PasskeySignInFlow
             include ::AuthenticationModeSwitchGuard
-            include EmailValidation
-            include IdentifierDetection
 
             AUTHENTICATION_MODE = :guest
             declare_authentication_mode! :guest
@@ -43,11 +41,6 @@ module Auth
             def create = verification
 
             private
-
-            def find_active_passkey_actor(identifier)
-              user = find_user_by_identifier(identifier)
-              user if user&.active?
-            end
 
             def before_passkey_options_request!
               verify_turnstile_stealth!

@@ -83,7 +83,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     attr_accessor :session_hash, :params_hash, :request_obj, :rendered, :redirected, :current_resource,
                   :cycle, :guardrail_result, :checkpoint_result, :allowed_policy, :current_session_value,
-                  :selector_result
+                  :selector_result, :oidc_authorization_login_challenge
 
     def initialize
       @session_hash = {}
@@ -565,7 +565,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.current_resource = Client.new(id: 123)
     @harness.cycle = FakeCycle.new(states: { checkpoint: true, dashboard: true }, return_to: "/after")
     @harness.checkpoint_result = Result.new(false)
-    @harness.session[:oidc_authorization_login_challenge] = "challenge-1"
+    @harness.oidc_authorization_login_challenge = "challenge-1"
     @harness.define_singleton_method(:after_login_path) { "/after-login" }
 
     @harness.continue_checkpoint_sequence_without_content!

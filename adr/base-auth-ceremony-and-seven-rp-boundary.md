@@ -45,9 +45,11 @@ Exact independent client IDs, keys, faces, browser transactions, and RP Sessions
 
 `core-app`, `core-com`, `core-org`, `side-app`, `side-com`, `side-org`, `edit-org`
 
-Each exposes exact `GET /sign/in`, `GET /sign/in/callback`, and `/sign/out`. Shared browser
-registrations (`sign-rp`, `base-rails-rp`, `side-rails-rp`, `core-next-rp`) are retired after the
-seven flows work. Native and content clients remain.
+Each exposes a neutral `GET /sign` entry page, CSRF-protected `POST /sign` flow starter, exact
+`GET /sign/callback` protocol callback, and `/sign/out`. The RP does not choose Sign in versus
+Sign up; Auth owns that internal ceremony choice. Shared browser registrations (`sign-rp`,
+`base-rails-rp`, `side-rails-rp`, `core-next-rp`) are retired after the seven flows work. Native
+and content clients remain.
 
 ### Session hierarchy
 
@@ -119,3 +121,59 @@ parent termination is a separate explicit logout/revocation scope.
 The amendment does not resolve the separate regional JP/US RP-registration conflict with the
 accepted seven-client ADR. Client IDs, redirect registrations, external RP configuration, and
 legacy-session migration remain blocked until that matrix is approved and verified.
+
+## Neutral browser RP entry amendment (2026-09-20)
+
+The canonical first-party browser entry is now `GET /sign` followed by a CSRF-protected
+`POST /sign`; `GET /sign/callback` is protocol infrastructure. The former RP `/sign/in` and
+`/sign/in/callback` aliases are removed. Auth ceremony routes under `/sign/in/*` remain separate
+and are not RP entrypoints. This amendment does not alter the Jump RT cryptographic or key
+architecture.
+
+## OIDC result transport amendment (2026-09-20)
+
+The browser result from Auth back to Base is POST-only. Auth's local `GET /sign/oidc/handoff`
+renders a same-origin CSRF-protected form; its `POST /sign/oidc/handoff` issues the opaque,
+surface-bound, one-shot result. Auth then renders a cross-surface form that submits the result in
+the body to the matching Base `POST /oauth/authorize` endpoint. The result is never placed in a
+redirect URL, query string, fragment, or Rails-session pre-authentication map.
+
+Base accepts the result only from the exact configured Auth origin (plus the existing same-site
+null-origin proxy case), performs atomic one-shot consumption, and checks the surface before
+resuming the pending authorization transaction. `GET /oauth/authorize?result=...` is not a result
+consumer. Rails forgery protection remains enabled; no global CSRF configuration or normal Rails
+CSRF boundary is weakened for this transport. Auth remains ceremony-only and Base remains the
+authority for the authorization transaction and all resulting Browser Session, RP Session, and
+authorization-code state.
+
+This amendment is limited to removing secret result transport from URLs and making the browser
+handoff explicit. It does not yet retire the remaining legacy Base callback/session issuance path;
+that remains a later implementation slice under the authority-boundary plan.
+
+## RP credential authority amendment (2026-09-20)
+
+The seven first-party RP callbacks now use the Access and Refresh credentials returned by Base's
+token endpoint directly. Core, Side, and Edit store them only in the dedicated host-only RP cookie
+slots (`oidc_rp_access` and `oidc_rp_refresh`, or their `__Host-` names in secure contexts). They do
+not call generic root `log_in` and do not create a second ClientToken, VisitorToken, or OperatorToken.
+
+The Core Browser API validates the Access JWT locally against the exact RP client binding and
+resource type, without a per-request RP Session lookup. Refresh, revocation, and logout return to
+the Base/RP Session authority. The older `core-browser` root-browser-cookie audience is not a
+credential for this RP path. This amendment does not weaken Rails CSRF protection, change the
+zero-cookie edge contract, or make TanStack an authentication authority.
+
+## RP logout authority amendment (2026-09-20)
+
+The seven first-party browser RP sign-out controllers authenticate POST `/sign/out` with the
+surface-local RP Access/Refresh cookies. They require the registered client and resource realm,
+verify the Access JWT issuer/audience/client binding, bind `sid` and JTI to the exact RP Session,
+and verify the subject against the RP Session owner. A valid refresh cookie may identify the same
+RP Session when the Access JWT is expired; no root Browser Session or Bearer fallback is permitted.
+
+Successful logout uses the PostgreSQL RP-session revoke operation and clears only the browser's RP
+credential cookies as credentials. The parent Base Browser Session and sibling RP Sessions remain
+usable. GET sign-out pages do not perform authoritative mutation, and existing Rails CSRF
+protection remains in force for POST mutation. Revocation prevents refresh and new Access JWT
+issuance; it does not claim immediate invalidation of an Access JWT already issued, which remains
+usable until its natural expiry and verifier clock-skew boundary.

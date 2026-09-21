@@ -31,7 +31,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "result resume url uses Base authorize and omits raw login_challenge" do
+  test "result issuance returns only an opaque body token" do
     transaction = issue_transaction!
     OidcAuthorizationTransactionCoordinator.register_result!(
       surface: "app",
@@ -43,12 +43,9 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     )
     issuance = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction.reload)
 
-    uri = URI.parse(issuance.resume_url)
-    query = Rack::Utils.parse_nested_query(uri.query)
-
-    assert_equal "/oauth/authorize", uri.path
-    assert_predicate query["result"], :present?
-    assert_nil query["login_challenge"]
+    assert_predicate issuance.code, :present?
+    assert_not_respond_to issuance, :resume_url
+    assert_no_match %r{https?://}, issuance.code
   end
 
   private

@@ -15,8 +15,8 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
       assert_equal client_id, client.client_id
       assert_equal client_id, client.aud
       assert_predicate client, :private_key_jwt_client?
-      assert client.redirect_uris.any? { |uri| uri.end_with?("/sign/in/callback") },
-             "#{client_id} missing /sign/in/callback"
+      assert client.redirect_uris.any? { |uri| uri.end_with?("/sign/callback") },
+             "#{client_id} missing /sign/callback"
       assert client.post_logout_redirect_uris.any? { |uri| uri.end_with?("/sign/out") },
              "#{client_id} missing /sign/out"
       assert_predicate(

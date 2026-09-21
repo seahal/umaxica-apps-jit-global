@@ -10,16 +10,16 @@ environment rules to avoid schema-change incidents.
 Every configured `migrations_paths` directory under `db/` must exist. Reserved databases (`search`,
 `storage`) keep empty directories so Rails cannot skip an owner silently.
 
-Committed `db/*_structure.sql` files are currently PostgreSQL session-setting stubs with no
-`CREATE TABLE` statements. Do not treat them as a loadable schema. `schema_format` remains `:sql`
-and `dump_schema_after_migration` is `false` in every environment. Regenerating populated dumps is a
-separate decision; until then, reconstruct with `bin/rails db:migrate:reset` (or the test suite's
-migration path).
+Committed `db/*_structure.sql` files are schema-only PostgreSQL dumps generated from the isolated
+test database fleet. They contain schema metadata (including `schema_migrations`) but no business
+rows. `schema_format` remains `:sql` and `dump_schema_after_migration` is `false` in every
+environment. The dumps are a reproducibility artifact, not a replacement for applying migrations
+to a clean database.
 
-`bin/rails db:verify_no_schema_drift` dumps schema and diffs the committed stubs. While dumps remain
-stubs, that task does not prove object-level reconstruction. Use
-`test/tooling/database_reconstruction_authority_test.rb` and
-`test/tooling/database_migration_path_ownership_test.rb` for the current invariant.
+`bin/rails db:verify_no_schema_drift` regenerates the configured dumps and compares them with the
+committed files. A worktree with intentionally regenerated but uncommitted dumps is expected to
+report those files as drift until the artifact changes are reviewed and committed. The migration
+path and clean-database reconstruction still require the separate checks below.
 
 ## Global / Regional Split (planned)
 
@@ -43,8 +43,8 @@ Until the split happens, this repository still prepares the full fleet as one un
    migrations.** Use `bin/rails db:migrate:reset` so every database is rebuilt from migrations.
 2. **Do not write silent-skip helpers such as `rename_table_if_present`.** Use
    `rename_table_strict`, provided by `MigrationHelpers::SafeTableRename`.
-3. **Do not assume committed `db/*_structure.sql` files reconstruct a database.** Apply migrations
-   to a clean database instead.
+3. **Do not treat `db/*_structure.sql` files as proof of migration reconstruction.** Apply migrations
+   to a clean database and compare the resulting schema with the dump instead.
 
 ## Why Incremental `db:migrate` Is Unsafe During Renames
 
@@ -121,7 +121,7 @@ manual resolution.
 
 ## Recommended Schema-Drift CI Check
 
-Add the following step to the end of the `database-consistency` job in
+Add the following step to the repository's schema-drift job in
 `.github/workflows/integration.yml` when enabling schema-drift enforcement:
 
 ```yaml
@@ -130,4 +130,19 @@ Add the following step to the end of the `database-consistency` job in
 ```
 
 The check fails when the branch's committed schema dumps differ from applying migrations to clean
-databases.
+databases. The retired `database_consistency` gem is not a runtime or CI dependency; historical
+documents that describe its earlier findings remain historical records.
+
+## Verified targeted database safeguards
+
+The app and com sign-up-flow token foreign keys use `ON DELETE RESTRICT`. A token purge therefore
+cannot delete a child flow whose own retention window has not completed. Rails associations use
+`restrict_with_exception` as the application-side counterpart. The approved all-rows
+`idx_avatar_ownership_periods_avatar_id_all_rows` index exists alongside, rather than replacing,
+the current-row partial unique index.
+
+The seven approved administrative and enforcement reason-note columns use non-deterministic Active
+Record Encryption. The corresponding focused test verifies both round-trip decryption and that a
+newly persisted database value does not contain the plaintext. Populated structure dumps have been
+generated from the isolated test databases and are deterministic on repeat dump. Full migration-
+to-clean-database reconstruction and schema-load equivalence remain separate verification work.

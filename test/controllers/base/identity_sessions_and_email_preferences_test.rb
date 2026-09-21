@@ -29,11 +29,11 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     other_session = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -60,11 +60,11 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     other_session = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
@@ -97,7 +97,7 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
     )
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       last_step_up_at: Time.current, last_step_up_scope: "settings_email",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
@@ -134,7 +134,7 @@ class BaseIdentitySessionsAndEmailPreferencesTest < ActionDispatch::IntegrationT
     )
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discarded_at: 1.day.from_now,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       last_step_up_at: Time.current, last_step_up_scope: "settings_email",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",

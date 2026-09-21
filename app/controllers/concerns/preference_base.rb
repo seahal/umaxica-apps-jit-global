@@ -312,7 +312,7 @@ module PreferenceBase
         event_id: normalized_event_id,
         level_id: preference_audit_level_class::INFO,
         occurred_at: Time.current,
-        discarded_at: expires_at_value,
+        discard_at: expires_at_value,
         ip_address: request.remote_ip || default_audit_ip,
         context: context,
       )
@@ -809,11 +809,11 @@ module PreferenceBase
     now = Time.current
 
     with_preference_connection(:writing) do
-      updates = { discarded_at: now }
+      updates = { discard_at: now }
       updates[:compromised_at] = now if preference.respond_to?(:compromised_at=)
       updates[:revoked_at] = now if preference.respond_to?(:revoked_at=)
 
-      lapses_at_value = preference.discarded_at
+      lapses_at_value = preference.discard_at
       is_infinite = lapses_at_value.respond_to?(:infinite?) && lapses_at_value.infinite?
       already_handled =
         if preference.respond_to?(:compromised_at)

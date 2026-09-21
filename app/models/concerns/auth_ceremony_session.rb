@@ -10,6 +10,8 @@ require "base64"
 module AuthCeremonySession
   extend ActiveSupport::Concern
 
+  class InvalidTransition < StandardError; end
+
   SID_BYTES = 32
   DEFAULT_TTL = 30.minutes
 
@@ -64,17 +66,55 @@ module AuthCeremonySession
   public
 
   def active?(now: Time.current)
-    revoked_at.blank? && expires_at > now
+    !terminal? && expires_at > now
+  end
+
+  def admitted?
+    admitted_at.present?
+  end
+
+  def completed?
+    completed_at.present?
+  end
+
+  def cancelled?
+    cancelled_at.present?
+  end
+
+  def terminal?
+    revoked_at.present? || completed? || cancelled?
+  end
+
+  def admit!(authorization_transaction_ref: nil, now: Time.current)
+    self.class.writing_connection do
+      with_lock do
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: now)
+        raise InvalidTransition, "auth ceremony session is already admitted" if admitted?
+
+        update!(
+          authorization_transaction_ref: authorization_transaction_ref.to_s.presence,
+          admitted_at: now,
+        )
+      end
+    end
   end
 
   def revoke!(now: Time.current)
-    self.class.writing_connection { update!(revoked_at: now) }
+    transition_to_terminal!(:revoked_at, now: now, require_admitted: false)
+  end
+
+  def complete!(now: Time.current)
+    transition_to_terminal!(:completed_at, now: now, require_admitted: true)
+  end
+
+  def cancel!(now: Time.current)
+    transition_to_terminal!(:cancelled_at, now: now, require_admitted: true)
   end
 
   def rotate!(ttl: DEFAULT_TTL, now: Time.current)
     self.class.writing_connection do
       with_lock do
-        raise ActiveRecord::RecordInvalid.new(self) unless active?(now: now)
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: now)
 
         raw_sid = SecureRandom.random_bytes(SID_BYTES)
         update!(
@@ -93,9 +133,26 @@ module AuthCeremonySession
     %i(
       identity_id user_id visitor_id staff_id aal amr role permission
       base_browser_session_id rp_session_id oidc_client_id
+      state nonce pkce_verifier code authorization_code access_token refresh_token
+      sign_in sign_up sign_in_intent sign_up_intent
     ).each do |name|
       raise ArgumentError, "authority attribute leaked: #{name}" if respond_to?(name) || has_attribute?(name.to_s)
     end
     true
+  end
+
+  private
+
+  def transition_to_terminal!(timestamp_attribute, now:, require_admitted:)
+    self.class.writing_connection do
+      with_lock do
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: now)
+        if require_admitted && !admitted?
+          raise InvalidTransition, "auth ceremony session was never admitted"
+        end
+
+        update!(timestamp_attribute => now)
+      end
+    end
   end
 end

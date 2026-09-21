@@ -162,9 +162,10 @@ events, which provides the measurement needed to decide when the fallback can be
 `:header_only`. Both are framework features, not local implementations.
 
 Every `allow_other_host: true` redirect site was traced to its target. The targets are
-route-helper-generated URLs or `resume_url`, which `acme_resume_url` builds from the configured
-`boot_config` host rather than from request input. No open redirect was found. `return_to` values
-are carried as signed `pt` tokens and rejected by `unsafe_guard_return_to?` when unsigned.
+route-helper-generated URLs or fixed, surface-local handoff paths; the retired OIDC transaction
+`resume_url`/`acme_resume_url` query transport is no longer available. No open redirect was found.
+`return_to` values are carried as signed `pt` tokens and rejected by `unsafe_guard_return_to?` when
+unsigned.
 
 Secrets: no `.env` file and no `*.key` file is tracked; credentials are committed only in encrypted
 `.enc` form; gitleaks runs in CI alongside Brakeman and bundler-audit.
@@ -216,11 +217,13 @@ application logging boundary and was not changed here.
 - `config/environments/test.rb` defaults `allow_forgery_protection` to false, with per-test opt-in.
   This matches the Rails-generated default for the test environment
   (`railties/.../templates/config/environments/test.rb.tt`) and is not a deviation, so no change was
-  warranted. Under the 8.2 verification strategies described below, blanket-enabling it would also
-  not be the improvement it appears to be: with `:header_only`, a request with no `Sec-Fetch-Site`
-  header over a non-SSL connection verifies successfully, which is exactly the shape of a test
-  request, so most tests would pass without exercising anything. Targeted CSRF boundary tests are
-  the meaningful coverage, and they exist —
+  warranted. Note that the `:header_only` shortcut - a request with no `Sec-Fetch-Site` header over
+  a non-SSL connection verifies successfully - does not apply here, because every surface root
+  overrides the strategy to `:header_or_legacy_token`, under which such a request falls back to the
+  legacy authenticity token and is rejected without one. Blanket-enabling the flag would therefore
+  exercise CSRF for real; the objection is the cost of threading tokens through tests whose subject
+  is not CSRF, not futility. Targeted CSRF boundary tests remain the meaningful coverage, and they
+  exist —
   `test/controllers/protocol_controller_csrf_boundary_test.rb`,
   `test/integration/social_completion_cross_host_csrf_test.rb`,
   `test/integration/csrf_notification_emission_test.rb`, and

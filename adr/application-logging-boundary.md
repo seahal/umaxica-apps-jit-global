@@ -51,6 +51,22 @@ reporting, but it must not be required for ordinary application log output.
 - Product analytics consent filtering must be redesigned separately if product analytics events are
   reintroduced.
 
+## Amendment: authentication security events have a durable Chronicle record
+
+Amended: 2026-09-21
+
+`AuthenticationSecurityEventEmitter` now records its accepted security-event taxonomy in the
+existing Chronicle audit database through the existing `security` retention policy. Payloads pass
+through the Chronicle sanitization policy before persistence; the operational log remains separately
+redacted and diagnostic. This amendment adds no table, retention duration, provider integration, or
+external configuration.
+
+Notification enqueue, provider acceptance, delivery outcome, retry, and permanent failure remain
+different facts. The existing SMS boundary records enqueue, provider acceptance, and provider
+failure facts in Chronicle without recipient or message content. No delivery success is inferred
+from an enqueue result, and email provider receipts or a generic provider receipt ledger are not
+introduced until their owner, provider contract, and retention policy are approved.
+
 ## Amendment: development logs reach Loki by file tail
 
 Amended: 2026-09-18

@@ -14,7 +14,7 @@ module Edit
         AUTHENTICATION_MODE = :open
         layout "edit/org/application"
 
-        before_action :authenticate!, only: :create
+        before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -39,6 +39,7 @@ module Edit
             client_id: "edit-org",
             issuer_resource_type: "operator",
             token_issuer: "operator",
+            session_authority: :rp_session,
           )
         end
 

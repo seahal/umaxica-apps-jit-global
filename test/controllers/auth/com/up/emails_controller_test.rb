@@ -212,6 +212,62 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil session[:com_sign_up_flow_locator]
   end
 
+  test "fresh sessions cannot distinguish pending and registered email sign-up" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    registered_email = VisitorEmail.create!(
+      visitor: visitor,
+      address: "com-fresh-session-registered-signup@example.com",
+      confirm_policy: true,
+      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    )
+    unregistered_address = "com-fresh-session-pending-signup@example.com"
+
+    registered_responses =
+      2.times.map do
+        response = nil
+        open_session do |session|
+          session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+          session.post(
+            auth_com_sign_up_email_url(ri: "jp"),
+            params: {
+              visitor_email: { raw_address: registered_email.address, confirm_policy: "1" },
+              "cf-turnstile-response": "test",
+            },
+          )
+          response = {
+            status: session.response.status,
+            location: session.response.headers["Location"],
+            body: session.response.body,
+          }
+        end
+        response
+      end
+
+    pending_responses =
+      2.times.map do
+        response = nil
+        open_session do |session|
+          session.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+          session.post(
+            auth_com_sign_up_email_url(ri: "jp"),
+            params: {
+              visitor_email: { raw_address: unregistered_address, confirm_policy: "1" },
+              "cf-turnstile-response": "test",
+            },
+          )
+          response = {
+            status: session.response.status,
+            location: session.response.headers["Location"],
+            body: session.response.body,
+          }
+        end
+        response
+      end
+
+    assert_equal 302, registered_responses.last.fetch(:status)
+    assert_equal registered_responses.last, pending_responses.last
+  end
+
   test "edit missing email resets flow and redirects to new" do
     get auth_com_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
 
@@ -291,7 +347,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal "turnstile@example.com", inertia_props.fetch("field").fetch("value")
   end
 
-  test "create inside overwrite window returns too many requests" do
+  test "create keeps re-registration inside overwrite window non-disclosing" do
     email_address = "cooldown-up@example.com"
 
     # First request
@@ -308,7 +364,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
                    "cf-turnstile-response": "test", },
          headers: default_headers
 
-    assert_response :too_many_requests
+    assert_redirected_to auth_com_sign_up_check_email_otp_url(ri: "jp")
   end
 
   test "create after overwrite window replaces unverified email" do
@@ -761,7 +817,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -783,7 +839,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -807,7 +863,7 @@ class Auth::Com::Sign::Up::EmailsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

@@ -23,6 +23,11 @@ module OidcCallback
     return render_callback_failure("authentication_time_missing") if authentication_event_at.blank?
 
     resource = provision_rp_account_from_id_token!(id_token_result)
+    if oidc_rp_credentials_only?
+      store_oidc_rp_credentials!(token_result.token_response)
+      return redirect_to(consume_oidc_pt, allow_other_host: false)
+    end
+
     login_result =
       ActiveRecord::Base.connected_to(role: :writing) do
         log_in(
@@ -46,7 +51,10 @@ module OidcCallback
     redirect_to(consume_oidc_pt, allow_other_host: false)
   rescue InvalidCallbackState => e
     log_invalid_callback_state!(e.message)
-    clear_oidc_session_state!(pending_flows: e.message == "OIDC state mismatch")
+    # A rejected callback must not destroy unrelated state-indexed browser-tab flows. The
+    # matching flow is consumed atomically before exchange; an invalid or missing state consumes
+    # nothing, so only legacy scalar keys may be cleared here.
+    clear_oidc_session_state!
     render plain: I18n.t("errors.messages.login_required"), status: :unprocessable_content
   end
 
@@ -103,6 +111,22 @@ module OidcCallback
     )
   rescue URI::InvalidURIError
     true
+  end
+
+  def oidc_rp_credentials_only?
+    false
+  end
+
+  def store_oidc_rp_credentials!(token_response)
+    access_token, refresh_token = OidcRpBrowserCredentialContract.require_token_response!(token_response)
+    access_expires_at = OidcRpBrowserCredentialContract.access_expires_at(access_token)
+
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      OidcRpBrowserCredentialContract.access_cookie_options(expires_at: access_expires_at).merge(
+        value: access_token,
+      )
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] =
+      OidcRpBrowserCredentialContract.refresh_cookie_options.merge(value: refresh_token)
   end
 
   def verify_id_token!(id_token)

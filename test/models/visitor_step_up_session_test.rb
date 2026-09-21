@@ -8,9 +8,9 @@
 #
 #  id               :bigint           not null, primary key
 #  attempt_count    :integer          default(0), not null
-#  discarded_at     :datetime         default(Infinity), not null
+#  discard_at     :datetime         default(Infinity), not null
 #  method           :string
-#  purged_at        :datetime         default(Infinity), not null
+#  purge_eligible_at        :datetime         default(Infinity), not null
 #  return_to        :text             not null
 #  scope            :string           not null
 #  status           :string           not null
@@ -44,7 +44,7 @@ class VisitorStepUpSessionTest < ActiveSupport::TestCase
       return_to: "/account",
       method: "passkey",
       status: "PENDING",
-      discarded_at: 10.minutes.from_now,
+      discard_at: 10.minutes.from_now,
     }.freeze
   end
 
@@ -90,8 +90,8 @@ class VisitorStepUpSessionTest < ActiveSupport::TestCase
   test "database rejects retention order when validations are bypassed" do
     session = VisitorStepUpSession.new(
       @valid_params.merge(
-        discarded_at: 2.days.from_now,
-        purged_at: 1.day.from_now,
+        discard_at: 2.days.from_now,
+        purge_eligible_at: 1.day.from_now,
       ),
     )
     exception_classes = [ActiveRecord::StatementInvalid]
@@ -116,9 +116,9 @@ class VisitorStepUpSessionTest < ActiveSupport::TestCase
     end
   end
 
-  test "expired? reflects discarded_at boundary" do
-    assert_predicate VisitorStepUpSession.new(@valid_params.merge(discarded_at: Time.current)), :expired?
-    assert_not VisitorStepUpSession.new(@valid_params.merge(discarded_at: 1.second.from_now)).expired?
+  test "expired? reflects discard_at boundary" do
+    assert_predicate VisitorStepUpSession.new(@valid_params.merge(discard_at: Time.current)), :expired?
+    assert_not VisitorStepUpSession.new(@valid_params.merge(discard_at: 1.second.from_now)).expired?
   end
 
   test "pending scope returns only pending sessions" do
@@ -481,7 +481,7 @@ class VisitorStepUpSessionTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -499,7 +499,7 @@ class VisitorStepUpSessionTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -519,7 +519,7 @@ class VisitorStepUpSessionTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

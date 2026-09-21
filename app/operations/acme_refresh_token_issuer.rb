@@ -101,7 +101,7 @@ class AcmeRefreshTokenIssuer
       family_scope = refresh_token_family_scope(token)
       now = Time.current
       # rubocop:disable Rails/SkipsModelValidations
-      family_scope.update_all(discarded_at: now)
+      family_scope.update_all(discard_at: now)
       # rubocop:enable Rails/SkipsModelValidations
 
       actor_key = actor_identifier_column(token) || :user_id

@@ -25,7 +25,12 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
     follow_redirect!
 
     assert_response :success
-    assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
+
+    record = ClientAuthCeremonySession.order(created_at: :desc).first
+
+    assert_predicate record, :admitted?
+    assert_equal issuance.transaction.transaction_id, record.authorization_transaction_ref
+    assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "sign up entry accepts a valid login challenge" do
@@ -42,7 +47,12 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
     follow_redirect!
 
     assert_response :success
-    assert_equal issuance.transaction.login_challenge, session[:oidc_authorization_login_challenge]
+
+    record = ClientAuthCeremonySession.order(created_at: :desc).first
+
+    assert_predicate record, :admitted?
+    assert_equal issuance.transaction.transaction_id, record.authorization_transaction_ref
+    assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "sign in entry without login challenge lists methods and stores no challenge" do
@@ -171,7 +181,7 @@ class AuthOidcEntrancesTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -189,7 +199,7 @@ class AuthOidcEntrancesTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -209,7 +219,7 @@ class AuthOidcEntrancesTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

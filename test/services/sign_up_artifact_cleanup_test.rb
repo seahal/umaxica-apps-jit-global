@@ -78,7 +78,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
       assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
       assert_not ClientExternalIdentity.exists?(identity.id)
-      assert_operator user.reload.discarded_at, :>=, now
+      assert_operator user.reload.discard_at, :>=, now
     end
   end
 
@@ -103,9 +103,9 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
     assert_equal VisitorSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal VisitorEmailStatus::DELETED, email.reload.visitor_email_status_id
-    assert_operator email.reload.discarded_at, :>=, now
-    assert_operator email.reload.purged_at, :>, email.reload.discarded_at
-    assert_operator visitor.reload.discarded_at, :>=, now
+    assert_operator email.reload.discard_at, :>=, now
+    assert_operator email.reload.purge_eligible_at, :>, email.reload.discard_at
+    assert_operator visitor.reload.discard_at, :>=, now
   end
 
   test "cleanup_pending_for claims one eligible cycle and skips missing statuses" do
@@ -176,7 +176,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_telephone_status_id
     assert_equal ClientPasskeyStatus::DELETED, pending_passkey.reload.status_id
-    assert_operator user.reload.discarded_at, :>=, now
+    assert_operator user.reload.discard_at, :>=, now
   end
 
   test "visitor pending telephone cleanup updates the phone and pending passkey" do
@@ -213,7 +213,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     assert_equal VisitorSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal VisitorTelephoneStatus::DELETED, telephone.reload.visitor_telephone_status_id
     assert_equal VisitorPasskeyStatus::DELETED, pending_passkey.reload.status_id
-    assert_operator visitor.reload.discarded_at, :>=, now
+    assert_operator visitor.reload.discard_at, :>=, now
   end
 
   private

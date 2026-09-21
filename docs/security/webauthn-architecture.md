@@ -25,13 +25,22 @@ invariants are in `docs/security/webauthn-security-invariants.md`; RP boundaries
 | ------------------------------------- | ----------------- | ---------------------------- | ---------------------------------------- | ------------------------------------ |
 | Sign-up registration (`app` only)     | registration      | registration (required)      | Exclude every passkey, including revoked | New row and metadata                 |
 | Settings registration (all surfaces)  | registration      | registration (required)      | Exclude every passkey                    | New row, metadata, and app/org audit |
-| Direct sign-in (all surfaces)         | authentication    | direct_sign_in (required)    | ACTIVE only                              | `sign_count`, `last_used_at`         |
+| Direct sign-in (`app` / `com`)        | authentication    | direct_sign_in (required)    | None: discoverable credentials           | `sign_count`, `last_used_at`         |
+| Normal sign-in (`org`)                | authentication    | direct_sign_in (required)    | Entra-selected Operator's ACTIVE keys   | `sign_count`, `last_used_at`         |
 | Emergency Access sign-in (`org` only) | emergency_sign_in | emergency_sign_in (required) | ACTIVE only                              | `sign_count`, `last_used_at`         |
 | MFA challenge (all surfaces)          | authentication    | mfa_challenge (required)     | ACTIVE only                              | `sign_count`, `last_used_at`         |
 | Step-up (all surfaces)                | step_up           | ordinary_step_up (required)  | ACTIVE only                              | `sign_count`                         |
 
-- Registration uses `resident_key: "discouraged"` and `attestation: "none"` for an identifier-first,
-  non-discoverable flow.
+- App and com registration use `resident_key: "required"` so direct sign-in can be usernameless and
+  discoverable. Org registration retains `resident_key: "discouraged"`; org normal, Emergency, MFA,
+  and Step-Up ceremonies remain actor-known and may continue to send actor-scoped descriptors.
+- App and com direct sign-in options are issued without an identifier lookup and contain no real
+  credential IDs in `allowCredentials` (the serialized list is empty). Verification resolves the
+  surface-local passkey by assertion credential ID and verifies it with the saved public key;
+  browser-supplied `userHandle`, identifier, and client metadata do not select the account.
+- Verification rechecks ACTIVE credential status, active actor state, existing verified-PII and
+  session/risk restrictions before establishing a session. App, com, and org credential stores
+  remain separate.
 - `user.id` is the actor's opaque, immutable `webauthn_user_handle`.
 - The display name is `passkey_resource_display_name`, derived from email or `public_id`.
 
@@ -57,6 +66,7 @@ Emergency-specific verifier is prohibited. See `docs/security/org-emergency-acce
 
 ## Password Fallback
 
-When passkey sign-in or UV fails, return to the existing identifier-first sign-in screen and its
+When direct app/com passkey sign-in or UV fails, return to the existing sign-in screen and its
 password-plus-MFA path. Do not mix a password exchange into a WebAuthn ceremony; the password path
-retains its own audit and rate limits.
+retains its own audit and rate limits. Org Emergency remains an identifier-bound, actor-known
+ceremony and is not converted to discoverable direct sign-in by this decision.

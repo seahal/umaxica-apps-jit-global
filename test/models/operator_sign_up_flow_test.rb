@@ -51,8 +51,8 @@ class FlowSignUpTest < ActiveSupport::TestCase
     @connection.create_table(:flow_sign_up_test_records, force: true) do |t|
       t.integer(:status_id, null: false)
       t.string(:step)
-      t.datetime(:discarded_at, null: false)
-      t.datetime(:purged_at, null: false)
+      t.datetime(:discard_at, null: false)
+      t.datetime(:purge_eligible_at, null: false)
       t.datetime(:expires_at)
       t.datetime(:completed_at)
       t.timestamps
@@ -124,7 +124,7 @@ class FlowSignUpTest < ActiveSupport::TestCase
 
     record.discard_sign_up!(now: record.created_at)
 
-    assert_equal record.created_at, record.discarded_at
+    assert_equal record.created_at, record.discard_at
   end
 
   private
@@ -136,8 +136,8 @@ class FlowSignUpTest < ActiveSupport::TestCase
     record_class.create!(
       status_id: status_id,
       step: "start",
-      discarded_at: now + 1.day,
-      purged_at: now + 2.days,
+      discard_at: now + 1.day,
+      purge_eligible_at: now + 2.days,
       expires_at: now + 1.hour,
     )
   end

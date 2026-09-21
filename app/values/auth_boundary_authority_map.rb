@@ -27,6 +27,8 @@ module AuthBoundaryAuthorityMap
     /dashboard
     /lobby
     /sign/out/complete
+    /sign/in
+    /sign/in/callback
   ).freeze
 
   RP_FACES = {
@@ -39,8 +41,8 @@ module AuthBoundaryAuthorityMap
     "edit-org" => { surface: "edit", face: "org", actor: "operator" },
   }.freeze
 
-  CANONICAL_RP_CALLBACK_PATH = "/sign/in/callback"
-  CANONICAL_RP_SIGN_IN_PATH = "/sign/in"
+  CANONICAL_RP_CALLBACK_PATH = "/sign/callback"
+  CANONICAL_RP_SIGN_IN_PATH = "/sign"
   CANONICAL_RP_SIGN_OUT_PATH = "/sign/out"
 
   AUTH_CEREMONY_FACES = %w(app com org).freeze

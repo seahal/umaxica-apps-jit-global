@@ -72,6 +72,28 @@ module Auth::App::In
       assert_not_includes response.body, "送信され"
     end
 
+    test "new exposes an actor-scoped selector when two active authenticators exist" do
+      second = ClientTotpCredential.create!(
+        user: @user,
+        private_key: ROTP::Base32.random_base32,
+        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+        title: "second authenticator",
+      )
+      with_prosopite_paused { establish_pending_mfa_via_secret_credential! }
+
+      with_prosopite_paused do
+        get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+      end
+
+      selector = inertia_props.fetch("form").fetch("credential_selector")
+
+      assert_equal "totp_challenge_form[credential_public_id]", selector.fetch("name")
+      assert_equal [@totp.public_id, second.public_id].sort,
+                   selector.fetch("options").map { |option| option.fetch("value") }.sort
+      assert selector.fetch("options").all? { |option| option.fetch("label").present? }
+      assert selector.fetch("options").none? { |option| option.key?("id") }
+    end
+
     test "new redirects to sign in when pending_mfa is missing" do
       with_prosopite_paused do
         get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
@@ -220,17 +242,16 @@ module Auth::App::In
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     end
 
-    # The Valkey-backed rate_limit rules fail open when the store is unreachable (RedisCacheStore
-    # swallows the error and `increment` returns nil). The PostgreSQL lockout must still stop the
-    # guessing, and it must reject even a correct code while it is in force.
-    test "create locks the account in PostgreSQL even when the rate-limit store is unreachable" do
+    # The Valkey-backed rate_limit rules fail open when the store is unreachable. The PostgreSQL
+    # credential counter must still permanently revoke only the credential being guessed.
+    test "create permanently revokes the credential even when the rate-limit store is unreachable" do
       with_prosopite_paused do
         establish_pending_mfa_via_secret_credential!
       end
 
       freeze_time do
         rate_limit_store.with(unreachable_rate_limit_store) do
-          ClientTotpCredential::MAX_TOTP_ATTEMPTS.times do
+          ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times do
             post_totp(wrong_totp_code)
 
             assert_response :unprocessable_content
@@ -239,21 +260,22 @@ module Auth::App::In
           post_totp(ROTP::TOTP.new(@totp.private_key).now)
         end
 
-        assert_response :too_many_requests
-        assert_equal ClientTotpCredential::TOTP_LOCKOUT_DURATION.to_i.to_s, response.headers["Retry-After"]
+        assert_response :unprocessable_content
         assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-        assert_equal ClientTotpCredential::MAX_TOTP_ATTEMPTS, @totp.reload.otp_attempts_count
+        assert_equal ClientTotpCredential::MAX_CONSECUTIVE_FAILURES, @totp.reload.otp_attempts_count
+        assert_equal ClientTotpCredentialStatus::REVOKED,
+                     @totp.user_identity_totp_credential_status_id
       end
     end
 
-    test "the PostgreSQL lockout survives a rate-limit store flush" do
+    test "the PostgreSQL terminal revocation survives a rate-limit store flush" do
       with_prosopite_paused do
         establish_pending_mfa_via_secret_credential!
       end
 
       freeze_time do
         rate_limit_store.with(unreachable_rate_limit_store) do
-          ClientTotpCredential::MAX_TOTP_ATTEMPTS.times { post_totp(wrong_totp_code) }
+          ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times { post_totp(wrong_totp_code) }
         end
 
         # A recovered-but-empty store: every Valkey counter is gone.
@@ -261,7 +283,7 @@ module Auth::App::In
           post_totp(ROTP::TOTP.new(@totp.private_key).now)
         end
 
-        assert_response :too_many_requests
+        assert_response :unprocessable_content
         assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
       end
     end
@@ -673,7 +695,7 @@ class Auth::App::In::MfaTotpsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -699,7 +721,7 @@ class Auth::App::In::MfaTotpsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -727,7 +749,7 @@ class Auth::App::In::MfaTotpsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

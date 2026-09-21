@@ -21,19 +21,15 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     }
   end
 
-  test "issue creates a pending transaction and resume url points to acme authorize" do
+  test "issue creates a pending transaction without a resume URL" do
     issuance = OidcAuthorizationTransactionCoordinator.issue!(surface: "app", intent: "sign_in", params: @params)
 
     assert_predicate issuance.transaction, :persisted?
     assert_equal "pending", issuance.transaction.status
     assert_equal "app", issuance.transaction.surface
     assert_equal "sign_in", issuance.transaction.intent
-
-    uri = URI.parse(issuance.resume_url)
-
-    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).base_service.host, uri.host
-    assert_equal "/oauth/authorize", uri.path
-    assert_equal issuance.transaction.login_challenge, Rack::Utils.parse_nested_query(uri.query)["login_challenge"]
+    assert_not_respond_to issuance, :resume_url
+    assert_not_respond_to issuance.transaction, :acme_resume_url
   end
 
   test "register_result marks the transaction authenticated and consume makes it one time" do

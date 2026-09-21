@@ -17,7 +17,7 @@ module SignIn
       assert_equal actor.id, result.token.user_id
       assert_equal result.token, result.cycle.token
       assert_predicate result.refresh_token, :present?
-      assert_in_delta TokenStatusManagement::RESTRICTED_TTL.from_now.to_i, result.token.discarded_at.to_i, 2
+      assert_in_delta TokenStatusManagement::RESTRICTED_TTL.from_now.to_i, result.token.discard_at.to_i, 2
       assert_predicate result.cycle, :sign_in_session_limit_pending?
     end
 

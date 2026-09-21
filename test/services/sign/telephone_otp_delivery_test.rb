@@ -18,7 +18,8 @@ module Sign
         assert_match(/\A\d{6}\z/, otp_code)
         assert_predicate telephone.otp_private_key, :present?
         assert_predicate telephone.otp_counter.to_s, :present?
-        assert_in_delta 12.minutes.from_now.to_i, telephone.otp_expires_at.to_i, 1
+        assert_operator telephone.otp_counter.to_i, :<, 1 << 64
+        assert_in_delta 10.minutes.from_now.to_i, telephone.otp_expires_at.to_i, 1
         if telephone.respond_to?(:otp_last_sent_at)
           assert_equal Time.current.to_i, telephone.otp_last_sent_at.to_i
         end

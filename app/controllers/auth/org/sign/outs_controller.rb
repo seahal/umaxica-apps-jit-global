@@ -36,6 +36,7 @@ module Auth
             client_id: "sign-rp",
             issuer_resource_type: "operator",
             token_issuer: "operator",
+            session_authority: :base_browser_session,
           )
         end
 

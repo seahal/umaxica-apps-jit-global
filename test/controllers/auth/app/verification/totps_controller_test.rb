@@ -98,6 +98,40 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     assert_equal "settings_email", @token.last_step_up_scope
   end
 
+  test "step-up exposes an actor-scoped selector for two active authenticators" do
+    ClientTotpCredential.create!(
+      user: @user,
+      private_key: ROTP::Base32.random_base32,
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+      title: "primary authenticator",
+      last_otp_at: Time.zone.at(0),
+    )
+    second = ClientTotpCredential.create!(
+      user: @user,
+      private_key: ROTP::Base32.random_base32,
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+      title: "second authenticator",
+      last_otp_at: Time.zone.at(0),
+    )
+    return_to = "/settings/emails?ri=jp"
+    pt = signed_step_up_pt(return_to)
+    grant = signed_step_up_grant_for(
+      actor: @user, token: @token, scope: "settings_email", return_to: return_to, surface: "app",
+    )
+
+    with_prosopite_paused do
+      get auth_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", step_up_ceremony_grant: grant),
+          headers: @headers
+      get new_auth_app_verification_totp_url(ri: "jp"), headers: @headers
+    end
+
+    selector = inertia_form.fetch("credential_selector")
+
+    assert_equal "verification[credential_public_id]", selector.fetch("name")
+    assert_includes selector.fetch("options").map { |option| option.fetch("value") }, second.public_id
+    assert selector.fetch("options").all? { |option| option.fetch("label").present? }
+  end
+
   test "successful totp consumes the step-up session and cannot be replayed" do
     private_key = "JBSWY3DPEHPK3PXP"
     ClientTotpCredential.create!(
@@ -194,9 +228,9 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     assert_equal 1, ClientStepUpSession.where(user_token: @token).count
   end
 
-  # Step-Up TOTP shares the PostgreSQL lockout with sign-in: once an account's TOTP is locked,
-  # a correct code must not complete a step-up either.
-  test "rejects a correct code while the account's TOTP lockout is in force" do
+  # Step-Up TOTP shares the PostgreSQL terminal state with sign-in: once this credential is
+  # revoked, a correct code must not complete a step-up either.
+  test "rejects a correct code after this TOTP credential is revoked" do
     private_key = "JBSWY3DPEHPK3PXP"
     credential = ClientTotpCredential.create!(
       user: @user,
@@ -218,9 +252,9 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     assert_response :success
 
     freeze_time do
-      # Lock the account through the shared verifier, as failed sign-in attempts would.
+      # Revoke this credential through the shared verifier, as failed sign-in attempts would.
       credentials = ClientTotpCredential.where(id: credential.id)
-      ClientTotpCredential::MAX_TOTP_ATTEMPTS.times do
+      ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times do
         TotpWindowConsumer.call(credentials: credentials, token: wrong_totp_code(private_key))
       end
 
@@ -231,9 +265,11 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
       end
     end
 
-    assert_response :unprocessable_content
+    assert_response :see_other
+    assert_redirected_to %r{/verification/setup/new}
     assert_not_includes response.body, "step-up-completion-form"
-    assert_equal ClientTotpCredential::MAX_TOTP_ATTEMPTS, credential.reload.otp_attempts_count
+    assert_equal ClientTotpCredential::MAX_CONSECUTIVE_FAILURES, credential.reload.otp_attempts_count
+    assert_equal ClientTotpCredentialStatus::REVOKED, credential.user_identity_totp_credential_status_id
     assert_equal 0, credential.last_otp_at.to_i
   end
 
@@ -802,7 +838,7 @@ class Auth::App::Verification::TotpsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -830,7 +866,7 @@ class Auth::App::Verification::TotpsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -858,7 +894,7 @@ class Auth::App::Verification::TotpsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

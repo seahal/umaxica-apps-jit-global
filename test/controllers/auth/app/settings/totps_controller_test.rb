@@ -115,6 +115,23 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
+  test "index displays active and revoked statuses without removing revoked credentials" do
+    @totp.update!(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::REVOKED,
+      otp_attempts_count: ClientTotpCredential::MAX_CONSECUTIVE_FAILURES,
+    )
+
+    with_prosopite_paused do
+      get auth_app_settings_totps_url(ri: "jp"), headers: @headers
+    end
+
+    assert_response :ok
+    row = inertia_props.fetch("totps").find { |candidate| candidate.fetch("public_id") == @totp.public_id }
+
+    assert_equal I18n.t("messages.totp_status.revoked"), row.fetch("status")
+    assert_equal I18n.t("messages.totp_status_label"), inertia_props.fetch("columns").fetch("status")
+  end
+
   test "index stays accessible when no totp is registered" do
     user = Client.create!(status_id: ClientStatus::NOTHING)
     token = ClientToken.create!(user_id: user.id)
@@ -223,7 +240,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   test "new refuses to start another authenticator once the limit is reached" do
     @user.client_totp_credentials.destroy_all
-    Auth::App::Settings::TotpsController::MAX_TOTPS.times do |index|
+    ClientTotpCredential::MAX_TOTP_SLOTS.times do |index|
       ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,
@@ -239,7 +256,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal I18n.t(
       "session_limit.totp_limit_reached",
-      count: Auth::App::Settings::TotpsController::MAX_TOTPS,
+      count: ClientTotpCredential::MAX_TOTP_SLOTS,
     ), response.body
   end
 
@@ -1002,7 +1019,7 @@ class Auth::App::Settings::TotpsControllerTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1028,7 +1045,7 @@ class Auth::App::Settings::TotpsControllerTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -1056,7 +1073,7 @@ class Auth::App::Settings::TotpsControllerTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

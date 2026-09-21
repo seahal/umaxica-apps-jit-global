@@ -246,7 +246,7 @@ must be synthetic. Contact forms require Turnstile test keys or bypass for autom
 ## 9. Tooling, Data, and Automation
 
 - **Tools**: Minitest, Rails system tests, `committee-rails`, Vitest, Oxlint, Oxfmt, Brakeman,
-  Bundler Audit, database_consistency, curl scripts for manual smoke checks.
+  Bundler Audit, curl scripts for manual smoke checks.
 - **Fixtures**: Stored per DB context; use `ActiveRecord::FixtureSet.create_fixtures` per database
   connection. Sensitive examples anonymized.
 - **Data cleanup**: Multi-DB tests must wrap in transactions (Rails 8 multi-db test helpers) or rely

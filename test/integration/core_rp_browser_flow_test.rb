@@ -62,7 +62,7 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     expectations.each do |host, controller|
       assert_routing(
-        { method: :get, path: "http://#{host}/sign/in/callback" },
+        { method: :get, path: "http://#{host}/sign/callback" },
         { controller: controller, action: "show" },
       )
     end
@@ -73,7 +73,8 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
       host! surface[:host]
       https!
 
-      get "/sign/in", headers: browser_headers.merge("Host" => surface[:host])
+      get "/sign", headers: browser_headers.merge("Host" => surface[:host])
+      post "/sign", params: { pt: "/", ri: "jp" }, headers: browser_headers.merge("Host" => surface[:host])
 
       assert_response :redirect
       uri = URI.parse(jump_rt_url_from_location(response.location))
@@ -84,7 +85,7 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_not_equal "jump.umaxica.net", uri.host
       assert_equal surface[:client_id], query["client_id"]
       assert_equal redirect_uri_for(surface), query["redirect_uri"]
-      assert_equal "signup", query["screen_hint"]
+      assert_nil query["screen_hint"]
       assert_equal "S256", query["code_challenge_method"]
       assert_predicate query["state"], :present?
       assert_predicate query["nonce"], :present?
@@ -543,7 +544,7 @@ class CoreRpBrowserFlowTest
 
     ensure_user_token_reference_records!
     token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
+    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
     token ||= ClientToken.create!(
       user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -561,7 +562,7 @@ class CoreRpBrowserFlowTest
     ensure_staff_token_reference_records!
     token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
     token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= OperatorToken.create!(
@@ -581,7 +582,7 @@ class CoreRpBrowserFlowTest
     ensure_visitor_token_reference_records!
     token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
     token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
+      "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
     token ||= VisitorToken.create!(

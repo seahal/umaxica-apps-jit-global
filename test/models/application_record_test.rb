@@ -4,6 +4,15 @@
 require "test_helper"
 
 class ApplicationRecordTest < ActiveSupport::TestCase
+  test "database_now reads the writer database clock" do
+    database_now = Client.database_now
+    writer_now = Client.connection.select_value("SELECT clock_timestamp()")
+
+    assert_instance_of Time, database_now
+    assert_instance_of Time, writer_now
+    assert_in_delta writer_now.to_f, database_now.to_f, 1.0
+  end
+
   test "clear_fixed_id_seed_cache! clears the cache" do
     ApplicationRecord.clear_fixed_id_seed_cache!
     ApplicationRecord.insert_missing_fixed_ids!([99_999])
@@ -86,7 +95,7 @@ class ApplicationRecordTest < ActiveSupport::TestCase
     end
   end
 
-  test "insert_missing_fixed_ids! falls back when bulk insert is unavailable" do
+  test "insert_missing_fixed_ids! does not hide a bulk insert database failure" do
     ApplicationRecord.clear_fixed_id_seed_cache!
     max_id = ClientStatus.maximum(:id) || 0
     missing_id = max_id + 10_003
@@ -94,11 +103,13 @@ class ApplicationRecordTest < ActiveSupport::TestCase
 
     Object.send(:remove_const, :Prosopite) if prosopite
 
-    ClientStatus.stub(:insert_all, ->(*) { raise ActiveRecord::StatementInvalid, "unsupported" }) do
-      ClientStatus.insert_missing_fixed_ids!([missing_id])
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ClientStatus.stub(:insert_all, ->(*) { raise ActiveRecord::StatementInvalid, "unsupported" }) do
+        ClientStatus.insert_missing_fixed_ids!([missing_id])
+      end
     end
 
-    assert_predicate ClientStatus.where(id: missing_id), :exists?
+    assert_not_predicate ClientStatus.where(id: missing_id), :exists?
   ensure
     Object.const_set(:Prosopite, prosopite) if prosopite && !defined?(Prosopite)
   end
@@ -113,7 +124,7 @@ class ApplicationRecordTest < ActiveSupport::TestCase
 
     relation = ClientStatus.where(id: missing_id)
 
-    ClientStatus.stub(:insert_all, ->(*) { raise ActiveRecord::StatementInvalid, "unsupported" }) do
+    ClientStatus.stub(:insert_all, ->(*) { raise ActiveRecord::RecordNotUnique, "duplicate" }) do
       relation.stub(:first_or_create!, -> { raise ActiveRecord::RecordNotUnique, "duplicate" }) do
         ClientStatus.stub(
           :where, ->(conditions) {

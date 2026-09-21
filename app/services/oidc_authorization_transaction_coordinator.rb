@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 class OidcAuthorizationTransactionCoordinator < ApplicationService
-  Issuance = Data.define(:transaction, :resume_url)
+  Issuance = Data.define(:transaction)
 
   class << self
     public
@@ -38,7 +38,7 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
           expires_at: now + ttl,
           now: now,
         )
-      Issuance.new(transaction: transaction, resume_url: transaction.acme_resume_url)
+      Issuance.new(transaction: transaction)
     end
 
     def find_by_login_challenge!(surface:, login_challenge:)
@@ -60,7 +60,7 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
         authentication_event_at: authentication_event_at,
         now: now,
       )
-      Issuance.new(transaction: transaction, resume_url: transaction.acme_resume_url)
+      Issuance.new(transaction: transaction)
     end
 
     def consume!(surface:, login_challenge:, now: Time.current)
