@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{brand_tld})",
+                          title: "Continue",
+                          separator: "—",
+                          reverse: true %>
+  </head>
+  <body>
+    <main>
+      <h1>Continue</h1>
+      <%= form_with url: neutral_sign_form_url, method: :post, local: true do |form| %>
+        <%= form.submit "Continue" %>
+      <% end %>
+    </main>
+  </body>
+</html>
