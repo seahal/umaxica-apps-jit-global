@@ -18,7 +18,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal edit_auth_app_sign_out_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
-  test "edit renders confirmation and post starts the RP logout handoff" do
+  test "edit renders confirmation and post redirects to Base without an Auth RP logout" do
     user = create_verified_user_with_email(email_address: "auth-app-sign-out-#{SecureRandom.hex(4)}@example.com")
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(token)
@@ -36,26 +36,13 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post auth_app_sign_out_url(ri: "jp", host: @host), headers: rp_session_headers(user, token)
 
-    assert_response :success
-    assert_select "form#sign-out-handoff-form[method=?]", "post", count: 1
-    handoff = URI.parse(css_select("form#sign-out-handoff-form").first["action"])
-    query = Rack::Utils.parse_nested_query(handoff.query.to_s)
+    assert_response :see_other
+    location = URI.parse(response.location)
 
-    # Auth is an RP: it hands the browser to the Base end-session endpoint instead of
-    # mutating authoritative session state itself.
-    assert_equal @base_host, handoff.host
-    assert_equal "/oidc/logout", handoff.path
-    assert_predicate query["id_token_hint"], :present?
-    assert_predicate query["state"], :present?
-    assert_equal(
-      auth_app_sign_out_url(
-        ri: "jp",
-        host: Rails.configuration.x.boot_config.fetch(:hosts).auth_service.host,
-        protocol: "https",
-      ),
-      query["post_logout_redirect_uri"],
-    )
-    assert_predicate token.reload, :revoked?
+    assert_equal @base_host, location.host
+    assert_equal "/sign/out", location.path
+    assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(location.query.to_s))
+    assert_predicate token.reload, :currently_usable?
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
@@ -75,17 +62,29 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
         surface: "app",
         ri: "jp",
       ).transaction
+    AcmeLogoutTransactionCoordinator.advance!(
+      logout_challenge: transaction.logout_challenge,
+      step: "origin_cleared",
+    )
+    AcmeLogoutTransactionCoordinator.advance!(
+      logout_challenge: transaction.logout_challenge,
+      step: "acme_cleared",
+    )
 
     post auth_app_sign_out_url(ri: "jp", host: @host, logout_challenge: transaction.logout_challenge),
          headers: rp_session_headers(user, token)
 
-    # The continuation hop must not start a second RP ceremony; it only clears this host.
-    assert_response :see_other
-    location = URI.parse(response.location)
+    # The continuation hop must not start a second RP ceremony; it only clears this host and
+    # renders the approved POST handoff to Base's authoritative end-session endpoint.
+    assert_response :success
+    handoff = css_select("form#sign-out-handoff-form").first
+    location = URI.parse(handoff["action"])
 
     assert_equal @base_host, location.host
-    assert_equal "/sign/out", location.path
-    assert_predicate token.reload, :revoked?
+    assert_equal "/oidc/logout", location.path
+    assert_equal transaction.logout_challenge,
+                 handoff.css('input[name="logout_challenge"]').first["value"]
+    assert_predicate token.reload, :currently_usable?
   end
 
   test "destroy cancels the pending logout and keeps the current session" do

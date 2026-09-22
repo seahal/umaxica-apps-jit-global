@@ -69,17 +69,18 @@ module Email
   end
 
   # Cooldown gates how often an OTP may be re-sent. Email-only: see OtpLockable.
-  def otp_cooldown_active?
+  def otp_cooldown_active?(now: nil)
     return false if otp_last_sent_at.blank?
     return false if otp_last_sent_at == -Float::INFINITY
 
-    otp_last_sent_at > OTP_COOLDOWN_PERIOD.ago
+    otp_last_sent_at > (now || self.class.database_now) - OTP_COOLDOWN_PERIOD
   end
 
-  def otp_cooldown_remaining
-    return 0 unless otp_cooldown_active?
+  def otp_cooldown_remaining(now: nil)
+    decision_time = now || self.class.database_now
+    return 0 unless otp_cooldown_active?(now: decision_time)
 
-    (otp_last_sent_at + OTP_COOLDOWN_PERIOD) - Time.current
+    (otp_last_sent_at + OTP_COOLDOWN_PERIOD) - decision_time
   end
 
   def raw_address

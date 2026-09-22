@@ -69,7 +69,10 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
       ENTRY_PATHS.each do |path|
         %w(jp us).each do |region|
           host! host
-          get path, params: { ri: region, admission: admission_code_for(surface, path) }
+          redeem_auth_ceremony_entry!(
+            path, reference: admission_reference_for(surface, path),
+                  params: { ri: region }, headers: { "Host" => host },
+          )
 
           assert_response :see_other, "#{surface} #{path}?ri=#{region} admission redemption must succeed"
           follow_redirect!
@@ -100,7 +103,7 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
   # path `AuthOidcEntrancesTest` and `AuthenticationFlowTest` use, so the code carries a genuine
   # signature rather than a stub -- `AuthCeremonyAdmission#admit_or_render_sign_ceremony!` verifies
   # it for real.
-  def admission_code_for(surface, path)
+  def admission_reference_for(surface, path)
     client = OidcClientRegistry.find!("core-next-rp")
     transaction =
       OidcAuthorizationTransactionCoordinator.issue!(
@@ -117,6 +120,6 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
   end
 end

@@ -330,11 +330,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
            headers: { "Host" => @host }
 
     assert_response :redirect
-    assert_oidc_authorize_redirect(
-      jump_rt_url_from_location(response.location),
-      host: @public_base_host,
-      client_id: "sign-rp",
-    )
+    assert_auth_local_sign_in_redirect(response.location, surface: :app)
   end
 
   test "unlink succeeds when user has only inactive legacy social identity and an active email" do

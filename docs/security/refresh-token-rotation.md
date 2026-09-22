@@ -17,7 +17,10 @@ downstream tokens.
 The OIDC token endpoint accepts both `authorization_code` and `refresh_token` grants. A refresh
 request is bound to the registered client and its RP session, validates the active parent session,
 scope, sender constraint and absolute session ceiling, and rotates the presented token on the
-writing database role. The RP session stores the original `auth_time`, `acr`, `amr`, and OIDC nonce;
+writing database role. State-changing refresh-token and RP-session lifecycle decisions select one
+uncached writer-database clock value after the required row locks are held, and pass that value
+through the transition so activity, rotation, revocation, and expiry decisions do not mix clocks.
+The RP session stores the original `auth_time`, `acr`, `amr`, and OIDC nonce;
 refresh advances token `iat` but never substitutes the refresh or exchange time for `auth_time`.
 Missing authentication-event time fails closed. Replay and revoke outcomes remain scoped to the
 owning RP session/family, and the project continues to accept the residual risk that already-issued

@@ -33,13 +33,12 @@ class OidcAccessTokenAuthenticator < ApplicationService
     return failure("invalid_token") unless payload
     return failure("invalid_token") unless dpop_valid?(payload)
 
-    token = find_token(payload)
-    return failure("invalid_token") unless token && root_token_for(token).active?
-    return failure("invalid_token") unless token_belongs_to_audience?(token, payload)
-    return failure("invalid_token") unless token_jti_matches?(token, payload)
+    base_session = find_base_session(payload)
+    return failure("invalid_token") unless base_session&.currently_usable?
+    return failure("invalid_token") unless token_belongs_to_audience?(payload)
     return failure("insufficient_scope") unless token_scope_allows_userinfo?(payload)
 
-    resource = token_resource(token)
+    resource = find_resource(payload)
     return failure("invalid_token") unless resource&.active?
     return failure("invalid_token") if resource.respond_to?(:admin_locked?) && resource.admin_locked?
     if resource.respond_to?(:access_token_stale_for_administrative_lock?) &&
@@ -47,8 +46,9 @@ class OidcAccessTokenAuthenticator < ApplicationService
       return failure("invalid_token")
     end
     return failure("invalid_token") unless token_subject_matches?(resource, payload)
+    return failure("invalid_token") unless base_session_actor_matches?(base_session, resource)
 
-    Result.new(success: true, payload: payload, token: token, resource: resource, error: nil)
+    Result.new(success: true, payload: payload, token: base_session, resource: resource, error: nil)
   end
 
   private
@@ -78,54 +78,42 @@ class OidcAccessTokenAuthenticator < ApplicationService
     ).call.valid?
   end
 
-  # Normal Access JWT authentication is cryptographic (RFC 9068) plus Base Browser
-  # Session binding. Exchanged and refreshed JWTs carry the RP Session public ID as
-  # `sid`, so the RP Session is resolved only to reach its parent Browser Session and
-  # its client/jti binding. Its own revocation state is deliberately not checked:
-  # child revoke stops refresh/new issuance only and does not invalidate an
-  # already-issued JWT. `call` checks that the parent Browser Session is active.
-  def find_token(payload)
-    sid = payload["sid"].to_s
-    return if sid.blank?
+  # Normal Access JWT authentication is cryptographic (RFC 9068) plus a direct
+  # binding to the Base Browser Session that issued the RP credentials. The RP
+  # Session remains the refresh/revocation authority, but it is deliberately not
+  # read on every authenticated request. `sid` remains the protocol identifier
+  # for the RP Session; `umx_base_sid` identifies the parent Base session.
+  def find_base_session(payload)
+    base_sid = AuthorizationTokenClaims.base_session_id(payload).to_s
+    return if base_sid.blank?
 
-    token_context.connected_to(role: :reading) do
-      rp_session_class_for_resource_type.find_by(public_id: sid) ||
-        token_class_for_resource_type.find_by(oidc_sid: sid) ||
-        token_class_for_resource_type.find_by(public_id: sid)
+    token_class_for_resource_type.connection_class_for_self.connected_to(role: :reading) do
+      token_class_for_resource_type.find_by(public_id: base_sid)
     end
   end
 
-  def rp_session_class_for_resource_type
-    case resource_type
-    when "operator" then OperatorRpSession
-    when "visitor" then VisitorRpSession
-    else ClientRpSession
-    end
-  end
-
-  def token_belongs_to_audience?(token, payload)
-    return false unless token.respond_to?(:oidc_client_id)
-
-    client = OidcClientRegistry.find(token.oidc_client_id)
+  def token_belongs_to_audience?(payload)
+    client = OidcClientRegistry.find(AuthorizationTokenClaims.client_id(payload))
     return false unless client
     return false unless OidcIssuer.resource_type_for_client(client) == resource_type
 
     Array(payload["aud"]).include?(client.aud)
   end
 
-  def token_jti_matches?(token, payload)
-    return true unless token.respond_to?(:oidc_jti)
-    return true if token.oidc_jti.blank?
-
-    expected = token.oidc_jti.to_s
-    actual = payload["jti"].to_s
-    return false unless expected.bytesize == actual.bytesize
-
-    ActiveSupport::SecurityUtils.secure_compare(expected, actual)
-  end
-
   def token_scope_allows_userinfo?(payload)
     AuthorizationTokenClaims.scopes(payload).include?("openid")
+  end
+
+  def find_resource(payload)
+    public_id = OidcSubject.public_id_from(
+      AuthorizationTokenClaims.subject(payload),
+      resource_type: resource_type,
+    )
+    return if public_id.blank?
+
+    resource_class_for_resource_type.connection_class_for_self.connected_to(role: :reading) do
+      resource_class_for_resource_type.find_by(public_id: public_id)
+    end
   end
 
   def token_subject_matches?(resource, payload)
@@ -136,12 +124,19 @@ class OidcAccessTokenAuthenticator < ApplicationService
     ActiveSupport::SecurityUtils.secure_compare(expected, actual)
   end
 
-  def token_resource(token)
-    session_token = root_token_for(token)
+  def base_session_actor_matches?(base_session, resource)
     case resource_type
-    when "operator" then session_token.staff
-    when "visitor" then session_token.visitor
-    else session_token.user
+    when "operator" then base_session.staff_id == resource.id
+    when "visitor" then base_session.visitor_id == resource.id
+    else base_session.user_id == resource.id
+    end
+  end
+
+  def resource_class_for_resource_type
+    case resource_type
+    when "operator" then Operator
+    when "visitor" then Visitor
+    else Client
     end
   end
 
@@ -150,22 +145,6 @@ class OidcAccessTokenAuthenticator < ApplicationService
     when "operator" then OperatorToken
     when "visitor" then VisitorToken
     else ClientToken
-    end
-  end
-
-  def root_token_for(token)
-    return token.client_token if token.respond_to?(:client_token) && token.client_token.present?
-    return token.operator_token if token.respond_to?(:operator_token) && token.operator_token.present?
-    return token.visitor_token if token.respond_to?(:visitor_token) && token.visitor_token.present?
-
-    token
-  end
-
-  def token_context
-    case resource_type
-    when "operator" then OrgTicketRecord
-    when "visitor" then ComTicketRecord
-    else AppTicketRecord
     end
   end
 

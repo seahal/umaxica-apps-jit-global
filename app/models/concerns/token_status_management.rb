@@ -55,22 +55,28 @@ module TokenStatusManagement
     token_status_id == self.class.token_status_model::ACTIVE && currently_usable?
   end
 
-  def mark_restricted!
-    update_status_transition!(self.class.token_status_foreign_key => self.class.token_status_model::RESTRICTED)
+  def mark_restricted!(now: nil)
+    update_status_transition!(
+      { self.class.token_status_foreign_key => self.class.token_status_model::RESTRICTED },
+      now: now,
+    )
   end
 
-  def promote_to_active!
-    update_status_transition!(self.class.token_status_foreign_key => self.class.token_status_model::ACTIVE)
+  def promote_to_active!(now: nil)
+    update_status_transition!(
+      { self.class.token_status_foreign_key => self.class.token_status_model::ACTIVE },
+      now: now,
+    )
   end
 
-  def revoke!
-    now = Time.current
+  def revoke!(now: nil)
+    now ||= self.class.database_now
     ensure_token_status_defaults!
     attrs = { self.class.token_status_foreign_key => self.class.token_status_model::REVOKED }
     if has_attribute?(:discard_at)
       attrs[:discard_at] = [now, created_at].compact.max
     end
-    update_status_transition!(attrs)
+    update_status_transition!(attrs, now: now)
   end
 
   def expired?(now = Time.current)
@@ -162,10 +168,15 @@ module TokenStatusManagement
     value <= now
   end
 
-  def update_status_transition!(attrs)
+  def update_status_transition!(attrs, now: nil)
     attrs = attrs.dup
-    attrs[:updated_at] = Time.current if has_attribute?(:updated_at)
-    operation = -> { update!(attrs) }
+    now ||= self.class.database_now
+    attrs[:updated_at] = now if has_attribute?(:updated_at)
+    operation =
+      lambda do
+        assign_attributes(attrs)
+        save!(touch: false)
+      end
     defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
   end
 end

@@ -128,8 +128,11 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "show with an expired otp redirects to the start" do
     user_email = start_email_signup!("email-show-expired@example.com")
 
-    travel_to(user_email.reload.otp_expires_at + 1.second) do
-      get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    expiry = user_email.reload.otp_expires_at
+    ClientEmail.stub(:database_now, expiry + 1.second) do
+      travel_to(expiry + 1.second) do
+        get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+      end
     end
 
     assert_response :redirect
@@ -139,10 +142,13 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   test "patch with an expired otp redirects to the start" do
     user_email = start_email_signup!("email-expired@example.com")
 
-    travel_to(user_email.reload.otp_expires_at + 1.second) do
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-            params: { client_email: { pass_code: "000000" } },
-            headers: default_headers
+    expiry = user_email.reload.otp_expires_at
+    ClientEmail.stub(:database_now, expiry + 1.second) do
+      travel_to(expiry + 1.second) do
+        patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+              params: { client_email: { pass_code: "000000" } },
+              headers: default_headers
+      end
     end
 
     assert_response :redirect

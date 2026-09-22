@@ -443,7 +443,8 @@ project-wide percentage change is unmeasured.
   line each, immediately above the existing `include ::RateLimit`, so the ordering is visible at the
   point of declaration.
 - `app/controllers/auth/{app,com,org}/preferences_base_controller.rb`,
-  `app/controllers/auth/app/oidc/callbacks_controller.rb`,
+  the historical `app/controllers/auth/app/oidc/callbacks_controller.rb` reference (the Auth
+  callback controller was retired by the ceremony-only boundary),
   `app/controllers/auth/app/sign/in/sessions_controller.rb`,
   `app/controllers/concerns/oidc_rp_logout_launcher.rb` — `ensure_fqdn_gate_first!` after their own
   `prepend_before_action`, which would otherwise land ahead of the gate.

@@ -6121,7 +6121,7 @@ CREATE INDEX index_user_workspaces_on_workspace_id ON public.user_workspaces USI
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6129,7 +6129,7 @@ ALTER TABLE ONLY public.agent_memberships
 --
 
 ALTER TABLE ONLY public.bureau_units
-    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6145,7 +6145,7 @@ ALTER TABLE ONLY public.departments
 --
 
 ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6169,7 +6169,7 @@ ALTER TABLE ONLY public.organization_entra_connections
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id);
+    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id) NOT VALID;
 
 
 --
@@ -6241,7 +6241,7 @@ ALTER TABLE ONLY public.operator_entra_identities
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id);
+    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id) NOT VALID;
 
 
 --
@@ -6281,7 +6281,7 @@ ALTER TABLE ONLY public.agent_usage_grants
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -6417,7 +6417,7 @@ ALTER TABLE ONLY public.operator_passkeys
 --
 
 ALTER TABLE ONLY public.operator_workspace_account_memberships
-    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -6481,7 +6481,7 @@ ALTER TABLE ONLY public.operators
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -6745,7 +6745,7 @@ ALTER TABLE ONLY public.bureau_view_grants
 --
 
 ALTER TABLE ONLY public.operator_lifecycle_requests
-    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -6881,7 +6881,7 @@ ALTER TABLE ONLY public.agent_assignments
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id);
+    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id) NOT VALID;
 
 
 --
@@ -6921,7 +6921,7 @@ ALTER TABLE ONLY public.agent_ownerships
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
 
 
 --

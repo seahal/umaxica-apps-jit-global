@@ -89,6 +89,9 @@ module Palm
 
           assert_predicate payload["logout_url"], :present?
           assert_predicate payload["state"], :present?
+
+          callback_state = payload.fetch("state")
+
           assert_predicate payload["expires_at"], :present?
           assert_predicate native_token.reload, :revoked?
           assert_predicate native_token.device_session.reload, :revoked?
@@ -141,20 +144,41 @@ module Palm
             },
           )
 
+          assert_response :success
+          base_form = css_select("form#sign-out-handoff-form").first
+          base_uri = URI.parse(base_form["action"])
+
+          assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), base_uri.host
+          assert_equal "/oidc/logout", base_uri.path
+          assert_equal query.fetch("logout_challenge"),
+                       base_form.css('input[name="logout_challenge"]').first["value"]
+
+          post base_uri.path,
+               params: {
+                 logout_challenge: query.fetch("logout_challenge"),
+                 ri: "jp",
+               },
+               headers: {
+                 "Host" => base_uri.host,
+                 "Origin" => "https://#{Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host}",
+                 "Sec-Fetch-Site" => "same-site",
+               }
+
           assert_response :see_other
           finalize_uri = URI.parse(jump_rt_url_from_location(response.location))
           finalize_query = Rack::Utils.parse_nested_query(finalize_uri.query.to_s)
 
-          assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), finalize_uri.host
+          assert_equal Rails.configuration.x.boot_config.fetch(:hosts).palm_service.host, finalize_uri.host
           assert_equal "/sign/out", finalize_uri.path
-          assert_nil finalize_query["logout_challenge"]
-          assert_nil finalize_query["state"]
+          assert_equal query.fetch("logout_challenge"), finalize_query.fetch("logout_challenge")
+          assert_equal callback_state, finalize_query.fetch("state")
 
-          get jump_rt_url_from_location(response.location)
+          get finalize_uri.request_uri, headers: host_headers(finalize_uri.host)
+          follow_redirect! if response.redirect?
 
           assert_response :success
-          # The browser lands on the Base one-shot sign-out page after coordinated sign-out.
-          assert_equal "base/app/sign_outs/edit", inertia_component
+          # The browser lands on Palm's one-shot completion page after coordinated sign-out.
+          assert_equal "palm/app/sign_outs/show", inertia_component
           assert_predicate inertia_props.fetch("title"), :present?
         end
 

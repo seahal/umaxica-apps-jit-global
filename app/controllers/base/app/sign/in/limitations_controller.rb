@@ -230,9 +230,38 @@ module Base
           end
 
           def resume_authorization_after_resolution
+            return render_invalid_resolution unless promote_oidc_resolution_session!
+
             @oidc_transaction.consume!
             @resolution.finalize!
             issue_authorization_code!
+          end
+
+          def promote_oidc_resolution_session!
+            candidate = current_session
+            return false unless candidate.is_a?(ClientToken)
+            return false unless candidate.user_id == @actor.id && candidate.currently_usable?
+
+            promoted_session =
+              with_actor_session_lock(@actor) do
+                AppTicketRecord.connected_to(role: :writing) do
+                  token = ClientToken.lock.find_by(id: candidate.id)
+                  next false unless token&.currently_usable? && token.user_id == @actor.id
+
+                  if token.restricted?
+                    next false unless ClientToken.active_status.where(user_id: @actor.id).count <
+                      ClientToken::MAX_SESSIONS_PER_USER
+
+                    token.promote_to_active!
+                  end
+                  token
+                end
+              end
+
+            return false unless promoted_session
+
+            @current_session = promoted_session
+            true
           end
 
           def issue_authorization_code!

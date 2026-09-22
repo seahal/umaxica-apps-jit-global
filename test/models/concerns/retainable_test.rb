@@ -12,6 +12,22 @@ class RetainableTest < ActiveSupport::TestCase
 
     attribute :created_at, :datetime, default: -> { Time.current }
 
+    class << self
+      def database_now_value=(value)
+        @database_now_value = value
+      end
+
+      def database_now
+        database_now_value || Time.current
+      end
+
+      private
+
+      def database_now_value
+        @database_now_value
+      end
+    end
+
     # We need to simulate ActiveRecord update context for the validation
     def validation_context
       @validation_context || :default
@@ -30,6 +46,7 @@ class RetainableTest < ActiveSupport::TestCase
 
   setup do
     @dummy = DummyRetainable.new
+    DummyRetainable.database_now_value = nil
   end
 
   test "persistent retainable records use semantic retention column names" do
@@ -106,6 +123,17 @@ class RetainableTest < ActiveSupport::TestCase
     assert_equal evaluation_time + 1.day, @dummy.purge_eligible_at
   end
 
+  test "discard_now uses the model writer database clock when no time is supplied" do
+    database_time = Time.utc(2040, 1, 1, 12)
+    DummyRetainable.database_now_value = database_time
+    @dummy.created_at = database_time - 1.hour
+
+    @dummy.discard_now!(purge_after: 1.day)
+
+    assert_equal database_time, @dummy.discard_at
+    assert_equal database_time + 1.day, @dummy.purge_eligible_at
+  end
+
   test "defaults use infinity sentinel" do
     assert_equal Float::INFINITY, @dummy.discard_at
     assert_equal Float::INFINITY, @dummy.purge_eligible_at
@@ -144,6 +172,18 @@ class RetainableTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) {
       @dummy.schedule_retention!(discard_at: 2.hours.from_now, purge_eligible_at: 1.hour.from_now)
     }
+  end
+
+  test "schedule_retention! compares deadlines with the model writer database clock" do
+    database_time = Time.utc(2040, 1, 1, 12)
+    DummyRetainable.database_now_value = database_time
+
+    assert_raises(ArgumentError) do
+      @dummy.schedule_retention!(
+        discard_at: database_time - 1.hour,
+        purge_eligible_at: database_time + 1.day,
+      )
+    end
   end
 
   test "schedule_retention! updates attributes if valid" do

@@ -67,46 +67,27 @@ class RiRoutingContractTest < ActiveSupport::TestCase
   RI_SKIP_ALLOWLIST = %w(
     app/controllers/auth/app/edge/v0/token/checks_controller.rb
     app/controllers/auth/app/edge/v0/token/dbsc_controller.rb
-    app/controllers/auth/app/oidc/authorizations_controller.rb
-    app/controllers/auth/app/oidc/callbacks_controller.rb
     app/controllers/auth/app/omniauth/omniauth_callbacks_controller.rb
     app/controllers/auth/com/edge/v0/token/checks_controller.rb
     app/controllers/auth/com/edge/v0/token/dbsc_controller.rb
-    app/controllers/auth/com/oidc/authorizations_controller.rb
-    app/controllers/auth/com/oidc/callbacks_controller.rb
     app/controllers/auth/org/edge/v0/token/checks_controller.rb
     app/controllers/auth/org/edge/v0/token/dbsc_controller.rb
-    app/controllers/auth/org/oidc/authorizations_controller.rb
-    app/controllers/auth/org/oidc/callbacks_controller.rb
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
     app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/app/oauth/authorizations_controller.rb
-    app/controllers/base/app/oidc/authorizations_controller.rb
-    app/controllers/base/app/oidc/callbacks_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
     app/controllers/base/com/oauth/authorizations_controller.rb
-    app/controllers/base/com/oidc/authorizations_controller.rb
-    app/controllers/base/com/oidc/callbacks_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb
     app/controllers/base/org/oauth/authorizations_controller.rb
-    app/controllers/base/org/oidc/authorizations_controller.rb
-    app/controllers/base/org/oidc/callbacks_controller.rb
     app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
-    app/controllers/core/app/oidc/authorizations_controller.rb
     app/controllers/core/app/oidc/callbacks_controller.rb
     app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
-    app/controllers/core/com/oidc/authorizations_controller.rb
     app/controllers/core/com/oidc/callbacks_controller.rb
     app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
-    app/controllers/core/org/oidc/authorizations_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
-    app/controllers/edit/org/oidc/authorizations_controller.rb
     app/controllers/edit/org/oidc/callbacks_controller.rb
-    app/controllers/side/app/oidc/authorizations_controller.rb
     app/controllers/side/app/oidc/callbacks_controller.rb
-    app/controllers/side/com/oidc/authorizations_controller.rb
     app/controllers/side/com/oidc/callbacks_controller.rb
-    app/controllers/side/org/oidc/authorizations_controller.rb
     app/controllers/side/org/oidc/callbacks_controller.rb
   ).freeze
 

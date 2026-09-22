@@ -4,7 +4,7 @@
 class OidcConnectionRecorder < ApplicationService
   class StaleAuthorization < StandardError; end
 
-  def initialize(resource:, client:, scope:, authorization_issued_at:, used_at: Time.current)
+  def initialize(resource:, client:, scope:, authorization_issued_at:, used_at: nil)
     super()
     @resource = resource
     @client = client
@@ -21,7 +21,7 @@ class OidcConnectionRecorder < ApplicationService
     reject_stale_authorization!(connection)
 
     connection.scope = normalized_scope
-    connection.last_used_at = used_at
+    connection.last_used_at = used_at || connection_model.database_now
     connection.revoked_at = nil
     connection.save!
     connection

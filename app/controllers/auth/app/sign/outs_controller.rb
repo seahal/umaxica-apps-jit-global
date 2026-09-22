@@ -5,22 +5,21 @@ module Auth
   module App
     module Sign
       class OutsController < ::Auth::App::ApplicationController
-        include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::SignOutCancellation
-        include ::OidcRpLogoutLauncher
         include ::SurfaceInertiaPage
         include ::SignOutInertiaPages
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
+        skip_before_action :transparent_refresh_access_token, raise: false
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
         after_action :sign_out_notice_cache_headers!, only: %i(show edit)
 
         def show
-          complete_oidc_rp_logout!
+          redirect_to_base_sign_out!
         end
 
         def new
@@ -35,33 +34,48 @@ module Auth
           # Coordinated logout continuation. Core, Side, and Palm origins run a three-step
           # ceremony whose `sign_cleared` hop lands here after Base has cleared its own state,
           # and the one-shot logout challenge is the proof for that cross-host post. A
-          # user-initiated sign-out on this surface carries no challenge and starts a fresh
-          # RP logout toward the Base end-session endpoint instead.
+          # user-initiated sign-out on this surface ends only Auth ceremony state and then
+          # redirects to Base, which owns authoritative logout.
           return continue_coordinated_sign_out! if params[:logout_challenge].present?
 
-          launch_oidc_rp_logout!(
-            client_id: "sign-rp",
-            issuer_resource_type: "client",
-            token_issuer: "client",
-            session_authority: :base_browser_session,
-          )
+          clear_auth_ceremony_context!
+          redirect_to_base_sign_out!
         end
 
         private
 
         def continue_coordinated_sign_out!
-          cookies.delete(AuthenticationBase::REFRESH_COOKIE_KEY)
-          logout_current_session!(reason: "user_logout")
+          clear_auth_ceremony_context!
+          transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: params.expect(:logout_challenge))
+          result = AcmeLogoutTransactionCoordinator.advance!(
+            logout_challenge: transaction.logout_challenge,
+            step: "sign_cleared",
+          )
+          return render_coordinated_sign_out_unavailable unless result.success?
 
+          render_cross_origin_sign_out_handoff(
+            target_url: base_app_oidc_logout_url(
+              host: base_authority_host,
+              protocol: "https",
+            ),
+            transaction: transaction,
+          )
+        end
+
+        def redirect_to_base_sign_out!
           redirect_to(
             base_app_sign_out_url(
-              host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
+              host: base_authority_host,
               protocol: "https",
               ri: params[:ri],
             ),
             status: :see_other,
             allow_other_host: true,
           )
+        end
+
+        def render_coordinated_sign_out_unavailable
+          render "auth/shared/sign_outs/unavailable", status: :unprocessable_content, layout: false
         end
 
         def sign_out_confirmation_form_path

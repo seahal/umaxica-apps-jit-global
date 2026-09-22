@@ -11,15 +11,17 @@ module OidcAuthorizationResultPost
   public
 
   def create
-    payload = BaseAuthAdmissionCoordinator.consume_result!(
-      raw_code: params[:result].to_s,
-      surface: oidc_result_surface,
-    )
     transaction =
       OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
         surface: oidc_result_surface,
-        transaction_id: payload.fetch("subject_ref"),
+        transaction_id: params[:transaction_ref].to_s,
       )
+    BaseAuthAdmissionCoordinator.consume_result!(
+      raw_code: params[:result].to_s,
+      surface: oidc_result_surface,
+      transaction_ref: params[:transaction_ref].to_s,
+      expected_intent: transaction.intent,
+    )
     validate_authorization_request!(transaction.authorize_params)
     resume_authorization!(transaction)
   rescue BaseAuthAdmissionCoordinator::Denied, Umaxica::Valkey::Unavailable,

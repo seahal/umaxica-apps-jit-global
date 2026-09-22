@@ -59,19 +59,25 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   test "replayed admission is rejected and does not create a Base session token" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     issuance = issue_transaction!(SURFACES.first)
-    code = handoff_code(issuance)
+    reference = handoff_reference(issuance)
     token_count = ClientToken.count
 
     open_session do |first|
       first.host!(host)
-      first.get(auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => host })
+      redeem_auth_ceremony_session!(
+        first, auth_app_sign_in_path(ri: "jp"), reference: reference,
+                                                headers: { "Host" => host },
+      )
 
       assert_equal 303, first.response.status
     end
 
     open_session do |second|
       second.host!(host)
-      second.get(auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => host })
+      redeem_auth_ceremony_session!(
+        second, auth_app_sign_in_path(ri: "jp"), reference: reference,
+                                                 headers: { "Host" => host },
+      )
 
       assert_equal 400, second.response.status
       assert_nil second.session[:oidc_authorization_login_challenge]
@@ -88,7 +94,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       params: authorize_params("app").merge(screen_hint: "signup"),
     )
 
-    get auth_app_sign_in_url(ri: "jp", admission: handoff_code(issuance)), headers: { "Host" => host }
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path(ri: "jp"), reference: handoff_reference(issuance),
+                                       params: { ri: "jp" }, headers: { "Host" => host },
+    )
 
     assert_response :bad_request
     assert_nil session[:oidc_authorization_login_challenge]
@@ -99,7 +108,10 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     host! host
     issuance = issue_transaction!(SURFACES.fetch(1))
 
-    get auth_app_sign_in_url(ri: "jp", admission: handoff_code(issuance)), headers: { "Host" => host }
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path(ri: "jp"), reference: handoff_reference(issuance),
+                                       params: { ri: "jp" }, headers: { "Host" => host },
+    )
 
     assert_response :bad_request
     assert_nil session[:oidc_authorization_login_challenge]
@@ -125,9 +137,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     host!(host)
     issuance = issue_transaction!(surface)
 
-    get(
-      public_send(surface.fetch(:sign_in), ri: "jp", admission: handoff_code(issuance)),
-      headers: { "Host" => host },
+    redeem_auth_ceremony_entry!(
+      public_send(surface.fetch(:sign_in)), reference: handoff_reference(issuance),
+                                            params: { ri: "jp" }, headers: { "Host" => host },
     )
 
     assert_response :see_other
@@ -151,8 +163,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def handoff_code(issuance)
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  def handoff_reference(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
   end
 
   def authorize_params(surface_name)

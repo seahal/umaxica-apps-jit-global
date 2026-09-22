@@ -339,7 +339,7 @@ class AuthorityOwnerMigrationInventory
     states =
       AUTHORITY_TABLES.each_with_object({}) do |(surface, table_names), result|
         configuration = RESOURCE_CONFIGS.find { |entry| entry.fetch(:surface) == surface }
-        connection = configuration.fetch(:resource_class).connection
+        connection = configuration.fetch(:resource_class).lease_connection
         result[surface] = table_names.index_with { |table_name| connection.data_source_exists?(table_name) }
       end
     present = states.values.flat_map(&:values)

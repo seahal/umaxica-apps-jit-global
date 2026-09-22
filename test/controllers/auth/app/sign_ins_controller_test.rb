@@ -34,7 +34,7 @@ module Auth
       end
 
       test "local ceremony renders authentication links" do
-        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -67,7 +67,7 @@ module Auth
         AppPreferenceCookie.create!(preference: preference)
         cookies[::PreferenceCookieName.refresh(surface: :app)] = token
 
-        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -78,8 +78,7 @@ module Auth
       test "authentication links carry pt" do
         pt = Base64.urlsafe_encode64("https://log.umaxica.app/settings/sessions?ri=jp", padding: false)
 
-        get auth_app_sign_in_url(ri: "jp", pt: pt, admission: login_challenge),
-            headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp", pt: pt)
 
         assert_response :see_other
         follow_redirect!
@@ -93,8 +92,7 @@ module Auth
       end
 
       test "sign up link includes pt when pt is present" do
-        get auth_app_sign_in_url(ri: "jp", pt: "abc", admission: login_challenge),
-            headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp", pt: "abc")
 
         assert_response :see_other
         follow_redirect!
@@ -105,7 +103,7 @@ module Auth
       end
 
       test "sign up link includes only ri when pt is absent" do
-        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -117,8 +115,7 @@ module Auth
 
       test "sign up link preserves encoded-like pt value safely" do
         pt = "aHR0cHM6Ly9leGFtcGxlLmNvbS8_cD0xJmE9Mg%3D%3D"
-        get auth_app_sign_in_url(ri: "jp", pt: pt, admission: login_challenge),
-            headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp", pt: pt)
 
         assert_response :see_other
         follow_redirect!
@@ -129,8 +126,7 @@ module Auth
       end
 
       test "should render in english when lx=en" do
-        get auth_app_sign_in_url(lx: "en", ri: "jp", admission: login_challenge),
-            headers: { "Host" => @host }
+        enter_sign_in!(lx: "en", ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -141,7 +137,7 @@ module Auth
       end
 
       test "shows social login buttons" do
-        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -164,7 +160,7 @@ module Auth
       end
 
       test "apple button carries a permitted call to action on the custom button element" do
-        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -178,7 +174,7 @@ module Auth
       end
 
       test "apple button renders the official logo artwork for both appearances" do
-        get auth_app_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
         follow_redirect!
@@ -217,9 +213,9 @@ module Auth
             params: authorize_params,
           )
         headers = as_user_headers(user, host: @host)
-        code = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+        reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
 
-        get auth_app_sign_in_url(ri: "jp", admission: code), headers: headers
+        get auth_app_sign_in_path(ri: "jp", transaction_ref: reference), headers: headers
 
         assert_response :conflict
         assert_equal "Sign-in is unavailable while authenticated.", response.body
@@ -234,13 +230,20 @@ module Auth
 
       private
 
+      def enter_sign_in!(params)
+        redeem_auth_ceremony_entry!(
+          auth_app_sign_in_path, reference: login_challenge,
+                                 params: params, headers: { "Host" => @host },
+        )
+      end
+
       def login_challenge(intent: "sign_in")
         transaction = OidcAuthorizationTransactionCoordinator.issue!(
           surface: "app",
           intent: intent,
           params: authorize_params,
         ).transaction
-        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
       end
 
       def authorize_params

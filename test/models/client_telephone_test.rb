@@ -369,16 +369,16 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     user_telephone = ClientTelephone.create!(@valid_attributes.merge(raw_number: "+819012345600"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
-      user_telephone.store_otp("SECRET", "2", 30.seconds.from_now.to_i)
+    ClientTelephone.stub(:database_now, now) do
+      user_telephone.store_otp("SECRET", "2", (now + 30.seconds).to_i)
     end
 
-    travel_to now + 29.seconds do
+    ClientTelephone.stub(:database_now, now + 29.seconds) do
       assert_predicate user_telephone.reload, :otp_active?
       assert_not user_telephone.otp_expired?
     end
 
-    travel_to now + 30.seconds do
+    ClientTelephone.stub(:database_now, now + 30.seconds) do
       assert_predicate user_telephone.reload, :otp_expired?
       assert_not user_telephone.otp_active?
     end
@@ -388,7 +388,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     user_telephone = ClientTelephone.create!(@valid_attributes.merge(raw_number: "+819012345601"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
+    ClientTelephone.stub(:database_now, now) do
       user_telephone.update_columns(otp_attempts_count: 3, created_at: now)
       user_telephone.increment_attempts!
 
@@ -399,7 +399,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
 
       assert_equal 5, user_telephone.otp_attempts_count
       assert_predicate user_telephone, :locked?
-      assert_in_delta 15.minutes.from_now.to_i, user_telephone.locked_at.to_i, 1
+      assert_in_delta (now + 15.minutes).to_i, user_telephone.locked_at.to_i, 1
     end
   end
 
@@ -407,8 +407,8 @@ class ClientTelephoneTest < ActiveSupport::TestCase
     user_telephone = ClientTelephone.create!(@valid_attributes.merge(raw_number: "+819012345602"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
-      user_telephone.update_columns(otp_attempts_count: 4, created_at: 15.minutes.ago - 1.second)
+    ClientTelephone.stub(:database_now, now) do
+      user_telephone.update_columns(otp_attempts_count: 4, created_at: now - 15.minutes - 1.second)
       user_telephone.increment_attempts!
 
       assert_equal 1, user_telephone.otp_attempts_count

@@ -76,10 +76,12 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       )
-      get auth_app_sign_in_path(
-        ri: "jp",
-        admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
-      ), headers: { "Host" => @host }
+      redeem_auth_ceremony_entry!(
+        auth_app_sign_in_path,
+        reference: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference,
+        params: { ri: "jp" },
+        headers: { "Host" => @host },
+      )
 
       assert_response :see_other
       follow_redirect!

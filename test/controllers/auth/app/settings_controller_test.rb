@@ -18,6 +18,26 @@ class Auth::App::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{\Ahttps://}, response.location
   end
 
+  test "anonymous sign settings does not start a browser RP authorization request" do
+    issued_url = nil
+
+    JumpRtIssuer.stub(:call, ->(**args) { issued_url = args.fetch(:url); "signed-jump-token" }) do
+      RedirectsJumpGatewayUrl.stub(
+        :call,
+        ->(_token) { RedirectsTargetResult.ok(kind: :external, source: :test, value: issued_url) },
+      ) do
+        get auth_app_settings_url(ri: "jp")
+      end
+    end
+
+    uri = URI.parse(issued_url)
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+
+    assert_equal @host, uri.host
+    assert_equal auth_app_sign_in_path, uri.path
+    assert_nil query["client_id"]
+  end
+
   test "retained sign credential settings routes still resolve on sign" do
     get auth_app_settings_passkeys_url(ri: "jp")
 

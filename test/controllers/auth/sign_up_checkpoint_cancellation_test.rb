@@ -36,8 +36,11 @@ class AuthSignUpCheckpointCancellationTest < ActionDispatch::IntegrationTest
     registered = ClientEmail.order(:created_at).last
     first_sent_at = registered.otp_last_sent_at
 
-    travel 5.minutes do
-      post auth_app_sign_up_check_email_otp_url(ri: "jp", host: host), headers: headers
+    decision_time = ClientEmail.database_now + 5.minutes
+    ClientEmail.stub(:database_now, decision_time) do
+      travel 5.minutes do
+        post auth_app_sign_up_check_email_otp_url(ri: "jp", host: host), headers: headers
+      end
     end
 
     assert_response :redirect
@@ -91,8 +94,11 @@ class AuthSignUpCheckpointCancellationTest < ActionDispatch::IntegrationTest
     registered = VisitorEmail.order(:created_at).last
     first_sent_at = registered.otp_last_sent_at
 
-    travel 5.minutes do
-      post auth_com_sign_up_check_email_otp_url(ri: "jp", host: host), headers: headers
+    decision_time = VisitorEmail.database_now + 5.minutes
+    VisitorEmail.stub(:database_now, decision_time) do
+      travel 5.minutes do
+        post auth_com_sign_up_check_email_otp_url(ri: "jp", host: host), headers: headers
+      end
     end
 
     assert_response :redirect

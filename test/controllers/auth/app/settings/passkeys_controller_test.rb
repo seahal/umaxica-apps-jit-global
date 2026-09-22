@@ -63,12 +63,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
          headers: browser_headers.merge("X-CSRF-Token" => "test_csrf_token")
 
     assert_response :redirect
-    uri = URI.parse(jump_rt_url_from_location(response.location))
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).base_service.host, uri.host
-    assert_equal "/oauth/authorize", uri.path
-    assert_equal "sign-rp", query["client_id"]
+    assert_auth_local_sign_in_redirect(response.location, surface: :app)
   end
 
   # A failed stealth challenge must not mint registration options: the browser

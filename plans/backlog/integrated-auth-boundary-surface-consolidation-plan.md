@@ -856,6 +856,22 @@ claims:
 6. Update .env examples, Compose/Dev Container docs and health/runbook material for the one nonprod
    Valkey service. Keep records of checks in flat evidence/ files only after execution.
 
+## Current implementation progress
+
+### Auth ceremony-only logout slice (2026-09-21)
+
+Auth app/com/org sign-out controllers no longer include the RP logout launcher or issue the
+deprecated `sign-rp` OIDC end-session request. A normal Auth sign-out clears only Auth ceremony
+continuity and redirects with the existing regional context to the configured Base sign-out route.
+A coordinated logout challenge clears the local ceremony state, advances the existing
+`sign_cleared` transaction step, and returns to Base for finalization. Base remains the only
+authority that mutates Base Browser Session and RP-session state. The shared client registrations
+remain a separate migration blocker until all real callers, persisted sessions, keys, and external
+registrations have a verified retirement order.
+
+Focused verification for this slice is recorded in
+`evidence/2026-09-21-shared-browser-client-retirement-audit-R8S9.md`.
+
 ## Open questions
 
 No target architecture choice remains open: the user’s specified target takes precedence over

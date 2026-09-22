@@ -10,21 +10,19 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
   LEGACY_XT_REDIRECT = /\bredirect_to_xt(?:_url)?\b/.freeze
 
   ALLOW_OTHER_HOST_ALLOWLIST = %w(
-    app/controllers/base/app/oidc/authorizations_controller.rb
-    app/controllers/base/com/oidc/authorizations_controller.rb
-    app/controllers/base/org/oidc/authorizations_controller.rb
     app/controllers/auth/app/sign/in/sessions_controller.rb
     app/controllers/auth/app/sign/ins_controller.rb
     app/controllers/auth/app/sign/outs_controller.rb
     app/controllers/auth/app/sign/ups_controller.rb
+    app/controllers/auth/com/sign/outs_controller.rb
     app/controllers/auth/org/sign/in/entra/authorizations_controller.rb
+    app/controllers/auth/org/sign/outs_controller.rb
     app/controllers/concerns/common_redirect.rb
     app/controllers/concerns/oidc_callback.rb
     app/controllers/concerns/oidc_rp_logout_launcher.rb
     app/controllers/concerns/oidc_sso_initiator.rb
     app/controllers/concerns/sign_oidc_logout.rb
     app/controllers/core/app/sign/outs_controller.rb
-    app/controllers/palm/app/oidc/authorizations_controller.rb
     app/controllers/sign/app/sign/ins_controller.rb
     app/controllers/sign/app/sign/outs_controller.rb
   ).freeze

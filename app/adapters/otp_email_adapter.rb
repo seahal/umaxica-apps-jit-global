@@ -16,7 +16,14 @@ class OtpEmailAdapter < OtpAdapter
     }
     mailer_params[:purpose] = purpose.to_s if purpose.present?
 
-    @mailer.with(mailer_params).create.deliver_later
+    begin
+      @mailer.with(mailer_params).create.deliver_later
+    rescue StandardError => e
+      record_email_enqueue_failure!(record: record, purpose: purpose, error: e)
+      raise
+    end
+
+    record_email_enqueue!(record: record, purpose: purpose)
   end
 
   private

@@ -21,10 +21,28 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     assert_nil cookies["auth_sid"]
   end
 
-  test "valid admission rotates ceremony session and 303s to a clean sign-in URL" do
-    transaction, code = issue_admission!
+  test "legacy admission query is rejected without consuming a code" do
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
 
-    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", admission: issuance.code), headers: { "Host" => @host }
+
+    assert_response :bad_request
+    assert_includes response.body, I18n.t("errors.messages.invalid_request")
+  end
+
+  test "valid admission rotates ceremony session and 303s to a clean sign-in URL" do
+    transaction, reference = issue_admission!
+
+    get auth_app_sign_in_url(ri: "jp", transaction_ref: reference), headers: { "Host" => @host }
+
+    assert_response :success
+    assert_includes response.body, "auth-admission-continuation-form"
+    assert_no_match(/name="admission"/, response.body)
+
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      transaction_ref: reference,
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
 
     assert_response :see_other
     location = URI.parse(response.location)
@@ -48,12 +66,41 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     assert_predicate cookies["auth_sid"].presence || cookies["__Host-auth_sid"].presence, :present?
   end
 
-  test "Base-owned local admission reaches the ceremony without creating an OIDC transaction" do
-    code = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").code
+  test "admission continuation carries the existing local return target" do
+    _transaction, reference = issue_admission!
 
-    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", pt: "/settings/sessions?ri=jp", transaction_ref: reference),
+        headers: { "Host" => @host }
+
+    assert_response :success
+    assert_includes response.body, 'name="pt"'
+
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      transaction_ref: reference,
+      pt: "/settings/sessions?ri=jp",
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
 
     assert_response :see_other
+    assert_equal "/sign/in", URI.parse(response.location).path
+  end
+
+  test "Base-owned local admission reaches the ceremony without creating an OIDC transaction" do
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+
+    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
+
+    assert_response :success
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_equal "no-referrer", response.headers["Referrer-Policy"]
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      entry_ref: reference,
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
+
+    assert_response :see_other
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_equal "no-referrer", response.headers["Referrer-Policy"]
     assert_nil session[:oidc_authorization_login_challenge]
 
     record = ClientAuthCeremonySession.order(created_at: :desc).first
@@ -69,25 +116,41 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "a replayed Base-owned local admission is rejected" do
-    code = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").code
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
 
-    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      entry_ref: reference,
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
 
     assert_response :see_other
 
-    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      entry_ref: reference,
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
 
     assert_response :bad_request
   end
 
   test "replayed admission is rejected" do
-    _transaction, code = issue_admission!
+    _transaction, reference = issue_admission!
 
-    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", transaction_ref: reference), headers: { "Host" => @host }
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      transaction_ref: reference,
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
 
     assert_response :see_other
 
-    get auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", transaction_ref: reference), headers: { "Host" => @host }
+    post auth_app_sign_in_path(ri: "jp"), params: {
+      transaction_ref: reference,
+      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
+    }, headers: { "Host" => @host }
 
     assert_response :bad_request
   end
@@ -122,6 +185,6 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
         },
       )
     handoff = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction)
-    [issuance.transaction, handoff.code]
+    [issuance.transaction, handoff.reference]
   end
 end

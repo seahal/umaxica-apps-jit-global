@@ -72,6 +72,22 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "first-party browser RPs have no obsolete OIDC authorization controller" do
+    files = %w(
+      app/controllers/core/app/oidc/authorizations_controller.rb
+      app/controllers/core/com/oidc/authorizations_controller.rb
+      app/controllers/core/org/oidc/authorizations_controller.rb
+      app/controllers/side/app/oidc/authorizations_controller.rb
+      app/controllers/side/com/oidc/authorizations_controller.rb
+      app/controllers/side/org/oidc/authorizations_controller.rb
+      app/controllers/edit/org/oidc/authorizations_controller.rb
+    )
+
+    offenders = files.select { |path| Rails.root.join(path).exist? }
+
+    assert_empty offenders
+  end
+
   test "the core browser RPs still do not own a dashboard page" do
     RP_ROUTES.first(3).each do |rp|
       assert_raises(ActionController::RoutingError) do

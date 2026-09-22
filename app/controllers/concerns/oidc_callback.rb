@@ -13,6 +13,7 @@ module OidcCallback
   def show
     response.set_header("Cache-Control", "no-store")
     validate_state!
+    validate_authorization_response_issuer!
     token_result = exchange_code!
     return render_callback_failure(token_result.error) unless token_result.success?
 
@@ -53,7 +54,7 @@ module OidcCallback
     log_invalid_callback_state!(e.message)
     # A rejected callback must not destroy unrelated state-indexed browser-tab flows. The
     # matching flow is consumed atomically before exchange; an invalid or missing state consumes
-    # nothing, so only legacy scalar keys may be cleared here.
+    # nothing.
     clear_oidc_session_state!
     render plain: I18n.t("errors.messages.login_required"), status: :unprocessable_content
   end
@@ -65,8 +66,7 @@ module OidcCallback
     @current_oidc_flow, @current_oidc_flow_expired = consume_oidc_pending_flow(actual)
     raise InvalidCallbackState, "OIDC state expired" if @current_oidc_flow_expired
 
-    clear_legacy_oidc_flow_if_current!(actual) if @current_oidc_flow.present?
-    expected = @current_oidc_flow.present? ? actual : session.delete(:oidc_state).to_s
+    expected = @current_oidc_flow.present? ? actual : nil
     @oidc_invalid_state_context = oidc_invalid_state_context(expected: expected, actual: actual)
     unless expected.present? && actual.present? && expected.bytesize == actual.bytesize &&
         ActiveSupport::SecurityUtils.secure_compare(expected, actual)
@@ -77,7 +77,7 @@ module OidcCallback
   end
 
   def exchange_code!
-    code_verifier = oidc_flow_value("code_verifier") || session.delete(:oidc_code_verifier)
+    code_verifier = oidc_flow_value("code_verifier")
     raise InvalidCallbackState, "OIDC PKCE verifier missing" if code_verifier.blank?
 
     token_url = oidc_token_url
@@ -90,6 +90,16 @@ module OidcCallback
       code_verifier: code_verifier,
       require_https: oidc_token_endpoint_requires_https?(token_url),
     )
+  end
+
+  def validate_authorization_response_issuer!
+    actual = params[:iss].to_s
+    expected = OidcIssuer.for_resource_type(oidc_resource_type).to_s
+    valid = actual.present? && actual.bytesize == expected.bytesize &&
+      ActiveSupport::SecurityUtils.secure_compare(actual, expected)
+    return if valid
+
+    raise InvalidCallbackState, "OIDC issuer mismatch"
   end
 
   def oidc_token_endpoint_requires_https?(token_url)
@@ -134,8 +144,8 @@ module OidcCallback
       id_token: id_token,
       client_id: oidc_client_id,
       resource_type: oidc_resource_type,
-      expected_nonce: oidc_flow_value("nonce") || session.delete(:oidc_nonce),
-      expected_max_age: oidc_flow_value("max_age") || session.delete(:oidc_max_age),
+      expected_nonce: oidc_flow_value("nonce"),
+      expected_max_age: oidc_flow_value("max_age"),
       issuer: OidcIssuer.for_resource_type(oidc_resource_type),
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(oidc_resource_type),
     )
@@ -160,17 +170,16 @@ module OidcCallback
 
   def consume_oidc_pt
     pending_pt = oidc_flow_value("pt").presence
-    legacy_pt = session.delete(:oidc_pt).presence
-    pt = pending_pt || legacy_pt || "/"
+    pt = pending_pt || "/"
     log_oidc_callback_return_to(
       pt: pt,
-      source: pending_pt.present? ? "pending_flow" : legacy_pt.present? ? "legacy" : "default",
+      source: pending_pt.present? ? "pending_flow" : "default",
     )
     pt
   end
 
   def session_limit_gate_pt
-    oidc_flow_value("pt").presence || session[:oidc_pt].presence ||
+    oidc_flow_value("pt").presence ||
       (defined?(super) ? super : request&.fullpath.presence || request&.path.presence || "/")
   rescue StandardError
     "/"
@@ -226,13 +235,13 @@ module OidcCallback
 
   def oidc_invalid_state_context(expected:, actual:)
     {
-      expected_state_present: expected.present?,
-      actual_state_present: actual.present?,
-      expected_state_digest12: oidc_state_digest12(expected),
-      actual_state_digest12: oidc_state_digest12(actual),
-      code_verifier_present: oidc_flow_value("code_verifier").present? || session[:oidc_code_verifier].present?,
-      nonce_present: oidc_flow_value("nonce").present? || session[:oidc_nonce].present?,
-      pt_present: oidc_flow_value("pt").present? || session[:oidc_pt].present?,
+      expected_value_present: expected.present?,
+      actual_value_present: actual.present?,
+      expected_value_digest12: oidc_state_digest12(expected),
+      actual_value_digest12: oidc_state_digest12(actual),
+      code_verifier_present: oidc_flow_value("code_verifier").present?,
+      nonce_present: oidc_flow_value("nonce").present?,
+      pt_present: oidc_flow_value("pt").present?,
     }
   end
 
@@ -296,16 +305,6 @@ module OidcCallback
 
   def oidc_flow_value(key)
     @current_oidc_flow&.[](key)
-  end
-
-  def clear_legacy_oidc_flow_if_current!(state)
-    return unless session[:oidc_state].to_s == state
-
-    session.delete(:oidc_code_verifier)
-    session.delete(:oidc_state)
-    session.delete(:oidc_nonce)
-    session.delete(:oidc_pt)
-    session.delete(:oidc_max_age)
   end
 
   def bind_oidc_rp_logout_session!(payload)

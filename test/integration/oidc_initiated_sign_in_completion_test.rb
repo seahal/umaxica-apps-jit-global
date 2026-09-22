@@ -54,22 +54,30 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
     admit_sign_in!
 
+    token_count = ClientToken.where(user_id: @user.id).count
     submit_secret_credential!
 
     assert_response :redirect
     assert_equal auth_app_sign_in_check_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal token_count, ClientToken.where(user_id: @user.id).count
+
+    ceremony = ClientAuthCeremonySession.order(created_at: :desc).first
+
+    assert_equal "secret", ceremony.authentication_method
+    assert_predicate ceremony.authentication_event_at, :present?
   end
 
   test "the local handoff POST binds the signed-in actor to the authorization transaction" do
     admit_sign_in!
     submit_secret_credential!
 
-    follow_redirect!
+    follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
     transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: @transaction.login_challenge)
 
     assert_equal @user.public_id, transaction.actor_ref
+    assert_nil transaction.session_ref
     assert_predicate transaction.authenticated_at, :present?
     assert_nil transaction.consumed_at, "the authorization endpoint consumes it, not the checkpoint"
   end
@@ -78,7 +86,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     admit_sign_in!
     submit_secret_credential!
 
-    follow_redirect!
+    follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
     assert_response :success
@@ -137,12 +145,20 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     )
   end
 
+  def follow_redirect_to_oidc_handoff!
+    follow_redirect!
+    follow_redirect!
+  end
+
   def admit_sign_in!
     @transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app", intent: "sign_in", params: oidc_authorize_params(realm: "client"),
     ).transaction
-    code = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: @transaction).code
-    get(auth_app_sign_in_url(ri: "jp", admission: code), headers: { "Host" => @host })
+    reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: @transaction).reference
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: reference,
+                             params: { ri: "jp" }, headers: { "Host" => @host },
+    )
 
     assert_response :see_other
     follow_redirect!

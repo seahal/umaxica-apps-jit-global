@@ -17,6 +17,10 @@ module Palm
           route_to("https://#{host}/oidc/callback", method: :get),
         )
 
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("https://#{host}/oidc/authorization", method: :get)
+        end
+
         source = Rails.root.join("config/routes/palm.rb").read
 
         assert_not_includes source, "ios"

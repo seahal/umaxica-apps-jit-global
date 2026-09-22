@@ -21,6 +21,13 @@ class OtpEmailNotifierAdapter < OtpAdapter
       public_id: public_id,
     }
     notifier_params[:purpose] = purpose if purpose.present?
-    @notifier.issue(**notifier_params)
+    begin
+      @notifier.issue(**notifier_params)
+    rescue StandardError => e
+      record_email_enqueue_failure!(record: record, purpose: purpose, error: e)
+      raise
+    end
+
+    record_email_enqueue!(record: record, purpose: purpose)
   end
 end

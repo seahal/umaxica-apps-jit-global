@@ -33,8 +33,12 @@ class IdentityAuthorityInversionGuardTest < ActiveSupport::TestCase
     assert_source_includes base_routes,
                            'resource :revocation, only: :destroy, path: "other_sessions", ' \
                            'controller: "revocations/others", as: :other_sessions'
-    assert_source_includes auth_routes, 'resource :registration, only: :show, path: "up", controller: :ups, as: :up'
-    assert_source_includes auth_routes, 'resource :session, only: :show, path: "in", controller: :ins, as: :in'
+    assert_source_includes auth_routes,
+                           'resource :registration, only: %i(show create), path: "up", ' \
+                           "controller: :ups, as: :up"
+    assert_source_includes auth_routes,
+                           'resource :session, only: %i(show create), path: "in", ' \
+                           "controller: :ins, as: :in"
     assert_source_includes auth_routes,
                            "resource :termination, only: %i(show new edit create destroy), " \
                            'path: "out", controller: :outs, as: :out'

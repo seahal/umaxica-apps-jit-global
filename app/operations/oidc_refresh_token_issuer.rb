@@ -80,12 +80,13 @@ class OidcRefreshTokenIssuer
             return failure(:refresh_token_reuse_detected, token: usage)
           end
 
-          return failure(:inactive_token, token: usage) unless usage.active?
+          decision_time = usage.class.database_now
+          return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
           return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
 
           previous_token = usage.dup
-          refresh_token = usage.rotate_refresh_token!
-          touch_oidc_connection!(usage)
+          refresh_token = usage.rotate_refresh_token!(now: decision_time)
+          touch_oidc_connection!(usage, now: decision_time)
 
           result = success(
             token: usage,
@@ -174,11 +175,11 @@ class OidcRefreshTokenIssuer
     end
   end
 
-  def touch_oidc_connection!(usage)
+  def touch_oidc_connection!(usage, now: nil)
     connection = connection_for(usage)
     return unless connection
 
-    connection.update!(last_used_at: Time.current)
+    connection.update!(last_used_at: now || usage.class.database_now)
   end
 
   def connection_for(usage)

@@ -31,10 +31,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       intent: "sign_in",
       params: authorize_params,
     )
-    get auth_org_sign_in_url(
-      ri: "jp",
-      admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
-    ), headers: { "Host" => @host }
+    enter_sign_in!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -68,8 +65,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_in!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
 
@@ -92,8 +88,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_in!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
 
@@ -116,11 +111,11 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(
+    enter_sign_in!(
+      admission_reference(issuance),
       ri: "jp",
       pt: Base64.urlsafe_encode64("https://log.umaxica.org/settings/sessions?ri=jp", padding: false),
-      admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
-    ), headers: { "Host" => @host }
+    )
 
     assert_response :see_other
 
@@ -138,8 +133,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_in!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
 
@@ -156,8 +150,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_org_sign_in_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_in!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
 
@@ -184,6 +177,13 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
 
   private
 
+  def enter_sign_in!(reference, params)
+    redeem_auth_ceremony_entry!(
+      auth_org_sign_in_path, reference: reference,
+                             params: params, headers: { "Host" => @host },
+    )
+  end
+
   def method_hrefs
     inertia_props.fetch("methods").map { |method| method.fetch("href") }
   end
@@ -192,8 +192,8 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     inertia_props.fetch("methods").find { |method| method.fetch("key") == key }
   end
 
-  def admission_code(issuance)
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  def admission_reference(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
   end
 
   def auth_ceremony_record

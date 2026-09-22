@@ -28,12 +28,13 @@ class SignInCycleLocator
 
   NONCE_BYTES = 32
 
-  def initialize(session, surface:, cycle_class: nil, actor: nil, token: nil)
+  def initialize(session, surface:, cycle_class: nil, actor: nil, token: nil, allow_principal_without_token: false)
     @session = session
     @surface = normalize_surface(surface)
     @cycle_class = cycle_class || CYCLE_CLASSES.fetch(@surface)
     @actor = actor
     @token = token
+    @allow_principal_without_token = allow_principal_without_token
   end
 
   def current
@@ -91,7 +92,9 @@ class SignInCycleLocator
 
   def actor_binding_valid?(cycle)
     return true if cycle.principal_id.blank?
-    return false if actor.blank?
+    if actor.blank?
+      return @allow_principal_without_token && cycle.token_id.blank?
+    end
     return false unless actor.is_a?(ACTOR_CLASSES.fetch(surface))
 
     actor.id == cycle.principal_id

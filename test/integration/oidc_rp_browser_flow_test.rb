@@ -118,20 +118,15 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # The final state asserted here (three non-revoked sessions) is the arithmetic that holds only
-  # once the Sign surface stops issuing sessions, which is the accepted architecture
-  # (adr/acme-session-and-token-authority.md) but is not implemented yet. Today Sign mints one and
-  # the authorization resume mints another, so the RP callback attempts a fourth token and is
-  # rejected by ClientToken::MAX_TOTAL_SESSIONS_PER_USER. Tracked in issue #846, which also has to
-  # reconcile this test with "acme app authorization resume succeeds with two usable tokens and
-  # consumes the transaction once" below, because the two encode opposite contracts for the resume.
-  test "app email sign-in session-limit handoff signs in Sign and leaves capacity for RP callback session" do
-    skip("blocked on Sign-side session issuance removal: https://github.com/seahal/umaxica-apps-jit-global/issues/846")
+  test "app email sign-in session-limit handoff completes Core RP callback without a root session" do # rubocop:disable Minitest/MultipleAssertions
+    previous_core_browser_jwt_cookie_enabled = ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"]
+    ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"] = "1"
 
     with_acme_oidc_client_key do
       TurnstileVerifierStub.challenge_enabled = true
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      acme_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "base.app.localhost")
+      sign_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
+      core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
       email = user.client_emails.create!(address: "oidc_email_limit_#{SecureRandom.hex(4)}@example.com")
@@ -149,22 +144,37 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       )
       second_active.rotate_refresh_token!
 
-      host!(acme_host)
-      # Drive the sign-in screen explicitly; the RP entrypoint otherwise defaults to signup.
-      get("/oidc/authorization", params: { screen_hint: "signin" }, headers: browser_headers)
+      host!(core_host)
+      get("/sign", headers: browser_headers)
+      post("/sign", params: { pt: "/", ri: "jp" }, headers: browser_headers)
 
       assert_response :redirect
       authorize_uri = URI.parse(jump_rt_url_from_location(response.location))
       authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)
 
-      get("/oauth/authorize", params: authorize_query, headers: browser_headers)
+      assert_equal acme_host, authorize_uri.host
+      assert_equal "/oauth/authorize", authorize_uri.path
+      assert_equal "core-app", authorize_query.fetch("client_id")
+      assert_equal redirect_uri_for_core_app(core_host), authorize_query.fetch("redirect_uri")
+      assert_nil authorize_query["screen_hint"]
+
+      host!(acme_host)
+      get(authorize_uri.request_uri, headers: browser_headers)
 
       assert_response :redirect
       sign_uri = URI.parse(jump_rt_url_from_location(response.location))
       sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
 
       host!(sign_host)
-      get(sign_uri.request_uri, headers: browser_headers)
+      redeem_auth_ceremony_entry!(
+        sign_uri.path,
+        reference: sign_query.fetch("transaction_ref"),
+        params: { ri: "jp" },
+        headers: browser_headers,
+      )
+
+      assert_response :see_other
+      follow_redirect!
 
       assert_response :success
 
@@ -192,43 +202,77 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         self.login_cooldown = original_login_cooldown
       end
 
-      assert_redirected_to sign_app_sign_in_session_path(ri: "jp")
+      assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+      follow_redirect!
+      follow_redirect!
 
-      assert_no_difference -> { ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count } do
-        patch(
-          sign_app_sign_in_session_path(ri: "jp"),
-          params: { revoke_refs: [first_active.signed_ref] },
-          headers: browser_headers,
-        )
-      end
+      assert_response :success
 
-      assert_response :redirect
+      auth_token_count_before_handoff =
+        ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+      post(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: browser_headers)
+
+      assert_response :success
+      assert_equal auth_token_count_before_handoff,
+                   ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count,
+                   "Auth must hand off authentication evidence without creating a Base Browser Session"
+      result_code = response.body[/name="result"[^>]+value="([^"]+)"/, 1]
+      transaction_ref = response.body[/name="transaction_ref"[^>]+value="([^"]+)"/, 1]
+
+      assert_predicate result_code, :present?
+      assert_predicate transaction_ref, :present?
+
+      # Keep the integration session's cookie jar aligned with the actual Base host. A manual
+      # Host header alone does not update the jar's host context, so Base-issued host-only
+      # credentials would be omitted from the subsequent resolution request.
+      host!(acme_host)
+      post(
+        "/oauth/authorize",
+        params: { result: result_code, transaction_ref: transaction_ref, ri: "jp" },
+        headers: browser_headers.merge(
+          "Origin" => "https://#{sign_host}",
+          "Sec-Fetch-Site" => "same-site",
+        ),
+      )
+
+      assert_response :see_other
       resume_uri = URI.parse(response.location)
       resume_query = Rack::Utils.parse_nested_query(resume_uri.query.to_s)
 
       assert_equal acme_host, resume_uri.host
-      assert_equal "/oauth/authorize", resume_uri.path
-      assert_equal sign_query.fetch("login_challenge"), resume_query.fetch("login_challenge")
+      assert_equal "/sign/in/limitation", resume_uri.path
+      assert_predicate resume_query.fetch("resolution_challenge"), :present?
 
-      transaction = ClientOidcAuthorizationTransaction.find_by!(
-        login_challenge: sign_query.fetch("login_challenge"),
-      )
+      transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: transaction_ref)
 
       assert_predicate transaction, :authenticated?
-      sign_session = ClientToken.find_by!(public_id: transaction.session_ref)
+      assert_nil transaction.session_ref
+      assert_equal 3, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
-      assert_predicate sign_session, :active?
-      assert_equal user.id, sign_session.user_id
-      assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+      resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(
+        resume_query.fetch("resolution_challenge"),
+      )
+
+      assert_predicate resolution, :present?
+      assert_predicate ClientToken.restricted_status.where(user_id: user.id), :exists?
 
       host!(acme_host)
       get(resume_uri.request_uri, headers: browser_headers)
+
+      assert_response :success
+
+      patch(
+        resume_uri.request_uri,
+        params: { session_ref: SessionLimitResolutionTokenRef.issue(first_active) },
+        headers: browser_headers,
+      )
 
       assert_response :redirect
       callback_uri = URI.parse(jump_rt_url_from_location(response.location))
       callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
 
-      assert_equal "/oidc/callback", callback_uri.path
+      assert_equal core_host, callback_uri.host
+      assert_equal "/sign/callback", callback_uri.path
       assert_predicate callback_query["code"], :present?
       assert_predicate transaction.reload, :consumed?
 
@@ -237,31 +281,74 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       # in the other callback tests.
       id_token = OidcIdTokenIssuer.call(
         resource: user,
-        client: OidcClientRegistry.find!("base-rails-rp"),
-        nonce: session.fetch(:oidc_nonce),
+        client: OidcClientRegistry.find!("core-app"),
+        nonce: authorize_query.fetch("nonce"),
         auth_time: transaction.authenticated_at,
+      )
+      core_client = OidcClientRegistry.find!("core-app")
+      rp_root_token = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).order(created_at: :desc).first
+      rp_session = ClientRpSession.create!(
+        client_token: rp_root_token,
+        oidc_client_id: core_client.client_id,
+        oidc_scope: "openid profile",
+        oidc_jti: SecureRandom.uuid,
+        oidc_auth_time: transaction.authenticated_at,
+        refresh_token_expires_at: 10.minutes.from_now,
+      )
+      rp_access_token = AuthenticationTokenService.encode(
+        user,
+        host: core_host,
+        resource_type: "client",
+        session_public_id: rp_root_token.public_id,
+        oidc_sid: rp_session.public_id,
+        oidc_jti: rp_session.oidc_jti,
+        expires_at: 10.minutes.from_now,
+        scopes: %w(openid profile),
+        issuer: OidcIssuer.for_client(core_client),
+        audiences: [core_client.aud],
+        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(core_client),
+        subject: OidcSubject.for(user, resource_type: "client"),
+        client_id: core_client.client_id,
       )
       token_result = OidcRpTokenClient::Result.new(
         success: true,
-        token_response: { id_token: id_token },
+        token_response: {
+          access_token: rp_access_token,
+          refresh_token: rp_session.issue_refresh_token!,
+          id_token: id_token,
+        },
         error: nil,
       )
 
       OidcRpTokenClient.stub(:call, token_result) do
+        host!(callback_uri.host)
         get(callback_uri.request_uri, headers: browser_headers)
       end
 
       assert_response :redirect
-      assert_equal 3, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+      assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
-      host!(sign_host)
-      get(auth_app_root_path(ri: "jp"), headers: browser_headers)
+      host!(core_host)
+      get(
+        "/api/v0/session",
+        headers: {
+          "Accept" => "application/json",
+          "Content-Type" => "application/json",
+          "Client-Agent" => self.class::TEST_BROWSER_USER_AGENT,
+        },
+      )
 
       assert_response :success
-      assert_select "h1", "Dashboard"
+      assert(response.parsed_body.fetch("authenticated"))
+      assert_equal user.public_id, response.parsed_body.dig("actor", "id")
     ensure
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.challenge_response = nil
+      if previous_core_browser_jwt_cookie_enabled.nil?
+        ENV.delete("CORE_BROWSER_JWT_COOKIE_ENABLED")
+      else
+        ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"] = previous_core_browser_jwt_cookie_enabled
+      end
     end
   end
 
@@ -510,6 +597,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   def redirect_uri_for(surface)
     OidcClientRegistry.find!(surface[:client_id]).redirect_uris.find do |uri|
       URI.parse(uri).host == surface[:host]
+    end
+  end
+
+  def redirect_uri_for_core_app(host)
+    OidcClientRegistry.find!("core-app").redirect_uris.find do |uri|
+      URI.parse(uri).host == host
     end
   end
 

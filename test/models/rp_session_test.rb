@@ -201,5 +201,43 @@ class RpSessionTest < ActiveSupport::TestCase
       end
       assert_nil session.reload.refresh_token_digest
     end
+
+    test "#{rp_session_case[:name]} rp session uses the writer database clock for lifecycle changes" do
+      root = rp_session_case[:root_builder].call
+      session = rp_session_case[:model].create!(
+        rp_session_case[:parent_label] => root,
+        :oidc_client_id => "core-next-rp",
+        :oidc_scope => "openid profile",
+        :refresh_token_expires_at => 2.days.from_now,
+      )
+      database_time = 1.hour.from_now
+
+      rp_session_case[:model].stub(:database_now, database_time) do
+        session.issue_refresh_token!(expires_at: database_time + 1.day, now: nil)
+      end
+
+      issued = session.reload
+
+      assert_equal database_time.to_i, issued.last_used_at.to_i
+
+      rp_session_case[:model].stub(:database_now, database_time) do
+        issued.rotate_refresh_token!(expires_at: database_time + 1.day, now: nil)
+      end
+
+      rotated = issued.reload
+
+      assert_equal database_time.to_i, rotated.last_used_at.to_i
+      assert_equal database_time.to_i, rotated.refresh_token_rotated_at.to_i
+
+      rp_session_case[:model].stub(:database_now, database_time) do
+        rotated.revoke!(status: "success", now: nil)
+      end
+
+      revoked = rotated.reload
+
+      assert_equal database_time.to_i, revoked.revoked_at.to_i
+      assert_equal database_time.to_i, revoked.last_logout_attempted_at.to_i
+      assert_equal database_time.to_i, revoked.logged_out_at.to_i
+    end
   end
 end

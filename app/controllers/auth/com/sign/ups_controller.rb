@@ -15,10 +15,12 @@ module Auth
         declare_authentication_mode! :guest, no_redirect: true
 
         def show
-          admit_or_render_sign_ceremony!(expected_intent: "sign_up") { render_method_selection! }
+          admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
         end
 
         private
+
+        def auth_ceremony_entry_intent = "sign_up"
 
         def sign_up_surface = :com
 

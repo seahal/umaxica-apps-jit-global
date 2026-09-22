@@ -16,7 +16,10 @@ Auth uses actor-specific `ClientAuthCeremonySession`, `VisitorAuthCeremonySessio
   not authoritative for whether an Auth ceremony was admitted or which Base transaction it serves.
 - The row must not carry identity, AAL, Base Browser Session, RP Session, role, or policy fields.
   Base admission remains authoritative via opaque handoff/result codes in
-  `Valkey::AuthState::OpaqueAdmissionStore` (60s TTL, digest keys, CAS).
+  `Valkey::AuthState::OpaqueAdmissionStore` (60s TTL, digest keys, CAS). The Base-to-Auth browser
+  entry carries only a short-lived non-secret reference in the initial GET; the opaque code is
+  consumed by a same-origin CSRF-protected POST through the reference index. The index points to the
+  digest-keyed record and never stores the raw code.
 - Auth-state Valkey clients use a 250ms connect, read, and write timeout with zero reconnect
   attempts. The adapter issues one command attempt and does not add an application retry. The
   three socket budgets provide a configured 750ms upper bound for a Valkey operation while a

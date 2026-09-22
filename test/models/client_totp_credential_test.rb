@@ -58,6 +58,11 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
     assert_equal :belongs_to, association.macro
   end
 
+  test "database default is the fixed NOTHING status" do
+    assert_equal ClientTotpCredentialStatus::NOTHING,
+                 ClientTotpCredential.column_defaults.fetch("user_identity_totp_credential_status_id")
+  end
+
   test "has private_key attribute" do
     record = ClientTotpCredential.new(
       user: @user,

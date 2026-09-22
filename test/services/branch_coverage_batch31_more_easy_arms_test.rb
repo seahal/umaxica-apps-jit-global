@@ -73,7 +73,11 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
   end
 
   test "SignTelephoneOtpDelivery assign writes otp fields" do
-    telephone = Object.new
+    telephone_class =
+      Class.new do
+        def self.database_now = Time.current
+      end
+    telephone = telephone_class.new
     telephone.define_singleton_method(:otp_private_key=) { |v| @k = v }
     telephone.define_singleton_method(:otp_counter=) { |v| @c = v }
     telephone.define_singleton_method(:otp_expires_at=) { |v| @e = v }

@@ -22,7 +22,7 @@ module Auth
       end
 
       test "valid login challenge renders local ceremony" do
-        get auth_com_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
 
@@ -36,8 +36,7 @@ module Auth
       test "authentication links carry pt" do
         pt = Base64.urlsafe_encode64("https://log.umaxica.com/settings/sessions?ri=jp", padding: false)
 
-        get auth_com_sign_in_url(ri: "jp", pt: pt, admission: login_challenge),
-            headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp", pt: pt)
 
         assert_response :see_other
 
@@ -54,7 +53,7 @@ module Auth
       end
 
       test "does not show social login buttons" do
-        get auth_com_sign_in_url(ri: "jp", admission: login_challenge), headers: { "Host" => @host }
+        enter_sign_in!(ri: "jp")
 
         assert_response :see_other
 
@@ -67,8 +66,7 @@ module Auth
 
       test "does not show temporary google signin button when legacy flag is set" do
         with_env("COM_#{"GOOGLE"}_SIGNIN_ENABLED" => "true") do
-          get auth_com_sign_in_url(ri: "jp", admission: login_challenge),
-              headers: { "Host" => @host }
+          enter_sign_in!(ri: "jp")
         end
 
         assert_response :see_other
@@ -97,13 +95,20 @@ module Auth
 
       private
 
+      def enter_sign_in!(params)
+        redeem_auth_ceremony_entry!(
+          auth_com_sign_in_path, reference: login_challenge,
+                                 params: params, headers: { "Host" => @host },
+        )
+      end
+
       def login_challenge
         transaction = OidcAuthorizationTransactionCoordinator.issue!(
           surface: "com",
           intent: "sign_in",
           params: authorize_params,
         ).transaction
-        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
       end
 
       def authorize_params

@@ -10,6 +10,8 @@ module Base
           declare_authentication_mode! :private
 
           before_action :authenticate_client!
+          step_up only: %i(create destroy), scope: "session_revoke_all"
+
           def create
             authorize!(ClientToken, to: :revoke_others?)
             AuthenticationOtherSessionsRevoker.call(

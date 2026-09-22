@@ -37,8 +37,7 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_up!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -54,8 +53,7 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_up!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -77,8 +75,7 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_up!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -97,8 +94,7 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
     )
 
     with_env("ORG_#{"GOOGLE"}_SIGNUP_ENABLED" => "true") do
-      get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
-          headers: { "Host" => @host }
+      enter_sign_up!(admission_reference(issuance), ri: "jp")
     end
 
     assert_response :see_other
@@ -115,8 +111,7 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_org_sign_up_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @host }
+    enter_sign_up!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -169,8 +164,15 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   private
 
-  def admission_code(issuance)
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  def enter_sign_up!(reference, params)
+    redeem_auth_ceremony_entry!(
+      auth_org_sign_up_path, reference: reference,
+                             params: params, headers: { "Host" => @host },
+    )
+  end
+
+  def admission_reference(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
   end
 
   def auth_ceremony_record

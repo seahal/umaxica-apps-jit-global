@@ -16,7 +16,8 @@ class SecurityJwtAuthAccessTokenCodec
 
   class << self
     def encode(resource, host:, resource_type: nil, dpop_jkt: nil, expires_at: nil,
-               session_public_id: nil, session_id: nil, oidc_sid: nil, oidc_jti: nil, scopes: nil, acr: nil,
+               session_public_id: nil, session_id: nil, base_session_public_id: nil,
+               oidc_sid: nil, oidc_jti: nil, scopes: nil, acr: nil,
                amr: nil, access_token_ttl: SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL,
                jwt_issuer_id: nil, issuer: nil, audiences: nil,
                subject: nil, auth_time: nil, step_up_until: nil, client_id: nil,
@@ -37,6 +38,7 @@ class SecurityJwtAuthAccessTokenCodec
         resource: resource,
         session_id: session_id,
         session_public_id: session_public_id,
+        base_session_public_id: base_session_public_id,
         oidc_sid: oidc_sid,
         oidc_jti: oidc_jti,
         resource_type: resource_type,

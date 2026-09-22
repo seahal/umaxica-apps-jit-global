@@ -27,8 +27,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "valid login challenge renders local ceremony" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -37,8 +36,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "sets lang attribute on html element" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -49,8 +47,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows registration methods and social providers" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -62,8 +59,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows telephone registration link" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -76,8 +72,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows social login buttons" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -95,8 +90,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders registration layout structure" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -113,8 +107,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "page renders the registration heading and no sign-in/up chrome navigation" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -127,8 +120,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "footer contains navigation links" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -140,8 +132,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders specific cta text" do
-    get auth_app_sign_up_url(format: :html, ri: "jp", admission: login_challenge),
-        headers: { "Host" => host }
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -178,13 +169,20 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     (ENV["BRAND_NAME"].presence || ENV["NAME"]).to_s
   end
 
+  def enter_sign_up!(params)
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_up_path(format: :html), reference: login_challenge,
+                                            params: params, headers: { "Host" => host },
+    )
+  end
+
   def login_challenge
     transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
       intent: "sign_up",
       params: authorize_params,
     ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
   end
 
   def authorize_params

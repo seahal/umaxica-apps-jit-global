@@ -93,6 +93,8 @@ module AuthenticationSequenceGate
       return reject_invalid_sign_in_sequence! unless cycle.sign_in_checkpoint_pending?
       return reject_invalid_sign_in_sequence! unless allowed_to?(:show_checkpoint?, cycle)
 
+      authorize!(cycle, to: :show_checkpoint?)
+
       result =
         with_sign_in_flow_writing(cycle) do
           sign_in_checkpoint_participant(cycle).advance_if_clear!
@@ -135,6 +137,38 @@ module AuthenticationSequenceGate
     redirect_after_checkpoint_sequence!(pt: signed_pt_param)
   end
 
+  # OIDC credentials are established by Auth's ceremony, not by an Auth root
+  # session. Resolve the actor from the DB-backed sign-in cycle when the
+  # transaction challenge is present; a browser credential is only a normal
+  # fallback for non-OIDC checkpoint entry.
+  def authenticate_sign_in_sequence_actor!
+    return authenticate! unless oidc_authorization_login_challenge_present?
+
+    cycle = current_db_sign_in_flow_for_sequence
+    actor = cycle && sign_in_flow_actor(cycle)
+    return reject_invalid_sign_in_sequence! unless actor.is_a?(resource_class)
+    return reject_invalid_sign_in_sequence! unless actor.login_allowed?
+
+    @current_resource = actor
+    true
+  end
+
+  # The OIDC result handoff must use the actor bound to the pending cycle. It
+  # must never fall back to an unrelated Auth root credential or to a request
+  # supplied identifier.
+  def authenticate_oidc_result_actor!
+    return reject_invalid_sign_in_sequence! unless oidc_authorization_login_challenge_present?
+
+    cycle = current_db_sign_in_flow_for_sequence
+    actor = cycle && sign_in_flow_actor(cycle)
+    return reject_invalid_sign_in_sequence! unless cycle&.sign_in_dashboard_pending?
+    return reject_invalid_sign_in_sequence! unless actor.is_a?(resource_class)
+    return reject_invalid_sign_in_sequence! unless actor.login_allowed?
+
+    @current_resource = actor
+    true
+  end
+
   # rubocop:disable Metrics/AbcSize
   def continue_welcome_sequence_without_content!
     cycle = current_db_sign_in_flow_for_sequence
@@ -159,7 +193,7 @@ module AuthenticationSequenceGate
     return redirect_to(after_welcome_path) unless consume_welcome_gate!(sequence_id: cycle.public_id)
 
     bind_current_session_to_sign_in_flow!(cycle)
-    return reject_invalid_sign_in_sequence! unless allowed_to?(:show_dashboard?, cycle)
+    return reject_invalid_sign_in_sequence! unless authorize_sign_in_sequence!(cycle)
 
     if cycle.sign_in_dashboard_pending?
       result =
@@ -376,6 +410,8 @@ module AuthenticationSequenceGate
           surface: sign_in_sequence_surface,
           actor: actor,
           token: token,
+          allow_principal_without_token: respond_to?(:oidc_authorization_login_challenge, true) &&
+            oidc_authorization_login_challenge.present?,
         ).current
       end
   rescue ArgumentError
@@ -449,6 +485,8 @@ module AuthenticationSequenceGate
       return result
     end
 
+    return result unless result[:status] == :success
+
     cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
     if cycle.sign_in_guardrail_pending?
       guardrail = SignInGuardrailParticipant.new(cycle: cycle, actor: resource)
@@ -507,70 +545,6 @@ module AuthenticationSequenceGate
     true
   end
 
-  def promote_current_session_limit_cycle_for_oidc_handoff!(actor)
-    cycle = current_db_sign_in_flow_for_sequence
-    challenge = oidc_authorization_login_challenge
-    return nil unless cycle&.sign_in_session_limit_pending?
-    return nil if challenge.blank?
-
-    result = SignInSessionLimitManager.new(
-      cycle: cycle,
-      actor: actor,
-      token: current_session,
-    ).promote!
-    cycle = result.cycle.reload
-
-    return nil unless advance_oidc_session_promotion!(cycle, actor)
-
-    session_result = log_in(
-      actor,
-      record_login_audit: true,
-      token_kind_id: "BROWSER_WEB",
-      require_totp_check: false,
-      audit_context: { auth_method: "oidc_session_limit_promotion" },
-      bootstrap_actor: true,
-      authentication_event_at: current_authentication_event_at,
-    )
-    return nil unless session_result[:status] == :success && current_session
-
-    bind_session_for_oidc_handoff!(cycle, actor, current_session)
-  end
-
-  def advance_oidc_session_promotion!(cycle, actor)
-    if cycle.sign_in_guardrail_pending?
-      guardrail_result = SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
-      return false if guardrail_result.blocking?
-    end
-
-    cycle.reload
-    if cycle.sign_in_checkpoint_pending?
-      checkpoint_result =
-        with_sign_in_flow_writing(cycle) do
-          sign_in_checkpoint_participant(cycle).advance_if_clear!
-        end
-      return false if checkpoint_result.blocking?
-    end
-
-    true
-  end
-
-  def bind_session_for_oidc_handoff!(cycle, actor, issued_session)
-    with_sign_in_flow_writing(cycle) do
-      changes = {
-        status_id: cycle.status_id_for("DASHBOARD_PENDING"),
-        state: "DASHBOARD_PENDING",
-        step: "dashboard",
-        token: issued_session,
-      }
-      changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
-      cycle.reload.update!(changes)
-    end
-
-    sign_in_flow_locator_for(actor: actor, token: issued_session).issue!(cycle.reload)
-    reset_current_db_sign_in_flow_for_sequence!
-    oidc_authorization_after_login_path
-  end
-
   def issue_active_session_for_selector!(cycle)
     actor = sign_in_flow_actor(cycle)
     return { status: :invalid_request } unless actor
@@ -610,6 +584,12 @@ module AuthenticationSequenceGate
     return unless cycle.respond_to?(:principal)
 
     cycle.principal
+  end
+
+  def oidc_authorization_login_challenge_present?
+    return false unless respond_to?(:oidc_authorization_login_challenge, true)
+
+    oidc_authorization_login_challenge.present?
   end
 
   def pending_mfa_sign_in_flow_for(resource)
@@ -659,5 +639,15 @@ module AuthenticationSequenceGate
     )
   end
 
-  private :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?, :pending_sign_in_flow_actor
+  def authorize_sign_in_sequence!(cycle)
+    rule = cycle.sign_in_dashboard_pending? ? :show_dashboard? : :consume_return?
+    return false unless allowed_to?(rule, cycle)
+
+    authorize!(cycle, to: rule)
+    true
+  end
+
+  private :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?, :pending_sign_in_flow_actor,
+          :authorize_sign_in_sequence!, :authenticate_sign_in_sequence_actor!,
+          :authenticate_oidc_result_actor!, :oidc_authorization_login_challenge_present?
 end

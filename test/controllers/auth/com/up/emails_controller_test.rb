@@ -380,11 +380,14 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     first_email = VisitorEmail.find_by!(public_id: first_public_id)
     first_visitor = first_email.visitor
 
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      post auth_com_sign_up_email_url(ri: "jp"),
-           params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
-                     "cf-turnstile-response": "test", },
-           headers: default_headers
+    decision_time = first_email.otp_last_sent_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
+    VisitorEmail.stub(:database_now, decision_time) do
+      travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+        post auth_com_sign_up_email_url(ri: "jp"),
+             params: { visitor_email: { raw_address: email_address, confirm_policy: "1" },
+                       "cf-turnstile-response": "test", },
+             headers: default_headers
+      end
     end
 
     assert_response :redirect

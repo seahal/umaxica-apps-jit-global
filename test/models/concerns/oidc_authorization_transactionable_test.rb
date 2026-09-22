@@ -4,6 +4,22 @@
 require "test_helper"
 
 class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
+  self.use_transactional_tests = false
+
+  setup do
+    @transaction_prefix = "oidc-authorization-transaction-test-#{SecureRandom.hex(8)}"
+  end
+
+  teardown do
+    [
+      ClientOidcAuthorizationTransaction,
+      VisitorOidcAuthorizationTransaction,
+      OperatorOidcAuthorizationTransaction,
+    ].each do |transaction_class|
+      transaction_class.where("login_challenge LIKE ?", "#{@transaction_prefix}-%").delete_all
+    end
+  end
+
   test "create_transaction! persists a transaction and authorize_params mirrors the public contract" do
     transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
 
@@ -68,7 +84,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       assert_equal "visitor-1", transaction.actor_ref
       assert_equal authentication_event_at, transaction.authenticated_at
 
-      transaction = transaction.consume!
+      transaction = transaction.consume!(now: now)
 
       assert_predicate transaction, :consumed?
       assert_equal now, transaction.consumed_at
@@ -140,24 +156,40 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
 
   test "concurrent authentication results have exactly one winner" do
     transaction = create_transaction(VisitorOidcAuthorizationTransaction, surface: "com")
-    results =
-      2.times.map do |index|
-        Concurrent::Promises.future do
-          VisitorOidcAuthorizationTransaction.find(transaction.id).register_authentication!(
-            actor_ref: "visitor-#{index}",
-            session_ref: "session-#{index}",
-            auth_method: "passkey",
-            acr: "aal2",
-            authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5) + index,
-          )
-          :success
-        rescue ArgumentError => e
-          e.message
-        end
-      end.map(&:value!)
+    ready = Queue.new
+    release = Queue.new
+    results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
 
-    assert_equal 1, results.count(:success), results.inspect
-    assert_equal 1, results.count("authorization transaction is not pending"), results.inspect
+    threads =
+      Array.new(2) do |index|
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
+          VisitorOidcAuthorizationTransaction.connection_pool.with_connection do
+            ready << true
+            release.pop
+            VisitorOidcAuthorizationTransaction.find(transaction.id).register_authentication!(
+              actor_ref: "visitor-#{index}",
+              session_ref: "session-#{index}",
+              auth_method: "passkey",
+              acr: "aal2",
+              authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5) + index,
+            )
+            results << :success
+          rescue ArgumentError => e
+            results << e.message
+          rescue StandardError => e
+            results << e
+          end
+        end
+      end
+
+    2.times { ready.pop }
+    2.times { release << true }
+    threads.each(&:join)
+    outcomes = 2.times.map { results.pop }
+
+    assert_equal 1, outcomes.count(:success), outcomes.inspect
+    assert_equal 1, outcomes.count("authorization transaction is not pending"), outcomes.inspect
     assert_predicate transaction.reload, :authenticated?
 
     assert_includes %w(visitor-0 visitor-1), transaction.actor_ref
@@ -179,7 +211,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
   private
 
   def create_transaction(transaction_class, surface:, unique: "one", prompt: nil, max_age: nil)
-    transaction_class.create_transaction!(
+    transaction = transaction_class.create_transaction!(
       surface: surface,
       intent: "sign_in",
       client_id: "core-next-rp",
@@ -190,11 +222,12 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       nonce: "nonce-#{unique}",
       code_challenge: "challenge-#{unique}",
       code_challenge_method: "S256",
-      login_challenge: "login-#{unique}",
+      login_challenge: "#{@transaction_prefix}-#{unique}",
       login_challenge_expires_at: 5.minutes.from_now,
       expires_at: 10.minutes.from_now,
       prompt: prompt,
       max_age: max_age,
     )
+    transaction
   end
 end

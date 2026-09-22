@@ -3155,7 +3155,7 @@ ALTER TABLE ONLY public.handles
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -3291,7 +3291,7 @@ ALTER TABLE ONLY public.member_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -3315,7 +3315,7 @@ ALTER TABLE ONLY public.client_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -3363,7 +3363,7 @@ ALTER TABLE ONLY public.member_avatar_oversights
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
 
 
 --

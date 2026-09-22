@@ -138,7 +138,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 
     post base_com_oauth_authorization_url(host: host),
-         params: { result: "no-such-challenge" },
+         params: { result: "no-such-challenge", transaction_ref: "unknown" },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
@@ -158,14 +158,14 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     )
 
     post base_com_oauth_authorization_url(host: host),
-         params: { result: result.code },
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :redirect
     assert_predicate issuance.transaction.reload, :consumed?
 
     post base_com_oauth_authorization_url(host: host),
-         params: { result: result.code },
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
@@ -184,14 +184,14 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     )
 
     post base_org_oauth_authorization_url(host: host),
-         params: { result: result.code },
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :redirect
     assert_predicate issuance.transaction.reload, :consumed?
 
     post base_org_oauth_authorization_url(host: host),
-         params: { result: result.code },
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :bad_request
@@ -206,7 +206,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction: issuance.transaction)
 
     post base_com_oauth_authorization_url(host: host),
-         params: { result: result.code },
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
@@ -222,7 +222,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     result = BaseAuthAdmissionCoordinator.issue_result!(transaction: issuance.transaction)
 
     post base_org_oauth_authorization_url(host: host),
-         params: { result: result.code },
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :bad_request
@@ -248,7 +248,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
       post base_com_oauth_authorization_url(host: host),
-           params: { result: result.code },
+           params: { result: result.code, transaction_ref: result.transaction.transaction_id },
            headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
     end
 
@@ -274,12 +274,75 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
       post base_org_oauth_authorization_url(host: host),
-           params: { result: result.code },
+           params: { result: result.code, transaction_ref: result.transaction.transaction_id },
            headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
     end
 
     assert_response :bad_request
     assert_equal "authorization transaction expired", response.parsed_body.fetch("error_description")
+  end
+
+  test "com result binding mismatch does not consume the result" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    first = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
+    )
+    second = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor").merge(state: "second"),
+    )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: "com", login_challenge: first.transaction.login_challenge,
+      actor: visitors(:reserved_visitor), session_ref: "com-binding-session", auth_method: "passkey",
+      authentication_event_at: Time.current,
+    )
+
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code, transaction_ref: second.transaction.transaction_id },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+
+    assert_response :bad_request
+    assert_not_predicate first.transaction.reload, :consumed?
+
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code, transaction_ref: first.transaction.transaction_id },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+
+    assert_response :redirect
+    assert_predicate first.transaction.reload, :consumed?
+  end
+
+  test "com authorize does not consume a result with a different purpose" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "com", intent: "authentication", params: authorize_params(realm: "visitor"),
+    )
+    store = Valkey::AuthState::OpaqueAdmissionStore.new
+    result_code = store.issue!(
+      purpose: "invitation_result",
+      actor_type: "visitor",
+      surface: "com",
+      subject_ref: issuance.transaction.transaction_id,
+      reference: SecureRandom.uuid,
+    )
+
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result_code, transaction_ref: issuance.transaction.transaction_id },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+
+    assert_response :bad_request
+    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
+
+    still_available = store.consume!(
+      purpose: "invitation_result",
+      raw_code: result_code,
+      expected: {
+        actor_type: "visitor",
+        surface: "com",
+        subject_ref: issuance.transaction.transaction_id,
+      },
+    )
+
+    assert_predicate still_available, :success?
   end
 
   private

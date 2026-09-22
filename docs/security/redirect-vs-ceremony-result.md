@@ -27,6 +27,13 @@ redirect query or fragment. Its GET handoff only renders a same-origin CSRF-prot
 form; the following Auth POST creates the opaque one-shot result. A second form then submits that
 result in the POST body to the matching Base `POST /oauth/authorize` endpoint.
 
+The Base-to-Auth admission follows the same transport boundary. Base may carry only a non-secret,
+short-lived transaction or local-entry reference in the initial Auth GET so that Auth can render its
+same-origin continuation form. The admission code itself is never placed in that URL. The following
+CSRF-protected POST consumes the reference atomically in Valkey, and then redirects to a clean
+ceremony URL. A GET does not consume an admission, and the reference index stores only a pointer to
+the digest-keyed admission record; it does not store the raw code.
+
 Base accepts the result only from the exact configured Auth origin (including the existing
 same-site/null-origin proxy case), checks the surface-bound result at atomic consumption, and then
 resumes the pending Base transaction. `GET /oauth/authorize?result=...` never consumes a result.

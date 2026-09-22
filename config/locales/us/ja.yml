@@ -3957,6 +3957,7 @@ ja:
           complete: 検証が完了しました
     shared:
       sign_out:
+        already_signed_out: すでにサインアウトしています。
         button: ログアウトします
         completed_description: "%{expires_at}以降には確実にアクセスが不可能となります。"
         completed_title: サインアウトしました

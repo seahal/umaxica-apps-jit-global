@@ -30,7 +30,10 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "guest can access login page" do
-    get auth_app_sign_in_path(ri: "jp", admission: login_challenge_for_sign_in), headers: { "Host" => @host }
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: login_challenge_for_sign_in,
+                             params: { ri: "jp" }, headers: { "Host" => @host },
+    )
 
     assert_response :see_other
     follow_redirect!
@@ -47,27 +50,14 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
     cookies[:auth_refresh] = refresh_plain
 
-    get auth_app_sign_in_path(admission: login_challenge_for_sign_in), headers: { "Host" => @host }
+    get auth_app_sign_in_path(ri: "jp"), headers: { "Host" => @host }
 
-    # First response should be a redirect (ri=jp or guest_only)
-    assert_response :redirect
+    assert_response :conflict
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
 
-    # Follow redirects until we reach the final page
-    max_redirects = 10
-    redirects = 0
-    while response.redirect? && redirects < max_redirects
-      follow_redirect!
-      redirects += 1
-    end
-
-    # The test expects authentication to succeed.
-    # After transparent refresh, guest authentication mode should redirect logged-in users away.
-    # Due to complex redirect chains, we verify the key outcome:
-    # 1. First response was a redirect (auth processing happened)
-    # 2. Cookies were rotated (refresh worked)
-
-    # Verify cookies updated (rotated)
-    new_refresh = response.cookies["auth_refresh"] || cookies["auth_refresh"]
+    # The browser is refused at the sign-in boundary after transparent refresh;
+    # a second authentication ceremony must not start while authenticated.
+    new_refresh = response.cookies["auth_refresh"]
 
     assert_not_nil new_refresh, "Refresh cookie should be rotated"
   end
@@ -86,18 +76,10 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     refresh_plain = token_record.rotate_refresh_token!
 
     cookies_header = "auth_refresh=#{refresh_plain}"
-    get auth_app_sign_in_path(admission: login_challenge_for_sign_in),
-        headers: { "Cookie" => cookies_header, "Host" => @host }
+    get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-    # First response should be a redirect
-    assert_response :redirect
-
-    max_redirects = 10
-    redirects = 0
-    while response.redirect? && redirects < max_redirects
-      follow_redirect!
-      redirects += 1
-    end
+    assert_response :conflict
+    assert_equal "Sign-in is unavailable while authenticated.", response.body
 
     # Check audit using subject fields - may not always be created depending on auth flow
     # The key assertion is that the first response was a redirect (auth processing happened)
@@ -123,18 +105,10 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
           events << payload
         end
 
-      get auth_app_sign_in_path(admission: login_challenge_for_sign_in),
-          headers: { "Cookie" => cookies_header, "Host" => @host }
+      get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-      # First response should be a redirect (auth succeeded despite audit failure)
-      assert_response :redirect
-
-      max_redirects = 10
-      redirects = 0
-      while response.redirect? && redirects < max_redirects
-        follow_redirect!
-        redirects += 1
-      end
+      assert_response :conflict
+      assert_equal "Sign-in is unavailable while authenticated.", response.body
 
       ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
     end
@@ -152,18 +126,10 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
     AuthenticationAuditWriter.stub(:write, false) do
       cookies_header = "auth_refresh=#{refresh_plain}"
-      get auth_app_sign_in_path(admission: login_challenge_for_sign_in),
-          headers: { "Cookie" => cookies_header, "Host" => @host }
+      get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-      # First response should be a redirect
-      assert_response :redirect
-
-      max_redirects = 10
-      redirects = 0
-      while response.redirect? && redirects < max_redirects
-        follow_redirect!
-        redirects += 1
-      end
+      assert_response :conflict
+      assert_equal "Sign-in is unavailable while authenticated.", response.body
     end
   end
 
@@ -211,6 +177,6 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
         scope: "openid profile",
       },
     ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
   end
 end

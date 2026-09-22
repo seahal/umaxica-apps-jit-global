@@ -1,11 +1,11 @@
 # typed: false
 # frozen_string_literal: true
 
-# Reference data (lookup / status tables) is owned by migrations, which insert the fixed rows
-# with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file is
-# only responsible for development/test sample fixtures (sample Client / Operator and their
-# email/secret), and is a no-op in production. The sample fixtures below rely on the reference
-# rows already being present from migrations.
+# Reference data (lookup / status tables) is normally owned by migrations, which insert the fixed
+# rows with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file
+# also replays the current occurrence catalog after a schema-only load, because that database's
+# migration markers suppress the original data inserts. The remaining content is development/test
+# sample fixtures (sample Client / Operator and their email/secret), and is a no-op in production.
 
 return if Rails.env.production?
 
@@ -24,6 +24,27 @@ OperatorSecretCredentialStatus.insert_missing_fixed_ids!(
    OperatorSecretCredentialStatus::EXPIRED, OperatorSecretCredentialStatus::REVOKED,
    OperatorSecretCredentialStatus::USED,],
 )
+
+# Occurrence reference rows are owned by the occurrence database, not primary.
+# A structure.sql load marks data migrations as applied without replaying their
+# INSERTs, so reproduce the current JWT anomaly catalog through the same
+# idempotent migration writer on the correct writer connection. During the
+# pre-migration bootstrap both tables are absent and this section is skipped;
+# a partially-created occurrence schema fails loudly instead of reporting a
+# successful but incomplete seed.
+occurrence_connection = OccurrenceRecord.lease_connection
+occurrence_tables = %w(jwt_occurrence_statuses jwt_occurrences)
+occurrence_table_presence =
+  occurrence_tables.map do |table_name|
+    occurrence_connection.data_source_exists?(table_name)
+  end
+
+if occurrence_table_presence.any?
+  require Rails.root.join(
+    "db/occurrences_migrate/20260918150000_insert_current_jwt_anomaly_reference_data",
+  ).to_s
+  InsertCurrentJwtAnomalyReferenceData.new.seed_into(occurrence_connection)
+end
 
 sample_user_secret = "00000000000000000000000000000000"
 sample_staff_public_id = "2222222222222222"

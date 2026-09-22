@@ -20,10 +20,12 @@ module Auth
         declare_authentication_mode! :open
 
         def show
-          admit_or_render_sign_ceremony!(expected_intent: "sign_up") { render_sign_up_entry_page! }
+          admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_sign_up_entry_page! }
         end
 
         private
+
+        def auth_ceremony_entry_intent = "sign_up"
 
         def sign_up_surface = :app
 

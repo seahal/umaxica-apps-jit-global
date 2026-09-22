@@ -118,16 +118,19 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
   def visit_admitted_ceremony!(surface:, intent:)
     host = SURFACES.fetch(surface).fetch(:host)
     host!(host)
-    _transaction, code = issue_admission!(surface: surface.to_s, intent: intent)
+    _transaction, reference = issue_admission!(surface: surface.to_s, intent: intent)
 
     path =
       if intent == "sign_up"
-        public_send(:"auth_#{surface}_sign_up_path", ri: "jp", admission: code)
+        public_send(:"auth_#{surface}_sign_up_path")
       else
-        public_send(:"auth_#{surface}_sign_in_path", ri: "jp", admission: code)
+        public_send(:"auth_#{surface}_sign_in_path")
       end
 
-    get(path, headers: { "Host" => host })
+    redeem_auth_ceremony_entry!(
+      path, reference: reference, params: { ri: "jp" },
+            headers: { "Host" => host },
+    )
 
     assert_response :see_other
     follow_redirect!
@@ -151,6 +154,6 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
         },
       )
     handoff = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction)
-    [issuance.transaction, handoff.code]
+    [issuance.transaction, handoff.reference]
   end
 end

@@ -63,13 +63,16 @@ module RefreshTokenShared
       digest_column:,
       unused_column: nil,
       expires_at_column: nil,
-      now: Time.current
+      now: nil
     )
       return nil if digest.blank?
 
       scope = where(digest_column => digest)
       scope = scope.where(unused_column => nil) if unused_column
-      scope = scope.where(arel_table[expires_at_column].gt(now)) if expires_at_column
+      if expires_at_column
+        now ||= database_now
+        scope = scope.where(arel_table[expires_at_column].gt(now))
+      end
       scope.lock.order(:id).first
     end
   end

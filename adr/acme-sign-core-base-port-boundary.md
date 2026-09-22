@@ -160,6 +160,13 @@ secret reflection, and no cookie issuance. Do not delete them until native app r
 provider console settings, external documentation, and access logs have been checked. They are
 deletion or consolidation candidates, not the formal Palm OAuth/OIDC entry point.
 
+Palm also does not expose a browser-facing native authorization launcher while the native client
+registration and concrete iOS/Android flow remain unapproved. The Rails Palm root must not publish
+native sign-in or sign-up links, and Palm must not proxy a client-specific authorization request to
+Acme. Once an actual native client and its external registration are approved, the common Acme
+authorization entry point may be enabled through a separately reviewed contract. This does not
+remove the inert callback compatibility stub described above.
+
 Future Palm device and token transport APIs should use explicit API namespaces such as:
 
 - `/api/v0/device/*`

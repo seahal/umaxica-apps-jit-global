@@ -16,7 +16,7 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
     get base_app_accounts_url(ri: "jp", host: @host), headers: host_headers(@host)
 
     assert_response :redirect
-    assert_oidc_authorize_redirect(response.location, host: @host)
+    assert_auth_ceremony_redirect(response.location, surface: :app)
   end
 
   test "index lists accounts" do

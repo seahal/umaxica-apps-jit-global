@@ -502,15 +502,18 @@ module Auth::App::Up
 
       # Past the re-registration overwrite window the same number must be
       # registrable again -- the abandoned pending row/user is cleaned up.
-      travel(CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second) do
-        post auth_app_sign_up_telephone_url, params: {
-          user_telephone: {
-            raw_number: number,
-            confirm_policy: "1",
-            confirm_using_mfa: "1",
-          },
-          "cf-turnstile-response": "test",
-        }
+      decision_time = telephone.created_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
+      ClientTelephone.stub(:database_now, decision_time) do
+        travel(CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second) do
+          post auth_app_sign_up_telephone_url, params: {
+            user_telephone: {
+              raw_number: number,
+              confirm_policy: "1",
+              confirm_using_mfa: "1",
+            },
+            "cf-turnstile-response": "test",
+          }
+        end
       end
 
       assert_redirected_to auth_app_sign_up_check_telephone_otp_url
@@ -588,16 +591,19 @@ module Auth::App::Up
       first_telephone = registration_telephone
       first_user = first_telephone.user
 
-      travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-        # Create second registration with the same number
-        post auth_app_sign_up_telephone_url, params: {
-          user_telephone: {
-            raw_number: "+1234567894",
-            confirm_policy: "1",
-            confirm_using_mfa: "1",
-          },
-          "cf-turnstile-response": "test",
-        }
+      decision_time = first_telephone.created_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
+      ClientTelephone.stub(:database_now, decision_time) do
+        travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+          # Create second registration with the same number
+          post auth_app_sign_up_telephone_url, params: {
+            user_telephone: {
+              raw_number: "+1234567894",
+              confirm_policy: "1",
+              confirm_using_mfa: "1",
+            },
+            "cf-turnstile-response": "test",
+          }
+        end
       end
 
       # First telephone and its pending user should be cleaned up

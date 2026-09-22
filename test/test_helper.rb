@@ -77,6 +77,7 @@ require_relative "support/login_cooldown_helper"
 require_relative "support/inertia_page_object"
 require_relative "support/org_entra_first_stage_helper"
 require_relative "support/oidc_authorization_response_helper"
+require_relative "support/auth_ceremony_entry_helper"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
@@ -130,6 +131,36 @@ module AuthenticationHarness
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
+  # Base protected pages may use the approved Jump gateway transport before the browser reaches
+  # Auth. Assert the destination contract after that transport is unwrapped: Base must hand the
+  # browser to the matching Auth ceremony with an opaque local admission, never to a legacy OIDC
+  # RP authorization endpoint.
+  def assert_auth_ceremony_redirect(location, surface:)
+    target = jump_rt_url_from_location_for_test(location)
+    uri = URI.parse(target)
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    auth_host = auth_host_for_test_surface(surface)
+
+    assert_equal auth_host, uri.host
+    assert_equal public_send(:"auth_#{surface}_sign_in_path"), uri.path
+    assert_predicate query["entry_ref"], :present?
+    assert_nil query["client_id"]
+    assert_nil query["screen_hint"]
+  end
+
+  # Auth-owned pages use the local ceremony entry when the request is already on Auth. It must
+  # not manufacture an OIDC RP authorization request or a cross-surface client binding.
+  def assert_auth_local_sign_in_redirect(location, surface:)
+    target = jump_rt_url_from_location_for_test(location)
+    uri = URI.parse(target)
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+
+    assert_equal auth_host_for_test_surface(surface, local: true), uri.host
+    assert_equal public_send(:"auth_#{surface}_sign_in_path"), uri.path
+    assert_nil query["client_id"]
+    assert_nil query["screen_hint"]
+  end
+
   def submit_step_up_completion_if_present!(host: nil, headers: {})
     return unless respond_to?(:response) && response.media_type == "text/html"
     return unless response.body.include?("step-up-completion-form")
@@ -150,6 +181,31 @@ module AuthenticationHarness
   end
 
   private
+
+  def jump_rt_url_from_location_for_test(location)
+    uri = URI.parse(location.to_s)
+    return location unless uri.host == "jump.umaxica.net"
+
+    token = Rack::Utils.parse_nested_query(uri.query.to_s)["rt"]
+    return location if token.blank?
+
+    payload, = JWT.decode(token, nil, false)
+    payload["url"].presence || location
+  rescue JWT::DecodeError, URI::InvalidURIError
+    location
+  end
+
+  def auth_host_for_test_surface(surface, local: false)
+    env_key =
+      case surface.to_sym
+      when :app then "PUBLIC_AUTH_SERVICE_URL"
+      when :com then local ? "PRIVATE_AUTH_CORPORATE_URL" : "PUBLIC_AUTH_CORPORATE_URL"
+      when :org then local ? "PRIVATE_AUTH_STAFF_URL" : "PUBLIC_AUTH_STAFF_URL"
+      else raise ArgumentError, "unknown Auth surface: #{surface}"
+      end
+
+    CommonRedirect.normalize_host(ENV.fetch(env_key))
+  end
 
   def authenticated_resource_headers(resource, host:, headers:, session_public_id:, resource_type:, session_header:)
     token_record = authentication_harness_session_token(resource, session_public_id: session_public_id)
@@ -287,6 +343,7 @@ module ActiveSupport
     include FormActionPolicyHelper
     include LoginCooldownHelper
     include OutboundHttpStub
+    include AuthCeremonyEntryHelper
 
     # Physical cores, not logical processors (SMT/vCPUs): measured on a 16-core/32-thread host --
     # `PARALLEL_WORKERS=32` (one per logical thread) took 37s on a 3000-test subset versus 22-24s

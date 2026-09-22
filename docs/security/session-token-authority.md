@@ -11,9 +11,14 @@ host-only RP cookies on the RP host. A browser RP callback does not call the gen
 
 Auth owns credential ceremony continuity only. Auth does not act as an OIDC RP, exchange RP codes,
 or issue Base Browser Session or RP Session authority. The RP Access JWT is validated locally at
-the browser API boundary using the exact registered RP audience/client binding; normal requests do
-not perform an RP Session database lookup. Refresh, revoke, and logout remain Base/RP-Session
-operations.
+the browser API boundary using the exact registered RP audience/client binding. Exchanged and
+refreshed OIDC Access JWTs carry the RP Session identifier in the protocol `sid` claim and the
+parent Base Browser Session public identifier in the private `umx_base_sid` claim. Normal bearer
+validation uses the verified JWT claims, the active Base Browser Session binding, and the actor
+resource; it does not perform an RP Session database lookup. Refresh, revoke, and logout remain
+Base/RP-Session operations. Revoking only an RP Session therefore stops refresh and new issuance,
+while an already-issued Access JWT remains usable until its natural expiry and verifier clock-skew
+boundary.
 
 The older `acme/www` and `sign/id` wording below is retained as migration history. It must not be
 used to infer current physical ownership where it conflicts with the Base/Auth/RP boundary above.

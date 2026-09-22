@@ -10,6 +10,8 @@ module Base
           declare_authentication_mode! :private
 
           before_action :authenticate_client!
+          step_up only: :create, scope: "settings_secret_credential"
+
           def create
             authorize!(current_client, to: :update?)
             CredentialSecurityTransition.call(

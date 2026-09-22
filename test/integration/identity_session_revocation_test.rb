@@ -93,12 +93,24 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   test "app revoke other sessions keeps the current session" do
     host! @app_host
     setup_app_actor!
+    mark_step_up_satisfied!(@current_token, audience: "step_up:app")
 
     delete base_app_identity_other_sessions_url(ri: "jp", host: @app_host), headers: @app_headers
 
     assert_response :see_other
     assert_not_predicate @other_token.reload, :currently_usable?
     assert_predicate @current_token.reload, :currently_usable?
+  end
+
+  test "app revoke other sessions requires a fresh step-up" do
+    host! @app_host
+    setup_app_actor!
+
+    delete base_app_identity_other_sessions_url(ri: "jp", host: @app_host), headers: @app_headers
+
+    assert_response :unauthorized
+    assert_predicate @current_token.reload, :currently_usable?
+    assert_predicate @other_token.reload, :currently_usable?
   end
 
   # --- com surface -------------------------------------------------------
@@ -117,12 +129,25 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   test "com revoke other sessions keeps the current session" do
     host! @com_host
     setup_com_actor!
+    mark_step_up_satisfied!(@current_token, audience: "step_up:com")
 
     delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
 
     assert_response :see_other
     assert_not_predicate @other_token.reload, :currently_usable?
     assert_predicate @current_token.reload, :currently_usable?
+  end
+
+  test "com revoke other sessions requires a fresh step-up" do
+    host! @com_host
+    setup_com_actor!
+
+    delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
+
+    assert_response :see_other
+    assert_equal "/verification/setup/new", URI.parse(response.location).path
+    assert_predicate @current_token.reload, :currently_usable?
+    assert_predicate @other_token.reload, :currently_usable?
   end
 
   private
@@ -190,5 +215,17 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     )
     token.update!(created_at: 1.hour.ago)
     token
+  end
+
+  def mark_step_up_satisfied!(token, audience:)
+    token.update_columns(
+      last_step_up_at: Time.current,
+      last_step_up_scope: "session_revoke_all",
+      last_step_up_aal: "aal2",
+      last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: audience,
+    )
   end
 end

@@ -34,10 +34,9 @@ scope module: :palm, as: :palm do
       # Sitemap endpoint.
       resource :sitemap, only: :show, path: "sitemap.xml"
 
-      # RP login start: redirects to Base /oauth/authorize.
-      # Compatibility callback is a generic native stub; Base owns OAuth/OIDC.
+      # Native callback compatibility stub only. Palm does not expose an unfinished native
+      # authorization launcher before a real native client and registration are approved.
       namespace :oidc do
-        resource :authorization, only: :show
         resource :callback, only: :show
       end
 

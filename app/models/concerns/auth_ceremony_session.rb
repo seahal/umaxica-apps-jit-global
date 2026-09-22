@@ -6,7 +6,9 @@ require "base64"
 
 # Short-lived Auth ceremony continuity only. Holds no Base login, identity, AAL,
 # policy, or RP Session authority. Cookie __Host-auth_sid carries only the raw
-# random id; this row stores SHA-256(sid) plus lifecycle timestamps.
+# random id; this row stores SHA-256(sid) plus lifecycle timestamps. Authentication
+# evidence recorded after a successful local ceremony is a one-time handoff input
+# for Base; it is not authority held by Auth or this row.
 module AuthCeremonySession
   extend ActiveSupport::Concern
 
@@ -14,22 +16,36 @@ module AuthCeremonySession
 
   SID_BYTES = 32
   DEFAULT_TTL = 30.minutes
+  AUTHENTICATION_METHODS = %w(email telephone secret passkey totp google apple entra).freeze
 
   module ClassMethods
     public
 
-    def issue!(ttl: DEFAULT_TTL, now: Time.current)
+    def issue!(ttl: DEFAULT_TTL, now: nil)
       raw_sid = SecureRandom.random_bytes(SID_BYTES)
       digest = digest_for(raw_sid)
-      record = writing_connection { create!(sid_digest: digest, expires_at: now + ttl) }
+      record =
+        writing_connection do
+          decision_time = now || database_now
+          create!(
+            sid_digest: digest,
+            expires_at: decision_time + ttl,
+            created_at: decision_time,
+            updated_at: decision_time,
+          )
+        end
       [record, encode_sid(raw_sid)]
     end
 
-    def find_active_by_raw_sid(raw_sid, now: Time.current)
+    def find_active_by_raw_sid(raw_sid, now: nil)
       digest = digest_for(decode_sid(raw_sid))
-      record = find_by(sid_digest: digest)
+      record, decision_time =
+        writing_connection do
+          decision_time = now || database_now
+          [find_by(sid_digest: digest), decision_time]
+        end
       return nil if record.nil?
-      return nil unless record.active?(now: now)
+      return nil unless record.active?(now: decision_time)
 
       record
     end
@@ -65,12 +81,41 @@ module AuthCeremonySession
 
   public
 
-  def active?(now: Time.current)
+  def active?(now: nil)
+    now ||= self.class.database_now
     !terminal? && expires_at > now
   end
 
   def admitted?
     admitted_at.present?
+  end
+
+  def authentication_evidence_recorded?
+    authentication_method.present? && authentication_event_at.present?
+  end
+
+  def record_authentication_evidence!(method:, now: nil)
+    normalized_method = method.to_s
+    unless AUTHENTICATION_METHODS.include?(normalized_method)
+      raise InvalidTransition, "unsupported authentication method"
+    end
+
+    self.class.writing_connection do
+      with_lock do
+        decision_time = now || self.class.database_now
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: decision_time)
+        raise InvalidTransition, "auth ceremony session was never admitted" unless admitted?
+        raise InvalidTransition, "authentication evidence is already recorded" if authentication_evidence_recorded?
+        raise InvalidTransition, "authentication evidence is incomplete" if authentication_method.present? ||
+          authentication_event_at.present?
+
+        update!(
+          authentication_method: normalized_method,
+          authentication_event_at: decision_time,
+          updated_at: decision_time,
+        )
+      end
+    end
   end
 
   def completed?
@@ -85,43 +130,47 @@ module AuthCeremonySession
     revoked_at.present? || completed? || cancelled?
   end
 
-  def admit!(authorization_transaction_ref: nil, now: Time.current)
+  def admit!(authorization_transaction_ref: nil, now: nil)
     self.class.writing_connection do
       with_lock do
-        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: now)
+        decision_time = now || self.class.database_now
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: decision_time)
         raise InvalidTransition, "auth ceremony session is already admitted" if admitted?
 
         update!(
           authorization_transaction_ref: authorization_transaction_ref.to_s.presence,
-          admitted_at: now,
+          admitted_at: decision_time,
+          updated_at: decision_time,
         )
       end
     end
   end
 
-  def revoke!(now: Time.current)
+  def revoke!(now: nil)
     transition_to_terminal!(:revoked_at, now: now, require_admitted: false)
   end
 
-  def complete!(now: Time.current)
+  def complete!(now: nil)
     transition_to_terminal!(:completed_at, now: now, require_admitted: true)
   end
 
-  def cancel!(now: Time.current)
+  def cancel!(now: nil)
     transition_to_terminal!(:cancelled_at, now: now, require_admitted: true)
   end
 
-  def rotate!(ttl: DEFAULT_TTL, now: Time.current)
+  def rotate!(ttl: DEFAULT_TTL, now: nil)
     self.class.writing_connection do
       with_lock do
-        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: now)
+        decision_time = now || self.class.database_now
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: decision_time)
 
         raw_sid = SecureRandom.random_bytes(SID_BYTES)
         update!(
           previous_sid_digest: sid_digest,
           sid_digest: self.class.digest_for(raw_sid),
-          expires_at: now + ttl,
-          rotated_at: now,
+          expires_at: decision_time + ttl,
+          rotated_at: decision_time,
+          updated_at: decision_time,
         )
         self.class.encode_sid(raw_sid)
       end
@@ -146,12 +195,13 @@ module AuthCeremonySession
   def transition_to_terminal!(timestamp_attribute, now:, require_admitted:)
     self.class.writing_connection do
       with_lock do
-        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: now)
+        decision_time = now || self.class.database_now
+        raise InvalidTransition, "auth ceremony session is not active" unless active?(now: decision_time)
         if require_admitted && !admitted?
           raise InvalidTransition, "auth ceremony session was never admitted"
         end
 
-        update!(timestamp_attribute => now)
+        update!(timestamp_attribute => decision_time, :updated_at => decision_time)
       end
     end
   end

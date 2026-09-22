@@ -214,6 +214,29 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
     assert_equal ClientTokenStatus::RESTRICTED, @token.reload.user_token_status_id
   end
 
+  test "status transitions use one writer database time for the state and timestamp" do
+    database_time = 1.hour.from_now
+
+    ClientToken.stub(:database_now, database_time) do
+      @token.mark_restricted!
+    end
+
+    restricted = @token.reload
+
+    assert_equal ClientTokenStatus::RESTRICTED, restricted.user_token_status_id
+    assert_equal database_time.to_i, restricted.updated_at.to_i
+
+    ClientToken.stub(:database_now, database_time) do
+      restricted.revoke!
+    end
+
+    revoked = restricted.reload
+
+    assert_equal ClientTokenStatus::REVOKED, revoked.user_token_status_id
+    assert_equal database_time.to_i, revoked.discard_at.to_i
+    assert_equal database_time.to_i, revoked.updated_at.to_i
+  end
+
   test "promote_to_active! updates status to active" do
     @token.update!(user_token_status_id: ClientTokenStatus::RESTRICTED)
     @token.promote_to_active!

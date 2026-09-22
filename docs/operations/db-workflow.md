@@ -19,7 +19,13 @@ to a clean database.
 `bin/rails db:verify_no_schema_drift` regenerates the configured dumps and compares them with the
 committed files. A worktree with intentionally regenerated but uncommitted dumps is expected to
 report those files as drift until the artifact changes are reviewed and committed. The migration
-path and clean-database reconstruction still require the separate checks below.
+path and clean-database reconstruction are verified separately before the artifacts are accepted.
+
+The former `db/initial_schemas/*.rb` loaders for app/com/org settings and Chronicle have been
+removed. Their initial table, extension, index, and foreign-key definitions now live directly in
+the owning migration. `db/migration_support/publishing_schema.rb` remains an explicit migration
+builder for the publishing family matrix; it is not a schema dump and is covered by the publishing
+reconstruction contract.
 
 ## Global / Regional Split (planned)
 
@@ -144,5 +150,7 @@ the current-row partial unique index.
 The seven approved administrative and enforcement reason-note columns use non-deterministic Active
 Record Encryption. The corresponding focused test verifies both round-trip decryption and that a
 newly persisted database value does not contain the plaintext. Populated structure dumps have been
-generated from the isolated test databases and are deterministic on repeat dump. Full migration-
-to-clean-database reconstruction and schema-load equivalence remain separate verification work.
+generated from the isolated test databases and are deterministic on repeat dump. On 2026-09-21,
+the isolated test fleet was rebuilt from migrations, seeded twice, and dumped twice; all configured
+database versions reached their expected current migration and the two dump sets matched. The
+reconstruction verification is recorded in `evidence/2026-09-21-phase-09-reconstruction-X4Y5.md`.

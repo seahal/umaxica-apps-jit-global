@@ -1525,16 +1525,19 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     user_count_before_second = Client.count
 
     # Second registration attempt after cooldown (should delete first pending user)
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
-      post auth_app_sign_up_email_url(ri: "jp"),
-           params: {
-             user_email: {
-               raw_address: email,
-               confirm_policy: "1",
+    decision_time = first_email.otp_last_sent_at + CommonOtpPolicy::SEND_COOLDOWN + 1.second
+    ClientEmail.stub(:database_now, decision_time) do
+      travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+        post auth_app_sign_up_email_url(ri: "jp"),
+             params: {
+               user_email: {
+                 raw_address: email,
+                 confirm_policy: "1",
+               },
+               "cf-turnstile-response": "test",
              },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
+             headers: default_headers
+      end
 
       assert_response :redirect
 
@@ -1664,20 +1667,24 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect
 
     # After the overwrite window expires, even though OTP resend cooldown is longer.
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      assert_enqueued_emails 1 do
-        post auth_app_sign_up_email_url(ri: "jp"),
-             params: {
-               user_email: {
-                 raw_address: email,
-                 confirm_policy: "1",
+    first_email = ClientEmail.order(:created_at).last
+    decision_time = first_email.otp_last_sent_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
+    ClientEmail.stub(:database_now, decision_time) do
+      travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+        assert_enqueued_emails 1 do
+          post auth_app_sign_up_email_url(ri: "jp"),
+               params: {
+                 user_email: {
+                   raw_address: email,
+                   confirm_policy: "1",
+                 },
+                 "cf-turnstile-response": "test",
                },
-               "cf-turnstile-response": "test",
-             },
-             headers: default_headers
-      end
+               headers: default_headers
+        end
 
-      assert_response :redirect
+        assert_response :redirect
+      end
     end
   end
 

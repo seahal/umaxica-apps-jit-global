@@ -21,13 +21,13 @@ generated artifacts contain schema metadata and `schema_migrations` bookkeeping 
 no business-data `INSERT` statements. A second `db:schema:dump` produced identical SHA-256 values
 for all 20 files, so the dump operation was deterministic during this run.
 
-`RAILS_ENV=test bin/rails db:verify_no_schema_drift` exited non-zero because every regenerated
-structure file is intentionally different from the previously committed empty stub. That result
-is recorded as expected worktree drift, not as a successful clean-drift check. The clean migration
-reconstruction and schema-load equivalence checks have not yet been run.
+At the time of this first dump-only check, `RAILS_ENV=test bin/rails db:verify_no_schema_drift`
+exited non-zero because every regenerated structure file was intentionally different from the
+previously committed empty stub. That result was recorded as worktree drift, not as a successful
+clean-drift check.
 
 ## Remaining verification
 
-The populated dumps do not prove that a new empty database can be reconstructed from the current
-migrations, nor that loading a dump and running the required seeds produces the same shape. Those
-checks require an explicitly verified isolated database target and remain open for Phase 09.
+The follow-up reconstruction was performed on the explicitly verified isolated test target and is
+recorded in the Phase 09 evidence. This file remains the historical record of the earlier
+dump-only run; it must not be read as the final reconstruction result.

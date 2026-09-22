@@ -137,7 +137,42 @@ offenses for the four changed implementation/test files.
 
 ## Remaining Phase 09 work
 
-This evidence confirms migration execution, seed repeatability, structure-dump determinism,
-Retainable vocabulary migration, and test-suite health after reset. It does not claim that all
-business-time reads use database time or that the final reconstructed schema has been reviewed and
-committed. Those remain separate implementation and review steps.
+The initial-schema reconstruction was then completed as a TDD slice. A new tooling assertion first
+failed because four migrations loaded `db/initial_schemas/*.rb`. The schema bodies were moved into
+the owning migrations using the standard migration DSL, the obsolete four files were removed, and
+the initial foreign-key block uses the repository's explicit `safety_assured` exception because
+these migrations run only while bootstrapping a clean database. The `force: :cascade` options from
+the generated schema definitions were removed; the first conversion attempt correctly failed on
+that Strong Migrations guard and was corrected before the successful reset.
+
+After the corrected reset, the authority test passed with:
+
+```text
+74 runs, 329 assertions, 0 failures, 0 errors, 0 skips
+```
+
+The final full Rails suite was run after the reset and conversion:
+
+```text
+11,440 runs, 73,144 assertions, 0 failures, 0 errors, 5 skips
+```
+
+The five skips are existing suite skips; no skip was added by this slice. The generated structure
+dumps were regenerated twice after the successful reset and matched byte-for-byte. No business-data
+INSERT statements were present.
+
+The follow-up writer-database-clock slice covered refresh-token rotation, device-session activity,
+RP-session issue/rotate/revoke, OIDC connection touches, and refresh reuse. Its focused set passed
+with 153 runs, 624 assertions, 0 failures, 0 errors, and 0 skips; the subsequent full suite passed
+with 11,450 runs, 73,177 assertions, 0 failures, 0 errors, and 5 existing skips. See
+`evidence/2026-09-21-database-clock-state-transitions-H8J9.md` for the lock/decision-time audit.
+
+The follow-up database-clock state-transition slice is recorded in
+`evidence/2026-09-21-database-clock-state-transitions-H8J9.md`. It covers Retainable scheduling/
+discarding and token status transitions, including preservation of the selected writer-clock
+`updated_at`.
+
+The normal local review/commit of the generated schema artifacts also remains. This evidence does
+not claim that every historical migration in every database path has been rewritten into a single
+new migration; the approved initial loader paths are now direct migrations, while historical
+migrations remain for reconstruction history and are still exercised by the clean reset.

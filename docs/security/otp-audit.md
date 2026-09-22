@@ -1,6 +1,6 @@
 # OTP Security Boundary
 
-Status: partial hardening recorded on 2026-09-20
+Status: partial hardening recorded on 2026-09-21
 
 ## Classification
 
@@ -29,6 +29,9 @@ app-only.
   plaintext.
 - Delivery adapters use the existing encrypted outbound payload boundary, so
   OTP values are not placed in queue arguments as plaintext.
+- Email adapters record successful enqueue and enqueue failure as separate
+  sanitized Chronicle facts without recipient or OTP content; provider delivery
+  receipts remain outside the current contract.
 - App and com email sign-in create requests use a server-side, normalized-address
   cooldown bucket before account lookup. The response is the existing generic
   cooldown response for both registered and unregistered addresses; the
@@ -37,6 +40,10 @@ app-only.
 - The identifier bucket is reserved only after the request's Turnstile result
   has been evaluated successfully. Failed Turnstile requests use the existing
   IP-scoped controls and cannot reserve another address's bucket.
+- Authentication OTP expiry is fail-closed for malformed timestamp values:
+  both PostgreSQL infinity sentinels and values that cannot be compared as a
+  finite time are treated as expired. Authentication OTPs therefore cannot
+  become timeless through an invalid persisted expiry.
 
 ## Verification performed
 
@@ -72,3 +79,31 @@ The OTP secret-delivery boundary was then rechecked with the email, Noticed,
 SMS-job, and encrypted-payload tests: 21 runs, 74 assertions, 0 failures, 0
 errors, and 0 skips. This verifies repository-side queue/payload handling only;
 provider-side logs, APM payloads, and live external delivery remain unverified.
+
+## Latest finite-expiry regression
+
+The public `OtpLockable` contract was exercised after a RED test reproduced a
+`Float::INFINITY` expiry reaching the time comparison and raising before the
+OTP was rejected. The implementation now treats positive and negative infinity,
+blank expiry, and non-comparable expiry values as expired. The focused OTP
+regression suite completed with 154 runs, 588 assertions, 0 failures, 0 errors,
+and 0 skips. This is a repository-side guarantee; it does not replace the
+separate audit of all provider delivery and external observability boundaries.
+
+The subsequent full Rails suite completed with 11469 runs, 73281 assertions,
+0 failures, 0 errors, and 6 existing skips. No skip was added for this
+regression.
+
+## Writer database clock verification
+
+OTP issue, cooldown, expiry, and failed-attempt transition paths use the owning
+writer database clock for each decision unit. The focused regression set covers
+the model boundaries and app/com signup and signin controller paths; tests stub
+the public model `database_now` boundary rather than assuming Rails time travel
+advances PostgreSQL.
+
+The focused suite completed with 283 runs, 1418 assertions, 0 failures, 0
+errors, and 0 skips. The final Rails suite completed with 11472 runs, 73290
+assertions, 0 failures, 0 errors, and 6 existing skips. This is a repository-side
+verification; operational clock-drift bounds and unrelated historical timestamp
+uses remain outside this OTP slice.

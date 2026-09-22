@@ -4,7 +4,7 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
-class Base::App::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
+class BaseAppRetiredOidcRoutesTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
   end

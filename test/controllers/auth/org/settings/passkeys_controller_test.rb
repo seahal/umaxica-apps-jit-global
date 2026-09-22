@@ -137,11 +137,7 @@ class Auth::Org::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     get auth_org_settings_passkeys_url(ri: "jp"), headers: browser_headers.merge(@host_headers)
 
     assert_response :redirect
-    assert_oidc_authorize_redirect(
-      jump_rt_url_from_location(response.location),
-      host: Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host,
-      client_id: "sign-rp",
-    )
+    assert_auth_local_sign_in_redirect(response.location, surface: :org)
   end
 
   test "should get edit" do

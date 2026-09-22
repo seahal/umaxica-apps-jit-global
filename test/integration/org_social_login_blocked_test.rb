@@ -39,7 +39,10 @@ class OrgSocialLoginBlockedTest < ActionDispatch::IntegrationTest
   test "staff sign-in page does not contain social login buttons" do
     host! @staff_host
 
-    get "/sign/in", params: { ri: "jp", admission: login_challenge_for("org") }
+    redeem_auth_ceremony_entry!(
+      "/sign/in", reference: login_challenge_for("org"),
+                  params: { ri: "jp" },
+    )
 
     assert_response :see_other
     follow_redirect!
@@ -88,7 +91,7 @@ class OrgSocialLoginBlockedTest < ActionDispatch::IntegrationTest
         scope: "openid profile",
       },
     ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
   end
 
   def with_env(values)

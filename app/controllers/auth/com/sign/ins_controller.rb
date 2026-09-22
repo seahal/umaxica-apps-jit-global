@@ -13,10 +13,12 @@ module Auth
         declare_authentication_mode! :guest, no_redirect: true
 
         def show
-          admit_or_render_sign_ceremony!(expected_intent: "sign_in") { render_method_selection! }
+          admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
         end
 
         private
+
+        def auth_ceremony_entry_intent = "sign_in"
 
         def reject_logged_in_direct_entry!
           render_sign_in_unavailable_while_authenticated

@@ -20,6 +20,7 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to base_app_root_path(ri: "jp")
   end
+
   private
 
   def host_headers(host = nil)
@@ -51,6 +52,59 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
+  end
+end
+
+class Base::App::WelcomeAuthorizationControllerTest < ActionController::TestCase
+  tests Base::App::WelcomesController
+
+  setup do
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
+    BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+
+    nonce = "welcome-policy-controller-test-nonce"
+    @cycle = ClientSignInFlow.create!(
+      principal_id: @user.id,
+      token: @token,
+      status_id: ClientSignInFlow.status_id_for("DASHBOARD_PENDING"),
+      step: "dashboard",
+      return_to: "/after",
+      nonce_digest: ClientSignInFlow.digest_nonce(nonce),
+      issued_at: Time.current,
+      expires_at: 15.minutes.from_now,
+    )
+    SignInCycleLocator.new(@request.session, surface: :app, actor: @user, token: @token).issue!(@cycle, nonce: nonce)
+    @request.session[:app_sign_in_welcome] = {
+      "remaining" => 5,
+      "issued_at" => Time.current.to_i,
+      "expires_at" => 10.minutes.from_now.to_i,
+      "sequence_id" => @cycle.public_id,
+    }
+    @request.host = @host
+    @request.headers["X-TEST-CURRENT-USER"] = @user.id.to_s
+    @request.headers["X-TEST-SESSION-PUBLIC-ID"] = @token.public_id
+    @request.headers["Authorization"] = "Bearer #{access_token}"
+  end
+
+  test "dashboard-pending welcome authorizes the sign-in cycle before rendering" do
+    get :show, params: { ri: "jp" }
+
+    assert_response :success
+  end
+
+  private
+
+  def access_token
+    AuthenticationToken.encode(
+      @user,
+      host: @host,
+      session_public_id: @token.public_id,
+      resource_type: "client",
+      jwt_issuer_id: "surface:BASE_APP",
+    )
   end
 end
 

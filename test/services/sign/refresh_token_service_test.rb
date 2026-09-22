@@ -170,15 +170,15 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
   end
 
   test "scheduled revoked tokens are invalid after discard_at passes" do
-    freeze_time do
-      token = ClientToken.create!(
-        user: create_verified_user_with_email(email_address: "refresh-scheduled-#{SecureRandom.hex(4)}@example.com"),
-        discard_at: 5.minutes.from_now,
-        purge_eligible_at: 1.day.from_now,
-      )
-      refresh = token.rotate_refresh_token!
-      travel 6.minutes
+    database_time = ClientToken.database_now
+    token = ClientToken.create!(
+      user: create_verified_user_with_email(email_address: "refresh-scheduled-#{SecureRandom.hex(4)}@example.com"),
+      discard_at: database_time + 5.minutes,
+      purge_eligible_at: database_time + 1.day,
+    )
+    refresh = token.rotate_refresh_token!
 
+    ClientToken.stub(:database_now, database_time + 6.minutes) do
       result = SignRefreshTokenIssuer.call(refresh_token: refresh)
 
       assert_not result.success?

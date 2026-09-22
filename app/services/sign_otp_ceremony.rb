@@ -139,19 +139,26 @@ class SignOtpCeremony
 
   def cooldown_active?(record)
     return record.otp_cooldown_active? if record.respond_to?(:otp_cooldown_active?)
+
+    decision_time = record.class.database_now
     return false unless record.respond_to?(:otp_last_sent_at)
     return false if record.otp_last_sent_at.blank?
     return false if record.otp_last_sent_at == -Float::INFINITY
 
-    record.otp_last_sent_at > CommonOtpPolicy::SEND_COOLDOWN.ago
+    record.otp_last_sent_at > decision_time - CommonOtpPolicy::SEND_COOLDOWN
   end
 
   def generate_and_store_otp!(record)
     otp_private_key = ROTP::Base32.random_base32
     otp_counter = SecureRandom.random_number(1 << 64)
     otp_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    record.store_otp(otp_private_key, otp_counter, (Time.current + OTP_EXPIRATION).to_i)
-    record.update!(otp_last_sent_at: Time.current) if record.respond_to?(:otp_last_sent_at=)
+    decision_time = record.class.database_now
+    record.store_otp(
+      otp_private_key,
+      otp_counter,
+      (decision_time + OTP_EXPIRATION).to_i,
+      now: decision_time,
+    )
     otp_code
   end
 

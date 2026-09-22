@@ -74,12 +74,13 @@ class SignInOtpResender
   # occurrence database lock.
   def reserve_resend!(occurrence)
     occurrence.with_lock do
+      decision_time = occurrence.class.database_now
       issued_timestamps = parse_issued_history(occurrence.memo)
       policy = SignInOtpResendPolicy.new(base_seconds: BASE_SECONDS, cap_seconds: EMAIL_CAP_SECONDS)
-      decision = policy.evaluate(issued_timestamps: issued_timestamps)
+      decision = policy.evaluate(issued_timestamps: issued_timestamps, now: decision_time)
 
       if decision.resendable
-        updated_history = (issued_timestamps + [Time.current]).last(MAX_HISTORY)
+        updated_history = (issued_timestamps + [decision_time]).last(MAX_HISTORY)
         log_issued!(occurrence: occurrence, issued_timestamps: updated_history)
         nil
       else

@@ -170,6 +170,12 @@ module Auth
         @allowed_policy
       end
 
+      def authorize!(_record, to:)
+        raise ActionPolicy::Unauthorized unless allowed_to?(to)
+
+        true
+      end
+
       def sign_in_checkpoint_participant(cycle)
         checkpoint_participant || super
       end

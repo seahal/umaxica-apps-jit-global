@@ -46,6 +46,33 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_kind_of Integer, result.token_response[:expires_in]
   end
 
+  test "stamps the OIDC connection with the surface writer database time" do
+    code_record = issue_code!
+    database_now = Time.utc(2026, 9, 21, 13, 14, 15, 123_456)
+
+    AppTicketRecord.stub(:database_now, database_now) do
+      with_authenticated_client do
+        result = OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion",
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier,
+          expected_resource_type: "client",
+        )
+
+        assert_predicate result, :success?
+      end
+    end
+
+    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-next-rp")
+
+    assert_equal database_now, connection.last_used_at
+  end
+
   test "refresh grant rotates the RP refresh token and reissues tokens with the original auth time" do
     authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
     @user_session_token.update!(authentication_event_at: authentication_event_at)
@@ -2449,6 +2476,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal OidcSubject.for(@user, resource_type: "client"), access_token.fetch("sub")
     assert_equal [@client.aud], Array(access_token.fetch("aud"))
     assert_equal "core-next-rp", access_token.fetch("client_id")
+    assert_equal @user_session_token.public_id, access_token.fetch("umx_base_sid")
     assert_equal "openid profile", access_token.fetch("scope")
     assert_predicate access_token.fetch("auth_time"), :present?
 

@@ -31,4 +31,41 @@ class OtpAdapter
   def deliver(**)
     raise NotImplementedError, "#{self.class}#deliver is not implemented"
   end
+
+  private
+
+  def record_email_enqueue!(record:, purpose: nil)
+    record_email_delivery_event!(
+      event: "enqueued",
+      record: record,
+      purpose: purpose,
+    )
+  end
+
+  def record_email_enqueue_failure!(record:, purpose:, error:)
+    record_email_delivery_event!(
+      event: "enqueue_failed",
+      record: record,
+      purpose: purpose,
+      reason: error.class.name,
+    )
+  end
+
+  def record_email_delivery_event!(event:, record:, purpose: nil, reason: nil)
+    Chronicle.capture(
+      action: "notification.delivery.email.#{event}",
+      subject: record,
+      metadata: { purpose: purpose.to_s.presence }.compact,
+      reason: reason,
+    )
+  rescue StandardError => e
+    Rails.logger.error(
+      JitLogEvent.format(
+        "notification.delivery_audit_failed",
+        action: "notification.delivery.email.#{event}",
+        error_class: e.class.name,
+      ),
+    )
+    nil
+  end
 end

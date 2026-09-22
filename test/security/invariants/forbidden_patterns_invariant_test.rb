@@ -154,30 +154,6 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/base/app/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Base app authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/base/com/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Base com authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/base/org/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Base org authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/palm/app/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Palm app authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/ins_controller.rb",
           line: /\A\s*allow_other_host: true,\s*\z/,
           reason: "Auth app sign-in sends authenticated browsers to the reviewed Base dashboard host.",
@@ -191,6 +167,12 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
+          path: "app/controllers/auth/com/sign/outs_controller.rb",
+          line: /allow_other_host: true,/,
+          reason: "Auth com sign-out uses only the configured Base com route for the fixed authority handoff.",
+        },
+        {
+          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/ups_controller.rb",
           line: /\A\s*allow_other_host: true,\s*\z/,
           reason: "Auth app sign-up sends authenticated browsers to the reviewed Base dashboard host.",
@@ -200,6 +182,12 @@ module Security
           path: "app/controllers/auth/org/sign/in/entra/authorizations_controller.rb",
           line: /allow_other_host: true,/,
           reason: "Org Entra sign-in completion returns through the reviewed RP resume URL.",
+        },
+        {
+          pattern: "cross-host redirect escape hatch",
+          path: "app/controllers/auth/org/sign/outs_controller.rb",
+          line: /allow_other_host: true,/,
+          reason: "Auth org sign-out uses only the configured Base org route for the fixed authority handoff.",
         },
         {
           pattern: "cross-host redirect escape hatch",

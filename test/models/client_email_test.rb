@@ -259,16 +259,16 @@ class ClientEmailTest < ActiveSupport::TestCase
     user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-expiry@example.com"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
-      user_email.store_otp("SECRET", "2", 30.seconds.from_now.to_i)
+    ClientEmail.stub(:database_now, now) do
+      user_email.store_otp("SECRET", "2", (now + 30.seconds).to_i)
     end
 
-    travel_to now + 29.seconds do
+    ClientEmail.stub(:database_now, now + 29.seconds) do
       assert_predicate user_email.reload, :otp_active?
       assert_not user_email.otp_expired?
     end
 
-    travel_to now + 30.seconds do
+    ClientEmail.stub(:database_now, now + 30.seconds) do
       assert_predicate user_email.reload, :otp_expired?
       assert_not user_email.otp_active?
     end
@@ -278,7 +278,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-lock@example.com"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
+    ClientEmail.stub(:database_now, now) do
       user_email.update!(otp_attempts_count: 3, otp_last_sent_at: now)
       user_email.increment_attempts!
 
@@ -289,7 +289,7 @@ class ClientEmailTest < ActiveSupport::TestCase
 
       assert_equal 5, user_email.otp_attempts_count
       assert_predicate user_email, :locked?
-      assert_in_delta 15.minutes.from_now.to_i, user_email.locked_at.to_i, 1
+      assert_in_delta (now + 15.minutes).to_i, user_email.locked_at.to_i, 1
     end
   end
 
@@ -297,8 +297,8 @@ class ClientEmailTest < ActiveSupport::TestCase
     user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-window@example.com"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
-      user_email.update!(otp_attempts_count: 4, otp_last_sent_at: 15.minutes.ago - 1.second)
+    ClientEmail.stub(:database_now, now) do
+      user_email.update!(otp_attempts_count: 4, otp_last_sent_at: now - 15.minutes - 1.second)
       user_email.increment_attempts!
 
       assert_equal 1, user_email.otp_attempts_count

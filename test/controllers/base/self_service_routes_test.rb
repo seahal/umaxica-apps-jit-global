@@ -17,12 +17,6 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
     @app_host = hosts.base_service.host
     @org_host = hosts.base_staff.host
     @com_host = hosts.base_corporate.host
-    # The base RP is its own OIDC authority: OidcIssuer maps each surface to the base host
-    # (base_service/base_staff/base_corporate), so unauthenticated requests redirect to the
-    # same host they were made on. The acme_* hosts belong to the sign surface, not this RP.
-    @app_authority_host = hosts.base_service.host
-    @org_authority_host = hosts.base_staff.host
-    @com_authority_host = hosts.base_corporate.host
   end
 
   # The app surface no longer exposes singular current self-service pages (/account, /avatar,
@@ -129,15 +123,15 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
     get(url, headers: host_headers(host))
 
     assert_response :redirect
-    authority_host =
+    surface =
       case host
-      when @app_host then @app_authority_host
-      when @org_host then @org_authority_host
-      when @com_host then @com_authority_host
-      else host
+      when @app_host then :app
+      when @org_host then :org
+      when @com_host then :com
+      else raise ArgumentError, "unknown Base host: #{host}"
       end
 
-    assert_oidc_authorize_redirect(response.location, host: authority_host)
+    assert_auth_ceremony_redirect(response.location, surface: surface)
   end
 
   def assert_self_service_page(url, headers:, title:)

@@ -30,6 +30,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "base/app/sign_outs/edit", inertia_component
+    assert_equal I18n.t("sign.shared.sign_out.title"), inertia_props.fetch("title")
     assert_equal I18n.t("sign.shared.sign_out.confirm_description"), inertia_props.fetch("description")
     assert_includes inertia_props.fetch("form").fetch("action"), base_app_sign_out_path
     assert_predicate token.reload, :currently_usable?
@@ -56,11 +57,14 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/sign_outs/edit", inertia_component
     assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("notice").fetch("title")
+    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_nil inertia_props["form"]
 
     get base_app_sign_out_url(host: @host, ri: "jp")
 
     assert_response :success
     assert_nil inertia_props["notice"]
+    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
   end
 
   # `encrypt_history` keeps this tab's history entries encrypted, but the key that decrypts them

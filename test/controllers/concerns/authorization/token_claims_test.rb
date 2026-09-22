@@ -106,7 +106,24 @@ module Authorization
       assert_nil AuthorizationTokenClaims.subject(nil)
       assert_nil AuthorizationTokenClaims.resource_type(nil)
       assert_nil AuthorizationTokenClaims.session_id(nil)
+      assert_nil AuthorizationTokenClaims.base_session_id(nil)
       assert_nil AuthorizationTokenClaims.jti(nil)
+    end
+
+    test "build carries the Base Browser Session binding separately from the RP sid" do
+      issued_at = Time.zone.parse("2026-02-22 12:00:00")
+      payload = AuthorizationTokenClaims.build(
+        resource: DummyResource.new(42),
+        session_public_id: "base-session-public-id",
+        base_session_public_id: "base-session-public-id",
+        oidc_sid: "rp-session-public-id",
+        resource_type: "client",
+        issued_at: issued_at,
+        access_token_ttl: 5.minutes,
+      )
+
+      assert_equal "rp-session-public-id", payload.fetch("sid")
+      assert_equal "base-session-public-id", AuthorizationTokenClaims.base_session_id(payload)
     end
 
     test "build does not include preference claim" do

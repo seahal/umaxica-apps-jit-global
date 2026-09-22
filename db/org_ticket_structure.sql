@@ -71,7 +71,11 @@ CREATE UNLOGGED TABLE public.operator_auth_ceremony_sessions (
     admitted_at timestamp(6) with time zone,
     completed_at timestamp(6) with time zone,
     cancelled_at timestamp(6) with time zone,
+    authentication_method character varying,
+    authentication_event_at timestamp(6) with time zone,
     CONSTRAINT operator_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
+    CONSTRAINT operator_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
+    CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT operator_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1))
 );
 
@@ -2413,7 +2417,7 @@ CREATE INDEX index_organization_invitations_on_organization_id ON public.organiz
 --
 
 ALTER TABLE ONLY public.operator_sign_in_flows
-    ADD CONSTRAINT fk_rails_0451f7d1d6 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_0451f7d1d6 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -2421,7 +2425,7 @@ ALTER TABLE ONLY public.operator_sign_in_flows
 --
 
 ALTER TABLE ONLY public.operator_sign_out_flows
-    ADD CONSTRAINT fk_rails_0467d6b6d1 FOREIGN KEY (kind_id) REFERENCES public.operator_sign_out_flow_kinds(id);
+    ADD CONSTRAINT fk_rails_0467d6b6d1 FOREIGN KEY (kind_id) REFERENCES public.operator_sign_out_flow_kinds(id) NOT VALID;
 
 
 --
@@ -2429,7 +2433,7 @@ ALTER TABLE ONLY public.operator_sign_out_flows
 --
 
 ALTER TABLE ONLY public.operator_sign_up_flows
-    ADD CONSTRAINT fk_rails_10f95a7068 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_10f95a7068 FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -2437,7 +2441,7 @@ ALTER TABLE ONLY public.operator_sign_up_flows
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -2445,7 +2449,7 @@ ALTER TABLE ONLY public.operator_tokens
 --
 
 ALTER TABLE ONLY public.operator_step_up_sessions
-    ADD CONSTRAINT fk_rails_6daa6fb880 FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_6daa6fb880 FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -2453,7 +2457,7 @@ ALTER TABLE ONLY public.operator_step_up_sessions
 --
 
 ALTER TABLE ONLY public.operator_sign_in_flows
-    ADD CONSTRAINT fk_rails_6ed9308623 FOREIGN KEY (status_id) REFERENCES public.operator_sign_in_flow_statuses(id);
+    ADD CONSTRAINT fk_rails_6ed9308623 FOREIGN KEY (status_id) REFERENCES public.operator_sign_in_flow_statuses(id) NOT VALID;
 
 
 --
@@ -2461,7 +2465,7 @@ ALTER TABLE ONLY public.operator_sign_in_flows
 --
 
 ALTER TABLE ONLY public.operator_sign_out_flows
-    ADD CONSTRAINT fk_rails_85024a94ea FOREIGN KEY (status_id) REFERENCES public.operator_sign_out_flow_statuses(id);
+    ADD CONSTRAINT fk_rails_85024a94ea FOREIGN KEY (status_id) REFERENCES public.operator_sign_out_flow_statuses(id) NOT VALID;
 
 
 --
@@ -2477,7 +2481,7 @@ ALTER TABLE ONLY public.operator_rp_sessions
 --
 
 ALTER TABLE ONLY public.operator_verifications
-    ADD CONSTRAINT fk_rails_c8ab8d08df FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_c8ab8d08df FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -2485,7 +2489,7 @@ ALTER TABLE ONLY public.operator_verifications
 --
 
 ALTER TABLE ONLY public.operator_sign_out_flows
-    ADD CONSTRAINT fk_rails_caa3cf1c6d FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_caa3cf1c6d FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -2493,7 +2497,7 @@ ALTER TABLE ONLY public.operator_sign_out_flows
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_rails_f211b6bc2e FOREIGN KEY (staff_token_kind_id) REFERENCES public.operator_token_kinds(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_f211b6bc2e FOREIGN KEY (staff_token_kind_id) REFERENCES public.operator_token_kinds(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -2501,7 +2505,7 @@ ALTER TABLE ONLY public.operator_tokens
 --
 
 ALTER TABLE ONLY public.operator_sign_up_flows
-    ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id);
+    ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id) NOT VALID;
 
 
 --
@@ -2509,7 +2513,7 @@ ALTER TABLE ONLY public.operator_sign_up_flows
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_staff_tokens_on_staff_token_binding_method_id FOREIGN KEY (staff_token_binding_method_id) REFERENCES public.operator_token_binding_methods(id);
+    ADD CONSTRAINT fk_staff_tokens_on_staff_token_binding_method_id FOREIGN KEY (staff_token_binding_method_id) REFERENCES public.operator_token_binding_methods(id) NOT VALID;
 
 
 --
@@ -2517,7 +2521,7 @@ ALTER TABLE ONLY public.operator_tokens
 --
 
 ALTER TABLE ONLY public.operator_tokens
-    ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id);
+    ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id) NOT VALID;
 
 
 --
@@ -2581,4 +2585,3 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260508135006'),
 ('20260507010002'),
 ('20260501000000');
-

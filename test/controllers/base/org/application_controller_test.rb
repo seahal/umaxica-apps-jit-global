@@ -17,7 +17,7 @@ module Base
         assert_includes controller.class, ::AuthorizationOperator
         assert_includes controller.class, ::VerificationOperator
         assert_includes controller.class, ActionPolicy::Controller
-        assert_includes controller.class, ::OidcSsoInitiator
+        assert_not_includes controller.class, ::OidcSsoInitiator
         assert_includes controller.class, ::ActorSupport
         assert_includes controller.class, ::Finisher
       end

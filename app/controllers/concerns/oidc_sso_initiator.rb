@@ -43,21 +43,13 @@ module OidcSsoInitiator
     nonce = SecureRandom.urlsafe_base64(32)
 
     oidc_pt = safe_oidc_pt(pt)
-    if screen_hint.present?
-      session[:oidc_code_verifier] = verifier
-      session[:oidc_state] = state
-      session[:oidc_nonce] = nonce
-      session[:oidc_pt] = oidc_pt
-      session[:oidc_max_age] = max_age
-    else
-      remember_oidc_pending_flow!(
-        state: state,
-        verifier: verifier,
-        nonce: nonce,
-        pt: oidc_pt,
-        max_age: max_age,
-      )
-    end
+    remember_oidc_pending_flow!(
+      state: state,
+      verifier: verifier,
+      nonce: nonce,
+      pt: oidc_pt,
+      max_age: max_age,
+    )
     log_oidc_pending_flow_created(state: state, pt: oidc_pt)
 
     oidc_authorization_url(

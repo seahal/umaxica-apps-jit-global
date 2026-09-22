@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "yaml"
+require "concurrent/map"
 require "active_support/core_ext/object/blank"
 require_relative "error"
 require_relative "configuration_error"
@@ -17,6 +18,8 @@ module Umaxica
       APPLICATION_RESPONSIBILITIES = %i(cache rate_limit auth_state).freeze
       DIAGNOSTIC_RESPONSIBILITIES = %i(performance coverband).freeze
       NONPROD_ENVIRONMENTS = %w(development test).freeze
+      CURRENT_CACHE = Concurrent::Map.new
+      CURRENT_CACHE_KEY = :current
 
       Resolved =
         Data.define(:responsibility, :url, :db, :host, :port, :store, :namespace) do
@@ -33,11 +36,11 @@ module Umaxica
         end
 
         def current
-          @current ||= load
+          CURRENT_CACHE.compute_if_absent(CURRENT_CACHE_KEY) { load }
         end
 
         def reset_current!
-          @current = nil
+          CURRENT_CACHE.delete(CURRENT_CACHE_KEY)
         end
 
         def document

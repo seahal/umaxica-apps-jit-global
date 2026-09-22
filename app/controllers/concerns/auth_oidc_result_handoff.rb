@@ -26,14 +26,17 @@ module AuthOidcResultHandoff
     challenge = oidc_authorization_login_challenge
     return reject_oidc_result_handoff! if challenge.blank?
 
+    evidence = oidc_result_authentication_evidence
+    return reject_oidc_result_handoff! if evidence.nil? || current_resource.nil?
+
     issuance = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: oidc_result_handoff_surface,
       login_challenge: challenge,
       actor: current_resource,
-      session_ref: current_session_public_id,
-      auth_method: Array(Actor.authn.access_claims&.dig("amr")).first || "unknown",
-      acr: Actor.authn.access_claims&.dig("acr"),
-      authentication_event_at: current_authentication_event_at,
+      session_ref: nil,
+      auth_method: evidence.fetch(:auth_method),
+      acr: nil,
+      authentication_event_at: evidence.fetch(:authentication_event_at),
     )
     complete_auth_ceremony_session!
 
@@ -42,13 +45,15 @@ module AuthOidcResultHandoff
            locals: {
              completion_url: public_send(
                oidc_result_base_completion_helper,
-               host: oidc_base_authority_host,
+               host: base_authority_host,
                protocol: "https",
              ),
              result_token: issuance.code,
+             transaction_ref: issuance.transaction.transaction_id,
              ri: params[:ri],
            }
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
+         AuthCeremonySession::InvalidTransition, ArgumentError, KeyError
     reject_oidc_result_handoff!
   end
 
@@ -60,6 +65,20 @@ module AuthOidcResultHandoff
 
   def oidc_result_handoff_layout
     "auth/#{oidc_result_handoff_surface}/application"
+  end
+
+  def oidc_result_authentication_evidence
+    ceremony = current_auth_ceremony_session
+    return unless ceremony&.authentication_evidence_recorded?
+
+    method = ceremony.authentication_method.to_s
+    amr = AuthenticationBase::ESTABLISHED_AUTHENTICATION_METHOD_AMR_MAP.fetch(method)
+    event_at = ceremony.authentication_event_at
+    return if event_at.blank?
+
+    { auth_method: amr.first, authentication_event_at: event_at }
+  rescue KeyError
+    nil
   end
 
   def oidc_result_handoff_surface

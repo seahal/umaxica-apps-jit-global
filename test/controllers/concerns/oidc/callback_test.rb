@@ -17,16 +17,32 @@ class OidcCallbackTestController < ApplicationController
   include OidcCallback
 
   def seed
-    session[:oidc_code_verifier] = params[:code_verifier] if params.key?(:code_verifier)
-    session[:oidc_state] = params[:state] if params.key?(:state)
-    session[:oidc_nonce] = params[:nonce] if params.key?(:nonce)
-    session[:oidc_pt] = params[:pt] if params.key?(:pt)
-    session[:oidc_max_age] = params[:max_age].to_i if params.key?(:max_age)
+    if params[:state].present?
+      session["oidc_pending_flows"] ||= {}
+      flow =
+        {
+          "code_verifier" => params[:code_verifier],
+          "nonce" => params[:nonce],
+          "pt" => params[:pt],
+          "created_at" => Time.current.to_i,
+        }.tap do |pending_flow|
+          pending_flow["max_age"] = params[:max_age].to_i if params.key?(:max_age)
+        end
+      session["oidc_pending_flows"][params[:state]] = flow
+    end
     if params[:pending_state].present?
       session["oidc_pending_flows"] ||= {}
       session["oidc_pending_flows"][params[:pending_state]] = pending_flow
     end
 
+    head :no_content
+  end
+
+  def seed_legacy
+    session[:oidc_code_verifier] = params[:code_verifier]
+    session[:oidc_state] = params[:state]
+    session[:oidc_nonce] = params[:nonce]
+    session[:oidc_pt] = params[:pt]
     head :no_content
   end
 
@@ -103,6 +119,57 @@ class OidcCallbackTestController < ApplicationController
   end
 end
 
+class OidcProvisioningCallbackTestController < ApplicationController
+  class << self
+    # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+    attr_accessor :logged_in_resource_id
+    # rubocop:enable ThreadSafety/ClassAndModuleAttributes
+  end
+
+  include OidcCallback
+  include OidcRpIdentityProvisioning
+
+  class_attribute :oidc_rp_actor_class_name, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+  class_attribute :oidc_rp_identity_class_name, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+  class_attribute :oidc_rp_bridge_class_name, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+  provisions_oidc_rp_identity actor_class: "Client", identity_class: "ClientIdentity",
+                              bridge_class: "CoreAppClientBridge"
+
+  def self.declare_authentication_mode!(*)
+  end
+
+  private
+
+  def oidc_client_id
+    "base-rails-rp"
+  end
+
+  def oidc_client_secret
+    "unused-test-secret"
+  end
+
+  def oidc_token_url
+    "https://issuer.example.test/oauth/token"
+  end
+
+  def oidc_callback_url
+    "https://rp.example.test/oidc/callback"
+  end
+
+  def oidc_resource_type
+    "client"
+  end
+
+  def sign_in_url_with_pt(_return_to)
+    "https://sign.example.test/sign/in"
+  end
+
+  def log_in(resource, **)
+    self.class.logged_in_resource_id = resource.id
+    { status: :success }
+  end
+end
+
 class OidcCallbackTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
@@ -115,9 +182,12 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     Rails.application.routes.draw do
       get "/oidc/callback/session" => "oidc_callback_test#seed"
+      get "/oidc/callback/legacy-session" => "oidc_callback_test#seed_legacy"
       get "/oidc/callback/snapshot" => "oidc_callback_test#snapshot"
       get "/oidc/callback" => "oidc_callback_test#show"
+      get "/oidc/provision/callback" => "oidc_provisioning_callback_test#show"
     end
+    OidcProvisioningCallbackTestController.logged_in_resource_id = nil
   end
 
   teardown do
@@ -125,6 +195,154 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
   end
 
   Result = Struct.new(:success?, :token_response, :error, :error_description, keyword_init: true)
+
+  test "public callback provisions the actor identified by the verified OIDC subject" do
+    ClientIdentityState.ensure_defaults!
+    ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
+    ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
+    client = Client.create!(
+      public_id: "oidc_#{SecureRandom.hex(6)}",
+      status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
+    issuer = "https://issuer.example.test"
+    subject = OidcSubject.for(client, resource_type: "client")
+
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    result = Result.new(
+      success?: true,
+      token_response: { access_token: "access", refresh_token: "refresh", id_token: "id-token" },
+      error: nil,
+      error_description: nil,
+    )
+    id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
+      success?: true,
+      payload: {
+        "aud" => ["base-rails-rp"],
+        "iss" => issuer,
+        "sub" => subject,
+        "nonce" => "nonce",
+        "auth_time" => @authentication_event_at,
+      },
+      error: nil,
+    )
+
+    OidcRpTokenClient.stub(:call, result) do
+      OidcIdTokenVerifier.stub(:call, id_token_result) do
+        get "/oidc/provision/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+      end
+    end
+
+    assert_response :redirect
+    assert_redirected_to "/after"
+    assert_equal client.id, OidcProvisioningCallbackTestController.logged_in_resource_id
+    identity = ClientIdentity.find_by!(issuer: issuer, subject: subject, audience: "base-rails-rp")
+
+    assert_equal client.id, identity.source_record_id
+    assert_equal ClientIdentityState::ACTIVE, identity.status_id
+    assert_predicate CoreAppClientBridge.find_by!(client_id: client.id), :core?
+  end
+
+  test "public callback rejects a verified payload whose audience is not the RP client" do
+    ClientIdentityState.ensure_defaults!
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    result = Result.new(
+      success?: true,
+      token_response: { access_token: "access", refresh_token: "refresh", id_token: "id-token" },
+      error: nil,
+      error_description: nil,
+    )
+    id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
+      success?: true,
+      payload: {
+        "aud" => ["another-rp"],
+        "iss" => "https://issuer.example.test",
+        "sub" => "cli_not-used",
+        "nonce" => "nonce",
+        "auth_time" => @authentication_event_at,
+      },
+      error: nil,
+    )
+
+    error = nil
+    OidcRpTokenClient.stub(:call, result) do
+      OidcIdTokenVerifier.stub(:call, id_token_result) do
+        error =
+          assert_raises(ArgumentError) do
+            get(
+              "/oidc/provision/callback",
+              params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") },
+            )
+          end
+      end
+    end
+
+    assert_equal "invalid audience value", error.message
+    assert_nil OidcProvisioningCallbackTestController.logged_in_resource_id
+    assert_empty ClientIdentity.where(issuer: "https://issuer.example.test")
+  end
+
+  test "public callback reuses an existing identity and bridge for the same verified subject" do
+    ClientIdentityState.ensure_defaults!
+    ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
+    ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
+    client = Client.create!(
+      public_id: "oidc_ex_#{SecureRandom.hex(4)}",
+      status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
+    issuer = "https://issuer.example.test"
+    subject = "provider-subject-#{SecureRandom.hex(6)}"
+    identity = ClientIdentity.create!(
+      issuer: issuer,
+      subject: subject,
+      audience: "base-rails-rp",
+      source_record_id: client.id,
+      status_id: ClientIdentityState::ACTIVE,
+    )
+    bridge = CoreAppClientBridge.create!(client: client)
+
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    result = Result.new(
+      success?: true,
+      token_response: { access_token: "access", refresh_token: "refresh", id_token: "id-token" },
+      error: nil,
+      error_description: nil,
+    )
+    id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
+      success?: true,
+      payload: {
+        "aud" => ["base-rails-rp"],
+        "iss" => issuer,
+        "sub" => subject,
+        "nonce" => "nonce",
+        "auth_time" => @authentication_event_at,
+      },
+      error: nil,
+    )
+
+    OidcRpTokenClient.stub(:call, result) do
+      OidcIdTokenVerifier.stub(:call, id_token_result) do
+        get "/oidc/provision/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+      end
+    end
+
+    assert_response :redirect
+    assert_redirected_to "/after"
+    assert_equal client.id, OidcProvisioningCallbackTestController.logged_in_resource_id
+    assert_equal identity.id, ClientIdentity.find_by!(issuer: issuer, subject: subject).id
+    assert_equal bridge.id, CoreAppClientBridge.find_by!(client_id: client.id).id
+    assert_equal 1, ClientIdentity.where(issuer: issuer, subject: subject).count
+    assert_equal 1, CoreAppClientBridge.where(client_id: client.id).count
+  end
 
   test "show redirects to pt on successful exchange" do
     get "/oidc/callback/session",
@@ -144,7 +362,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -152,6 +371,17 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/after"
     assert_not OidcCallbackTestController.last_login_kwargs.fetch(:bootstrap_actor, false)
     assert OidcCallbackTestController.last_login_kwargs.fetch(:skip_login_cooldown)
+  end
+
+  test "show rejects scalar-only legacy state before token exchange" do
+    get "/oidc/callback/legacy-session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for scalar-only state") }) do
+      get "/oidc/callback", params: { code: "abc", state: "state" }
+    end
+
+    assert_response :unprocessable_content
   end
 
   test "RP callback stores Base-issued credentials without creating a root Browser Session" do
@@ -173,7 +403,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -205,7 +436,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -233,7 +465,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, ->(**kwargs) { captured = kwargs; id_token_result }) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -259,7 +492,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -289,7 +523,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -326,7 +561,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, ->(**kwargs) { token_call = kwargs; result }) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "older-state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "older-state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -403,7 +639,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "consumed-state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "consumed-state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -444,7 +681,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "consumed-state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "consumed-state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -496,7 +734,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                  logged << JSON.parse(message, symbolize_names: true) if message.to_s.start_with?("{")
                },
       ) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -527,7 +766,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -559,7 +799,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
-        get "/oidc/callback", params: { code: "abc", state: "state" }
+        get "/oidc/callback",
+            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
@@ -599,17 +840,41 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_equal "OIDC state mismatch", event.dig(:data, :reason)
     assert event.dig(:data, :grant_present)
     assert event.dig(:data, :csrf_present)
-    assert event.dig(:data, :expected_state_present)
-    assert event.dig(:data, :actual_state_present)
-    assert_predicate event.dig(:data, :expected_state_digest12), :present?
-    assert_predicate event.dig(:data, :actual_state_digest12), :present?
-    assert_not_equal "state", event.dig(:data, :expected_state_digest12)
-    assert_not_equal "wrong", event.dig(:data, :actual_state_digest12)
+    assert_not event.dig(:data, :expected_value_present)
+    assert event.dig(:data, :actual_value_present)
+    assert_nil event.dig(:data, :expected_value_digest12)
+    assert_predicate event.dig(:data, :actual_value_digest12), :present?
+    assert_not_equal "wrong", event.dig(:data, :actual_value_digest12)
 
     get "/oidc/callback/snapshot"
     snapshot = response.parsed_body
 
     assert_includes snapshot.fetch("oidc_pending_flows").keys, "pending-state"
+  end
+
+  test "show rejects a mismatched authorization response issuer before token exchange" do
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for issuer mismatch") }) do
+      get "/oidc/callback",
+          params: { code: "abc", state: "state", iss: "https://attacker.example.test" }
+    end
+
+    assert_response :unprocessable_content
+    assert_nil OidcCallbackTestController.last_login_kwargs
+  end
+
+  test "show rejects a missing authorization response issuer before token exchange" do
+    get "/oidc/callback/session",
+        params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
+
+    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run without an issuer") }) do
+      get "/oidc/callback", params: { code: "abc", state: "state" }
+    end
+
+    assert_response :unprocessable_content
+    assert_nil OidcCallbackTestController.last_login_kwargs
   end
 
   test "show raises unexpected provisioning errors" do
@@ -631,7 +896,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
         assert_raises(KeyError) do
-          get "/oidc/callback", params: { code: "abc", state: "state" }
+          get "/oidc/callback",
+              params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
         end
       end
     end

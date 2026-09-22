@@ -47,7 +47,9 @@ After a successful Auth ceremony:
 
 The Base result endpoint accepts only the exact configured Auth origin (with the existing
 same-site/null-origin proxy case), validates and consumes the result once, and verifies its surface
-binding before resuming the Base authorization transaction. Rails forgery protection remains
+binding before resuming the Base authorization transaction. It derives the single expected result
+purpose from that server-side transaction before the atomic Valkey consume; it does not probe
+unrelated result-purpose namespaces. Rails forgery protection remains
 enabled; the cross-host form does not share an Auth-host CSRF token and is protected by the exact
 origin boundary, one-shot result consumption, and surface binding.
 

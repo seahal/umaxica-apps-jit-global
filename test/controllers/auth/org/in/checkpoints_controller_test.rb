@@ -14,16 +14,11 @@ class Auth::Org::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
     OperatorSignInFlowStatus.ensure_defaults!
   end
 
-  test "show without login starts OIDC handoff" do
+  test "show without login returns to the local Auth ceremony entry" do
     get auth_org_sign_in_check_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :redirect
-    # Auth and Base are same-site, so the authorize hop goes straight to Base. The jump
-    # gateway (an `rt=` token) is for cross-site hops and is not used here.
-    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host,
-                 URI.parse(response.location).host
-    assert_equal "/oauth/authorize", URI.parse(response.location).path
-    assert_not_includes response.location, "rt="
+    assert_auth_local_sign_in_redirect(response.location, surface: :org)
   end
 
   test "show without sign in sequence is rejected" do

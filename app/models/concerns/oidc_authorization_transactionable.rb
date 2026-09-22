@@ -41,8 +41,10 @@ module OidcAuthorizationTransactionable
 
     def create_transaction!(surface:, intent:, client_id:, redirect_uri:, response_type:, scope:, state:, nonce:,
                             code_challenge:, code_challenge_method:, login_challenge:, login_challenge_expires_at:,
-                            expires_at:, prompt: nil, max_age: nil, now: Time.current)
+                            expires_at:, prompt: nil, max_age: nil, now: nil)
       connection_owner.connected_to(role: :writing) do
+        decision_time = now || connection_owner.database_now
+
         create!(
           transaction_id: SecureRandom.uuid,
           surface: surface.to_s,
@@ -61,8 +63,8 @@ module OidcAuthorizationTransactionable
           login_challenge_expires_at: login_challenge_expires_at,
           expires_at: expires_at,
           status: STATUS_PENDING,
-          created_at: now,
-          updated_at: now,
+          created_at: decision_time,
+          updated_at: decision_time,
         )
       end
     end
@@ -112,40 +114,46 @@ module OidcAuthorizationTransactionable
   end
 
   def register_authentication!(actor_ref:, session_ref:, auth_method:, acr:, authentication_event_at: nil,
-                               now: Time.current)
+                               now: nil)
     raise ArgumentError, "authentication event time is required" if authentication_event_at.blank?
 
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: now)
-        raise ArgumentError, "authorization transaction expired" if locked.login_challenge_expired?(now: now)
+        decision_time = now || self.class.database_now
+        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
+        raise ArgumentError, "authorization transaction expired" if locked.login_challenge_expired?(
+          now: decision_time,
+        )
         raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
 
         locked.update!(
           actor_ref: actor_ref.to_s,
-          session_ref: session_ref.to_s,
+          session_ref: session_ref.to_s.presence,
           auth_method: auth_method.to_s,
           acr: acr.to_s.presence || "aal1",
           authenticated_at: authentication_event_at,
           status: STATUS_AUTHENTICATED,
+          updated_at: decision_time,
         )
         locked
       end
     end
   end
 
-  def consume!(now: Time.current)
+  def consume!(now: nil)
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
-        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: now)
+        decision_time = now || self.class.database_now
+        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
         raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated?
         raise ArgumentError, "authorization transaction already consumed" if locked.consumed?
 
         locked.update!(
-          consumed_at: now,
+          consumed_at: decision_time,
           status: STATUS_CONSUMED,
+          updated_at: decision_time,
         )
         locked
       end

@@ -2379,11 +2379,11 @@ module AuthenticationBase
     "auth.#{resource_type}.session"
   end
 
-  # Canonical entry point for establishing a signed-in session. Every
-  # interactive sign-in, sign-up completion, and social callback must call
-  # this (not log_in directly): it orchestrates the MFA decision and then
-  # delegates to log_in, which performs the session-fixation reset_session.
-  # Paired vocabulary with logout_current_session! for the privilege
+  # Canonical entry point for completing an interactive authentication. Normal
+  # sign-in, sign-up, and social callbacks delegate to log_in, which performs
+  # the session-fixation reset_session. An OIDC-started ceremony is the one
+  # exception: it records Auth evidence and leaves Browser Session issuance to
+  # Base. Paired vocabulary with logout_current_session! for the privilege
   # transition points.
   def establish_signed_in_session!(resource, pt:, ri:, auth_method:, token_kind_id: "BROWSER_WEB",
                                    record_login_audit: true, audit_context: {}, bootstrap_actor: false,
@@ -2438,6 +2438,17 @@ module AuthenticationBase
                                             authentication_event_at: nil)
     return { status: :login_forbidden } unless resource.login_allowed?
 
+    if oidc_authentication_ceremony?
+      return establish_oidc_authentication_evidence!(
+        resource,
+        pt: pt,
+        record_login_audit: record_login_audit,
+        audit_context: audit_context,
+        skip_login_cooldown: skip_login_cooldown,
+        established_authentication_method: established_authentication_method,
+      )
+    end
+
     session_limit_state = bootstrap_actor ? :within_limit : session_limit_state_for(resource)
     return session_limit_hard_reject_result(resource) if session_limit_state == :hard_reject
 
@@ -2482,6 +2493,42 @@ module AuthenticationBase
     return result unless result[:status] == :success
 
     result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
+  end
+
+  # Auth verifies the credential, but Base owns the Browser Session and every
+  # downstream session. For an OIDC-started ceremony, persist only the
+  # one-time evidence that the Auth -> Base handoff will carry; never call
+  # log_in, rotate the Rails session, or issue a root token here.
+  def establish_oidc_authentication_evidence!(resource, pt:, record_login_audit:, audit_context:,
+                                              skip_login_cooldown:, established_authentication_method:)
+    return { status: :access_locked } if administratively_locked_resource?(resource)
+
+    check_login_cooldown!(resource, skip_login_cooldown: skip_login_cooldown)
+
+    method = established_authentication_method.to_s
+    unless AuthenticationBase::ESTABLISHED_AUTHENTICATION_METHOD_AMR_MAP.key?(method)
+      raise AuthCeremonySession::InvalidTransition, "OIDC authentication method is missing or unsupported"
+    end
+
+    ceremony = respond_to?(:current_auth_ceremony_session, true) ? current_auth_ceremony_session : nil
+    unless ceremony
+      raise AuthCeremonySession::InvalidTransition, "OIDC Auth ceremony session is missing"
+    end
+
+    ceremony.record_authentication_evidence!(method: method)
+    record_audit(AUDIT_EVENTS[:logged_in], resource: resource, context: audit_context) if record_login_audit
+
+    {
+      status: :success,
+      oidc_authentication_only: true,
+      redirect_path: sign_in_sequence_redirect_path(pt: pt),
+    }
+  end
+
+  def oidc_authentication_ceremony?
+    return false unless respond_to?(:oidc_authorization_login_challenge, true)
+
+    oidc_authorization_login_challenge.present?
   end
 
   def check_login_cooldown!(resource, bootstrap_actor: false, skip_login_cooldown: false)

@@ -264,6 +264,30 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_operator email.reload.otp_expires_at, :<=, 10.minutes.from_now + 1.second
   end
 
+  test "issue uses one writer database clock for OTP expiry and sent timestamp" do
+    email = create_verified_client_email("sign-otp-database-clock@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    database_now = 1.second.from_now
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    issued =
+      OtpAdapter.stub(:for, adapter) do
+        ClientEmail.stub(:database_now, database_now) do
+          SignOtpCeremony.issue!(
+            purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+            destination: email.address, session_nonce: flow.public_id,
+          )
+        end
+      end
+
+    assert_predicate issued, :success?
+    email.reload
+
+    assert_equal database_now.to_i, email.otp_last_sent_at.to_i
+    assert_equal (database_now + SignOtpCeremony::OTP_EXPIRATION).to_i, email.otp_expires_at.to_i
+  end
+
   private
 
   def create_email_flow(pending_contact_id: nil)

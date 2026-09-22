@@ -582,11 +582,11 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
     assert_equal "/sign/in", uri.path
-    assert_predicate query["admission"], :present?
+    assert_predicate query["transaction_ref"], :present?
     assert_nil query["login_challenge"]
 
-    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
-      raw_code: query["admission"],
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: query["transaction_ref"],
       surface: "app",
       expected_intent: "sign_in",
     )
@@ -730,8 +730,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_equal "/sign/in", uri.path
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
-      raw_code: query.fetch("admission"), surface: "app", expected_intent: "sign_in",
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: query.fetch("transaction_ref"), surface: "app", expected_intent: "sign_in",
     )
     transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
 
@@ -800,8 +800,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
       uri = URI.parse(jump_rt_url_from_location(response.location))
       query = Rack::Utils.parse_nested_query(uri.query.to_s)
-      admission = BaseAuthAdmissionCoordinator.consume_handoff!(
-        raw_code: query.fetch("admission"),
+      admission = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: query.fetch("transaction_ref"),
         surface: surface.fetch(:surface),
         expected_intent: "authentication",
       )
@@ -863,7 +863,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       auth_method: "passkey",
     )
 
-    post "/oauth/authorize", params: { result: result.code }, headers: browser_headers.merge(
+    post "/oauth/authorize", params: {
+      result: result.code,
+      transaction_ref: result.transaction.transaction_id,
+    }, headers: browser_headers.merge(
       "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
       "Sec-Fetch-Site" => "same-site",
     )
@@ -876,7 +879,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal oidc_authorize_params[:state], query["state"]
     assert_predicate issuance.transaction.reload, :consumed?
 
-    post "/oauth/authorize", params: { result: result.code }, headers: browser_headers.merge(
+    post "/oauth/authorize", params: {
+      result: result.code,
+      transaction_ref: result.transaction.transaction_id,
+    }, headers: browser_headers.merge(
       "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
       "Sec-Fetch-Site" => "same-site",
     )
@@ -906,7 +912,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     )
 
     travel 2.minutes do
-      post "/oauth/authorize", params: { result: result.code }, headers: browser_headers.merge(
+      post "/oauth/authorize", params: {
+        result: result.code,
+        transaction_ref: result.transaction.transaction_id,
+      }, headers: browser_headers.merge(
         "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
         "Sec-Fetch-Site" => "same-site",
       )

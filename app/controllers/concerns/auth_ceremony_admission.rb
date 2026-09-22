@@ -9,17 +9,26 @@ module AuthCeremonyAdmission
   include AuthCeremonySidCookie
   include AuthCeremonyContext
 
+  public
+
+  def create
+    apply_admission_transport_headers!
+    redeem_admission_reference_and_redirect!(expected_intent: auth_ceremony_entry_intent)
+  end
+
   private
 
   def admit_or_render_sign_ceremony!(expected_intent:)
     apply_admission_transport_headers!
 
-    if logged_in? && params[:admission].blank? && !admitted_ceremony_present?(expected_intent: expected_intent)
-      return handle_logged_in_direct_entry!
+    return render_invalid_admission_request! if params[:admission].present?
+    return render_invalid_admission_request! if multiple_admission_references?
+    if request.get? && admission_reference_param.present?
+      return render_admission_continuation!
     end
 
-    if params[:admission].present?
-      return redeem_admission_and_redirect!(expected_intent: expected_intent)
+    if logged_in? && admission_reference_param.blank? && !admitted_ceremony_present?(expected_intent: expected_intent)
+      return handle_logged_in_direct_entry!
     end
 
     if ceremony_admission_present?
@@ -34,24 +43,19 @@ module AuthCeremonyAdmission
     bridge_to_base_admission!
   end
 
-  def redeem_admission_and_redirect!(expected_intent:)
-    begin
-      BaseAuthAdmissionCoordinator.consume_local_entry!(
-        raw_code: params[:admission].to_s,
-        surface: auth_ceremony_surface,
-        expected_intent: expected_intent,
-      )
-      rotate_auth_ceremony_session!
-      return redirect_to(auth_ceremony_clean_url, status: :see_other)
-    rescue BaseAuthAdmissionCoordinator::Denied => e
-      raise unless e.message == "local admission missing"
-    end
+  def redeem_admission_reference_and_redirect!(expected_intent:)
+    return render_invalid_admission_request! if multiple_admission_references?
 
-    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
-      raw_code: params[:admission].to_s,
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: admission_reference_param,
       surface: auth_ceremony_surface,
       expected_intent: expected_intent,
     )
+    if BaseAuthAdmissionCoordinator.local_entry_purpose?(payload: payload, intent: expected_intent)
+      rotate_auth_ceremony_session!
+      return redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
+    end
+
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
       surface: auth_ceremony_surface,
       transaction_id: payload.fetch("subject_ref"),
@@ -69,9 +73,9 @@ module AuthCeremonyAdmission
     end
 
     rotate_auth_ceremony_session!(authorization_transaction_ref: transaction.transaction_id)
-    redirect_to(auth_ceremony_clean_url, status: :see_other)
+    redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
-    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    render_invalid_admission_request!
   end
 
   def rotate_auth_ceremony_session!(authorization_transaction_ref: nil)
@@ -114,20 +118,52 @@ module AuthCeremonyAdmission
     response.headers["Referrer-Policy"] = "no-referrer"
   end
 
-  def auth_ceremony_clean_url
-    ri = params[:ri]
-    case auth_ceremony_surface
-    when "app"
-      expected_sign_up? ? auth_app_sign_up_path(ri: ri) : auth_app_sign_in_path(ri: ri)
-    when "com"
-      expected_sign_up? ? auth_com_sign_up_path(ri: ri) : auth_com_sign_in_path(ri: ri)
-    else
-      expected_sign_up? ? auth_org_sign_up_path(ri: ri) : auth_org_sign_in_path(ri: ri)
-    end
+  def render_admission_continuation!
+    render "auth/shared/admission_continuation",
+           layout: false,
+           locals: {
+             action_url: request.path,
+             reference_param: admission_reference_param_name,
+             reference: admission_reference_param,
+             ri: params[:ri],
+             pt: params[:pt],
+           }
   end
 
-  def expected_sign_up?
-    action_name == "show" && controller_path.end_with?("/sign/ups")
+  def render_invalid_admission_request!
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
+
+  def admission_reference_param
+    refs = {
+      "transaction_ref" => params[:transaction_ref].to_s.presence,
+      "entry_ref" => params[:entry_ref].to_s.presence,
+    }.compact
+    refs.values.first
+  end
+
+  def multiple_admission_references?
+    params[:transaction_ref].to_s.present? && params[:entry_ref].to_s.present?
+  end
+
+  def admission_reference_param_name
+    return "transaction_ref" if params[:transaction_ref].to_s.present?
+    return "entry_ref" if params[:entry_ref].to_s.present?
+
+    raise ArgumentError, "admission reference is missing"
+  end
+
+  def auth_ceremony_clean_url(expected_intent:)
+    ri = params[:ri]
+    path = (expected_intent.to_s == "sign_up") ? "sign_up" : "sign_in"
+    case auth_ceremony_surface
+    when "app"
+      (path == "sign_up") ? auth_app_sign_up_path(ri: ri) : auth_app_sign_in_path(ri: ri)
+    when "com"
+      (path == "sign_up") ? auth_com_sign_up_path(ri: ri) : auth_com_sign_in_path(ri: ri)
+    else
+      (path == "sign_up") ? auth_org_sign_up_path(ri: ri) : auth_org_sign_in_path(ri: ri)
+    end
   end
 
   def auth_ceremony_intent_matches?(actual, expected)

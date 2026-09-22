@@ -18,7 +18,7 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "local ceremony shows email and telephone registration methods" do
-    get auth_com_sign_up_url(ct: "dr", ri: "jp", admission: login_challenge), headers: default_headers
+    enter_sign_up!(ct: "dr", ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -36,7 +36,7 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "does not show social login buttons when flag is off" do
-    get auth_com_sign_up_url(ct: "dr", ri: "jp", admission: login_challenge), headers: default_headers
+    enter_sign_up!(ct: "dr", ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -48,8 +48,7 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   test "does not show temporary google signup button when legacy flag is on" do
     with_env("COM_#{"GOOGLE"}_SIGNUP_ENABLED" => "true") do
-      get auth_com_sign_up_url(ct: "dr", ri: "jp", admission: login_challenge),
-          headers: default_headers
+      enter_sign_up!(ct: "dr", ri: "jp")
     end
 
     assert_response :see_other
@@ -74,7 +73,7 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "sign up entry renders without an active registration" do
-    get auth_com_sign_up_url(ri: "jp", admission: login_challenge), headers: default_headers
+    enter_sign_up!(ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -84,13 +83,20 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   private
 
+  def enter_sign_up!(params)
+    redeem_auth_ceremony_entry!(
+      auth_com_sign_up_path, reference: login_challenge,
+                             params: params, headers: default_headers,
+    )
+  end
+
   def login_challenge
     transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "com",
       intent: "sign_up",
       params: authorize_params,
     ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
   end
 
   def authorize_params

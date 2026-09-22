@@ -58,6 +58,16 @@ module AuthCeremonyContext
     record.complete!
   end
 
+  # Auth owns only ceremony continuity. Ending that continuity may revoke the
+  # short-lived ceremony row and clear local browser state, but it must never
+  # revoke a Base Browser Session or an RP Session.
+  def clear_auth_ceremony_context!
+    current_auth_ceremony_session&.revoke!
+    cookies.delete(auth_ceremony_sid_cookie_name, path: "/")
+    clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
+    reset_session
+  end
+
   def cancel_auth_ceremony_session!
     record = admitted_auth_ceremony_session
     return if record.nil?

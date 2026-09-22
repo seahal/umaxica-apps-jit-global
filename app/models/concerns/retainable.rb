@@ -49,9 +49,10 @@ module Retainable
   # Schedule a future logical+physical deletion window. Both timestamps must be
   # in the future. Use this when scheduling retention up front (e.g. issuing a
   # token with a known expiry).
-  def schedule_retention!(discard_at:, purge_eligible_at:)
-    raise ArgumentError, "discard_at must be in the future" unless future_time?(discard_at)
-    raise ArgumentError, "purge_eligible_at must be in the future" unless future_time?(purge_eligible_at)
+  def schedule_retention!(discard_at:, purge_eligible_at:, now: nil)
+    now ||= self.class.database_now
+    raise ArgumentError, "discard_at must be in the future" unless future_time?(discard_at, now)
+    raise ArgumentError, "purge_eligible_at must be in the future" unless future_time?(purge_eligible_at, now)
     raise ArgumentError, "discard_at must be <= purge_eligible_at" if time_after?(discard_at, purge_eligible_at)
 
     update!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
@@ -64,8 +65,10 @@ module Retainable
   # `discard_at` clamps to `created_at` to satisfy the
   # `retention_times_not_before_created_at` invariant when the row was created
   # in the same request (Time.current may be less than created_at by us).
-  def discard_now!(purge_after:, now: Time.current)
+  def discard_now!(purge_after:, now: nil)
     raise ArgumentError, "purge_after must be a Duration" unless purge_after.respond_to?(:from_now)
+
+    now ||= self.class.database_now
 
     discard_at_value = persisted_created_at_or(now)
     purge_eligible_at_value = now + purge_after

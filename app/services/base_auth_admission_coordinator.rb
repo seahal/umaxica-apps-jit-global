@@ -41,7 +41,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     "org" => OperatorAuthCeremonySession,
   }.freeze
 
-  Issuance = Data.define(:transaction, :code)
+  Issuance = Data.define(:transaction, :code, :reference)
 
   class << self
     public
@@ -53,8 +53,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         actor_type: SURFACE_ACTOR.fetch(transaction.surface),
         surface: transaction.surface,
         subject_ref: transaction.transaction_id,
+        reference: transaction.transaction_id,
       )
-      Issuance.new(transaction: transaction, code: code)
+      Issuance.new(transaction: transaction, code: code, reference: transaction.transaction_id)
     end
 
     def consume_handoff!(raw_code:, surface:, expected_intent:, store: default_store)
@@ -69,19 +70,43 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def issue_local_entry!(surface:, intent:, store: default_store)
       purpose = local_entry_purpose_for(intent)
+      reference = SecureRandom.uuid
       code = store.issue!(
         purpose: purpose,
         actor_type: SURFACE_ACTOR.fetch(surface.to_s),
         surface: surface,
+        subject_ref: reference,
+        reference: reference,
       )
-      Issuance.new(transaction: nil, code: code)
+      Issuance.new(transaction: nil, code: code, reference: reference)
     end
 
     def consume_local_entry!(raw_code:, surface:, expected_intent:, store: default_store)
       purpose = local_entry_purpose_for(expected_intent)
-      result = store.consume!(purpose: purpose, raw_code: raw_code)
+      result = store.consume!(
+        purpose: purpose,
+        raw_code: raw_code,
+        expected: binding_expectations(surface: surface),
+      )
       raise Denied, "local admission missing" if result.missing?
       raise Denied, "local admission replay" if result.replay?
+      raise Denied, "local admission binding mismatch" if result.binding_mismatch?
+      raise Denied, "local admission rejected" unless result.success?
+
+      payload = result.payload
+      validate_payload!(payload, surface: surface)
+      payload
+    end
+
+    def consume_entry_reference!(reference:, surface:, expected_intent:, store: default_store)
+      result = store.consume_reference!(
+        reference: reference,
+        purposes: admission_reference_purposes(expected_intent),
+        expected: binding_expectations(surface: surface),
+      )
+      raise Denied, "local admission missing" if result.missing?
+      raise Denied, "local admission replay" if result.replay?
+      raise Denied, "local admission binding mismatch" if result.binding_mismatch?
       raise Denied, "local admission rejected" unless result.success?
 
       payload = result.payload
@@ -91,38 +116,35 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def issue_result!(transaction:, ceremony_session_ref: nil, store: default_store)
       purpose = result_purpose_for(transaction.intent)
+      reference = SecureRandom.uuid
       code = store.issue!(
         purpose: purpose,
         actor_type: SURFACE_ACTOR.fetch(transaction.surface),
         surface: transaction.surface,
         subject_ref: transaction.transaction_id,
-        base_session_ref: transaction.session_ref,
+        reference: reference,
         ceremony_session_ref: ceremony_session_ref,
       )
-      Issuance.new(transaction: transaction, code: code)
+      Issuance.new(transaction: transaction, code: code, reference: reference)
     end
 
-    def consume_result!(raw_code:, surface:, store: default_store)
-      # Result purpose is recovered from the consumed payload; try each result
-      # purpose for this surface's expected intents would leak retries. Callers
-      # pass the raw code plus surface; we require the payload purpose to be a
-      # result purpose and the surface to match.
-      last_error = nil
-      RESULT_PURPOSE.values.uniq.each do |purpose|
-        result = store.consume!(purpose: purpose, raw_code: raw_code)
-        next if result.missing?
+    def consume_result!(raw_code:, surface:, transaction_ref:, expected_intent:, store: default_store)
+      raise Denied, "admission binding mismatch" if transaction_ref.to_s.blank?
 
-        raise Denied, "admission replay" if result.replay?
-        raise Denied, "admission rejected" unless result.success?
+      purpose = result_purpose_for(expected_intent)
+      result = store.consume!(
+        purpose: purpose,
+        raw_code: raw_code,
+        expected: binding_expectations(surface: surface, subject_ref: transaction_ref),
+      )
+      raise Denied, "admission missing" if result.missing?
+      raise Denied, "admission replay" if result.replay?
+      raise Denied, "admission binding mismatch" if result.binding_mismatch?
+      raise Denied, "admission rejected" unless result.success?
 
-        payload = result.payload
-        validate_payload!(payload, surface: surface)
-        return payload
-      rescue Denied => e
-        last_error = e
-        raise if e.message == "admission replay"
-      end
-      raise(last_error || Denied.new("admission missing"))
+      payload = result.payload
+      validate_payload!(payload, surface: surface)
+      payload
     end
 
     def register_result_and_issue!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
@@ -155,14 +177,23 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       LOCAL_ENTRY_PURPOSE.fetch(intent.to_s) { raise ArgumentError, "unsupported local entry intent" }
     end
 
+    def local_entry_purpose?(payload:, intent:)
+      payload.fetch("purpose").to_s == local_entry_purpose_for(intent)
+    end
+
     private
 
     private :handoff_purpose_for, :result_purpose_for, :local_entry_purpose_for
 
     def consume_code!(purpose:, raw_code:, surface:, store:)
-      result = store.consume!(purpose: purpose, raw_code: raw_code)
+      result = store.consume!(
+        purpose: purpose,
+        raw_code: raw_code,
+        expected: binding_expectations(surface: surface),
+      )
       raise Denied, "admission missing" if result.missing?
       raise Denied, "admission replay" if result.replay?
+      raise Denied, "admission binding mismatch" if result.binding_mismatch?
       raise Denied, "admission rejected" unless result.success?
 
       payload = result.payload
@@ -176,6 +207,22 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
       actor = SURFACE_ACTOR.fetch(surface.to_s)
       raise Denied, "admission actor mismatch" unless payload.fetch("actor_type").to_s == actor
+    end
+
+    def binding_expectations(surface:, subject_ref: nil)
+      expected = {
+        actor_type: SURFACE_ACTOR.fetch(surface.to_s),
+        surface: surface.to_s,
+      }
+      expected[:subject_ref] = subject_ref.to_s if subject_ref.present?
+      expected
+    end
+
+    def admission_reference_purposes(intent)
+      purposes = [handoff_purpose_for(intent)]
+      local_purpose = LOCAL_ENTRY_PURPOSE[intent.to_s]
+      purposes.unshift(local_purpose) if local_purpose.present?
+      purposes
     end
 
     def default_store

@@ -47,6 +47,11 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
     @current_client = resolve_current_client
     return redirect_to_login unless @current_client
 
+    if pending_oidc_session_limit_cycle?
+      render plain: I18n.t("errors.messages.invalid_request"), status: :conflict
+      return
+    end
+
     ref = params[:ref]
 
     if ref.present?
@@ -68,15 +73,6 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
 
     # Check if we can promote restricted session to active
     if (pending_session_limit_cycle? || current_session_restricted?) && can_promote_session?(@current_client)
-      if pending_oidc_session_limit_cycle?
-        resume_url = promote_current_session_limit_cycle_for_oidc_handoff!(@current_client)
-        if resume_url.present?
-          consume_session_limit_gate!
-          session.delete(:pending_login_user_id)
-          return redirect_to(resume_url, allow_other_host: false)
-        end
-      end
-
       if pending_session_limit_cycle? && promote_current_session_limit_cycle!(@current_client)
         consume_session_limit_gate!
         return redirect_to_sign_in_sequence!(

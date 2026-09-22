@@ -23,7 +23,6 @@ module Auth
       include ::AuthorizationClient
       include ::VerificationClient
       include ActionPolicy::Controller
-      include ::OidcSsoInitiator
       include ::AuthCeremonyContext
       # Note: RestrictedSessionGuard is still needed to enforce session expiration
       # and block expired restricted sessions on the session management page itself.
@@ -113,31 +112,19 @@ module Auth
         true
       end
 
-      def oidc_client_id
-        "sign-rp"
-      end
-
-      def oidc_sign_host
+      def auth_service_host
         ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-      end
-
-      def oidc_acme_host
-        ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      end
-
-      def oidc_base_authority_host
-        oidc_acme_host
       end
 
       def oidc_authorization_after_login_path
         auth_app_sign_oidc_handoff_path(
           ri: current_region_identifier,
-          protocol: URI.parse(OidcIssuer.absolute_url(oidc_sign_host)).scheme,
+          protocol: URI.parse(OidcIssuer.absolute_url(auth_service_host)).scheme,
         )
       end
 
       def acme_authority_host
-        oidc_acme_host
+        base_authority_host
       end
 
       def base_authority_host

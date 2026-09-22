@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 class InsertCurrentJwtAnomalyReferenceData < ActiveRecord::Migration[8.2]
+  STATUS_DATA = {
+    0 => "nothing",
+    1 => "legacy_nothing",
+    2 => "active",
+    3 => "inactive",
+    4 => "deleted",
+  }.freeze
+
   ACTIVE_STATUS_ID = 2
   PUBLIC_ID_PREFIX = "jwt_occurrence_"
   PUBLIC_ID_MAX_NUMBER = 999_999
@@ -44,16 +52,33 @@ class InsertCurrentJwtAnomalyReferenceData < ActiveRecord::Migration[8.2]
   }.freeze
 
   def up
-    unless table_exists?(:jwt_occurrence_statuses) && table_exists?(:jwt_occurrences)
+    seed_into(connection)
+  end
+
+  # Structure loads mark migrations as applied without replaying their data
+  # inserts. db/seeds.rb calls this same idempotent writer on the occurrence
+  # connection so the current runtime catalog is reproducible without making
+  # a migration depend on the primary connection.
+  def seed_into(target_connection)
+    unless target_connection.data_source_exists?("jwt_occurrence_statuses") &&
+        target_connection.data_source_exists?("jwt_occurrences")
       raise ActiveRecord::MigrationError,
             "JWT anomaly reference tables must exist before current catalog data is inserted"
     end
 
-    next_public_number = next_public_number()
+    next_public_number = next_public_number(target_connection)
 
     safety_assured do
+      STATUS_DATA.each do |id, name|
+        target_connection.execute(<<~SQL.squish)
+          INSERT INTO jwt_occurrence_statuses (id, name)
+          VALUES (#{id}, #{target_connection.quote(name)})
+          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+        SQL
+      end
+
       catalog_rows.each do |body, memo|
-        existing_status = existing_status_id(body)
+        existing_status = existing_status_id(target_connection, body)
         if existing_status
           unless existing_status == ACTIVE_STATUS_ID
             raise ActiveRecord::MigrationError,
@@ -68,12 +93,12 @@ class InsertCurrentJwtAnomalyReferenceData < ActiveRecord::Migration[8.2]
           next_public_number > PUBLIC_ID_MAX_NUMBER
 
         public_id = format("#{PUBLIC_ID_PREFIX}%06d", next_public_number)
-        execute(<<~SQL.squish)
+        target_connection.execute(<<~SQL.squish)
           INSERT INTO jwt_occurrences (body, memo, public_id, status_id, created_at, updated_at)
           VALUES (
-            #{connection.quote(body)},
-            #{connection.quote(memo)},
-            #{connection.quote(public_id)},
+            #{target_connection.quote(body)},
+            #{target_connection.quote(memo)},
+            #{target_connection.quote(public_id)},
             #{ACTIVE_STATUS_ID},
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP
@@ -81,6 +106,13 @@ class InsertCurrentJwtAnomalyReferenceData < ActiveRecord::Migration[8.2]
         SQL
       end
     end
+
+    ensure_sequence!(target_connection, :jwt_occurrence_statuses, STATUS_DATA.keys.max)
+    max_id = Integer(
+      target_connection.select_value("SELECT COALESCE(MAX(id), 0) FROM jwt_occurrences").to_s,
+      10,
+    )
+    ensure_sequence!(target_connection, :jwt_occurrences, max_id)
   end
 
   # Reference rows may already be linked from persisted anomaly events. They
@@ -100,22 +132,33 @@ class InsertCurrentJwtAnomalyReferenceData < ActiveRecord::Migration[8.2]
     end
   end
 
-  def existing_status_id(body)
-    value = select_value(<<~SQL.squish)
+  def existing_status_id(target_connection, body)
+    value = target_connection.select_value(<<~SQL.squish)
       SELECT status_id
       FROM jwt_occurrences
-      WHERE body = #{connection.quote(body)}
+      WHERE body = #{target_connection.quote(body)}
       LIMIT 1
     SQL
     value&.to_i
   end
 
-  def next_public_number
-    value = select_value(<<~SQL.squish)
+  def next_public_number(target_connection)
+    value = target_connection.select_value(<<~SQL.squish)
       SELECT COALESCE(MAX(CAST(substring(public_id FROM 'jwt_occurrence_([0-9]+)$') AS bigint)), 0)
       FROM jwt_occurrences
       WHERE public_id ~ '^jwt_occurrence_[0-9]+$'
     SQL
     Integer(value.to_s, 10)
+  end
+
+  def ensure_sequence!(target_connection, table_name, max_id)
+    sequence_name = target_connection.select_value(
+      "SELECT pg_get_serial_sequence(#{target_connection.quote(table_name.to_s)}, 'id')",
+    )
+    return if sequence_name.blank? || max_id <= 0
+
+    target_connection.execute(
+      "SELECT setval(#{target_connection.quote(sequence_name)}, #{Integer(max_id)}, true)",
+    )
   end
 end

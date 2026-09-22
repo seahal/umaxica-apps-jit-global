@@ -209,6 +209,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     return failure("invalid_grant", "refresh token could not be rotated") unless rotation.success?
 
     usage = rotation.token
+    decision_time = usage.class.database_now
     issue_refreshed_token_result(
       usage: usage,
       resource: resource,
@@ -218,6 +219,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       dpop_jkt: dpop_jkt,
       auth_time: auth_time,
       resource_type: resource_type,
+      now: decision_time,
     )
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] refresh rotation failed: #{e.class}")
@@ -412,26 +414,18 @@ class OidcTokenExchangeCoordinator < ApplicationService
           next
         end
 
-        OidcConnectionRecorder.call(
+        decision_time = connection_class.database_now
+
+        usage = prepare_exchanged_usage(
+          authorization_code: authorization_code,
           resource: resource,
           client: client,
-          scope: authorization_code.scope,
-          authorization_issued_at: authorization_code.issued_at,
-          used_at: Time.current,
-        )
-
-        usage = create_or_resolve_active_usage!(
           root_token: locked_root_token,
-          client: client,
-          scope: authorization_code.scope,
           dpop_jkt: dpop_jkt,
-          auth_time: authorization_code.auth_time,
-          acr: authorization_code.acr,
-          amr: authorization_code.amr,
-          nonce: authorization_code.nonce,
+          now: decision_time,
         )
 
-        refresh_plain = issue_or_rotate_usage_refresh_token!(usage)
+        refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
         link_consumed_family!(authorization_code, usage)
         issuance_result = issue_exchanged_token_result(
           authorization_code: authorization_code,
@@ -441,10 +435,33 @@ class OidcTokenExchangeCoordinator < ApplicationService
           usage: usage,
           refresh_plain: refresh_plain,
           dpop_jkt: dpop_jkt,
+          now: decision_time,
         )
       end
       issuance_result
     end
+  end
+
+  def prepare_exchanged_usage(authorization_code:, resource:, client:, root_token:, dpop_jkt:, now:)
+    OidcConnectionRecorder.call(
+      resource: resource,
+      client: client,
+      scope: authorization_code.scope,
+      authorization_issued_at: authorization_code.issued_at,
+      used_at: now,
+    )
+
+    create_or_resolve_active_usage!(
+      root_token: root_token,
+      client: client,
+      scope: authorization_code.scope,
+      dpop_jkt: dpop_jkt,
+      auth_time: authorization_code.auth_time,
+      acr: authorization_code.acr,
+      amr: authorization_code.amr,
+      nonce: authorization_code.nonce,
+      now: now,
+    )
   end
 
   def bound_session_usable_after_code_cas?(root_token, resource)
@@ -499,7 +516,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case authorization_code.resource_type
     when "operator" then Operator.find_by(public_id: public_id)
     when "visitor" then Visitor.find_by(public_id: public_id)
-    else Client.find_by(public_id: public_id)
+    when "client" then Client.find_by(public_id: public_id)
+    else nil
     end
   end
 
@@ -510,7 +528,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case authorization_code.resource_type
     when "operator" then OperatorToken.find_by(public_id: ref)
     when "visitor" then VisitorToken.find_by(public_id: ref)
-    else ClientToken.find_by(public_id: ref)
+    when "client" then ClientToken.find_by(public_id: ref)
+    else nil
     end
   end
 
@@ -583,7 +602,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     end
   end
 
-  def create_or_resolve_active_usage!(root_token:, client:, scope:, dpop_jkt:, auth_time:, acr:, amr:, nonce:)
+  def create_or_resolve_active_usage!(root_token:, client:, scope:, dpop_jkt:, auth_time:, acr:, amr:, nonce:, now:)
     usage_class = usage_class_for_root_token(root_token)
     owner = connection_owner_for(usage_class)
     usage = nil
@@ -610,10 +629,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
         oidc_acr: acr,
         oidc_amr: JSON.generate(Array(amr).map(&:to_s)),
         oidc_nonce: nonce,
-        last_used_at: Time.current,
-        refresh_token_expires_at: refresh_expires_at_for(root_token),
+        last_used_at: now,
+        refresh_token_expires_at: refresh_expires_at_for(locked_root_token, now: now),
       }
-      attributes[parent_key] = root_token
+      attributes[parent_key] = locked_root_token
       usage = usage_class.create!(**attributes)
 
       usage
@@ -622,8 +641,12 @@ class OidcTokenExchangeCoordinator < ApplicationService
     raise RpSessionAlreadyExists, "an RP Session for this Browser Session and client already exists"
   end
 
-  def issue_or_rotate_usage_refresh_token!(usage)
-    usage.refresh_token_digest.present? ? usage.rotate_refresh_token! : usage.issue_refresh_token!
+  def issue_or_rotate_usage_refresh_token!(usage, now:)
+    if usage.refresh_token_digest.present?
+      usage.rotate_refresh_token!(now: now)
+    else
+      usage.issue_refresh_token!(now: now)
+    end
   end
 
   def rp_session_oidc_jti(usage)
@@ -631,15 +654,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def issue_exchanged_token_result(authorization_code:, resource:, client:, root_token:, usage:, refresh_plain:,
-                                   dpop_jkt:)
-    now = Time.current.utc
+                                   dpop_jkt:, now:)
     resource_type = authorization_code.resource_type
     client = client_for_resource_type(client, resource_type)
     issuer = OidcIssuer.for_resource_type(resource_type)
     subject = OidcSubject.for(resource, resource_type: resource_type)
     access_expires_at = session_token_expiry(now, root_token)
     auth_time = authorization_code.auth_time
-    usage.record_access_token_expiry!(access_expires_at)
+    usage.record_access_token_expiry!(access_expires_at, now: now)
     access_token = encode_exchanged_access_token(
       authorization_code: authorization_code, resource: resource, client: client, root_token: root_token,
       usage: usage, dpop_jkt: dpop_jkt, access_expires_at: access_expires_at,
@@ -668,15 +690,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def issue_refreshed_token_result(usage:, resource:, client:, root_token:, refresh_plain:, dpop_jkt:,
-                                   auth_time:, resource_type:)
-    now = Time.current.utc
+                                   auth_time:, resource_type:, now:)
     client = client_for_resource_type(client, resource_type)
     issuer = OidcIssuer.for_resource_type(resource_type)
     subject = OidcSubject.for(resource, resource_type: resource_type)
     access_expires_at = session_token_expiry(now, root_token)
     scopes = usage.oidc_scope.to_s.split
     amr = parse_stored_amr(usage.oidc_amr)
-    usage.record_access_token_expiry!(access_expires_at)
+    usage.record_access_token_expiry!(access_expires_at, now: now)
     access_token = refreshed_access_token(
       usage:, resource:, root_token:, dpop_jkt:, auth_time:, resource_type:, client:, issuer:, subject:,
       scopes:, amr:, access_expires_at:,
@@ -708,6 +729,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       resource,
       host: OidcIssuer.host_for_resource_type(resource_type),
       session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
       oidc_sid: usage.public_id,
       oidc_jti: rp_session_oidc_jti(usage),
       resource_type: resource_type,
@@ -764,6 +786,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       resource,
       host: OidcIssuer.host_for_resource_type(resource_type),
       session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
       oidc_sid: usage.public_id,
       oidc_jti: rp_session_oidc_jti(usage),
       resource_type: resource_type,
@@ -835,7 +858,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     end
   end
 
-  def refresh_expires_at_for(root_token)
+  def refresh_expires_at_for(root_token, now:)
     ttl =
       case root_token
       when OperatorToken then SecurityTokenLifetimes::OPERATOR_REFRESH_TOKEN_TTL
@@ -843,7 +866,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       else SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
       end
     SessionAbsoluteExpiryValue.cap(
-      proposed_expiry: ttl.from_now,
+      proposed_expiry: now + ttl,
       absolute_expiry: root_token.discard_at,
     )
   end
@@ -859,7 +882,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
     case resource_type
     when "operator" then OrgTicketRecord
     when "visitor" then ComTicketRecord
-    else AppTicketRecord
+    when "client" then AppTicketRecord
+    else
+      raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
     end
   end
 

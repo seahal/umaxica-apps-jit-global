@@ -122,6 +122,18 @@ The amendment does not resolve the separate regional JP/US RP-registration confl
 accepted seven-client ADR. Client IDs, redirect registrations, external RP configuration, and
 legacy-session migration remain blocked until that matrix is approved and verified.
 
+## Base-to-Auth admission transport amendment (2026-09-21)
+
+Base-to-Auth browser admissions do not place the opaque admission code in a URL. The initial Auth
+GET may carry only the short-lived transaction or local-entry reference required to render a
+same-origin continuation form. That GET is non-consuming. The form carries the reference and the
+Auth Rails authenticity token in a POST body; the POST atomically consumes the reference-indexed,
+purpose- and surface-bound Valkey record and redirects to a clean ceremony URL. The reference index
+contains only a pointer to the digest-keyed admission record and never the raw admission code.
+
+Rails forgery protection remains enabled for the Auth POST. This transport does not add a bearer
+fallback, a Rails-session pre-authentication map, or a compatibility `admission` query consumer.
+
 ## Neutral browser RP entry amendment (2026-09-20)
 
 The canonical first-party browser entry is now `GET /sign` followed by a CSRF-protected
@@ -150,6 +162,15 @@ This amendment is limited to removing secret result transport from URLs and maki
 handoff explicit. It does not yet retire the remaining legacy Base callback/session issuance path;
 that remains a later implementation slice under the authority-boundary plan.
 
+### Result-purpose binding amendment (2026-09-21)
+
+Base resolves the expected result purpose from the server-side authorization transaction before
+attempting Valkey consumption. The result consumer no longer probes every result-purpose namespace
+until one happens to match. A result must therefore match the transaction's purpose, surface,
+actor type, and transaction reference at the atomic consume boundary; a mismatch is rejected
+without consuming the result. The existing `local_sign_in` and `local_sign_up` namespaces remain
+restricted to Base's own local landing entry and are not ordinary first-party RP result purposes.
+
 ## RP credential authority amendment (2026-09-20)
 
 The seven first-party RP callbacks now use the Access and Refresh credentials returned by Base's
@@ -162,6 +183,14 @@ resource type, without a per-request RP Session lookup. Refresh, revocation, and
 the Base/RP Session authority. The older `core-browser` root-browser-cookie audience is not a
 credential for this RP path. This amendment does not weaken Rails CSRF protection, change the
 zero-cookie edge contract, or make TanStack an authentication authority.
+
+For OIDC UserInfo and the equivalent bearer validation boundary, `sid` remains the RP Session
+protocol identifier, while the private `umx_base_sid` claim binds the JWT to the parent Base Browser
+Session that issued it. Verification resolves the Base Browser Session and actor from those signed
+claims; it does not resolve an RP Session row or compare a persisted RP-session JTI on every request.
+The RP Session remains authoritative for refresh, revocation, and logout. Child-only revocation
+therefore prevents further issuance without retroactively invalidating an already-issued JWT before
+its natural expiry and verifier clock-skew boundary.
 
 ## RP logout authority amendment (2026-09-20)
 

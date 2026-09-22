@@ -528,15 +528,12 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   test "restricted session is blocked on non-session base org routes" do
     token = create_restricted_session(@staff)
     base_host = ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost")
-    headers = {
-      "Host" => base_host,
-      "X-TEST-CURRENT-STAFF" => @staff.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
+    headers = as_staff_headers_with_token(@staff, token, host: base_host)
 
     get base_org_accounts_url(ri: "jp", host: base_host), headers: headers
 
-    assert_response :bad_request
+    assert_response :locked
+    assert_equal RestrictedSessionGuard::BLOCKED_MESSAGE, response.body
   end
 
   private
@@ -716,7 +713,16 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service =
+      if normalized.include?("base") || normalized.include?("www.")
+        "BASE"
+      elsif normalized.include?("acme")
+        "ACME"
+      elsif normalized.include?("core")
+        "CORE"
+      else
+        "SIGN"
+      end
     surface =
       if service == "SIGN"
         case resource_type

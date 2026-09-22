@@ -18,6 +18,12 @@ class OidcSsoInitiatorTestController < ApplicationController
     )
   end
 
+  def hinted
+    redirect_to_oidc_authorization_url(
+      initiate_oidc_session!(pt: "/hinted", screen_hint: "signup"),
+    )
+  end
+
   def burst
     params.fetch(:count, "1").to_i.times do |index|
       initiate_oidc_session!(pt: "/burst-#{index}")
@@ -63,6 +69,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     Rails.application.routes.draw do
       get "/oidc/sso" => "oidc_sso_initiator_test#index"
       get "/oidc/sso/fresh" => "oidc_sso_initiator_test#fresh"
+      get "/oidc/sso/hinted" => "oidc_sso_initiator_test#hinted"
       get "/oidc/sso/burst" => "oidc_sso_initiator_test#burst"
     end
   end
@@ -149,6 +156,24 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     assert_equal "login", query.fetch("prompt")
     assert_equal "60", query.fetch("max_age")
     assert_equal 60, session.fetch("oidc_pending_flows").fetch(query.fetch("state")).fetch("max_age")
+  end
+
+  test "screen hint does not move PKCE state into scalar session keys" do
+    get "/oidc/sso/hinted", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+    assert_response :redirect
+    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
+
+    assert_equal "signup", query.fetch("screen_hint")
+    flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
+
+    assert_equal "/hinted", flow.fetch("pt")
+    assert_predicate flow.fetch("code_verifier"), :present?
+    assert_predicate flow.fetch("nonce"), :present?
+    assert_nil session[:oidc_code_verifier]
+    assert_nil session[:oidc_state]
+    assert_nil session[:oidc_nonce]
+    assert_nil session[:oidc_pt]
   end
 
   test "pending flows remain independent and are bounded to two entries" do

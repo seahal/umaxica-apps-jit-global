@@ -20,7 +20,7 @@ module RefreshTokenable
   end
 
   class_methods do
-    def rotate_refresh!(presented_refresh_digest:, now: Time.current)
+    def rotate_refresh!(presented_refresh_digest:, now: nil)
       return { status: :invalid, token: nil } if presented_refresh_digest.blank?
 
       operation =
@@ -29,16 +29,22 @@ module RefreshTokenable
             current_token = lock_refresh_token_record_by_digest(
               presented_refresh_digest,
               digest_column: :refresh_token_digest,
-              now: now,
             )
 
             return { status: :invalid, token: nil } unless current_token
             return { status: :replay, token: current_token } if current_token.rotated_at.present?
-            return { status: :invalid, token: current_token } unless current_token.currently_usable?(now)
 
-            current_token.update!(rotated_at: now, last_used_at: now, updated_at: now)
+            decision_time = now || database_now
+            return { status: :invalid, token: current_token } unless current_token.currently_usable?(decision_time)
 
-            replacement, raw_refresh_token = create_rotated_token_record!(current_token)
+            current_token.assign_attributes(
+              rotated_at: decision_time,
+              last_used_at: decision_time,
+              updated_at: decision_time,
+            )
+            current_token.save!(touch: false)
+
+            replacement, raw_refresh_token = create_rotated_token_record!(current_token, now: decision_time)
 
             {
               status: :rotated,
@@ -54,7 +60,7 @@ module RefreshTokenable
 
     private
 
-    def create_rotated_token_record!(previous_token)
+    def create_rotated_token_record!(previous_token, now: nil)
       attrs = rotated_token_attributes(previous_token)
       release_unique_dbsc_session_id!(previous_token) if attrs[:dbsc_session_id].present?
       replacement = new(attrs)
@@ -63,7 +69,7 @@ module RefreshTokenable
 
       raw_refresh_token, verifier = generate_refresh_token(public_id: replacement.public_id)
       replacement.update!(refresh_token_digest: digest_refresh_token(verifier))
-      update_device_session_after_rotation!(previous_token, replacement)
+      update_device_session_after_rotation!(previous_token, replacement, now: now)
       [replacement, raw_refresh_token]
     end
 
@@ -135,7 +141,7 @@ module RefreshTokenable
       attrs[name] = previous_token.public_send(name) if previous_token.has_attribute?(name)
     end
 
-    def update_device_session_after_rotation!(previous_token, replacement)
+    def update_device_session_after_rotation!(previous_token, replacement, now: nil)
       return unless replacement.respond_to?(:device_session)
 
       device_session = replacement.device_session || previous_token.try(:device_session)
@@ -144,7 +150,7 @@ module RefreshTokenable
       attrs = {
         current_refresh_token_id: replacement.id,
         refresh_token_family_id: replacement.refresh_token_family_id,
-        last_seen_at: Time.current,
+        last_seen_at: now || replacement.class.database_now,
       }
       attrs[:dpop_jkt] = replacement.dpop_jkt if replacement.has_attribute?(:dpop_jkt)
       # rubocop:disable Rails/SkipsModelValidations
@@ -196,9 +202,10 @@ module RefreshTokenable
   end
 
   # Rotate (refresh) the token and return the raw token for the client.
-  def rotate_refresh_token!(discard_at: nil)
+  def rotate_refresh_token!(discard_at: nil, now: nil)
     # Use a transaction to keep token state consistent.
     transaction do
+      now ||= self.class.database_now
       token, verifier = generate_refresh_token(public_id: public_id)
 
       self.refresh_token_digest = digest_refresh_token(verifier)
@@ -206,14 +213,16 @@ module RefreshTokenable
         if discard_at
           SessionAbsoluteExpiryValue.cap(proposed_expiry: discard_at, absolute_expiry: self.discard_at)
         elsif self.discard_at.respond_to?(:infinite?) && self.discard_at.infinite?
-          default_lapses_at
+          default_lapses_at(now: now)
         else
           self.discard_at
         end
-      self.last_used_at = Time.current
+      self.last_used_at = now
       self.refresh_token_generation = Integer(refresh_token_generation.to_s, 10) + 1
       save!
-      self.class.send(:update_device_session_after_rotation!, self, self) if respond_to?(:device_session)
+      if respond_to?(:device_session)
+        self.class.send(:update_device_session_after_rotation!, self, self, now: now)
+      end
 
       # Return the combined token for the client.
       token
@@ -241,8 +250,8 @@ module RefreshTokenable
 
   private
 
-  def default_lapses_at
-    Time.current + REFRESH_TTL
+  def default_lapses_at(now: nil)
+    (now || self.class.database_now) + REFRESH_TTL
   end
 
   def ensure_lapses_at
@@ -271,7 +280,7 @@ module RefreshTokenable
       actor_key => public_send(actor_key),
       :dpop_jkt => has_attribute?(:dpop_jkt) ? dpop_jkt.presence : nil,
       :refresh_token_family_id => refresh_token_family_id,
-      :last_seen_at => Time.current,
+      :last_seen_at => self.class.database_now,
     }
     operation =
       lambda do

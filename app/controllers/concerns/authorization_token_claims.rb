@@ -4,7 +4,8 @@
 module AuthorizationTokenClaims
   module_function
 
-  def build(resource:, session_id: nil, session_public_id: nil, oidc_sid: nil, oidc_jti: nil, resource_type:,
+  def build(resource:, session_id: nil, session_public_id: nil, base_session_public_id: nil,
+            oidc_sid: nil, oidc_jti: nil, resource_type:,
             issued_at:, access_token_ttl:, expires_at: nil, scopes: nil, acr: nil, amr: nil, dpop_jkt: nil,
             issuer: nil, audiences: nil, subject: nil, auth_time: nil, step_up_until: nil, client_id: nil,
             authentication_context: nil)
@@ -36,6 +37,7 @@ module AuthorizationTokenClaims
     }
     payload["amr"] = Array(amr) if amr.present?
     payload["sid"] = sid if sid.present?
+    payload["umx_base_sid"] = base_session_public_id if base_session_public_id.present?
     payload["auth_time"] = timestamp_value(auth_time) if auth_time.present?
     payload["step_up_until"] = timestamp_value(step_up_until) if step_up_until.present?
     payload["cnf"] = { "jkt" => dpop_jkt } if dpop_jkt.present?
@@ -58,6 +60,10 @@ module AuthorizationTokenClaims
 
   def session_id(payload)
     payload&.dig("sid")
+  end
+
+  def base_session_id(payload)
+    payload&.dig("umx_base_sid")
   end
 
   def jti(payload)

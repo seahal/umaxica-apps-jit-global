@@ -52,21 +52,31 @@ module ProcessorErasureNotificationState
   end
 
   def mark_notified!(now: Time.current)
-    update!(
-      status_id: self.class.status_id_for("NOTIFIED"), notified_at: now, last_error_code: "",
-      last_error_message: "",
-    )
+    # The job-level terminal check is only advisory; re-check under the row lock so a
+    # concurrent retry cannot overwrite a terminal notification.
+    with_lock do
+      return self if terminal?
+
+      update!(
+        status_id: self.class.status_id_for("NOTIFIED"), notified_at: now, last_error_code: "",
+        last_error_message: "",
+      )
+    end
   end
 
   def mark_failed!(code:, message:, now: Time.current)
-    update!(
-      status_id: self.class.status_id_for("FAILED"),
-      failed_at: now,
-      retry_count: retry_count + 1,
-      next_retry_at: 15.minutes.from_now,
-      last_error_code: code.to_s,
-      last_error_message: message.to_s.truncate(255),
-    )
+    with_lock do
+      return self if terminal?
+
+      update!(
+        status_id: self.class.status_id_for("FAILED"),
+        failed_at: now,
+        retry_count: retry_count + 1,
+        next_retry_at: now + 15.minutes,
+        last_error_code: code.to_s,
+        last_error_message: message.to_s.truncate(255),
+      )
+    end
   end
 
   private

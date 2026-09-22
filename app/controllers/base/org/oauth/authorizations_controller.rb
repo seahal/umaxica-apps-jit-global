@@ -98,14 +98,14 @@ module Base
                 ri: params[:ri],
                 host: oidc_sign_host,
                 protocol: oidc_sign_protocol,
-                admission: handoff.code,
+                transaction_ref: handoff.reference,
               )
             else
               sign_org_sign_in_url(
                 ri: params[:ri],
                 host: oidc_sign_host,
                 protocol: oidc_sign_protocol,
-                admission: handoff.code,
+                transaction_ref: handoff.reference,
               )
             end
           redirect_to_jump_url(sign_url)

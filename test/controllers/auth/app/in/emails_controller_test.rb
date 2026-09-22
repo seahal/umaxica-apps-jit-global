@@ -196,13 +196,18 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     # Reset for invalid code test
     test_email.update!(pass_code: "123456", otp_attempts_count: 0)
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
-      post auth_app_sign_in_email_url(ri: "jp"),
-           params: {
-             :user_email => { address: test_email.address },
-             "cf-turnstile-response" => "test_token",
-           },
-           headers: { "Host" => @host }
+    decision_time = test_email.reload.otp_last_sent_at + CommonOtpPolicy::SEND_COOLDOWN + 1.second
+    ClientEmail.stub(:database_now, decision_time) do
+      EmailOccurrence.stub(:database_now, decision_time) do
+        travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+          post auth_app_sign_in_email_url(ri: "jp"),
+               params: {
+                 :user_email => { address: test_email.address },
+                 "cf-turnstile-response" => "test_token",
+               },
+               headers: { "Host" => @host }
+        end
+      end
     end
 
     follow_redirect!
@@ -634,17 +639,22 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     # Anchored to when the code was actually sent, not to now. `travel` moves
     # from the current moment, so on a slow run the setup alone can push the gap
     # past the cooldown and the case silently inverts into its opposite.
-    travel_to test_email.otp_last_sent_at + 29.seconds do
-      assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-        post auth_app_sign_in_email_url(ri: "jp"),
-             params: {
-               :user_email => { address: test_email.address },
-               "cf-turnstile-response" => "test_token",
-             },
-             headers: { "Host" => @host }
-      end
+    decision_time = test_email.otp_last_sent_at + 29.seconds
+    ClientEmail.stub(:database_now, decision_time) do
+      EmailOccurrence.stub(:database_now, decision_time) do
+        travel_to decision_time do
+          assert_no_difference -> { ActionMailer::Base.deliveries.count } do
+            post auth_app_sign_in_email_url(ri: "jp"),
+                 params: {
+                   :user_email => { address: test_email.address },
+                   "cf-turnstile-response" => "test_token",
+                 },
+                 headers: { "Host" => @host }
+          end
 
-      assert_response :too_many_requests
+          assert_response :too_many_requests
+        end
+      end
     end
   end
 
@@ -652,20 +662,25 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     test_email = test_setup_cooldown_test_email
     initial_sent_at = test_email.otp_last_sent_at
 
-    travel 31.seconds do
-      assert_difference -> { ActionMailer::Base.deliveries.count }, 1 do
-        perform_enqueued_jobs do
-          post auth_app_sign_in_email_url(ri: "jp"),
-               params: {
-                 :user_email => { address: test_email.address },
-                 "cf-turnstile-response" => "test_token",
-               },
-               headers: { "Host" => @host }
+    decision_time = initial_sent_at + 31.seconds
+    ClientEmail.stub(:database_now, decision_time) do
+      EmailOccurrence.stub(:database_now, decision_time) do
+        travel 31.seconds do
+          assert_difference -> { ActionMailer::Base.deliveries.count }, 1 do
+            perform_enqueued_jobs do
+              post auth_app_sign_in_email_url(ri: "jp"),
+                   params: {
+                     :user_email => { address: test_email.address },
+                     "cf-turnstile-response" => "test_token",
+                   },
+                   headers: { "Host" => @host }
+            end
+          end
+
+          assert_response :found
+          assert_operator test_email.reload.otp_last_sent_at, :>, initial_sent_at
         end
       end
-
-      assert_response :found
-      assert_operator test_email.reload.otp_last_sent_at, :>, initial_sent_at
     end
   end
 

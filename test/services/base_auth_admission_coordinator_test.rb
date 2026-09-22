@@ -48,6 +48,16 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_no_match %r{https?://}, issuance.code
   end
 
+  test "result issuance does not export an Auth session as Base session authority" do
+    transaction = issue_transaction!
+    store = PurposeCaptureStore.new
+
+    BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction, store: store)
+
+    assert_equal transaction.transaction_id, store.options.fetch(:subject_ref)
+    assert_nil store.options[:base_session_ref]
+  end
+
   private
 
   def issue_transaction!
@@ -65,5 +75,15 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         scope: "openid profile",
       },
     ).transaction
+  end
+
+  class PurposeCaptureStore
+    attr_reader :options, :purpose
+
+    def issue!(purpose:, **options)
+      @purpose = purpose
+      @options = options
+      "opaque-code"
+    end
   end
 end

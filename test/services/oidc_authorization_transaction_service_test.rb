@@ -32,6 +32,46 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     assert_not_respond_to issuance.transaction, :acme_resume_url
   end
 
+  test "default issue and state transitions use the writer database clock" do
+    issue_time = Time.utc(2026, 1, 2, 3, 4, 5)
+    authentication_time = Time.utc(2026, 1, 2, 3, 4, 6)
+    consume_time = Time.utc(2026, 1, 2, 3, 4, 7)
+
+    issuance =
+      ClientOidcAuthorizationTransaction.stub(:database_now, issue_time) do
+        OidcAuthorizationTransactionCoordinator.issue!(surface: "app", intent: "authentication", params: @params)
+      end
+
+    assert_in_delta issue_time.to_f, issuance.transaction.created_at.to_f, 0.001
+    assert_in_delta issue_time.to_f, issuance.transaction.updated_at.to_f, 0.001
+
+    result =
+      ClientOidcAuthorizationTransaction.stub(:database_now, authentication_time) do
+        OidcAuthorizationTransactionCoordinator.register_result!(
+          surface: "app",
+          login_challenge: issuance.transaction.login_challenge,
+          actor: @client,
+          session_ref: "session-1",
+          auth_method: "passkey",
+          authentication_event_at: authentication_time,
+        )
+      end
+
+    assert_in_delta authentication_time.to_f, result.transaction.updated_at.to_f, 0.001
+    assert_in_delta authentication_time.to_f, result.transaction.authenticated_at.to_f, 0.001
+
+    consumed =
+      ClientOidcAuthorizationTransaction.stub(:database_now, consume_time) do
+        OidcAuthorizationTransactionCoordinator.consume!(
+          surface: "app",
+          login_challenge: issuance.transaction.login_challenge,
+        )
+      end
+
+    assert_in_delta consume_time.to_f, consumed.updated_at.to_f, 0.001
+    assert_in_delta consume_time.to_f, consumed.consumed_at.to_f, 0.001
+  end
+
   test "register_result marks the transaction authenticated and consume makes it one time" do
     issuance = OidcAuthorizationTransactionCoordinator.issue!(surface: "app", intent: "sign_in", params: @params)
 
@@ -97,20 +137,19 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
         now: Time.current,
       )
 
-    travel 2.seconds do
-      error =
-        assert_raises(ArgumentError) do
-          OidcAuthorizationTransactionCoordinator.register_result!(
-            surface: "app",
-            login_challenge: issuance.transaction.login_challenge,
-            actor: @client,
-            session_ref: "session-1",
-            auth_method: "passkey",
-            authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
-          )
-        end
+    error =
+      assert_raises(ArgumentError) do
+        OidcAuthorizationTransactionCoordinator.register_result!(
+          surface: "app",
+          login_challenge: issuance.transaction.login_challenge,
+          actor: @client,
+          session_ref: "session-1",
+          auth_method: "passkey",
+          authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+          now: issuance.transaction.login_challenge_expires_at + 1.second,
+        )
+      end
 
-      assert_equal "authorization transaction expired", error.message
-    end
+    assert_equal "authorization transaction expired", error.message
   end
 end

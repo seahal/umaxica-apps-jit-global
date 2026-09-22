@@ -35,9 +35,24 @@ class DatabaseReconstructionAuthorityTest < ActiveSupport::TestCase
     structure_dumps.each do |path|
       content = path.read
 
-      business_inserts = content.lines.grep(/^INSERT INTO /).reject { |line| line.match?(/schema_migrations/) }
+      business_inserts = content.lines.grep(/^INSERT INTO /).grep_v(/schema_migrations/)
+
       assert_empty business_inserts, "#{path.basename} contains business data"
     end
+  end
+
+  test "initial schema files are not loaded by migrations" do
+    loaders =
+      Rails.root.glob("db/**/*_migrate/*.rb").filter_map do |path|
+        next unless path.read.match?(%r{db/initial_schemas/})
+
+        path.relative_path_from(Rails.root).to_s
+      end
+
+    assert_empty loaders,
+                 "migrations must define their initial schema directly: #{loaders.join(", ")}"
+    assert_empty Rails.root.glob("db/initial_schemas/*.rb"),
+                 "obsolete schema-loader files must not remain as a second authority"
   end
 
   test "publishing reconstructs from migrations rather than publishing_structure.sql" do

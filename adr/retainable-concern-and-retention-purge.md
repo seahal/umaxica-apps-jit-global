@@ -24,8 +24,12 @@ Applications require retention management in many models, but the current challe
 `discard_at` is intentionally a domain-specific retention name rather than a `discard` gem
 integration. In order to maintain the time window semantics of the existing Retainable,
 `discard_at = Float::INFINITY` is equivalent to the unrevoked sentinel, and
-`discard_at <= Time.current` is treated as inaccessible. Switching to discard gem `NULL = kept`
-semantics is a separate task after the time window usage has been separated into separate columns.
+`discard_at <= evaluation_time` is treated as inaccessible. State-changing retention decisions
+use the owning model's writer-database clock (`database_now`, inherited from `ApplicationRecord`)
+when no explicit
+decision-unit time is supplied; callers that already hold a required lock may pass that same
+database time through the operation. Switching to discard gem `NULL = kept` semantics is a
+separate task after the time window usage has been separated into separate columns.
 
 ### Introducing Retainable Concern
 
@@ -47,21 +51,22 @@ module Retainable
     validate :retention_times_not_before_created_at, on: :update
   end
 
-  def accessible?
-    discard_at > Time.current
+  def accessible?(evaluation_time = Time.current)
+    discard_at > evaluation_time
   end
 
-  def lapsed?
-    discard_at <= Time.current
+  def lapsed?(evaluation_time = Time.current)
+    discard_at <= evaluation_time
   end
 
-  def purgeable?
-    purge_eligible_at <= Time.current
+  def purgeable?(evaluation_time = Time.current)
+    purge_eligible_at <= evaluation_time
   end
 
-  def schedule_retention!(discard_at:, purge_eligible_at:)
-    raise ArgumentError, 'discard_at must be in the future' if discard_at <= Time.current
-    raise ArgumentError, 'purge_eligible_at must be in the future' if purge_eligible_at <= Time.current
+  def schedule_retention!(discard_at:, purge_eligible_at:, now: nil)
+    now ||= self.class.database_now
+    raise ArgumentError, 'discard_at must be in the future' if discard_at <= now
+    raise ArgumentError, 'purge_eligible_at must be in the future' if purge_eligible_at <= now
     raise ArgumentError, 'discard_at must be <= purge_eligible_at' if discard_at > purge_eligible_at
     update!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
   end
@@ -115,8 +120,8 @@ class RetentionPurgeJob < ApplicationJob
   ].freeze
 
   def perform(batch_size: 500)
-    now = Time.current
     RETAINABLE_MODELS.each do |klass|
+      now = klass.database_now
       klass.where('purge_eligible_at <= ?', now).in_batches(of: batch_size).delete_all
     end
   end
@@ -125,6 +130,26 @@ end
 
 DB-backed JumpLink records were removed when redirect handling moved to the external Jump gateway
 and signed `rt` tokens.
+
+### Retention safety contract
+
+`RetentionPurgeJob` is an explicitly destructive maintenance operation. Its safety contract is
+provided by the operation's bounded, allowlisted execution rather than by a preview API:
+
+- only the explicit `RETAINABLE_MODELS` allowlist is processed;
+- each model is selected using its writer-database retention clock and processed in explicit
+  `in_batches` scopes;
+- the `discard_at <= purge_eligible_at` retention invariant keeps an un-discarded Retainable row
+  outside the purge window; models with separate archive or legal-retention semantics are not
+  included without an approved model-specific eligibility rule or hold, and are never discovered
+  through wildcard table enumeration;
+- applicable retention holds and enforcement effects are re-evaluated during execution;
+- the operational retention kill switch stops destructive work before processing begins; and
+- model-specific anonymization, child cleanup, and physical deletion behavior remains explicit.
+
+This contract does not require `dry_run`, preview, or simulation behavior, and those interfaces
+must not be added solely to satisfy retention safety. Notification provider receipt, delivery,
+retry, and permanent-failure semantics are separate contracts and are not implied by this ADR.
 
 ## reason
 

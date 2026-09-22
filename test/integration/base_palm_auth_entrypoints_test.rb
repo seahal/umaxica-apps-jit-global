@@ -26,55 +26,17 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "palm auth entrypoint redirects to acme authorize for the selected native client" do
-    [
-      { client_id: "app-ios-rp", redirect_uri: "umaxica://oidc/callback" },
-      { client_id: "app-android-rp", redirect_uri: "com.umaxica.app:/oidc/callback" },
-    ].each do |surface|
-      host! PALM_HOST
+  test "palm does not expose a native authorization launcher before a native client exists" do
+    host! PALM_HOST
 
-      get "/oidc/authorization", params: { client_id: surface.fetch(:client_id) }
-
-      assert_response :redirect
-      uri = URI.parse(response.location)
-      query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-      assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), uri.host
-      assert_equal "/oauth/authorize", uri.path
-      assert_not_equal "jump.umaxica.net", uri.host
-      assert_equal surface.fetch(:client_id), query.fetch("client_id")
-      assert_equal "signup", query.fetch("screen_hint")
-      assert_equal surface.fetch(:redirect_uri), query.fetch("redirect_uri")
-      assert_predicate query["state"], :present?
-      assert_predicate query["nonce"], :present?
-      assert_predicate query["code_challenge"], :present?
+    %w(app-ios-rp app-android-rp unknown-rp).each do |client_id|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(
+          "https://#{PALM_HOST}/oidc/authorization?client_id=#{client_id}",
+          method: :get,
+        )
+      end
     end
-  end
-
-  test "palm auth entrypoint can request sign in intent for the selected native client" do
-    host! PALM_HOST
-
-    get "/oidc/authorization", params: { client_id: "app-ios-rp", screen_hint: "signin" }
-
-    assert_response :redirect
-    uri = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), uri.host
-    assert_equal "/oauth/authorize", uri.path
-    assert_not_equal "jump.umaxica.net", uri.host
-    assert_equal "app-ios-rp", query.fetch("client_id")
-    assert_equal "signin", query.fetch("screen_hint")
-    assert_equal "umaxica://oidc/callback", query.fetch("redirect_uri")
-  end
-
-  test "palm auth entrypoint rejects unknown native client ids" do
-    host! PALM_HOST
-
-    get "/oidc/authorization", params: { client_id: "unknown-rp" }
-
-    assert_response :bad_request
-    assert_equal "Invalid client", response.body
   end
 
   test "base leftover RP callback routes stay unroutable" do
@@ -85,8 +47,8 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # Base Root is the control-plane home. Palm still serves native sign-up links.
-  test "base roots render the control-plane home and palm root exposes sign up links" do
+  # Base Root is the control-plane home. Palm does not expose an unfinished native auth launcher.
+  test "base roots render the control-plane home and palm root exposes no native auth links" do
     host! BASE_APP_HOST
     get "/", params: { ri: "jp" }
 
@@ -117,13 +79,7 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     get "/", params: { ri: "jp" }
 
     assert_response :success
-    assert_equal(
-      [
-        ["Sign up on iOS", palm_app_oidc_authorization_path(client_id: "app-ios-rp", ri: "jp")],
-        ["Sign up on Android", palm_app_oidc_authorization_path(client_id: "app-android-rp", ri: "jp")],
-      ],
-      inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
-    )
+    assert_empty inertia_props.fetch("links")
   end
 end
 

@@ -45,11 +45,7 @@ class Auth::Com::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     get auth_com_settings_passkeys_path(ri: "jp"), headers: browser_headers.merge(host_headers(@host))
 
     assert_response :redirect
-    assert_oidc_authorize_redirect(
-      jump_rt_url_from_location(response.location),
-      host: Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host,
-      client_id: "sign-rp",
-    )
+    assert_auth_local_sign_in_redirect(response.location, surface: :com)
   end
 
   test "index renders sign settings passkeys" do

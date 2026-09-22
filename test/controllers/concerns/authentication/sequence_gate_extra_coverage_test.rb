@@ -148,6 +148,12 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     alias allowed_to? allow_to?
 
+    def authorize!(_record, to:)
+      raise ActionPolicy::Unauthorized unless allowed_to?(to)
+
+      true
+    end
+
     def current_db_sign_in_flow_for_sequence = @cycle
 
     def sign_in_sequence_carrier

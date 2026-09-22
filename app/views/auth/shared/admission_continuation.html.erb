@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <% content_for :page_title, I18n.t("sign.app.social.sessions.continue") %>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+  </head>
+  <body>
+    <form id="auth-admission-continuation-form"
+          method="post"
+          action="<%= action_url %>"
+          data-turbo="false">
+      <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+      <%= hidden_field_tag reference_param, reference %>
+      <%= hidden_field_tag :ri, ri if ri.present? %>
+      <%= hidden_field_tag :pt, pt if pt.present? %>
+    </form>
+    <script nonce="<%= content_security_policy_nonce %>">
+      (function () {
+        const form = document.getElementById("auth-admission-continuation-form");
+        if (form.requestSubmit) {
+          form.requestSubmit();
+        } else {
+          form.submit();
+        }
+      })();
+    </script>
+    <noscript>
+      <button form="auth-admission-continuation-form" type="submit">Continue</button>
+    </noscript>
+  </body>
+</html>

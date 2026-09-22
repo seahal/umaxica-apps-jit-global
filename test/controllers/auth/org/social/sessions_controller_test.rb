@@ -34,11 +34,11 @@ class Auth::Org::Social::SessionsControllerTest < ActionDispatch::IntegrationTes
         scope: "openid profile",
       },
     )
-    get "/sign/in",
-        params: {
-          ri: "jp",
-          admission: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code,
-        }
+    redeem_auth_ceremony_entry!(
+      "/sign/in",
+      reference: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference,
+      params: { ri: "jp" },
+    )
 
     assert_response :see_other
     follow_redirect!

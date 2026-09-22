@@ -52,13 +52,14 @@ module OtpLockable
   end
 
   # Stores OTP credential on this record.
-  def store_otp(otp_private_key, otp_counter, expires_at)
+  def store_otp(otp_private_key, otp_counter, expires_at, now: nil)
+    decision_time = now || self.class.database_now
     attrs = {
       otp_private_key: otp_private_key,
       otp_counter: otp_counter,
       otp_expires_at: Time.zone.at(expires_at),
     }
-    attrs[:otp_last_sent_at] = Time.current if respond_to?(:otp_last_sent_at=)
+    attrs[:otp_last_sent_at] = decision_time if respond_to?(:otp_last_sent_at=)
 
     attrs[:locked_at] = OTP_UNLOCKED_SENTINEL unless locked?
 
@@ -67,7 +68,10 @@ module OtpLockable
 
   # Retrieves OTP credential from this record, or nil when expired/locked/blank.
   def get_otp
-    return nil if otp_private_key.blank? || otp_expired? || locked?
+    return nil if otp_private_key.blank?
+
+    decision_time = self.class.database_now
+    return nil if otp_expired?(now: decision_time) || locked?(now: decision_time)
 
     {
       otp_private_key: otp_private_key,
@@ -91,22 +95,35 @@ module OtpLockable
     update!(attrs)
   end
 
-  def otp_expired?
-    return true if otp_expires_at.is_a?(Float) && otp_expires_at == -Float::INFINITY
+  def otp_expired?(now: nil)
+    expiry = otp_expires_at
+    return true if expiry.blank?
+    # PostgreSQL timestamp infinity is a valid retention sentinel in a few
+    # domains, but an authentication OTP must never become timeless. Treat
+    # both signs of infinity, and values that cannot be compared as a time,
+    # as expired rather than allowing malformed state to authenticate.
+    return true if expiry.respond_to?(:infinite?) && expiry.infinite?
 
-    otp_expires_at.nil? || otp_expires_at <= Time.current
+    expiry <= (now || self.class.database_now)
+  rescue ArgumentError, TypeError
+    true
   end
 
-  def otp_active?
-    !otp_expired? && !locked?
+  def otp_active?(now: nil)
+    decision_time = now || self.class.database_now
+    !otp_expired?(now: decision_time) && !locked?(now: decision_time)
   end
 
-  def locked?
-    lockout_active? || attempts_locked_without_expiry?
+  def locked?(now: nil)
+    decision_time = now || self.class.database_now
+    lockout_active?(now: decision_time) || attempts_locked_without_expiry?(now: decision_time)
   end
 
-  def lockout_active?
-    lockout_expires_at.present? && lockout_expires_at > Time.current
+  def lockout_active?(now: nil)
+    expiry = lockout_expires_at
+    return false if expiry.blank?
+
+    expiry > (now || self.class.database_now)
   end
 
   def lockout_expires_at
@@ -115,11 +132,11 @@ module OtpLockable
     locked_at
   end
 
-  def reregistration_window_active?
+  def reregistration_window_active?(now: nil)
     anchor = otp_window_anchor
     return false if anchor.blank? || anchor == -Float::INFINITY
 
-    anchor > CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW.ago
+    anchor > (now || self.class.database_now) - CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW
   end
 
   # Increments the attempt counter under a row lock and applies the lockout once
@@ -130,15 +147,16 @@ module OtpLockable
     operation =
       lambda do
         with_lock do
-          next if lockout_active?
+          decision_time = self.class.database_now
+          next if lockout_active?(now: decision_time)
 
-          unless attempt_window_active?
-            self.otp_last_sent_at = Time.current if respond_to?(:otp_last_sent_at=)
+          unless attempt_window_active?(now: decision_time)
+            self.otp_last_sent_at = decision_time if respond_to?(:otp_last_sent_at=)
             self.otp_attempts_count = 0
           end
 
           self.otp_attempts_count = otp_attempts_count.to_i + 1
-          self.locked_at = OTP_LOCKOUT_DURATION.from_now if otp_attempts_count >= MAX_OTP_ATTEMPTS
+          self.locked_at = decision_time + OTP_LOCKOUT_DURATION if otp_attempts_count >= MAX_OTP_ATTEMPTS
           save!(validate: false)
         end
         reload
@@ -149,15 +167,16 @@ module OtpLockable
 
   private
 
-  def attempt_window_active?
+  def attempt_window_active?(now: nil)
     anchor = otp_window_anchor
     return false if anchor.blank? || anchor == -Float::INFINITY
 
-    anchor > OTP_ATTEMPT_WINDOW.ago
+    anchor > (now || self.class.database_now) - OTP_ATTEMPT_WINDOW
   end
 
-  def attempts_locked_without_expiry?
-    lockout_expires_at.blank? && attempt_window_active? && otp_attempts_count.to_i >= MAX_OTP_ATTEMPTS
+  def attempts_locked_without_expiry?(now: nil)
+    lockout_expires_at.blank? && attempt_window_active?(now: now) &&
+      otp_attempts_count.to_i >= MAX_OTP_ATTEMPTS
   end
 
   # Anchor for time windows: the explicit otp_last_sent_at column when it exists

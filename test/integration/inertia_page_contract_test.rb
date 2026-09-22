@@ -86,10 +86,7 @@ class InertiaPageContractTest < ActionDispatch::IntegrationTest
 
     assert_predicate location, :present?
 
-    uri = URI.parse(location)
-
-    assert_equal @host, uri.host
-    assert_equal "/oauth/authorize", uri.path
+    assert_auth_ceremony_redirect(location, surface: :app)
   end
 
   test "a plain unauthenticated browser request still redirects" do

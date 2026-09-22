@@ -29,12 +29,12 @@ module Base
           if intent == "sign_up"
             auth_com_sign_up_url(
               ri: params[:ri], host: oidc_sign_host, protocol: "https",
-              admission: admission.code,
+              entry_ref: admission.reference,
             )
           else
             auth_com_sign_in_url(
               ri: params[:ri], host: oidc_sign_host, protocol: "https",
-              admission: admission.code,
+              entry_ref: admission.reference,
             )
           end
         redirect_to_jump_url(auth_url, status: :see_other)

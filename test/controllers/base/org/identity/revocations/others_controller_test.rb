@@ -22,6 +22,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
   test "destroy revokes every other staff session and keeps the current one" do
     headers = as_staff_headers(@operator, host: @host)
     current = authentication_harness_latest_token(@operator)
+    mark_step_up_satisfied!(current)
     other = OperatorToken.create!(
       staff: @operator,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -37,5 +38,38 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
     assert_redirected_to base_org_sessions_path(ri: "jp")
     assert_not_predicate other.reload, :currently_usable?
     assert_predicate current.reload, :currently_usable?
+  end
+
+  test "destroy requires a fresh step-up" do
+    headers = as_staff_headers(@operator, host: @host)
+    current = authentication_harness_latest_token(@operator)
+    other = OperatorToken.create!(
+      staff: @operator,
+      staff_token_status_id: OperatorTokenStatus::NOTHING,
+      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+      public_id: "org_other_#{SecureRandom.hex(4)}",
+      discard_at: 1.day.from_now,
+    )
+
+    delete base_org_identity_other_sessions_url(ri: "jp", host: @host), headers: headers
+
+    assert_response :see_other
+    assert_equal "/verification/setup/new", URI.parse(response.location).path
+    assert_predicate current.reload, :currently_usable?
+    assert_predicate other.reload, :currently_usable?
+  end
+
+  private
+
+  def mark_step_up_satisfied!(token)
+    token.update_columns(
+      last_step_up_at: Time.current,
+      last_step_up_scope: "session_revoke_all",
+      last_step_up_aal: "aal2",
+      last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:org",
+    )
   end
 end

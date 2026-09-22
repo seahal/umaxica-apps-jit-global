@@ -138,7 +138,10 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
 
     titles =
       %w(jp us).to_h do |region|
-        get(auth_app_sign_in_path(ri: region, admission: admission_code_for("app", "sign_in")))
+        redeem_auth_ceremony_entry!(
+          auth_app_sign_in_path, reference: admission_reference_for("app", "sign_in"),
+                                 params: { ri: region },
+        )
 
         assert_response :see_other
         follow_redirect!
@@ -213,7 +216,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
   # Issues a real transaction and redeems it through `BaseAuthAdmissionCoordinator`, the same path
   # `AuthOidcEntrancesTest` and `AuthRegionContractTest` use, so the code carries a genuine
   # signature rather than a stub.
-  def admission_code_for(surface, intent)
+  def admission_reference_for(surface, intent)
     client = OidcClientRegistry.find!("core-next-rp")
     transaction =
       OidcAuthorizationTransactionCoordinator.issue!(
@@ -230,7 +233,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
   end
 
   def assert_title_shape(title, tld)

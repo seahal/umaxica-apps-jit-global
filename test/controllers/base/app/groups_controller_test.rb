@@ -64,7 +64,7 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
     get base_app_groups_url(ri: "jp", host: @host), headers: host_headers(@host)
 
     assert_response :redirect
-    assert_oidc_authorize_redirect(response.location, host: @host)
+    assert_auth_ceremony_redirect(response.location, surface: :app)
   end
 
   test "client creates and views a group in the selected account" do

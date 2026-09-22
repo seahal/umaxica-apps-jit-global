@@ -4,10 +4,10 @@
 require "test_helper"
 
 # OidcAccessTokenAuthenticator is the userinfo gate for RP-held Access JWTs. Every case below mints
-# a real token for a real Browser Session / RP Session and changes exactly one fact about it, so a
-# refusal can only come from the check that owns that fact.
+# a real token for a real Base Browser Session / RP Session and changes exactly one fact about it,
+# so a refusal can only come from the check that owns that fact.
 class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
-  test "a well-formed client Access JWT for an active RP Session authenticates" do
+  test "a well-formed client Access JWT for an active Base Browser Session authenticates" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
     user = Client.create!(status_id: ClientStatus::ACTIVE)
@@ -21,7 +21,8 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     )
     token = AuthenticationTokenService.encode(
       user, host: OidcIssuer.host_for_resource_type("client"), resource_type: "client",
-            session_public_id: root.public_id, oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
+            session_public_id: root.public_id, base_session_public_id: root.public_id,
+            oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
             expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type("client"),
             audiences: [client.aud], subject: OidcSubject.for(user, resource_type: "client"),
             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
@@ -33,10 +34,41 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
 
     assert_predicate result, :success?
     assert_equal user, result.resource
-    assert_equal session, result.token
+    assert_equal root, result.token
   end
 
-  test "operator and visitor Access JWTs resolve against their own RP Session and actor" do
+  test "a well-formed client Access JWT authenticates without an RP Session lookup" do
+    client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
+      .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
+    user = Client.create!(status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(
+      user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    session = ClientRpSession.create!(
+      client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+    )
+    token = AuthenticationTokenService.encode(
+      user, host: OidcIssuer.host_for_resource_type("client"), resource_type: "client",
+            session_public_id: root.public_id, base_session_public_id: root.public_id,
+            oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
+            expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type("client"),
+            audiences: [client.aud], subject: OidcSubject.for(user, resource_type: "client"),
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
+    )
+
+    ClientRpSession.stub(:find_by, ->(**) { flunk("normal Access JWT authentication must not query RP Sessions") }) do
+      result = OidcAccessTokenAuthenticator.call(
+        access_token: token, resource_type: "client", host: OidcIssuer.host_for_resource_type("client"),
+      )
+
+      assert_predicate result, :success?
+      assert_equal user, result.resource
+    end
+  end
+
+  test "operator and visitor Access JWTs resolve against their own Base Session and actor" do
     { "operator" => [Operator, OperatorToken, OperatorRpSession, :staff, :operator_token],
       "visitor" => [Visitor, VisitorToken, VisitorRpSession, :visitor, :visitor_token], }.each do |type, spec|
       actor_class, token_class, session_class, actor_key, root_key = spec
@@ -50,7 +82,8 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
       )
       token = AuthenticationTokenService.encode(
         actor, host: OidcIssuer.host_for_resource_type(type), resource_type: type,
-               session_public_id: root.public_id, oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
+               session_public_id: root.public_id, base_session_public_id: root.public_id,
+               oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
                expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type(type),
                audiences: [client.aud], subject: OidcSubject.for(actor, resource_type: type),
                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(type), client_id: client.client_id,
@@ -76,7 +109,8 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     )
     token = AuthenticationTokenService.encode(
       user, host: OidcIssuer.host_for_resource_type("client"), resource_type: "client",
-            session_public_id: root.public_id, oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
+            session_public_id: root.public_id, base_session_public_id: root.public_id,
+            oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
             expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type("client"),
             audiences: [client.aud], subject: OidcSubject.for(user, resource_type: "client"),
             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
@@ -108,7 +142,8 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     key = OpenSSL::PKey::EC.generate("prime256v1")
     token = AuthenticationTokenService.encode(
       user, host: OidcIssuer.host_for_resource_type("client"), resource_type: "client",
-            session_public_id: root.public_id, oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
+            session_public_id: root.public_id, base_session_public_id: root.public_id,
+            oidc_sid: session.public_id, oidc_jti: session.oidc_jti,
             expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type("client"),
             audiences: [client.aud], subject: OidcSubject.for(user, resource_type: "client"),
             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
@@ -124,7 +159,7 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     assert_equal "invalid_token", result.error
   end
 
-  test "each broken binding between the token and its session or actor is refused" do
+  test "each broken binding between the token and its Base Session or actor is refused" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
     operator_client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
@@ -133,10 +168,9 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     cases = {
       "undecodable token" => { token: "not-a-jwt" },
       "no openid scope" => { scopes: %w(profile) },
-      "RP Session bound to an unknown client" => { session_client_id: "unknown-rp" },
-      "RP Session bound to another realm's client" => { session_client_id: operator_client.client_id },
-      "jti of a different length" => { jti: "short" },
-      "jti of the same length but different value" => { jti: SecureRandom.uuid },
+      "token bound to an unknown client" => { token_client_id: "unknown-rp" },
+      "token bound to another realm's client" => { token_client_id: operator_client.client_id },
+      "missing Base Session binding" => { missing_base_session: true },
       "subject of another actor" => { subject: "someone-else" },
       "revoked parent Browser Session" => { root_status: ClientTokenStatus::REVOKED },
       "admin-locked actor" => {
@@ -154,7 +188,7 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
       user = Client.create!({ status_id: ClientStatus::ACTIVE }.merge(change.fetch(:user_attrs, {})))
       root = ClientToken.create!(user: user, user_token_status_id: change.fetch(:root_status, ClientTokenStatus::ACTIVE))
       session = ClientRpSession.create!(
-        client_token: root, oidc_client_id: change.fetch(:session_client_id, client.client_id), oidc_scope: "openid",
+        client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
         oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
       )
       token =
@@ -162,11 +196,13 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
           AuthenticationTokenService.encode(
             user, host: host, resource_type: "client",
                   session_public_id: root.public_id, oidc_sid: session.public_id,
-                  oidc_jti: change.fetch(:jti, session.oidc_jti), expires_at: 5.minutes.from_now,
+                  base_session_public_id: (root.public_id unless change[:missing_base_session]),
+                  oidc_jti: session.oidc_jti, expires_at: 5.minutes.from_now,
                   scopes: change.fetch(:scopes, %w(openid)), issuer: OidcIssuer.for_resource_type("client"),
                   audiences: [client.aud],
                   subject: change.fetch(:subject, OidcSubject.for(user, resource_type: "client")),
-                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
+                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
+                  client_id: change.fetch(:token_client_id, client.client_id),
           )
         end
 
@@ -177,6 +213,41 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
 
       assert_equal expected, result.error, label
     end
+  end
+
+  test "an Access JWT cannot use a Base Session belonging to another actor" do
+    client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
+      .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
+    first_user = Client.create!(status_id: ClientStatus::ACTIVE)
+    second_user = Client.create!(status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(user: first_user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    session = ClientRpSession.create!(
+      client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+    )
+    token = AuthenticationTokenService.encode(
+      second_user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: root.public_id,
+      base_session_public_id: root.public_id,
+      oidc_sid: session.public_id,
+      oidc_jti: session.oidc_jti,
+      expires_at: 5.minutes.from_now,
+      scopes: %w(openid),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [client.aud],
+      subject: OidcSubject.for(second_user, resource_type: "client"),
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
+      client_id: client.client_id,
+    )
+
+    result = OidcAccessTokenAuthenticator.call(
+      access_token: token, resource_type: "client", host: OidcIssuer.host_for_resource_type("client"),
+    )
+
+    assert_not result.success?
+    assert_equal "invalid_token", result.error
   end
 
   test "a blank token is refused before decoding" do

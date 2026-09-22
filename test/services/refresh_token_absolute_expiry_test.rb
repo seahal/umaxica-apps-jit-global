@@ -13,12 +13,22 @@ class RefreshTokenAbsoluteExpiryTest < ActiveSupport::TestCase
 
   %i(app com org).each do |surface|
     test "#{surface} refresh rotation preserves the fixed absolute session deadline" do
-      travel_to Time.utc(2026, 9, 13, 9, 0) do
-        token = create_token(surface, expires_at: 1.day.from_now)
-        absolute_expiry = token.discard_at
-        refresh_token = token.rotate_refresh_token!(discard_at: absolute_expiry + 1.day)
+      model = token_model_for(surface)
+      database_time = model.database_now
 
-        result = AcmeRefreshTokenIssuer.call(refresh_token: refresh_token)
+      travel_to database_time do
+        token = create_token(surface, expires_at: database_time + 1.day)
+        absolute_expiry = token.discard_at
+        refresh_token = nil
+
+        model.stub(:database_now, database_time) do
+          refresh_token = token.rotate_refresh_token!(discard_at: absolute_expiry + 1.day)
+        end
+
+        result =
+          model.stub(:database_now, database_time) do
+            AcmeRefreshTokenIssuer.call(refresh_token: refresh_token)
+          end
 
         assert_predicate result, :success?
         assert_equal absolute_expiry, result.token.discard_at
@@ -28,21 +38,39 @@ class RefreshTokenAbsoluteExpiryTest < ActiveSupport::TestCase
     end
 
     test "#{surface} refresh is rejected after the absolute session deadline" do
-      travel_to Time.utc(2026, 9, 13, 9, 0)
-      token = create_token(surface, expires_at: 1.hour.from_now)
-      absolute_expiry = token.discard_at
-      refresh_token = token.rotate_refresh_token!
-      travel_to absolute_expiry + 1.second
+      model = token_model_for(surface)
+      database_time = model.database_now
 
-      result = AcmeRefreshTokenIssuer.call(refresh_token: refresh_token)
+      travel_to database_time do
+        token = create_token(surface, expires_at: database_time + 1.hour)
+        absolute_expiry = token.discard_at
+        refresh_token =
+          model.stub(:database_now, database_time) do
+            token.rotate_refresh_token!
+          end
+        travel_to absolute_expiry + 1.second
 
-      assert_not_predicate result, :success?
-      assert_equal :inactive_token, result.reason
-      assert_not_predicate token.reload, :currently_usable?
+        result =
+          model.stub(:database_now, absolute_expiry + 1.second) do
+            AcmeRefreshTokenIssuer.call(refresh_token: refresh_token)
+          end
+
+        assert_not_predicate result, :success?
+        assert_equal :inactive_token, result.reason
+        assert_not_predicate token.reload, :currently_usable?
+      end
     end
   end
 
   private
+
+  def token_model_for(surface)
+    case surface
+    when :app then ClientToken
+    when :com then VisitorToken
+    when :org then OperatorToken
+    end
+  end
 
   def create_token(surface, expires_at:)
     case surface

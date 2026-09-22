@@ -65,7 +65,10 @@ class BaseLocalAuthenticationEntryTest < ActionDispatch::IntegrationTest
 
       assert_equal auth_host, location.host
       assert_equal public_send(surface.fetch(:auth_path)), location.path
-      assert_predicate Rack::Utils.parse_nested_query(location.query)["admission"], :present?
+      query = Rack::Utils.parse_nested_query(location.query)
+
+      assert_predicate query["entry_ref"], :present?
+      assert_nil query["admission"]
     end
   end
 

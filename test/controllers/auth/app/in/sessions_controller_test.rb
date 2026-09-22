@@ -335,7 +335,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_includes response.location, "rt="
   end
 
-  test "update promotes pending email OIDC sign-in cycle and signs in Sign while preserving callback capacity" do
+  test "OIDC email verification reaches the Auth handoff without issuing an Auth session" do
     TurnstileVerifierStub.challenge_enabled = true
     first_active = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
     first_active.rotate_refresh_token!
@@ -350,7 +350,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     # Auth is ceremony-only: a direct `login_challenge` param no longer admits the ceremony (see
     # AuthCeremonyAdmission#admit_or_render_sign_ceremony!). The entry has to redeem a real
     # admission code issued by Base, same as AuthOidcEntrancesTest and AuthenticationFlowTest.
-    admission = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).code
+    admission_reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
 
     # `host!` (not just a per-call `Host` header) so the integration session's cookie jar
     # associates the domain-scoped session cookie with this host and resends it on
@@ -358,7 +358,10 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     # `oidc_authorization_login_challenge`) is silently dropped and the redirect target bridges
     # back to Base as if nothing had been admitted.
     host!(@host)
-    get(auth_app_sign_in_url(ri: "jp", admission: admission), headers: { "Host" => @host })
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: admission_reference,
+                             params: { ri: "jp" }, headers: { "Host" => @host },
+    )
 
     assert_response :see_other
     follow_redirect!(headers: { "Host" => @host })
@@ -384,40 +387,36 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     )
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_in_session_path(ri: "jp")
+    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+
+    assert_no_difference -> { ClientToken.not_revoked.where(user_id: @user.id, rotated_at: nil).count } do
+      follow_redirect!
+      follow_redirect!
+    end
+    assert_response :success
+
+    post(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: browser_headers.merge("Host" => @host))
+
+    assert_response :success
+    result_code = response.body[/name="result"[^>]+value="([^"]+)"/, 1]
+    transaction_ref = response.body[/name="transaction_ref"[^>]+value="([^"]+)"/, 1]
+
+    assert_predicate result_code, :present?
+    assert_predicate transaction_ref, :present?
 
     cycle = ClientSignInFlow.where(principal_id: @user.id).recent_first.first
 
-    assert_predicate cycle, :sign_in_session_limit_pending?
-
-    assert_no_difference -> { ClientToken.not_revoked.where(user_id: @user.id, rotated_at: nil).count } do
-      patch(
-        auth_app_sign_in_session_url(ri: "jp"),
-        params: { revoke_refs: [first_active.signed_ref] },
-        headers: browser_headers.merge("Host" => @host),
-      )
-    end
-
-    # An OIDC-admitted cycle resumes at Auth's local, CSRF-protected handoff page. The result is
-    # issued only by its POST and then sent to Base in a POST body, never in the redirect URL.
-    assert_response :redirect
-    assert_equal "/sign/oidc/handoff", URI.parse(response.location).path
-    assert_nil Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)["result"]
-    assert_predicate response.headers["Set-Cookie"].to_s, :present?
+    assert_predicate cycle, :sign_in_dashboard_pending?
+    assert_nil cycle.token_id
     assert_nil session[:oidc_authorization_login_challenge]
 
     cycle.reload
-    issued_session = ClientToken.find(cycle.token_id)
     transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: login_challenge)
 
-    # Result registration is deliberately deferred to the CSRF-protected local handoff POST;
-    # this redirect must not mutate the Base transaction merely by rendering or navigating.
     assert_predicate cycle, :sign_in_dashboard_pending?
-    assert_predicate issued_session, :active?
-    assert_equal "pending", transaction.status
-    assert_nil transaction.actor_ref
+    assert_equal "authenticated", transaction.status
+    assert_equal @user.public_id, transaction.actor_ref
     assert_nil transaction.session_ref
-    assert_nil transaction.auth_method
     assert_equal 2, ClientToken.not_revoked.where(user_id: @user.id, rotated_at: nil).count
   ensure
     TurnstileVerifierStub.challenge_enabled = false
@@ -666,15 +665,12 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   test "restricted session is blocked on non-session base app routes" do
     token = create_restricted_session(@user)
     base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
-    headers = {
-      "Host" => base_host,
-      "X-TEST-CURRENT-USER" => @user.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
+    headers = as_user_headers_with_token(@user, token, host: base_host)
 
     get base_app_accounts_url(ri: "jp", host: base_host), headers: headers
 
-    assert_response :bad_request
+    assert_response :locked
+    assert_equal RestrictedSessionGuard::BLOCKED_MESSAGE, response.body
   end
 
   private
@@ -901,7 +897,16 @@ class Auth::App::Sign::In::SessionsControllerTest
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service =
+      if normalized.include?("base") || normalized.include?("www.")
+        "BASE"
+      elsif normalized.include?("acme")
+        "ACME"
+      elsif normalized.include?("core")
+        "CORE"
+      else
+        "SIGN"
+      end
     surface =
       if service == "SIGN"
         case resource_type

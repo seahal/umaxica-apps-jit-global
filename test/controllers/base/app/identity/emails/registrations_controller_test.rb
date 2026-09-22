@@ -182,8 +182,11 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
     first_counter = pending.otp_counter
 
-    travel 5.minutes do
-      post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
+    decision_time = pending.otp_last_sent_at + 5.minutes
+    ClientEmail.stub(:database_now, decision_time) do
+      travel 5.minutes do
+        post base_app_identity_emails_registration_redelivery_url(ri: "jp", host: @host), headers: @headers
+      end
     end
 
     assert_response :redirect

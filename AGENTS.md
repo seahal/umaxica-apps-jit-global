@@ -244,7 +244,9 @@ execution outweighs re-establishing context.
 Completed tests, validations, verifications, audits, security checks and performance checks leave a
 short record in `evidence/` when retaining the result is useful. Records describe work that was
 actually performed — never plans, intentions, or unverified claims. A check that could not be
-completed is recorded as such, with the reason and whatever was observed.
+completed is recorded as such, with the reason and whatever was observed. Every record states the
+full git commit hash (`git rev-parse HEAD`) the work was performed against, and notes when the
+worktree had uncommitted changes that affected the result.
 
 - `evidence/` is flat; no subdirectories.
 - Only `.md` files.

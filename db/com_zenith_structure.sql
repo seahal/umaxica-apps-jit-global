@@ -5419,7 +5419,7 @@ CREATE INDEX index_visitors_on_withdrawn_at ON public.visitors USING btree (with
 --
 
 ALTER TABLE ONLY public.company_units
-    ADD CONSTRAINT fk_company_units_parent_same_company FOREIGN KEY (parent_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_company_units_parent_same_company FOREIGN KEY (parent_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -5427,7 +5427,7 @@ ALTER TABLE ONLY public.company_units
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_individual_memberships_unit_same_company FOREIGN KEY (company_unit_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_individual_memberships_unit_same_company FOREIGN KEY (company_unit_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -5515,7 +5515,7 @@ ALTER TABLE ONLY public.individual_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_241fa58f6a FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_rails_241fa58f6a FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE NOT VALID;
 
 
 --
@@ -5571,7 +5571,7 @@ ALTER TABLE ONLY public.individual_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.visitor_banners
-    ADD CONSTRAINT fk_rails_329012d103 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
+    ADD CONSTRAINT fk_rails_329012d103 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) NOT VALID;
 
 
 --
@@ -5619,7 +5619,7 @@ ALTER TABLE ONLY public.company_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_39edef8680 FOREIGN KEY (approved_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_39edef8680 FOREIGN KEY (approved_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -5643,7 +5643,7 @@ ALTER TABLE ONLY public.visitor_passkeys
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flows
-    ADD CONSTRAINT fk_rails_3e7b55d34f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
+    ADD CONSTRAINT fk_rails_3e7b55d34f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) NOT VALID;
 
 
 --
@@ -5707,7 +5707,7 @@ ALTER TABLE ONLY public.company_administration_grants
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_4d4952ecfc FOREIGN KEY (to_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_4d4952ecfc FOREIGN KEY (to_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -5755,7 +5755,7 @@ ALTER TABLE ONLY public.visitor_preference_themes
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -5771,7 +5771,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_ceremonies
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_606617dd12 FOREIGN KEY (visitor_withdrawal_flow_id) REFERENCES public.visitor_withdrawal_flows(id);
+    ADD CONSTRAINT fk_rails_606617dd12 FOREIGN KEY (visitor_withdrawal_flow_id) REFERENCES public.visitor_withdrawal_flows(id) NOT VALID;
 
 
 --
@@ -5779,7 +5779,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_641ad18d67 FOREIGN KEY (revoked_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_rails_641ad18d67 FOREIGN KEY (revoked_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
 
 
 --
@@ -5851,7 +5851,7 @@ ALTER TABLE ONLY public.visitor_preference_regions
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_77f6de8097 FOREIGN KEY (membership_kind_id) REFERENCES public.individual_membership_kinds(id);
+    ADD CONSTRAINT fk_rails_77f6de8097 FOREIGN KEY (membership_kind_id) REFERENCES public.individual_membership_kinds(id) NOT VALID;
 
 
 --
@@ -5859,7 +5859,7 @@ ALTER TABLE ONLY public.individual_memberships
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_790f1edfff FOREIGN KEY (membership_state_id) REFERENCES public.individual_membership_states(id);
+    ADD CONSTRAINT fk_rails_790f1edfff FOREIGN KEY (membership_state_id) REFERENCES public.individual_membership_states(id) NOT VALID;
 
 
 --
@@ -5875,7 +5875,7 @@ ALTER TABLE ONLY public.visitor_retention_holds
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flows
-    ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id);
+    ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) NOT VALID;
 
 
 --
@@ -5907,7 +5907,7 @@ ALTER TABLE ONLY public.individual_view_grants
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -5915,7 +5915,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 --
 
 ALTER TABLE ONLY public.individuals
-    ADD CONSTRAINT fk_rails_9297b83ebd FOREIGN KEY (visitor_identity_id) REFERENCES public.visitor_identities(id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_rails_9297b83ebd FOREIGN KEY (visitor_identity_id) REFERENCES public.visitor_identities(id) ON DELETE RESTRICT NOT VALID;
 
 
 --
@@ -5987,7 +5987,7 @@ ALTER TABLE ONLY public.company_administration_grants
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_ad4bcaff08 FOREIGN KEY (revoke_reason_id) REFERENCES public.individual_membership_revoke_reasons(id);
+    ADD CONSTRAINT fk_rails_ad4bcaff08 FOREIGN KEY (revoke_reason_id) REFERENCES public.individual_membership_revoke_reasons(id) NOT VALID;
 
 
 --
@@ -6043,7 +6043,7 @@ ALTER TABLE ONLY public.visitor_privacy_requests
 --
 
 ALTER TABLE ONLY public.visitor_identities
-    ADD CONSTRAINT fk_rails_bc90881f37 FOREIGN KEY (status_id) REFERENCES public.visitor_identity_states(id);
+    ADD CONSTRAINT fk_rails_bc90881f37 FOREIGN KEY (status_id) REFERENCES public.visitor_identity_states(id) NOT VALID;
 
 
 --

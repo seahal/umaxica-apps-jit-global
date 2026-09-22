@@ -72,13 +72,9 @@ class PalmRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "palm/app/sitemaps", recognized[:controller]
     assert_equal "show", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{PALM_HOST}/oidc/authorization",
-      method: :get,
-    )
-
-    assert_equal "palm/app/oidc/authorizations", recognized[:controller]
-    assert_equal "show", recognized[:action]
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{PALM_HOST}/oidc/authorization", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{PALM_HOST}/oauth/callback", method: :get)

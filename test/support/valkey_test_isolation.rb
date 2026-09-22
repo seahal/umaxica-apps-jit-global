@@ -56,6 +56,7 @@ module ValkeyTestIsolation
       "auth_state:authorization_code:#{run_id}:#{worker_id}:",
       "auth_state:sign_out_notice:#{run_id}:#{worker_id}:",
       "auth_state:admission:#{run_id}:#{worker_id}:",
+      "auth_state:admission-reference:#{run_id}:#{worker_id}:",
     ].each do |prefix|
       Umaxica::Valkey::Cleanup.delete_by_prefix(auth_connection, prefix: prefix)
     end

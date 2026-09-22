@@ -343,17 +343,20 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     first_telephone = VisitorTelephone.find_by!(public_id: first_public_id)
     first_visitor = first_telephone.visitor
 
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      post auth_com_sign_up_telephone_url(ri: "jp"),
-           params: {
-             visitor_telephone: {
-               raw_number: "+819012300005",
-               confirm_policy: "1",
-               confirm_using_mfa: "1",
+    decision_time = first_telephone.created_at + CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second
+    VisitorTelephone.stub(:database_now, decision_time) do
+      travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+        post auth_com_sign_up_telephone_url(ri: "jp"),
+             params: {
+               visitor_telephone: {
+                 raw_number: "+819012300005",
+                 confirm_policy: "1",
+                 confirm_using_mfa: "1",
+               },
+               "cf-turnstile-response": "test",
              },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
+             headers: default_headers
+      end
     end
 
     assert_response :redirect

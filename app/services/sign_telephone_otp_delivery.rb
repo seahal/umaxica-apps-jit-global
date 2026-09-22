@@ -5,7 +5,8 @@
 class SignTelephoneOtpDelivery
   OTP_EXPIRATION = CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL
 
-  def self.assign(telephone, now: Time.current)
+  def self.assign(telephone, now: nil)
+    now ||= telephone.class.database_now
     new(telephone, now: now).assign
   end
 

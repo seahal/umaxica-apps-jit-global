@@ -49,8 +49,9 @@ mutates session, refresh, preference, dashboard, withdrawal, token, account, or 
 state from a sign-side route, that behavior is a migration gap tracked by the Identity Authority
 inversion plans, not a competing source of truth.
 
-Current browser route contract keeps Acme as the only OP/AS authority. RP browser start and callback
-routes use `/oidc/authorization` and `/oidc/callback`; Acme owns the protocol `/oauth/*` surface and
+Current browser route contract keeps Acme as the only OP/AS authority. Browser RP start and callback
+routes use `/oidc/authorization` and `/oidc/callback`; Palm is excluded from the browser RP launcher
+contract and retains only its inert native callback compatibility stub. Acme owns the protocol `/oauth/*` surface and
 `/oidc/logout`, while RP local sign-out remains `/sign/out/new`, `/sign/out/edit`, `/sign/out`, and
 `/sign/out/complete` on Auth, Core, Side, and Palm. Base local sign-out confirms on
 `/sign/out/edit`, mutates on `POST /sign/out`, and completes with `303` to `/lobby`. Social login

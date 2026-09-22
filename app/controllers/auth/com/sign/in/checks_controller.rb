@@ -8,16 +8,13 @@ module Auth
         class ChecksController < ::Auth::Com::ApplicationController
           include SignComInCheckControllerSupport
 
-          AUTHENTICATION_MODE = :private
-          declare_authentication_mode! :private
+          AUTHENTICATION_MODE = :open
+          declare_authentication_mode! :open
 
-          before_action :authenticate_visitor!
+          prepend_before_action :authenticate_sign_in_sequence_actor!
+          ensure_fqdn_gate_first!
           before_action :continue_checkpoint_sequence_without_content!
 
-          # TODO: Action Policy authorization is not yet enforced here.
-          # This sign-in ceremony step gates with allowed_to?, which does not count toward
-          # verify_authorized, so its render path is expected to raise UnauthorizedAction.
-          # Audit the sign-in sequence boundary before choosing the authorize! rule.
           def show = super
         end
       end

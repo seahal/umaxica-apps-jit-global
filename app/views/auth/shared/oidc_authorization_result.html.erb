@@ -11,6 +11,7 @@
           action="<%= completion_url %>"
           data-turbo="false">
       <%= hidden_field_tag :result, result_token %>
+      <%= hidden_field_tag :transaction_ref, transaction_ref %>
       <%= hidden_field_tag :ri, ri if ri.present? %>
     </form>
     <script nonce="<%= content_security_policy_nonce %>">

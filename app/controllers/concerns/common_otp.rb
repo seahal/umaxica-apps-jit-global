@@ -59,9 +59,10 @@ module CommonOtp
       otp_count_number = generate_otp_counter
       hotp = ROTP::HOTP.new(otp_private_key)
       otp_code = hotp.at(otp_count_number)
-      expires_at = expiration_minutes.minutes.from_now.to_i
+      decision_time = record.class.database_now
+      expires_at = (decision_time + expiration_minutes.minutes).to_i
 
-      record.store_otp(otp_private_key, otp_count_number, expires_at)
+      record.store_otp(otp_private_key, otp_count_number, expires_at, now: decision_time)
       otp_code.to_s
     end
   end
@@ -81,7 +82,8 @@ module CommonOtp
     otp_count_number = generate_otp_counter
     hotp = ROTP::HOTP.new(otp_private_key)
     otp_code = hotp.at(otp_count_number)
-    expires_at = expiration_minutes.minutes.from_now
+    decision_time = record.class.database_now
+    expires_at = decision_time + expiration_minutes.minutes
 
     record.otp_private_key = otp_private_key
     record.otp_counter = otp_count_number

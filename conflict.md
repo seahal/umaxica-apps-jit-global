@@ -26,44 +26,35 @@ accepted ADRs, implementation plans, or evidence.
 
 ## CF-002 — Isolated Rails test boundary is incomplete
 
-- Status: BLOCKS_SLICE
+- Status: CLOSED_FOR_ISOLATED_TEST_VERIFICATION
 - Severity: P1
 - Requirement: Phase 0 verification and every test-gated implementation slice
-- Evidence: `bundle check` succeeds and Bundler loads `pg` 1.6.3. A direct
-  `scripts/test-environment-check` invocation uses the system Ruby and fails with
-  `LoadError: cannot load such file -- pg`; `bundle exec scripts/test-environment-check` fails
-  because `VALKEY_TEST_HOST` and `VALKEY_TEST_PORT` are unset; the bundled affected `bin/rails test`
-  boot fails before test execution for the same missing test Valkey configuration. Attempts with the
-  repository's explicit loopback Valkey URL shape booted Rails and reached the configured PostgreSQL
-  host, but the focused authority test failed before assertions because the test surface schema
-  lacks the `organizations` relation (`PG::UndefinedTable`). The configured `valkey` service did not
-  respond to readiness checks. The test-scoped `RAILS_ENV=test ... bundle exec bin/jobs check` did
-  pass with disposable local variable values, but
-  `RAILS_ENV=development ... bundle exec bin/jobs check` with the required local boot variables
-  reaches recurring-task loading but cannot resolve the configured PostgreSQL host `primary`; the
-  production equivalent stops at missing `TRUSTED_PROXIES`. Current focused Rails tests likewise
-  stop before assertions because PostgreSQL is not listening at `127.0.0.1:5432`, so those checks
-  remain unverified.
-- Conflict: The repository requires isolated Rails/Minitest verification, but the hostname-based
-  test Valkey service is not responsive, the primary test database remains incomplete for the full
-  fixture set, and the available surface databases require explicit loopback test variables. This
-  prevents treating the focused surface runs as a full-suite or deployment-topology proof.
-- Impact: Rails tests, route/runtime checks, database connection proofs, and Solid Queue integration
-  checks are currently unverified.
-- Current-cycle action: Preserve the historical isolated-service results as historical evidence and
-  use only explicitly isolated services for any new regression slice. The current session has no
-  usable PostgreSQL/Valkey listener, so no new database-backed result is promoted to a full-suite,
-  worker-runtime, or production-readiness claim.
-- Safe to defer because: no application behavior is enabled by this environment failure, and no
-  datastore fallback is safe.
-- Next-cycle action: Provision or restore the repository's explicit isolated PostgreSQL/Valkey test
-  topology, apply only the approved test schema preparation, provide the required
-  development/production boot variables without using shared data stores, then rerun the narrow
-  baseline through `scripts/test-isolated` and the environment-specific Solid Queue checks.
+- Evidence: The prescribed preflight completed successfully on 2026-09-22 with the explicit
+  `.env.devcontainer.example` selection. `primary` PostgreSQL and `valkey-kvs` resolved from the
+  Compose-backed test network; no secret values were printed. The current focused authentication,
+  OIDC, RP Session, OTP, authority, enforcement, queue, dashboard, and observability groups passed
+  with 487 runs / 2,879 assertions / 0 failures / 0 errors / 3 skips. The current full Rails suite
+  also passed with 11,503 runs / 73,303 assertions / 0 failures / 0 errors / 5 skips.
+- Conflict: The earlier missing-service and incomplete-schema observations were environment state at
+  the time of the historical records, not a current test-boundary failure. They remain preserved in
+  the dated evidence and do not describe the current Compose-backed execution context.
+- Impact: The isolated test boundary is usable for the verified local Rails and Valkey paths. This
+  does not establish production/development worker topology, external provider delivery, Cloudflare
+  routing, or any architecture decision tracked by another conflict.
+- Current-cycle action: Use the explicit Compose-backed test environment for subsequent focused
+  verification. Keep secrets out of output and do not substitute shared or loopback production-like
+  datastores.
+- Safe to defer because: production worker/runtime and external-service checks are explicitly out of
+  scope for this local closure and remain tracked by CF-005, CF-007, CF-009, CF-010, and CF-011 as
+  applicable.
+- Next-cycle action: Re-open this conflict only if the prescribed preflight or an affected local
+  test path fails after a code/configuration change. Do not treat a production-topology gap as a
+  failure of the isolated test boundary.
 - Acceptance test: the bundled preflight, the affected `bin/rails test` commands, and isolated DB
-  checks boot without falling back to a non-test datastore.
-- Related evidence: `evidence/2026-09-17-phase-0-and-safe-slices.md` records the exact command
-  outcomes without secrets or raw logs.
+  checks boot without falling back to a non-test datastore. This acceptance test passed in the
+  current environment.
+- Related evidence: `evidence/2026-09-22-auth-otp-authority-revalidation-R5S6.md` and the current
+  full-suite result; historical unavailable-service results remain in their original evidence files.
 
 ## CF-003 — Existing Persona/Organization authority graph is not the adopted graph
 
@@ -99,16 +90,17 @@ accepted ADRs, implementation plans, or evidence.
   locked transfer/lifecycle operations or prove direct-SQL behavior. A read-only
   `AuthorityOwnerMigrationInventory` and `authority:owner_inventory` task now enumerate all six
   concrete resources, classify legacy binding/membership candidates, emit only public identifiers,
-  and fail on a partially applied authority schema; the live report remains unrun because the
-  isolated PostgreSQL/Valkey test boundary is unavailable.
+  and fail on a partially applied authority schema. The current isolated task run reports an
+  applied schema but zero resource rows, so it proves command/schema handling only and does not
+  resolve owner mapping.
 - Safe to defer because: the foundation does not switch authorization sources or backfill a second
   owner. Static model loading, syntax, lint, and the canonical pool inheritance are authored;
   runtime migration, rollback, quota races, and current-data mapping remain unverified. Focused
   creator, schema-contract, vocabulary, and app creation-race tests now pass against the available
   isolated test services; this does not substitute for migration/cutover proof.
-- Next-cycle action: Run the three surface migrations on isolated databases, prove one-writer
-  rollback/concurrency, run the owner inventory against each isolated surface, review ambiguous
-  rows, then implement lifecycle-gated policy and cutover one surface at a time.
+- Next-cycle action: Run the owner inventory against reviewed representative isolated data, review
+  ambiguous rows, then prove one-writer migration rollback/concurrency before any lifecycle-gated
+  policy or cutover one surface at a time. Do not infer a mapping from the current zero-row report.
 - Acceptance test: one validated app slice proves concrete FKs, owner uniqueness, role gates,
   connection rollback, quota serialization, and no old authority fallback before com/org expansion.
 - Related evidence: `docs/architecture/persona-organization-authority.md`,
@@ -158,9 +150,14 @@ accepted ADRs, implementation plans, or evidence.
   `config/queue.yml` and `config/recurring.yml` are explicit, the concrete/gem inventory is recorded
   in `docs/operations/solid-queue-runtime.md`, and the contract test parses the mapping. The
   test-scoped `RAILS_ENV=test ... bundle exec bin/jobs check` passed with disposable local
-  variables. A development check with explicit loopback cache/rate-limit/auth-state URLs and
-  `TRUSTED_PROXIES` stopped while resolving PostgreSQL host `primary`; production stopped before
-  boot because `TRUSTED_PROXIES` was absent. No isolated worker was run.
+  variables. The current Compose-backed development recheck with explicit `TRUSTED_PROXIES`
+  also reports `Solid Queue configuration is valid.` A bounded test Solid Queue supervisor now
+  picked up and completed one existing application job with recurring scheduling disabled. The
+  existing Solid Queue enqueue/status and recurring-schedule behavior tests also pass with 9 runs
+  / 31 assertions / 0 failures / 0 errors / 0 skips. A current production `bin/jobs check`
+  attempt stopped during Rails boot because the required `BASE_SERVICE_URL` was not supplied;
+  no fallback value was invented and no worker/provider was started. Production boot/topology
+  therefore remains unverified.
 - Conflict: Static mapping can prove configuration coverage but cannot prove that a deployed worker
   reads this file, the queue DB schema is current, or dispatcher/scheduler/worker state transitions
   execute.
@@ -168,18 +165,21 @@ accepted ADRs, implementation plans, or evidence.
   concentration.
 - Current-cycle action: Replaced the wildcard/anchor configuration, aligned development and
   production recurring sets, added exact workers and queue-pool documentation, isolated retention
-  work, added a per-job ledger, and verified the test-scoped Solid Queue configuration command. No
-  production worker or queue DB was touched.
+  work, added a per-job ledger, verified the test-scoped and current development Solid Queue
+  configuration commands, and verified one bounded test worker pickup. No production worker or
+  queue DB was touched.
 - Safe to defer because: queue configuration is statically explicit and no external runtime claim is
   being made; enabling or deploying the changed topology without the runtime check is not safe to
   claim.
 - Next-cycle action: Supply the required development/production boot variables without using shared
-  data stores, rerun both environment checks, and run the isolated immediate/delayed/recurring/retry
-  worker integration suite against disposable test services.
+  data stores, provide the approved production host configuration without exposing credentials,
+  rerun the production check, and run the isolated immediate/delayed/recurring/retry worker
+  integration suite against disposable test services.
 - Acceptance test: every effective queue has a worker, every recurring class/command is valid, no
   wildcard/anchor/duplicate key remains, and delayed/retry/recurring jobs execute in an isolated
   queue DB.
-- Related evidence: queue audit evidence after the inventory is executed.
+- Related evidence: `evidence/2026-09-22-solid-queue-worker-pickup-Q1R2.md`; production topology,
+  recurring scheduler, retry/recovery, and provider delivery remain unverified.
 
 ## CF-006 — Avatar navigation request overlaps an explicit Avatar exclusion
 
@@ -195,7 +195,8 @@ accepted ADRs, implementation plans, or evidence.
   current independent navigation/observability work.
 - Current-cycle action: Added only an existing-route navigation prop from org Avatar show to edit.
   The controller's existing `show?` and `update?` authorization remains in place; no Avatar state,
-  lifecycle, create, or RBAC behavior changed. Runtime props verification remains blocked by CF-002.
+  lifecycle, create, or RBAC behavior changed. The current Compose-backed focused dashboard tests
+  verify the repository-side navigation contract.
 - Safe to defer because: current Avatar show/edit routes exist and no new authority is granted by
   deferral.
 - Next-cycle action: Re-audit after the excluded Avatar work completes; remove or retain the
@@ -265,58 +266,58 @@ accepted ADRs, implementation plans, or evidence.
 - Related evidence: Phase 0 inventory in `plans/backlog/2026-09-17-integrated-hardening-plan.md` and
   the existing retention/lifecycle ADRs.
 
-## CF-009 — Request-body limit contract is not established
+## CF-009 — Request-body limit contract has separate origin and edge boundaries
 
-- Status: BLOCKS_SLICE
+- Status: CLOSED_FOR_RAILS_JSON_ORIGIN_BOUNDARY
 - Severity: P1
 - Requirement: #845; request-size enforcement before parsing
-- Evidence: The current checkout has endpoint-specific bounded readers in
-  `app/controllers/concerns/csp_violation_report.rb:51-58` and
-  `app/controllers/auth/app/apple/notifications_controller.rb:28-57`. The repository-wide
-  application configuration at `config/application.rb:90-207` does not install a pre-parser
-  request-size limit. The Apple audit plan requires a strict notification limit at
-  `plans/analysis/apple-google-external-authentication-architecture-audit.md:1070-1083`, while
-  `docs/security/security-headers.md:41-48` documents limits only for the CSP report endpoint.
-- Conflict: The adopted requirement needs an effective limit before the first unbounded read, but
-  the repository does not define one maximum that is valid for JSON, form, multipart, upload, and
-  streaming contracts. Cloudflare or another edge may enforce an external limit, but that is not
-  evidence of an origin-side limit and is not inspectable from this checkout. Adding a guessed
-  global limit could reject valid uploads or protocol payloads; adding a post-parse limit would not
-  address the resource-exhaustion risk.
-- Impact: An incorrect change could either leave a reachable unbounded request path or break valid
-  authentication, notification, or upload traffic while giving a false sense of protection.
-- Current-cycle action: Keep the existing endpoint-specific bounds and do not add a guessed global
-  middleware limit. Record the missing contract rather than changing parsing order or upload
-  semantics without an approved size matrix.
-- Safe to defer because: No current slice proves a specific missing origin-side limit that can be
-  fixed without changing an external or public payload contract, and no safe numeric bound can be
-  derived from the repository alone.
-- Next-cycle action: Inventory every public body-reading path and the edge/origin chain, approve a
-  per-endpoint size/media/streaming matrix, then enforce it before parsing with controlled
-  oversized, chunked, compressed, and valid-upload tests.
-- Acceptance test: The approved paths reject oversized input before body parsing, handle missing or
-  inconsistent lengths safely, preserve valid uploads, and document the edge/origin responsibility.
-- Related evidence: `evidence/2026-09-17-auth-body-limit-blockers.md`; no external edge
-  configuration was modified or treated as verified.
+- Evidence: `lib/request_body_size_limit.rb:10-89` defines a 1 MiB JSON/`+json` limit and reads no
+  more than one byte beyond the boundary. `config/application.rb:140` inserts it immediately after
+  `ActionDispatch::RequestId`, before routes and Rails parameter parsing. It rejects invalid or
+  negative declared lengths, missing-length/chunked oversized bodies, and unsupported compressed
+  JSON with Problem Details responses. Endpoint-specific CSP and Apple readers retain their own
+  narrower limits.
+- Conflict: The historical gap concerned the absence of an origin-side pre-parser JSON limit. The
+  current Rails contract now defines that boundary. Cloudflare, proxy, and server-ingress limits
+  remain external and are not proven by this repository; multipart/upload and compressed-body
+  policies remain intentionally separate.
+- Impact: The Rails JSON resource-exhaustion boundary is protected. Claiming complete ingress
+  protection, or applying the 1 MiB JSON value to uploads or compressed input, would be incorrect.
+- Current-cycle action: Preserve the middleware and its explicit media-type scope. No external
+  configuration, upload contract, or compression decoder was added.
+- Safe to defer because: the remaining edge and non-JSON contracts do not prevent the verified Rails
+  JSON boundary from operating and require separate operational or product decisions.
+- Next-cycle action: Verify edge/origin alignment through an approved non-invasive operational check
+  and define any multipart/streaming/compressed limits separately before broadening this boundary.
+- Acceptance test: the middleware and Core boundary tests cover exact-limit success, oversized
+  declared and chunked bodies, malformed/negative lengths, unsupported compression, and rejection
+  before downstream parsing. This acceptance test passed with 25 runs / 110 assertions.
+- Related evidence: `evidence/2026-09-22-request-body-limit-revalidation-B3C4.md` and the historical
+  `evidence/2026-09-17-auth-body-limit-blockers.md`.
 
 ## CF-010 — Auth/Base issuance handoff contract remains unresolved
 
 - Status: BLOCKS_SLICE
 - Severity: P0
 - Requirement: #846; Base as the sole physical IdP/AS authority
-- Evidence: Auth controllers still define the `sign-rp` client at
-  `app/controllers/auth/app/application_controller.rb:114-152`, with equivalent definitions in
-  `app/controllers/auth/com/application_controller.rb:188-223` and
-  `app/controllers/auth/org/application_controller.rb:112-151`. The authentication sequence calls
-  `log_in` and creates the current session at
-  `app/controllers/concerns/authentication_sequence_gate.rb:513-545` and `:550-624`, then calls
-  `BaseAuthAdmissionCoordinator.register_result_and_issue_resume!` at `:609-618`. The coordinator
-  registers the result through `app/services/base_auth_admission_coordinator.rb:136-148`, and the
-  Auth admission flow consumes the resulting handoff in
-  `app/controllers/concerns/auth_ceremony_admission.rb:38-77`.
+- Evidence: the current Auth application controllers still include the shared session/authentication
+  stack (`app/controllers/auth/app/application_controller.rb:13-32`, with equivalent includes in
+  `app/controllers/auth/com/application_controller.rb:12-28` and
+  `app/controllers/auth/org/application_controller.rb:12-28`). The non-OIDC sequence still calls
+  `log_in` while promoting a session-limit cycle or issuing a selector session at
+  `app/controllers/concerns/authentication_sequence_gate.rb:511-580`. The OIDC primary-authentication
+  branch now records Auth-local evidence without calling `log_in` at
+  `app/controllers/concerns/authentication_base.rb:2441-2450,2498-2525`; the result handoff then
+  registers a Base authorization result through
+  `app/controllers/concerns/auth_oidc_result_handoff.rb:20-45` and
+  `app/services/base_auth_admission_coordinator.rb:136-148`, while Auth admission continuity is
+  handled by `app/controllers/concerns/auth_ceremony_admission.rb:38-77`. The legacy shared client
+  registrations remain in the static registry and dependent tests/docs, but no current Auth
+  application-controller `sign-rp` definition was found.
 - Conflict: The adopted architecture says Auth is a ceremony surface and Base is the sole physical
-  IdP/AS issuer, but the current code still has Auth-owned RP identity and Auth-side browser-session
-  issuance before the Base result/resume handoff. The repository does not yet establish the accepted
+  IdP/AS issuer, but legacy shared RP registrations remain in the static registry while Auth-side
+  non-OIDC/session-limit paths can still issue browser sessions before any Base-owned handoff. The
+  repository does not yet establish the accepted
   browser binding, one-time result consumption, issuer/realm, AAL/AMR, session-limit, and failure
   semantics needed to remove or relocate that issuance safely.
 - Impact: A partial move could create duplicate parent sessions, bypass session limits, break
@@ -356,7 +357,11 @@ accepted ADRs, implementation plans, or evidence.
   retries, manual intervention, and completion reporting would be unreliable.
 - Current-cycle action: Empty the job's success allowlist and record an explicit unavailable/manual-
   follow-up failure instead. Keep `NOTIFIED` reserved for a future concrete dispatch contract; do
-  not add provider integrations or a generic notification framework.
+  not add provider integrations or a generic notification framework. The notification state now
+  calculates its existing 15-minute retry timestamp from the supplied decision time, so retry
+  scheduling does not silently use a second clock. Its public transition methods also re-check
+  terminal state under a row lock, so `NOTIFIED` and `SKIPPED` rows cannot be overwritten by a
+  later failure or notification update.
 - Safe to defer because: No external processor delivery is claimed after this containment, and the
   affected workflow remains visibly incomplete rather than silently successful.
 - Next-cycle action: Define each processor's trusted endpoint/adapter, payload minimization,
@@ -365,12 +370,14 @@ accepted ADRs, implementation plans, or evidence.
 - Acceptance test: A concrete processor receives only the authorized erasure request, its provider
   result is persisted separately from delivery completion, retries are bounded and idempotent, and
   an unavailable integration cannot produce `NOTIFIED`.
-- Related evidence: `evidence/2026-09-18-processor-notification-success-boundary.md` and
+- Related evidence: `evidence/2026-09-18-processor-notification-success-boundary.md`,
+  `evidence/2026-09-22-processor-notification-retry-clock-A1B2.md`,
+  `evidence/2026-09-22-processor-notification-terminal-guard-C3D4.md`, and
   `docs/security/withdrawal-privacy-erasure.md`.
 
 ## CF-012 — Solid Queue setup checks conflict with the repository test rule
 
-- Status: OPEN_NON_BLOCKING
+- Status: CLOSED_FOR_RULE_RECONCILIATION
 - Severity: P2
 - Requirement: Solid Queue configuration verification; repository environment-test rule
 - Evidence: `adr/no-test-suite-for-environment-construction.md` and
@@ -384,22 +391,25 @@ accepted ADRs, implementation plans, or evidence.
 - Impact: Keeping the setup test would violate repository rules; removing it means YAML mapping
   regressions are detected by review, the static audit, and operational validation rather than every
   Minitest run.
-- Current-cycle action: Remove the setup test, retain behavior-level job tests, run `bin/jobs check`
-  with isolated variables where possible, and keep the exact mapping audit and result in evidence.
-- Safe to defer because: the current queue mapping is explicit and the test-scoped `bin/jobs check`
-  already passed; worker/database runtime remains independently blocked by CF-005.
+- Current-cycle action: The setup-only test is absent, behavior-level job tests remain, and the
+  installed validator has been run again against the isolated test environment. The exact mapping
+  audit and validator result remain in evidence.
+- Safe to close this conflict because: the repository-rule disagreement is resolved without
+  weakening queue behavior coverage. Worker/database runtime remains independently tracked by
+  CF-005.
 - Next-cycle action: Re-run `bin/jobs check` for development and production with their required
   isolated boot variables, then run the real disposable worker/scheduler path. Do not restore a
   setup-only Minitest unless the repository rule is explicitly amended.
 - Acceptance test: The installed validator passes in each supported environment, the static audit
   finds no wildcard/alias/duplicate-key omission, and the isolated worker executes immediate,
   delayed, recurring, and retry paths.
-- Related evidence: `evidence/2026-09-17-phase-0-and-safe-slices.md` and
-  `docs/operations/solid-queue-runtime.md`.
+- Related evidence: `evidence/2026-09-17-phase-0-and-safe-slices.md`,
+  `docs/operations/solid-queue-runtime.md`, and
+  `evidence/2026-09-22-solid-queue-rule-status-E5F6.md`.
 
 ## CF-013 — JWT anomaly runtime codes are not covered by the occurrence catalog
 
-- Status: BLOCKS_SLICE
+- Status: CLOSED_FOR_CATALOG_RECONSTRUCTION
 - Severity: P1
 - Requirement: #606; authentication and JWT anomaly observability
 - Evidence: `app/services/jit_security_jwt_anomaly_reporter.rb:7-18,47-67` emits `AUTH_CLIENT`,
@@ -411,31 +421,24 @@ accepted ADRs, implementation plans, or evidence.
   `app/values/security_jwt_auth_access_token_codec.rb:121-128,287-294` emits `CLAIM_INVALID` and
   `DECODE_FAILED`, which were not in the original seeded reason set. The additive transition is
   authored in `db/occurrences_migrate/20260918150000_insert_current_jwt_anomaly_reference_data.rb`.
-- Conflict: The runtime resource-type vocabulary and failure-code vocabulary do not match the
-  persisted reference catalog. Before this slice, the subscriber silently skipped unknown codes; it
-  now emits `jwt.anomaly.catalog_miss`, but those authentication anomalies still do not become
-  `JwtAnomalyEvent` rows. The missing-`nbf` mapping was compatible with the existing `MISSING_NBF`
-  reason and is fixed in the current safe slice, but the context and non-missing-claim code mismatch
-  requires an explicit persisted reference-data transition.
+- Conflict: The runtime resource-type vocabulary and failure-code vocabulary did not match the
+  persisted reference catalog. The additive current-catalog transition and schema-load seed path
+  now resolve the supported runtime pairs without rewriting historical rows. Unknown codes remain
+  observable through the existing bounded catalog-miss path rather than being fabricated into
+  occurrence rows.
 - Impact: #606 cannot claim complete authentication anomaly persistence or complete operational
   coverage. This is an observability and audit-loss risk; it does not itself grant authorization.
-- Current-cycle action: Add regression coverage, map the existing missing-`nbf` claim to
-  `MISSING_NBF`, connect the reporter to the existing Active Support notification boundary, and make
-  a catalog miss observable without creating a fabricated occurrence row. Malformed external values
-  are reduced to an `INVALID` marker and length. Commit `172686b23` adds 78 current runtime catalog
-  rows in a forward-only, idempotent migration. It preserves the legacy rows and event references,
-  refuses to rewrite an existing same-body row with a non-active status, and has not been executed
-  because the isolated occurrence database is unavailable.
-- Safe to defer because: The additive migration is not enabled or executed in this workspace, and
-  the affected anomaly paths remain visible in bounded structured logs without fabricated rows. It
-  is not safe to defer the disposable-database migration and persistence verification while claiming
-  the #606 audit slice is complete.
-- Next-cycle action: Run the authored transition in a disposable occurrence database and verify
-  rerun safety, legacy-row identity preservation, active status, unique public IDs, and event
-  persistence for every supported runtime context/reason pair. Do not execute it against populated
-  non-test data until the migration runbook gate is satisfied.
+- Current-cycle action: Additive reference data, standard-seed replay, migration-path replay, and
+  schema-load replay were verified on disposable/test occurrence databases. The fixed status IDs,
+  78 current catalog rows, idempotence, legacy-row retention, and sanitized anomaly boundaries all
+  pass. No non-test occurrence database was changed.
+- Safe to defer because: The catalog reconstruction boundary is complete. Notification provider
+  delivery/receipt/retry/permanent-failure remains a separate contract and is not closed here.
+- Next-cycle action: None for catalog reconstruction. Keep provider-delivery work separate and do not
+  treat this closure as proof of external delivery.
 - Acceptance test: Every supported runtime context/reason pair resolves to an active occurrence,
   unknown codes have an observable non-success path rather than silent loss, historical rows are not
-  rewritten, and anomaly events retain no raw JWT or secret values. The acceptance test is not yet
-  runtime-proven because PostgreSQL is unavailable.
-- Related evidence: `evidence/2026-09-18-jwt-anomaly-catalog-audit.md`.
+  rewritten, and anomaly events retain no raw JWT or secret values. This acceptance test passed in
+  the current disposable/test verification.
+- Related evidence: `evidence/2026-09-21-occurrence-catalog-seed-reconstruction-P8Q9.md` and the
+  current plan's occurrence resolution section.

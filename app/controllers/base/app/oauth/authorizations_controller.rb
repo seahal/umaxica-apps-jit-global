@@ -99,14 +99,14 @@ module Base
                 ri: params[:ri],
                 host: oidc_sign_host,
                 protocol: oidc_sign_protocol,
-                admission: handoff.code,
+                transaction_ref: handoff.reference,
               )
             else
               auth_app_sign_in_url(
                 ri: params[:ri],
                 host: oidc_sign_host,
                 protocol: oidc_sign_protocol,
-                admission: handoff.code,
+                transaction_ref: handoff.reference,
               )
             end
           redirect_to_jump_url(sign_url)
@@ -135,14 +135,16 @@ module Base
                 token_kind_id: "BROWSER_WEB",
                 require_totp_check: false,
                 audit_context: { oidc_client_id: transaction.client_id },
-                bootstrap_actor: true,
+                bootstrap_actor: false,
+                skip_login_cooldown: true,
                 authentication_event_at: transaction.authenticated_at,
               )
             end
           return redirect_to_session_limitation!(
             resource,
             transaction,
-          ) if login_result[:status] == :session_limit_hard_reject
+          ) if login_result[:status] == :session_limit_hard_reject ||
+            login_result[:session_management_required]
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,

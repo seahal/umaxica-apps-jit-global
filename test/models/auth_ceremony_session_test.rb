@@ -35,6 +35,25 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       assert_nil model.find_active_by_raw_sid(rotated)
     end
 
+    test "#{model.name} default lifecycle timestamps use the writer database clock" do
+      database_now = Time.utc(2026, 9, 21, 12, 34, 56)
+      record = nil
+
+      model.stub(:database_now, database_now) do
+        record, = model.issue!
+        record.admit!(authorization_transaction_ref: "clock-#{model.name}")
+        record.complete!
+      end
+
+      record.reload
+
+      assert_equal database_now, record.created_at
+      assert_equal database_now + model::DEFAULT_TTL, record.expires_at
+      assert_equal database_now, record.admitted_at
+      assert_equal database_now, record.completed_at
+      assert_equal database_now, record.updated_at
+    end
+
     test "#{model.name} admits one authorization transaction and has irreversible terminal states" do
       record, = model.issue!
 
@@ -63,6 +82,28 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       end
 
       assert_equal "transaction-#{model.name}", record.reload.authorization_transaction_ref
+    end
+
+    test "#{model.name} records one-time authentication evidence without granting authority" do
+      database_now = Time.utc(2026, 9, 21, 13, 14, 15)
+      record, = model.issue!(now: database_now)
+      record.admit!(authorization_transaction_ref: "evidence-#{model.name}", now: database_now)
+
+      record.class.stub(:database_now, database_now) do
+        record.record_authentication_evidence!(method: "secret")
+      end
+
+      record.reload
+
+      assert_equal "secret", record.authentication_method
+      assert_equal database_now, record.authentication_event_at
+      assert_predicate record, :authentication_evidence_recorded?
+      assert record.asserts_no_authority_api!
+
+      assert_raises(AuthCeremonySession::InvalidTransition) do
+        record.record_authentication_evidence!(method: "passkey", now: database_now)
+      end
+      assert_equal "secret", record.reload.authentication_method
     end
 
     test "#{model.name} cannot bind the same authorization transaction twice" do

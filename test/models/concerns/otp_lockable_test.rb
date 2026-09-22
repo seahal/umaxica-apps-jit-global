@@ -69,4 +69,67 @@ class OtpLockableTest < ActiveSupport::TestCase
     assert_respond_to ClientEmail.new(user: clients(:none_user)), :otp_cooldown_active?
     assert_not OperatorTelephone.new(staff: operators(:none_staff)).respond_to?(:otp_cooldown_active?)
   end
+
+  test "a positive infinity expiry cannot make an OTP usable" do
+    email = ClientEmail.create!(
+      user: clients(:none_user),
+      address: "otp-positive-infinity@example.com",
+      confirm_policy: true,
+    )
+    email.update_columns(
+      otp_private_key: ROTP::Base32.random_base32,
+      otp_counter: "1",
+      otp_expires_at: Float::INFINITY,
+      locked_at: -Float::INFINITY,
+    )
+
+    email.reload
+
+    assert_predicate email, :otp_expired?,
+                     "a positive infinity timestamp is invalid for an authentication OTP"
+    assert_not_predicate email, :otp_active?
+    assert_nil email.get_otp
+  end
+
+  test "otp expiry predicates use the owning writer database clock" do
+    application_now = Time.current
+    database_now = application_now - 1.hour
+    expiry = application_now - 30.minutes
+    email = ClientEmail.create!(
+      user: clients(:none_user),
+      address: "otp-database-clock@example.com",
+      confirm_policy: true,
+    )
+    email.update_columns(
+      otp_private_key: ROTP::Base32.random_base32,
+      otp_counter: "1",
+      otp_expires_at: expiry,
+      locked_at: -Float::INFINITY,
+    )
+
+    ClientEmail.stub(:database_now, database_now) do
+      assert_not_predicate email, :otp_expired?
+      assert_predicate email, :otp_active?
+    end
+  end
+
+  test "the lockout timestamp uses the same writer database clock as the failure increment" do
+    database_now = Time.utc(2026, 9, 21, 14, 0, 0)
+    email = ClientEmail.create!(
+      user: clients(:none_user),
+      address: "otp-lockout-database-clock@example.com",
+      confirm_policy: true,
+    )
+    email.update_columns(
+      otp_attempts_count: OtpLockable::MAX_OTP_ATTEMPTS - 1,
+      otp_last_sent_at: database_now,
+      locked_at: -Float::INFINITY,
+    )
+
+    ClientEmail.stub(:database_now, database_now) do
+      email.increment_attempts!
+    end
+
+    assert_equal database_now + OtpLockable::OTP_LOCKOUT_DURATION, email.reload.locked_at
+  end
 end

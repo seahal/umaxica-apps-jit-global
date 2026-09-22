@@ -18,8 +18,7 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
       params: authorize_params,
     )
 
-    get auth_app_sign_in_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @sign_host }
+    enter_sign_in!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -40,8 +39,7 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
       params: authorize_params(screen_hint: "signup"),
     )
 
-    get auth_app_sign_up_url(ri: "jp", admission: admission_code(issuance)),
-        headers: { "Host" => @sign_host }
+    enter_sign_up!(admission_reference(issuance), ri: "jp")
 
     assert_response :see_other
     follow_redirect!
@@ -78,8 +76,22 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
 
   private
 
-  def admission_code(issuance)
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).code
+  def enter_sign_in!(reference, params)
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: reference,
+                             params: params, headers: { "Host" => @sign_host },
+    )
+  end
+
+  def enter_sign_up!(reference, params)
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_up_path, reference: reference,
+                             params: params, headers: { "Host" => @sign_host },
+    )
+  end
+
+  def admission_reference(issuance)
+    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
   end
 
   def authorize_params(screen_hint: nil)

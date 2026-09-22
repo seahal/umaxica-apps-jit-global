@@ -14,7 +14,7 @@ class Auth::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "get sign out renders confirmation and post starts RP logout" do
+  test "get sign out renders confirmation and post redirects to Base without an Auth RP logout" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
     visitor = create_verified_visitor_with_email(email_address: "sign-com-#{SecureRandom.hex(4)}@example.com")
@@ -41,21 +41,13 @@ class Auth::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       }",
     }
 
-    assert_response :success
-    assert_select "form#sign-out-handoff-form[method=?]", "post", count: 1
-    location = URI.parse(css_select("form#sign-out-handoff-form").first["action"])
-    query = Rack::Utils.parse_nested_query(location.query.to_s)
+    assert_response :see_other
+    location = URI.parse(response.location)
 
     assert_equal acme_host, location.host
-    assert_equal "/oidc/logout", location.path
-    assert_predicate query["id_token_hint"], :present?
-    assert_equal auth_com_sign_out_url(
-      ri: "jp",
-      host: Rails.configuration.x.boot_config.fetch(:hosts).auth_corporate.host,
-      protocol: "https",
-    ),
-                 query["post_logout_redirect_uri"]
-    assert_predicate query["state"], :present?
+    assert_equal "/sign/out", location.path
+    assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(location.query.to_s))
+    assert_predicate token.reload, :currently_usable?
   end
 
   test "delete sign out cancels the pending logout and keeps the current session" do

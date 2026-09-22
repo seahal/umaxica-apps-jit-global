@@ -3,10 +3,10 @@
 
 require "test_helper"
 
-# The sign-in and sign-up entry pages accept an opaque Base admission code.
-# A code that names nothing is a caller error, not a server error: each surface
-# answers 400 rather than letting the lookup escape as a 500, and none of them
-# starts a session for it.
+# The sign-in and sign-up entry pages accept a non-secret Base admission reference on GET and
+# redeem it only on the CSRF-protected POST. A reference that names nothing is a caller error, not
+# a server error: each surface answers 400 rather than letting the lookup escape as a 500, and none
+# of them starts a session for it.
 class AuthSignEntryUnknownLoginChallengeTest < ActionDispatch::IntegrationTest
   ENTRY_POINTS = {
     "app sign-in" => ["PUBLIC_AUTH_SERVICE_URL", :auth_app_sign_in_url],
@@ -18,10 +18,13 @@ class AuthSignEntryUnknownLoginChallengeTest < ActionDispatch::IntegrationTest
   }.freeze
 
   ENTRY_POINTS.each do |label, (env_name, helper)|
-    test "#{label} refuses an admission code that names no transaction" do
+    test "#{label} refuses an admission reference that names no transaction" do
       host = ENV.fetch(env_name)
 
-      get public_send(helper, ri: "jp", admission: "no-such-challenge"), headers: { "Host" => host }
+      redeem_auth_ceremony_entry!(
+        public_send(helper), reference: "no-such-challenge",
+                             params: { ri: "jp" }, headers: { "Host" => host },
+      )
 
       assert_response :bad_request
       assert_equal I18n.t("errors.messages.invalid_request"), response.body

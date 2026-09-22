@@ -18,9 +18,11 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
     end
 
     def issue!(surface:, intent:, params:, login_challenge: SecureRandom.urlsafe_base64(32),
-               now: Time.current, login_challenge_ttl: 10.minutes, ttl: 15.minutes)
+               now: nil, login_challenge_ttl: 10.minutes, ttl: 15.minutes)
+      model = model_for(surface)
+      decision_time = now || model.database_now
       transaction =
-        model_for(surface).create_transaction!(
+        model.create_transaction!(
           surface: surface,
           intent: intent,
           client_id: params.fetch(:client_id),
@@ -34,9 +36,9 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
           prompt: OidcAuthorizeRequestResolver.normalize_prompt(params[:prompt]),
           max_age: OidcAuthorizeRequestResolver.normalize_max_age(params[:max_age]),
           login_challenge: login_challenge,
-          login_challenge_expires_at: now + login_challenge_ttl,
-          expires_at: now + ttl,
-          now: now,
+          login_challenge_expires_at: decision_time + login_challenge_ttl,
+          expires_at: decision_time + ttl,
+          now: decision_time,
         )
       Issuance.new(transaction: transaction)
     end
@@ -50,7 +52,7 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
     end
 
     def register_result!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
-                         authentication_event_at: nil, now: Time.current)
+                         authentication_event_at: nil, now: nil)
       transaction = find_by_login_challenge!(surface: surface, login_challenge: login_challenge)
       transaction = transaction.register_authentication!(
         actor_ref: actor.public_id,
@@ -63,7 +65,7 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
       Issuance.new(transaction: transaction)
     end
 
-    def consume!(surface:, login_challenge:, now: Time.current)
+    def consume!(surface:, login_challenge:, now: nil)
       find_by_login_challenge!(surface: surface, login_challenge: login_challenge).consume!(now: now)
     end
 

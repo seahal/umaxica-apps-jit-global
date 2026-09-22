@@ -31,8 +31,12 @@ module BaseSignOutDestination
   def render_oidc_end_session_confirmation
     @sign_out_notice = consume_sign_out_notice
     props = sign_out_edit_page_props
+    # The confirmation title asks a question; once nothing is left to sign out of, the page states
+    # the signed-out result instead.
+    props = props.merge(title: I18n.t("sign.shared.sign_out.completed_title")) unless props[:active]
     if @sign_out_notice.present?
       props = props.merge(
+        title: I18n.t("sign.shared.sign_out.completed_title"),
         notice: { title: I18n.t("sign.shared.sign_out.completed_title") },
         description: sign_out_completed_description,
       )

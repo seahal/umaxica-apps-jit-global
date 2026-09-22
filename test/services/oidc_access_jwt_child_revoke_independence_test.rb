@@ -14,7 +14,7 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
     )
   end
 
-  test "an exchanged Access JWT whose sid names an RP Session authenticates for userinfo" do
+  test "an exchanged Access JWT authenticates for userinfo without an RP Session lookup" do
     root, session = create_rp_session
 
     result = authenticate(access_token_for(root, session))
@@ -44,13 +44,12 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
     assert_equal "invalid_token", result.error
   end
 
-  test "an Access JWT carrying another RP Session jti is rejected" do
+  test "an Access JWT carrying another RP Session jti remains stateless" do
     root, session = create_rp_session
 
     result = authenticate(access_token_for(root, session, jti: SecureRandom.uuid))
 
-    assert_not result.success?
-    assert_equal "invalid_token", result.error
+    assert_predicate result, :success?
   end
 
   test "revoked RP Session remains inactive while parent Base Browser Session stays usable" do
@@ -100,6 +99,7 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
       host: OidcIssuer.host_for_resource_type("client"),
       resource_type: "client",
       session_public_id: root.public_id,
+      base_session_public_id: root.public_id,
       oidc_sid: session.public_id,
       oidc_jti: jti,
       expires_at: 5.minutes.from_now,

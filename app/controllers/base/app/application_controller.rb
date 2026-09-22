@@ -27,7 +27,6 @@ module Base
       include ActionPolicy::Controller
       include ::RestrictedSessionGuard
 
-      include ::OidcSsoInitiator
       include SurfaceRouteAliasHelper
       include ::ActorSupport
 
@@ -99,21 +98,18 @@ module Base
 
       private
 
-      def oidc_client_id
-        # Historical name for Base's own browser/local-session RP client; Base does not own this callback.
-        "base-rails-rp"
+      # Base owns the browser session and starts credential ceremonies through an opaque local
+      # admission. It is not a browser RP and must not redirect protected requests to an
+      # authorization-code callback of its own.
+      def sign_in_url_with_pt(_return_to)
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+        auth_app_sign_in_url(
+          ri: params[:ri], host: oidc_sign_host, protocol: "https", entry_ref: admission.reference,
+        )
       end
 
       def oidc_sign_host
         ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-      end
-
-      def oidc_base_authority_host
-        ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      end
-
-      def oidc_acme_host
-        oidc_base_authority_host
       end
 
       private

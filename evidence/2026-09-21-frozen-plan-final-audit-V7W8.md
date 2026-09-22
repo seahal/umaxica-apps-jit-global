@@ -92,3 +92,14 @@ advisory endpoint because DNS resolution was unavailable and is therefore unveri
 The repository-side hardening slice is test-green for the changed behavior and does not justify
 claiming full release readiness. The remaining FREQ-0064 contract and coverage/static follow-ups
 must be resolved or explicitly accepted in a later review before a final unconditional GO.
+
+## Subsequent revalidation
+
+The OIDC result-purpose binding and OTP email enqueue audit were subsequently verified with focused
+tests and the full Rails suite: `11475 runs, 73310 assertions, 0 failures, 0 errors, 6 skips`.
+FREQ-0064 remains partial only for provider receipt/delivery/retry/permanent-failure contracts and
+approved retention/archive policy; successful email enqueue is now durably recorded without secrets.
+
+Subsequent Valkey settings cache cleanup removed the three listed RuboCop offenses without changing
+Valkey configuration or retry behavior. Repository-wide RuboCop was rerun over 4,773 files with no
+offenses. The aggregate SimpleCov threshold failure remains a separate open quality-gate issue.

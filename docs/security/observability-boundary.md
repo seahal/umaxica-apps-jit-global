@@ -296,7 +296,10 @@ row using the existing security retention policy and may additionally write a re
 log for operational correlation. The log line is never treated as the authoritative audit record.
 Provider delivery acceptance, delivery outcome, retry, and permanent failure remain distinct facts.
 The existing SMS transport records enqueue, provider acceptance, and provider failure facts in
-Chronicle without recipient or message content. The repository does not infer delivery from an
+Chronicle without recipient or message content. The OTP email adapters record successful email
+enqueue and enqueue failure, bound to the email record as the Chronicle subject and without
+recipient or message content. An audit-write failure after enqueue is diagnostic only and must not
+make one queued email appear failed to the caller. The repository does not infer delivery from an
 enqueue result or introduce a generic delivery ledger without an approved provider contract.
 
 ## Minimum Rule For Implementation

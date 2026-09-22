@@ -258,7 +258,7 @@ module Security
     def public_web_or_edge?(entry) = entry.path.start_with?("/web/v0/", "/edge/v0/")
 
     def public_oauth_oidc_or_sso?(entry)
-      entry.path.start_with?("/oauth", "/oidc", "/sso", "/auth/")
+      entry.path.start_with?("/oauth", "/oidc", "/sso", "/auth/", "/sign/oidc/handoff")
     end
 
     def public_sign_in_or_up?(entry)

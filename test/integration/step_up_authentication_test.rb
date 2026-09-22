@@ -256,7 +256,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
   end
 
   test "secret credential removal route revokes other sessions and step-up grants" do
-    mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_secret")
+    mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_secret_credential")
     other_token = ClientToken.create!(
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -273,6 +273,14 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_predicate other_token.reload, :revoked?
     assert_nil @token.last_step_up_at
     assert_nil other_token.last_step_up_at
+  end
+
+  test "secret credential removal route requires a fresh step-up" do
+    post base_app_identity_secret_removal_url(secret_id: "credential-under-test", ri: "jp", host: @base_host),
+         headers: @headers
+
+    assert_response :unauthorized
+    assert_predicate @token.reload, :currently_usable?
   end
 
   test "email verification completion retains current session and revokes other sessions and step-up grants" do
