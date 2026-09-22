@@ -84,7 +84,7 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
       assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
 
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "docs_app",
+        client_id: "core-app",
         assertion: assertion,
         token_url: token_url,
       )

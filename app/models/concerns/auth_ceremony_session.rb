@@ -37,6 +37,42 @@ module AuthCeremonySession
       [record, encode_sid(raw_sid)]
     end
 
+    # Replace the previous browser ceremony and admit the replacement in one
+    # database transaction. The old row is never revoked unless the new row
+    # can also be created successfully.
+    def rotate_and_admit!(previous_raw_sid: nil, authorization_transaction_ref: nil, ttl: DEFAULT_TTL, now: nil)
+      raw_sid = SecureRandom.random_bytes(SID_BYTES)
+      digest = digest_for(raw_sid)
+      previous_digest = digest_for(decode_sid(previous_raw_sid)) if previous_raw_sid.present?
+
+      record =
+        writing_connection do
+          transaction do
+            previous = lock.find_by(sid_digest: previous_digest) if previous_digest
+            decision_time = now || database_now
+            if previous_digest && (previous.nil? || !previous.active?(now: decision_time))
+              replacement = find_by(previous_sid_digest: previous_digest)
+              raise InvalidTransition, "auth ceremony session was already replaced" if replacement
+            end
+            if previous&.active?(now: decision_time)
+              previous.update!(revoked_at: decision_time, updated_at: decision_time)
+            end
+
+            create!(
+              sid_digest: digest,
+              previous_sid_digest: previous_digest,
+              authorization_transaction_ref: authorization_transaction_ref.to_s.presence,
+              admitted_at: decision_time,
+              expires_at: decision_time + ttl,
+              created_at: decision_time,
+              updated_at: decision_time,
+            )
+          end
+        end
+
+      [record, encode_sid(raw_sid)]
+    end
+
     def find_active_by_raw_sid(raw_sid, now: nil)
       digest = digest_for(decode_sid(raw_sid))
       record, decision_time =

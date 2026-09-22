@@ -69,9 +69,11 @@ Remaining bounded legacy:
 ## Positive Checks
 
 - `acme/www` commits session, account, preference, token, authorization, and freshness state.
-- Delegated ceremonies use acme-issued grants and signed sign-issued results.
-- Ceremony results are short-lived, audience-bound, purpose-bound, one-shot, and transaction/session
-  bound where applicable.
+- Delegated ceremonies use Base-issued grants and Auth-issued, short-lived opaque results.
+- The current Base/Auth OIDC result is purpose-, surface-, and transaction-bound; its digest and
+  generation are durable in the surface-local PostgreSQL transaction, while the raw capability is
+  short-lived Valkey transport. PostgreSQL finalization and authorization-grant redemption are
+  atomic within the ticket database, and retries cannot create a second Browser/RP Session.
 - Downstream services trust acme-issued downstream tokens only.
 - `acme/www` owns OAuth/OIDC discovery, JWKS, authorization, token, userinfo, revocation, OIDC
   logout, and edge token refresh endpoints for new flows.

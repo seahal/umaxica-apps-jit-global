@@ -195,6 +195,40 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_includes %w(visitor-0 visitor-1), transaction.actor_ref
   end
 
+  test "concurrent authorization grant redemption has exactly one winner" do
+    transaction = create_transaction(VisitorOidcAuthorizationTransaction, surface: "com")
+    transaction.register_authentication!(
+      actor_ref: "visitor-concurrent",
+      session_ref: nil,
+      auth_method: "passkey",
+      acr: "aal2",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    )
+    transaction.finalize_base! do |_locked, _now|
+      { status: :success, browser_session_ref: "browser-session-concurrent" }
+    end
+
+    ActiveRecord::Base.connection_handler.clear_active_connections!
+    results = Queue.new
+    threads =
+      2.times.map do
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
+          VisitorOidcAuthorizationTransaction.connection_pool.with_connection do
+            results << VisitorOidcAuthorizationTransaction.find(transaction.id).claim_authorization_grant!
+          end
+        rescue StandardError => e
+          results << e
+        end
+      end
+    threads.each(&:join)
+
+    outcomes = 2.times.map { results.pop }
+
+    assert_equal 1, outcomes.count(true), outcomes.inspect
+    assert_equal 1, outcomes.count(false), outcomes.inspect
+    assert_predicate transaction.reload.authorization_grant_redeemed_at, :present?
+  end
+
   test "transaction surface must match the owning class" do
     {
       ClientOidcAuthorizationTransaction => "org",

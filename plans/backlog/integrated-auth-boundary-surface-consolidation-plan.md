@@ -1,8 +1,16 @@
 # Integrated Auth, OIDC, Browser Routes, and Edit Surface Implementation Plan
 
-**Status:** Architecture plan approved for implementation; verification environment remains
-blocked.  
-**Prepared:** 2026-09-13  
+> **Canonical RP-entry correction (2026-09-22):** The accepted
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` amendment supersedes any historical plan text
+> that describes an RP `/sign/in` or `/sign/in/callback` entry. The first-party RP contract is
+> `GET /sign`, CSRF-protected `POST /sign`, and protocol `GET /sign/callback`. Auth credential
+> ceremonies may retain `/sign/in/*`, but those routes are not RP entrypoints. Implementers must
+> apply the current ADR and route registry to the historical workstream descriptions below; the
+> historical `/sign/in` wording is not an additional compatibility requirement.
+
+**Status:** Architecture plan approved for implementation; local repository verification is
+available, while authority-cutover, external RP registration, and deployment gates remain blocked.
+**Prepared:** 2026-09-13; status revalidated 2026-09-22
 **Scope:** One coordinated implementation project in this Rails repository. No deployment, push, PR,
 or external write is included.
 
@@ -86,6 +94,57 @@ reachable test PostgreSQL service and a permitted debugger socket (or the reposi
 debugger-disable mechanism) are available. This does not block architecture approval, but must be
 resolved before claiming Rails checks green.
 
+The preceding baseline and revalidation paragraphs are historical records. On 2026-09-22, the
+repository-supported Compose test environment was available with `primary` and `valkey-kvs`, and
+the current checkout completed the relevant Rails verification. The full Rails result was 11,507
+runs, 73,317 assertions, 0 failures, 0 errors, and 5 pre-existing skips. The focused RP entry,
+callback, cookie-isolation, access-token, and browser-API set passed with 73 runs / 546 assertions;
+the frontend suite passed with 85 files / 1,065 tests. This revalidation does not close the
+authority-cutover, external RP-registration, production-topology, edge-limit, lifecycle/data,
+or provider-delivery gates described below. Evidence: `evidence/2026-09-22-rp-entry-authenticated-cookie-guard-Q7R8.md`
+and `evidence/2026-09-22-runtime-revalidation-J7K8.md`.
+
+The later CF-010 finalization slice and repository quality-gate revalidation completed on the
+current checkout with `11529 runs, 73449 assertions, 0 failures, 0 errors, 8 skips`; the focused
+CF-010 set, JavaScript suite/checks, Brakeman, and repository-wide RuboCop also passed. This does
+not change the separate authority-cutover, regional external RP registration, production topology,
+or provider-delivery gates. See
+`evidence/2026-09-22-cf-010-cross-store-finalization-Q4R5.md` and
+`evidence/2026-09-22-integrated-hardening-quality-gates-M7N8.md`.
+
+### Current-source correction (2026-09-22)
+
+The inventory bullets below preserve the historical design baseline, but they are not current
+source evidence where later slices changed the routes. Re-reading the current tree shows that
+`config/routes/auth.rb` exposes Auth ceremony and handoff routes but no Auth OIDC authorization,
+callback, or backchannel RP routes. `config/routes/base.rb` exposes the Base Authorization Server
+end-session paths; the former Base RP authorization/callback routes are not present. Current Auth
+controllers retain only the Base-bound handoff and local ceremony references. The remaining shared
+browser client registrations in the static registry, and legacy test/configuration references,
+remain a separate retirement/migration gate; their continued registry presence is not evidence
+that Auth currently owns an OIDC RP route.
+
+The Edit Publishing route-loop item is also already satisfied in the current tree. `config/routes/edit.rb`
+contains twelve ordinary `resource` declaration groups for the four Publishing surfaces and three
+audiences; it no longer generates those routes with a loop. The route contract tests in
+`test/integration/routes/edit_publishing_explicit_routes_test.rb` and
+`test/integration/routes/edit_org_publishing_management_route_contract_test.rb` verify the source
+shape, all twelve entry cells, nested publication/archive routes, host isolation, and the absence of
+entry deletion. This is a current-source correction to the historical inventory below, not a new
+route requirement or a reason to alter the Publishing controllers or data model.
+
+### Read-only content RP retirement amendment (2026-09-22)
+
+The current source and approved target boundary retire the obsolete Rails OIDC client
+registrations for `docs`, `news`, and `help` across `app`, `com`, and `org`. These surfaces remain
+read-only content/resource surfaces with their existing host-constrained routes and APIs; removing
+their OIDC registrations does not remove their content routes or change their content ownership.
+The static registry no longer defines `docs_*`, `news_*`, or `help_*` client IDs, and focused
+registry, token-exchange, assertion, and surface-lookup tests cover the negative and replacement
+paths. This is a local registry/contract change only: external edge configuration, undeployed
+consumer discovery, and secret/key retirement are separate deployment checks and are not claimed
+complete here.
+
 ## Current-state inventory
 
 ### Authority, RP, and token flow
@@ -105,11 +164,15 @@ resolved before claiming Rails checks green.
   configuration, standard health and revision routes, and the 12 Publishing management
   controller/page families. Edit::Org::ApplicationController still configures base-rails-rp and
   includes OidcSsoInitiator. Its route file creates the 12 surface/audience route cells with loops.
-- app/values/oidc_client_stores_static_client_store.rb currently registers sign-rp, base-rails-rp,
-  side-rails-rp, and core-next-rp as shared browser clients, as well as native and content clients.
+- At the historical inventory point, `app/values/oidc_client_stores_static_client_store.rb`
+  registered sign-rp, base-rails-rp, side-rails-rp, and core-next-rp as shared browser clients,
+  as well as native and content clients. The 2026-09-22 content RP retirement amendment removes
+  the obsolete docs/news/help entries from the current static registry; the remaining shared
+  browser-client retirement is a separate gate.
   build_redirect_uris uses /oidc/callback; the default registered post-logout path is
-  /sign/out/complete. Native and content clients have separate responsibilities and must survive
-  this refactor.
+  /sign/out/complete. Native clients remain separate from the browser-RP migration. The former
+  content client registrations are retired because the content routes are read-only resource
+  surfaces rather than Rails-authenticated RPs.
 - app/values/oidc_client_assertion_jwt.rb already enforces ES384, exact token endpoint audience,
   iss=sub=client_id, required claims, key id, signature, expiry, and one-use jti. Assertion lifetime
   is currently five minutes. A 60-second maximum assertion lifetime is a UMAXICA hardening policy,
@@ -249,7 +312,7 @@ it follows shared authority, session, protocol, and route dependencies.
 | ID      | Source                        | Requirement integrated into                                                                                                                                                                                       | Workstream / phase |
 | ------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
 | REQ-001 | Block 1, section 1            | Base authority; Auth not RP; seven isolated client IDs/keys/redirects/faces/browser transactions/RP Sessions.                                                                                                     | W1, W4 / P1, P5    |
-| REQ-002 | Block 1, section 2            | Canonical RP GET /sign/in and /sign/in/callback, exact URI registry, fail-closed host routing; Core callback owned by Rails.                                                                                      | W4 / P5            |
+| REQ-002 | Block 1, section 2            | Canonical RP GET/POST /sign and GET /sign/callback, exact URI registry, fail-closed host routing; Core callback owned by Rails; GET is non-mutating and POST refuses a valid already-authenticated same-RP browser before creating a second flow. | W4 / P5            |
 | REQ-003 | Block 1, section 3            | Pure lib/umaxica/oidc_rp protocol values; thin Rails adapters; no private-method testing.                                                                                                                         | W4 / P5            |
 | REQ-004 | Block 1, section 4            | Authorization Code + PKCE S256 for all seven RPs; independent state, nonce, verifier per request.                                                                                                                 | W4 / P5            |
 | REQ-005 | Block 1, section 5            | Bounded encrypted per-transaction RP cookie, max four, five-minute TTL, host-only attributes; cookie deletion is cleanup, not one-use enforcement. Base code CAS and callback-write atomicity enforce single-use. | W4 / P5            |
@@ -376,7 +439,7 @@ it follows shared authority, session, protocol, and route dependencies.
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | KEEP IN AUTH   | App/com/org credential ceremonies; SignIn/SignUp state machines and their existing actor/surface branches; Passkey ceremony/settings; TOTP where currently supported; App Google/Apple; Org Entra; Secret Credential authentication ceremony; short-lived actor-specific AuthCeremonySession (ceremony-local only, never Base login/session/policy/AAL authority); operational health/revision/CSP/PWA/robots/sitemap/Apple notifications as current contracts require; Jump/redirect .well-known/jwks.json. |
 | MOVE TO BASE   | Identity, browser session, session policy, MFA policy/settings, Secret Credential settings, sign-in/up/step-up admission, authoritative apply of ceremony results, RP registration administration and Base session hierarchy management.                                                                                                                                                                                                                                                                     |
-| REPLACE        | Shared browser clients with seven clients; /oidc/callback RP starts with /sign/in and /sign/in/callback; signed Auth handoff/results with opaque purpose-specific codes; PostgreSQL OAuth authorization codes with Valkey; TokenUsage names with RP Session names; Auth API /web/v0 with /api/v0; six Auth/Base root/dashboard/lobby paths with one Root contract; reusable completion routes with one-shot /sign/out.                                                                                       |
+| REPLACE        | Shared browser clients with seven clients; /oidc/callback RP starts with neutral GET/POST /sign and GET /sign/callback; signed Auth handoff/results with opaque purpose-specific codes; PostgreSQL OAuth authorization codes with Valkey; TokenUsage names with RP Session names; Auth API /web/v0 with /api/v0; six Auth/Base root/dashboard/lobby paths with one Root contract; reusable completion routes with one-shot /sign/out. |
 | RETIRE         | Auth OIDC authorization/callback/backchannel RP roles and sign-rp registration/keys; Base RP-only /oidc/authorization and /oidc/callback and base-rails-rp registration; shared core-next-rp and side-rails-rp browser identities; old authorization-code tables; TokenUsage names; six Auth/Base /dashboard routes; Base /lobby; browser /sign/out/complete and nested completion controllers; obsolete cookie OIDC RP transaction keys and old web/v0 endpoint copies after callers migrate.               |
 
 Root consequence: Base app/com/org Root keeps the authenticated former Dashboard behavior and its
@@ -405,7 +468,7 @@ table has one responsibility and one actor/surface boundary.
 | RP Session                          | ClientTokenUsage / VisitorTokenUsage / OperatorTokenUsage                                                                | Rename to ClientRpSession / VisitorRpSession / OperatorRpSession, tables and associations likewise. Rename OidcTokenUsage to RpSession concern. Retain scope, public_id, client_id, refresh family/digests/rotation/expiry, DPoP/binding, last activity, revoke and logout fields. Access JWTs remain stateless, short-lived values.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Active RP Session uniqueness        | Existing partial unique index on parent token + oidc_client_id where revoked_at is null                                  | Retain as a database partial unique index with final rp_session table/column names. Keep friendly model validation as secondary; concurrency test the database constraint.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Auth state machine data             | Actor-specific Client/Visitor/Operator SignInFlow, SignUpFlow, StepUpSession, and StepUpCeremonyTransaction              | Reuse these models and transitions. Add explicit handoff/result digest fields to the existing purpose-specific transaction where that object owns the same flow lifecycle, or add a named actor-specific handoff table only where no matching transaction exists. Use separate sign-in, sign-up, and step-up rows; never combine through a discriminator. App/Com/Org stay in their matching ticket DB.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Base admission/result code          | OIDC authorization transactions currently contain raw login_challenge; ceremony grants/results are currently signed JWTs | Replace raw challenge with a 256-bit random code whose SHA-256 digest is stored. Use distinct purpose-specific sign-in, sign-up, and step-up handoff/result lifecycle records, actor/surface-bounded. The record may carry separate handoff and result digests because both belong to that one flow transaction. Add conditional consume timestamps/state and 60-second expiry; never persist raw codes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Base admission/result code          | OIDC authorization transactions currently contain raw login_challenge; ceremony grants/results are currently signed JWTs | Replace raw challenge with a 256-bit random code whose SHA-256 digest is stored. Use distinct purpose-specific sign-in, sign-up, and step-up handoff/result lifecycle records, actor/surface-bounded. The OIDC authorization transaction carries the result digest, generation, expiry, and finalization references; the short-lived raw result remains Valkey transport and is re-readable only while its generation matches. Add conditional finalization/redeemed timestamps; never persist raw codes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | OAuth Authorization Code            | ClientAuthorizationCode / VisitorAuthorizationCode / OperatorAuthorizationCode tables in PostgreSQL                      | Remove these models/tables after Valkey contract/concurrency tests. Keep the 32-byte CSPRNG code high-entropy and its current 10-second issued TTL. Key by a SHA-256 digest; never store raw code. P3 store exposes fixed-schema JSON and atomic `issued -> consumed` CAS with distinct replay vs unknown/expired outcomes, not GETDEL alone. The consumed tombstone records only consumed_at, public client/RP face, state (linked/pending/replay-seen), and the minimum RP Session reference needed for family revocation. After a successful grant, expire the tombstone no later than the earlier of linked refresh-family expiry and parent Base Browser Session absolute expiry; remove it on family revoke where practical. This is finite online security state, not an audit record. A token-endpoint validation mismatch before CAS leaves the code issued as current tests require; once CAS succeeds, no later error can restore it. |
 | private_key_jwt JTI                 | SecurityConsumedJti / security_consumed_jtis in PostgreSQL                                                               | Keep table and unique constraint. Keep Postgres as source of replay prevention; unavailable database means reject assertion. Remove exception messages from logs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Logout challenge                    | AcmeLogoutTransaction and its ordered state machine                                                                      | Keep same purpose-specific transaction and audit/security contract. Revise its step sequence to remove Auth-as-RP clearing. Retain one-shot logout challenge and terminal CAS; do not retitle the shared conceptual Acme contract only because Base hosts authority routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -439,7 +502,7 @@ operations; they do not issue arbitrary update!(state: ...).
 
 #### RP sign-in
 
-1. A user requests GET /sign/in on one of the seven RP hosts. A host-scoped Rails controller
+1. A user requests GET /sign on one of the seven RP hosts. A host-scoped Rails controller
    resolves exactly one static client record; unknown host/client fails closed.
 2. The RP validates return_to as same-origin relative path, creates fresh state/nonce/code_verifier,
    derives an S256 challenge, and writes a short-lived encrypted transaction cookie unique to this
@@ -462,7 +525,7 @@ operations; they do not issue arbitrary update!(state: ...).
 6. Base issues a high-entropy OAuth Authorization Code. Its Valkey payload binds client_id, exact
    redirect_uri, subject reference, Base Browser Session reference, S256 challenge/method, nonce,
    scope, auth_time, and client face.
-7. RP GET /sign/in/callback loads the transaction cookie and checks version/face/state/nonce/expiry,
+7. RP GET /sign/callback loads the transaction cookie and checks version/face/state/nonce/expiry,
    then calls Base token endpoint with Authorization Code + code_verifier + private_key_jwt. Base
    validates client_id, exact redirect URI, PKCE, assertion and face against the issued payload
    before consumption (the current mismatch tests continue to see no token and an unconsumed code).
@@ -487,7 +550,7 @@ existing explicit identity policy. Sibling Base Browser Sessions are unaffected 
 explicitly includes them.
 
 The first-party IDs are core-app, core-com, core-org, side-app, side-com, side-org, and edit-org.
-Their callback is exactly https://<registered-face-host>/sign/in/callback; post-logout URI exactly
+Their callback is exactly https://<registered-face-host>/sign/callback; post-logout URI exactly
 https://<registered-face-host>/sign/out. Each has its own ES384 private key, public/JWKS
 registration and client face. client_id and face mapping is static: app/client, com/visitor,
 org/operator.
@@ -553,9 +616,9 @@ Metadata and no-store contracts; they do not weaken ordinary CSRF protection.
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auth app/com/org /oidc/authorization and /oidc/callback | Retire as RP endpoints. Auth /sign/in and /sign/up stay as Base-admission bridges and ceremony entry URLs. Remove Auth /oidc/backchannel/logout because Auth is no longer a registered RP.                                                                                                     |
 | Base app/com/org /oidc/authorization and /oidc/callback | Retire Base’s old RP start/callback only. Keep Base /oidc/logout as OIDC Authorization Server end-session; keep /oauth/authorize, token, JWKS, revocation, userinfo, discovery and global OIDC contracts.                                                                                      |
-| Core/Side /oidc/authorization and /oidc/callback        | Replace with GET /sign/in and GET /sign/in/callback in Rails. Keep RP backchannel logout; do not implement any OIDC/PKCE/token exchange in TanStack Start.                                                                                                                                     |
-| Edit org (currently no independent RP)                  | Add GET /sign/in, GET /sign/in/callback, RP backchannel logout and /sign/out under Edit::Org routes; change client ID to edit-org.                                                                                                                                                             |
-| Seven clients’ redirect registration                    | Exact host + /sign/in/callback per distinct client. Exact post_logout_redirect_uri host + /sign/out. No wildcard or host synthesized from request.                                                                                                                                             |
+| Core/Side /oidc/authorization and /oidc/callback        | Replace with GET/POST /sign and GET /sign/callback in Rails. Keep RP backchannel logout; do not implement any OIDC/PKCE/token exchange in TanStack Start.                                                                                                                                        |
+| Edit org (currently no independent RP)                  | Add GET/POST /sign, GET /sign/callback, RP backchannel logout and /sign/out under Edit::Org routes; change client ID to edit-org.                                                                                                                                                            |
+| Seven clients’ redirect registration                    | Exact host + /sign/callback per distinct client. Exact post_logout_redirect_uri host + /sign/out. No wildcard or host synthesized from request.                                                                                                                                                 |
 | Auth UI /web/v0/*                                       | Move same-origin UI endpoints to /api/v0/*, preserving health/revision JSON endpoints, media types, Accept behavior, CSRF and no-store contracts. Delete old /web/v0 only after every source caller migrates.                                                                                  |
 | Auth /edge/v0/token/check and /dbsc                     | Replace only Auth’s obsolete JWT-session behavior with concrete /api/v0 opaque-session operations, then retire old Auth routes/helpers after call-site/static contract search. Keep Base/Core token routes and refresh/DBSC contracts.                                                         |
 | Auth/Base app/com/org GET /                             | Retain route as canonical Root; unauthenticated renders public Root at same host/path; authenticated renders current actor-specific Dashboard experience in Root controller/page without dashboard redirect. Remove RootSignInRedirect and RegionalRootRedirect use only from these six roots. |
@@ -583,7 +646,7 @@ tests. Phases do not keep a legacy alias “just in case.”
 | P2: Browser Session/RP Session model                         | P1                                                       | Add hierarchy, one active child per parent+client, DB-enforced concurrent create, per-RP/parent/identity revoke, refresh reuse, admin permissions, and tests that ordinary Access JWT authentication performs no RP Session row query and remains valid through exp+30s after child revoke.                                                                  | Rename actor-specific Usage classes/tables/associations/services to RpSession. Update token issuer/revoker/session writer and Base Org admin UI. Remove RP Session active/JTI lookup from normal OIDC access authentication; keep the child row for refresh/new-issuance and administration. Add explicit revoke-RP-session and parent/identity revoke composition.                                                                                                                                        | Directly edit unshipped actor-ticket migrations and schemas; retain partial unique index under final names. Keep DB boundaries/no cross-DB FKs. Record five-minute Access JWT TTL and 30-second leeway in tests/docs.                                                                        | Remove TokenUsage aliases/tests/names; retain ClientToken/VisitorToken/OperatorToken as Base Browser Session roots. Exit with hierarchy, revoke scope, stateless JWT, and concurrency tests green.                                                                   |
 | P3: Valkey topology and adapter                              | P1; independent of P2’s UI                               | Test purpose URL parsing, namespace isolation, fixed JSON schema, TTL, NX, atomic code CAS and notice consume, replay tombstones, adapter errors, hiredis selection, cleanup and no FLUSH. Real Valkey threads/processes prove one code winner, replay is distinguishable from unknown/expired, one notice winner, and store outage/corruption fails closed. | Add structured Valkey connection/namespace/error boundary and auth-state stores. Authorization codes use digest keys and Lua/CAS `issued -> consumed` tombstones, not GETDEL alone; retain a finite family-bound tombstone reference. SignOutNotice uses a separate digest-keyed five-minute presentation namespace with atomic GETDEL-equivalent consume. Centralize raw commands and preserve cache/rate-limit contracts.                                                                                | Consolidate development/test services/volumes to one Valkey with DB 0/1/2 dev and 3/4/5 test via responsibility URLs; add hiredis using locked redis-client API and verify actual driver. Namespaces include suite_run_id/worker_id/test_id, TTL, SCAN ensure-cleanup and surfaced failures. | Update Compose/.devcontainer/env/health/docs. No FLUSHALL/FLUSHDB and no notice tables. Exit only after real Valkey atomicity/concurrency and parallel cleanup tests pass.                                                                                           |
 | P4: Base admission and Auth ceremony boundary                | P1, P2 for session references                            | Characterize state events, actor/surface differences, invitation, providers, step-up, settings, CSRF and current handoff/result. Add opaque handoff/result expiry/replay/CAS, direct-entry rejection, terminal irreversibility, session rotation and Auth-session non-authority tests.                                                                       | Base decides admission/step-up and issues purpose-specific opaque records. Auth uses concrete `ClientAuthCeremonySession`, `VisitorAuthCeremonySession`, and `OperatorAuthCeremonySession` with random-only `__Host-auth_sid`; session is short-lived ceremony continuity only, has no Base login/identity/AAL/policy/RP authority, and each protected new flow needs Base admission. Keep existing state machines and provider contracts; replace internal JWT results with opaque Base-consumed results. | Add/edit actor-purpose migrations only where existing transaction ownership is proven; digest fields, TTL/indexes, CAS state. No generic flow/session/result table.                                                                                                                          | Remove direct Auth starts and JWT session requirements after callers migrate; keep Jump JWKS and audit Auth edge callers. Exit with provider/flow/CSRF and authority-boundary tests green.                                                                           |
-| P5: Valkey OAuth codes and seven RP clients                  | P2, P3, P4                                               | Add pure-library PKCE/claim/redirect tests, seven separation tests, assertion failure/replay tests, Valkey code tombstone/replay/failure tests, and duplicate callback/two-tab tests proving one token exchange and one local login write. Assert no RP Session lookup on normal Access JWT path and no token for mismatch/corrupt/outage.                   | Build pure OIDC RP values and thin adapters. Register seven independent ES384 clients and exact per-host `/sign/in/callback`/`/sign/out`; implement Rails callbacks. Change exchange coordinator to code CAS/tombstone and link the child family only after successful grant; on replay revoke only linked child family. Keep PostgreSQL JTI and RFC 9068/refresh/backchannel contracts.                                                                                                                   | Remove old AuthorizationCode models/tables after store tests; require AUTH_STATE_REDIS_URL and per-client key namespaces.                                                                                                                                                                    | Remove old shared browser registrations/callbacks only after seven flows pass; retain native/content and Base authority endpoints.                                                                                                                                   |
+| P5: Valkey OAuth codes and seven RP clients                  | P2, P3, P4                                               | Add pure-library PKCE/claim/redirect tests, seven separation tests, assertion failure/replay tests, Valkey code tombstone/replay/failure tests, and duplicate callback/two-tab tests proving one token exchange and one local login write. Assert no RP Session lookup on normal Access JWT path and no token for mismatch/corrupt/outage.                   | Build pure OIDC RP values and thin adapters. Register seven independent ES384 clients and exact per-host `/sign/callback`/`/sign/out`; implement Rails callbacks. Change exchange coordinator to code CAS/tombstone and link the child family only after successful grant; on replay revoke only linked child family. Keep PostgreSQL JTI and RFC 9068/refresh/backchannel contracts.                                                                                                                      | Remove old AuthorizationCode models/tables after store tests; require AUTH_STATE_REDIS_URL and per-client key namespaces.                                                                                                                                                                    | Remove old shared browser registrations/callbacks only after seven flows pass; retain native and Base authority endpoints. Read-only docs/news/help routes remain, but their obsolete Rails OIDC RP registrations are retired under the 2026-09-22 amendment. |
 | P6: Auth/Base canonical Root                                 | P4 for ceremony-session boundary and P2 for session data | Add six-root tests for public 200, local Sign In, flash transport, no auto-start, `ri`, private/no-store cache, and `/dashboard` unroutable. Base authenticated branch tests FullAccess/selected actor/restricted/verification/Action Policy. Auth Root remains public with a ceremony cookie and never exposes Base-login or Dashboard authority.           | Remove six Root redirects. Base Root explicitly preserves former Dashboard authorization/content; Auth Root is minimal public ceremony entry and old Auth Dashboards are retired. No Auth ceremony cookie is used as authentication proof.                                                                                                                                                                                                                                                                 | No schema beyond P4; no new flash writes.                                                                                                                                                                                                                                                    | Retire redirect concerns only on six roots, remove six dashboards and Base lobby, retain Core/Side/Edit dashboards and region normalization.                                                                                                                         |
 | P7: common browser sign-out resource and one-shot completion | P2, P3, P5, P6                                           | Add route/request tests for show/new/edit/create/destroy; one-shot Valkey notice success/missing/expired/authenticated/replay/parallel consume; GET no authority mutation; clear_history; stale cancellation CAS; OIDC exact URI/cross-host/fetch/origin/challenge/backchannel.                                                                              | Align route semantics and shorten Auth-as-RP logout hop. Use P3’s dedicated five-minute Valkey notice marker, not PostgreSQL tables; only marker consumption mutates on GET. Preserve Base authority/logout transaction and Auth ceremony cleanup.                                                                                                                                                                                                                                                         | No notice migration. Update exact `/sign/out` registrations and all coordinator targets. P7 explicitly depends on P3’s Valkey adapter.                                                                                                                                                       | Delete completion routes/controllers/pages/helpers and `/lobby`; supersede contradictory ADRs; preserve Palm native behavior. Exit with one-shot/race/security suite green.                                                                                          |
 | P8: Edit Publishing boundary closure                         | P1 and P5; P5 owns Edit’s independent OIDC RP wiring     | Verify host isolation, exact Edit callback, independent edit-org registration, all 12 matrix and lifecycle tests, operator Active/Action Policy, standard health/revision contracts and current public publishing API. Add failure assertion for dynamic route loops through route inventory.                                                                | Keep the Edit RP routes/controller and edit-org registration wired in P5. Replace only the Publishing route-generation loop with 12 explicit route declarations. Keep app/controllers/edit/org/publishing and src/pages/edit/org/publishing ownership. Keep only necessary current Edit controller guards; do not copy the whole Base graph or add a broad Concern.                                                                                                                                        | No Publishing schema migration; host config is already present. Update host/env examples only where the existing source of truth lacks an Edit value.                                                                                                                                        | Ensure Base.Org has no duplicate management route/page/controller. Keep public /api/v0/entries and all Publishing data/models in Global. Update security/public-entrypoint inventories. Exit with 12 cells and existing Publishing tests green.                      |
@@ -611,7 +674,18 @@ authority-boundary corrections without changing the P0–P9 dependency order:
   `VisitorAuthCeremonySession`, and `OperatorAuthCeremonySession` (subject to exact repository
   naming verification), and are ceremony-local only. They contain no roles, permissions, policy,
   AAL, Base-login proof, or RP authority. A session alone cannot start a protected flow; Base
-  admission is required, and new admission atomically cancels/rotates old ceremony state.
+  admission is required, and new admission atomically cancels/rotates old ceremony state. The
+  current actor-specific implementation performs that replacement through the public
+  `rotate_and_admit!` operation: predecessor revocation and replacement creation share one
+  writing-database transaction, replacement rows retain the predecessor digest, and a second
+  replacement attempt from the same predecessor is rejected. This local guarantee does not
+  resolve the separate Base/Valkey cross-store handoff or first-admission-without-a-predecessor
+  coordination questions tracked by CF-010.
+- The Base Auth-result POST validates the stored authorization request before reading the short-lived
+  Valkey result. An invalid persisted client or redirect binding therefore leaves the result
+  available for a corrected or recoverable request. The result's digest/generation and transaction
+  binding are checked before idempotent PostgreSQL finalization; this is a retryable transport, not
+  a one-shot result consume boundary.
 - P5 treats encrypted RP transaction-cookie deletion as cleanup, not exactly-once enforcement. Base
   Code CAS and callback-write atomicity enforce one exchange and one persistent local login under
   duplicate callbacks/two tabs/stale cookies.
@@ -629,10 +703,14 @@ authority-boundary corrections without changing the P0–P9 dependency order:
 
 - Base handoff: 256-bit entropy contract, digest-only storage, 60-second expiry, atomic single
   redemption, cancel/revoke/expiry/face/destination mismatch, duplicate concurrent redeem exactly
-  one winner, no raw code in URL logs/error logs/props.
+  one winner, no raw code in URL logs/error logs/props. The Auth-to-Base OIDC result is the
+  deliberate exception at the result layer: its short-lived transport is re-readable while its
+  generation matches the durable transaction, while Browser Session finalization and authorization
+  grant redemption remain idempotent/one-time in PostgreSQL.
 - Auth direct /sign/in, /sign/up, /verification or generic step-up without valid Base admission
-  cannot enter a ceremony. Each one-time result succeeds once, expires, rejects replay and fails
-  closed if the authority DB is unavailable.
+  cannot enter a ceremony. Purpose-specific non-OIDC results remain one-time, expire, reject
+  replay and fail closed if the authority DB is unavailable; the Base/Auth OIDC result follows the
+  retryable transport and durable-finalization contract above.
 - SignIn/SignUp actor state machine behavior for success, all current guardrails/checkpoints,
   terminal failures, cancellation and compensation. Preserve App/Com/Org differences and Org
   invitation path.
@@ -693,7 +771,7 @@ authority-boundary corrections without changing the P0–P9 dependency order:
   change state. New/authenticated requests cannot bypass Base auth. post_logout_redirect_uri remains
   exact and realm-bound. Cross-host challenge is one-use, step-checked and protected by current
   Origin/Fetch Metadata checks.
-- Rails route test proves Core /sign/in and callback reach Rails rather than TanStack. Old
+- Rails route test proves Core /sign and /sign/callback reach Rails rather than TanStack. Old
   /sign/out/complete unrouteable on browser surfaces. OIDC authority end-session round trip ends at
   exact /sign/out.
 - Preserve Inertia clear_history and encrypt_history behavior; run existing Playwright/e2e harness
@@ -806,8 +884,8 @@ before broad checks; the whole Rails test suite requires the configured PostgreS
 - Update env examples and BootConfig/Host Authorization with required one-argument ENV.fetch
   settings. Do not add silent defaults for production secrets or client keys.
 - Old RP client IDs and old browser session cookies are intentionally invalid after the unshipped
-  cutover. New RPs start fresh; no dual client registrations. Native/content OIDC client
-  registrations remain.
+  cutover. New RPs start fresh; no dual client registrations. Native OIDC client registrations
+  remain; read-only docs/news/help content surfaces have no Rails OIDC client registrations.
 - Keep production cache/rate-limit responsibility URLs separately configured. The one Valkey
   service/six DB layout applies only to development/test. Do not treat logical database number as a
   security boundary.
@@ -932,9 +1010,12 @@ Implementation is complete only when all of the following hold:
 - Auth has no RP authorization/callback/backchannel state, token exchange, RP session, or shared
   sign-rp client; it retains the approved ceremony/provider/settings responsibilities and Jump JWKS.
 - Core app/com/org, Side app/com/org and Edit org each work as their own client with unique key,
-  exact /sign/in/callback and /sign/out, PKCE S256, private_key_jwt, per-RP transaction cookie and
+  exact /sign/callback and /sign/out, PKCE S256, private_key_jwt, per-RP transaction cookie and
   RP Session.
-- Core Rails owns /sign/in and /sign/in/callback despite the TanStack catch-all.
+- Core Rails owns GET/POST /sign and /sign/callback despite the TanStack catch-all. GET is
+  non-mutating, POST remains CSRF-protected, and a valid root Browser Session or same-RP access
+  credential receives a server-side plain refusal before a second OIDC flow is created; another
+  surface's credential does not satisfy that check.
 - Base→Auth handoff and Auth→Base results are opaque, high entropy, digest-only, short-lived,
   single-use and atomic. Base admission/policy is authoritative.
 - Auth __Host-auth_sid is random-only and server-side; concrete AuthCeremonySession rows are

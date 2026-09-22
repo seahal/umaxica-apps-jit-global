@@ -36,12 +36,29 @@ class AuthenticationPurposeContractTest < ActiveSupport::TestCase
 
   def issued_purpose_for(intent:, kind:)
     store = PurposeCaptureStore.new
-    transaction = Struct.new(:intent, :surface, :transaction_id, :session_ref).new(
-      intent,
-      "app",
-      "transaction-1",
-      "session-1",
-    )
+    client = OidcClientRegistry.find!("core-app")
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app",
+      intent: intent,
+      params: {
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: client.redirect_uris.first,
+        code_challenge: "purpose-contract-challenge",
+        code_challenge_method: "S256",
+        state: SecureRandom.urlsafe_base64(16),
+        nonce: SecureRandom.urlsafe_base64(16),
+        scope: "openid profile",
+      },
+    ).transaction
+    transaction = OidcAuthorizationTransactionCoordinator.register_result!(
+      surface: "app",
+      login_challenge: transaction.login_challenge,
+      actor: clients(:one),
+      session_ref: nil,
+      auth_method: "passkey",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    ).transaction
 
     if kind == :handoff
       BaseAuthAdmissionCoordinator.issue_handoff!(transaction:, store:)

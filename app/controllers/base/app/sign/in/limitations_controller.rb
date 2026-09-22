@@ -232,7 +232,12 @@ module Base
           def resume_authorization_after_resolution
             return render_invalid_resolution unless promote_oidc_resolution_session!
 
-            @oidc_transaction.consume!
+            finalization =
+              @oidc_transaction.finalize_base! do |_locked, _finalization_time|
+                { status: :success, browser_session_ref: current_session.public_id }
+              end
+            return render_invalid_resolution unless finalization[:status] == :success
+
             @resolution.finalize!
             issue_authorization_code!
           end
@@ -272,6 +277,7 @@ module Base
               auth_method: @oidc_transaction.auth_method,
               acr: @oidc_transaction.acr,
               authentication_event_at: @oidc_transaction.authenticated_at,
+              authorization_transaction_ref: @oidc_transaction.transaction_id,
             )
 
             if result.success?

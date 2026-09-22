@@ -60,7 +60,8 @@ module AuthCeremonyAdmission
       surface: auth_ceremony_surface,
       transaction_id: payload.fetch("subject_ref"),
     )
-    if transaction.login_challenge_expired?
+    decision_time = transaction.class.database_now
+    if transaction.login_challenge_expired?(now: decision_time) || transaction.expired?(now: decision_time)
       raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction expired"
     end
 
@@ -74,19 +75,17 @@ module AuthCeremonyAdmission
 
     rotate_auth_ceremony_session!(authorization_transaction_ref: transaction.transaction_id)
     redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
+         AuthCeremonySession::InvalidTransition
     render_invalid_admission_request!
   end
 
   def rotate_auth_ceremony_session!(authorization_transaction_ref: nil)
     model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
-    raw = read_auth_ceremony_sid_cookie
-    if raw.present?
-      existing = model.find_active_by_raw_sid(raw)
-      existing&.revoke!
-    end
-    record, sid = model.issue!
-    record.admit!(authorization_transaction_ref: authorization_transaction_ref)
+    record, sid = model.rotate_and_admit!(
+      previous_raw_sid: read_auth_ceremony_sid_cookie,
+      authorization_transaction_ref: authorization_transaction_ref,
+    )
     write_auth_ceremony_sid_cookie!(sid)
     record
   end

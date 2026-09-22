@@ -118,6 +118,66 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       end
     end
 
+    test "#{model.name} atomically replaces the previous admitted session" do
+      previous, previous_sid = model.issue!
+      previous.admit!(authorization_transaction_ref: "previous-#{model.name}")
+
+      replacement, replacement_sid = model.rotate_and_admit!(
+        previous_raw_sid: previous_sid,
+        authorization_transaction_ref: "replacement-#{model.name}",
+      )
+
+      assert_predicate previous.reload, :terminal?
+      assert_not_predicate previous, :active?
+      assert_predicate replacement, :admitted?
+      assert_predicate replacement, :active?
+      assert_equal previous.sid_digest, replacement.previous_sid_digest
+      assert_nil model.find_active_by_raw_sid(previous_sid)
+      assert_equal replacement.id, model.find_active_by_raw_sid(replacement_sid).id
+    end
+
+    test "#{model.name} rejects a second replacement from the same previous session" do
+      previous, previous_sid = model.issue!
+      previous.admit!(authorization_transaction_ref: "previous-#{model.name}")
+      model.rotate_and_admit!(
+        previous_raw_sid: previous_sid,
+        authorization_transaction_ref: "replacement-#{model.name}",
+      )
+
+      assert_raises(AuthCeremonySession::InvalidTransition) do
+        model.rotate_and_admit!(
+          previous_raw_sid: previous_sid,
+          authorization_transaction_ref: "racing-replacement-#{model.name}",
+        )
+      end
+
+      assert_equal 1, model.where(previous_sid_digest: previous.sid_digest).count
+      assert_equal 1, model.where(
+        previous_sid_digest: previous.sid_digest,
+        revoked_at: nil,
+        completed_at: nil,
+        cancelled_at: nil,
+      ).count
+    end
+
+    test "#{model.name} keeps the previous session when replacement admission conflicts" do
+      previous, previous_sid = model.issue!
+      transaction_ref = "conflicting-#{model.name}"
+      previous.admit!(authorization_transaction_ref: transaction_ref)
+
+      assert_raises(ActiveRecord::RecordNotUnique) do
+        model.rotate_and_admit!(
+          previous_raw_sid: previous_sid,
+          authorization_transaction_ref: transaction_ref,
+        )
+      end
+
+      assert_predicate previous.reload, :admitted?
+      assert_predicate previous, :active?
+      assert_equal previous.id, model.find_active_by_raw_sid(previous_sid).id
+      assert_equal 1, model.where(authorization_transaction_ref: transaction_ref).count
+    end
+
     test "#{model.name} database constraints keep terminal state and admission binding coherent" do
       record, = model.issue!
 

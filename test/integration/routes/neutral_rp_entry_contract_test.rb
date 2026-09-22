@@ -213,6 +213,64 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     assert_equal "text/plain", response.media_type
   end
 
+  test "an RP-authenticated browser receives a plain refusal instead of a new RP flow" do
+    host = RP_ROUTES.first.fetch(:host).call
+    host!(host)
+    client = clients(:one)
+    oidc_client = OidcClientRegistry.find!("core-app")
+    access_token = AuthenticationTokenService.encode(
+      client,
+      host: host,
+      resource_type: "client",
+      session_public_id: "rp-entry-contract-session",
+      oidc_sid: "rp-entry-contract-session",
+      oidc_jti: SecureRandom.uuid,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(client, resource_type: "client"),
+      client_id: oidc_client.client_id,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
+
+    post "/sign", params: { pt: "/" }, headers: host_headers(host)
+
+    assert_response :conflict
+    assert_equal AlreadyAuthenticatedError::MESSAGE, response.body
+    assert_equal "text/plain", response.media_type
+    assert_nil session["oidc_pending_flows"]
+  end
+
+  test "an RP credential for another surface does not block the current RP" do
+    host = RP_ROUTES.first.fetch(:host).call
+    host!(host)
+    visitor = visitors(:reserved_visitor)
+    oidc_client = OidcClientRegistry.find!("core-com")
+    access_token = AuthenticationTokenService.encode(
+      visitor,
+      host: host,
+      resource_type: "visitor",
+      session_public_id: "cross-surface-rp-entry-session",
+      oidc_sid: "cross-surface-rp-entry-session",
+      oidc_jti: SecureRandom.uuid,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(visitor, resource_type: "visitor"),
+      client_id: oidc_client.client_id,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
+
+    post "/sign", params: { pt: "/" }, headers: host_headers(host)
+
+    assert_response :redirect
+    assert_predicate session.fetch("oidc_pending_flows"), :present?
+  end
+
   private
 
   def jump_rt_url_from_location(location)

@@ -3,7 +3,7 @@
 
 class OidcAuthorizationCodeIssuer < ApplicationService
   def initialize(client:, params:, resource:, session_token:, auth_method: nil, acr: nil,
-                 authentication_event_at: nil,
+                 authentication_event_at: nil, authorization_transaction_ref: nil,
                  store: Valkey::AuthState::AuthorizationCodeStore.new)
     super()
     @client = client
@@ -13,6 +13,7 @@ class OidcAuthorizationCodeIssuer < ApplicationService
     @auth_method = auth_method
     @acr = acr
     @authentication_event_at = authentication_event_at
+    @authorization_transaction_ref = authorization_transaction_ref
     @store = store
   end
 
@@ -29,6 +30,7 @@ class OidcAuthorizationCodeIssuer < ApplicationService
       scope: params[:scope],
       auth_time: required_authentication_event_at,
       resource_type: resource_type,
+      authorization_transaction_ref: authorization_transaction_ref,
       acr: acr,
       amr: auth_method,
     )
@@ -46,7 +48,8 @@ class OidcAuthorizationCodeIssuer < ApplicationService
 
   private
 
-  attr_reader :client, :params, :resource, :session_token, :auth_method, :acr, :authentication_event_at
+  attr_reader :client, :params, :resource, :session_token, :auth_method, :acr, :authentication_event_at,
+              :authorization_transaction_ref
 
   def required_authentication_event_at
     return authentication_event_at if authentication_event_at.present?

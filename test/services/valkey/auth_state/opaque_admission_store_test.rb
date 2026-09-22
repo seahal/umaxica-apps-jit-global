@@ -92,6 +92,23 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     end
   end
 
+  test "result issuance accepts a caller-generated opaque code and records its generation" do
+    raw = SecureRandom.urlsafe_base64(32, padding: false)
+
+    stored = @store.issue!(
+      purpose: :authentication_result,
+      actor_type: "client",
+      surface: "app",
+      subject_ref: "transaction-1",
+      raw_code: raw,
+      result_generation: 3,
+    )
+
+    assert_equal raw, stored
+    assert_equal 3, @store.read(raw).fetch("result_generation")
+    assert_equal "transaction-1", @store.read(raw).fetch("subject_ref")
+  end
+
   test "a non-secret reference consumes the admission without putting the code in the URL" do
     raw = @store.issue!(
       purpose: :authentication_handoff,

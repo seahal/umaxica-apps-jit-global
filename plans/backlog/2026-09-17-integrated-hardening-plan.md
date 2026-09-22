@@ -23,12 +23,36 @@ external-service checks remain separate conflicts. The adopted
 Persona/Organization redesign is not enabled until its source-owner inventory, connection proof,
 lifecycle gates, and migration gates are complete. The Rails-side JSON body-size boundary for #845
 is now verified; external edge limits, compressed-input policy, and non-JSON upload limits remain
-separate operational contracts. #846 remains blocked by the unresolved Auth/Base issuance handoff
-contract; it is not silently implemented with guessed semantics.
+separate operational contracts. The Base/Auth issuance handoff for #846/CF-010 is now implemented
+under the closure amendment below; external RP registration/key deployment and live runtime
+acceptance remain separate. The neutral browser RP entry now also refuses a second flow when the
+same RP's valid access credential is present, while preserving cross-surface cookie isolation.
 
 Status precedence: dated sections explicitly labeled historical record the state at the time of
 that verification. The current status and latest dated resolution above take precedence over
 earlier handoff wording; historical blocker entries are not reopened by their preserved text.
+
+### CF-010 closure amendment (2026-09-22)
+
+`CF-010` is closed for the approved Base/Auth OIDC finalization contract. Auth remains ceremony-only;
+the three surface-local Base authorization-transaction tables are the durable lifecycle authority.
+They persist only result digest/generation/expiry and finalization references, never raw result or
+authorization-code values. Auth-to-Base result transport is short-lived Valkey state and is read
+only after server-side transaction validation; a valid result may be retried while its transport
+TTL remains. PostgreSQL row locking makes Base Browser Session finalization idempotent and creates
+at most one root Browser Session for the transaction.
+
+Authorization-code aliases carry the transaction reference and exact OIDC binding. In the same
+surface ticket-database transaction that creates or resolves the RP Session, Base atomically claims
+`authorization_grant_redeemed_at`; a second alias or callback therefore cannot create or replace a
+second RP Session. Valkey authorization-code consumption and family-link cleanup occur after the
+durable database transaction and are transport cleanup rather than the grant authority. A Valkey
+cleanup failure is not reported as distributed atomicity and does not return credentials from a
+failed database transaction.
+
+The closure does not claim immediate invalidation of already-issued Access JWTs, distributed ACID
+across PostgreSQL and Valkey, live external RP registration/key deployment, or production/external
+Tunnel verification. Those remain separately bounded operational or deployment checks.
 
 ### Retention acceptance scope clarification (2026-09-21)
 
@@ -36,8 +60,9 @@ For FREQ-0064, retention deletion/anonymization safety is the existing explicit 
 batch/scope, writer-clock, hold, enforcement, and kill-switch contract. `dry-run`, `preview`, and
 `simulation` are not required capabilities for `RetentionPurgeJob`, and no interface, command,
 service, audit event, or schema may be added solely for that purpose. Other plan references to a
-source-owner dry run, an isolated data-transformation dry run, or an optional unsubscribe preview
-belong to those separate domains and do not add a RetentionPurgeJob requirement.
+read-only source-owner inventory (historically labelled a dry run), an isolated data-transformation
+dry run, or an optional unsubscribe preview belong to those separate domains and do not add a
+RetentionPurgeJob requirement.
 
 Here, `bounded` means that each database selection/deletion operation is an explicit finite
 `in_batches(of: batch_size)` scope. A run may process successive eligible batches until its current
@@ -55,21 +80,42 @@ The remaining dry-run/preview wording in this plan is classified as follows:
 
 | Reference | Classification | Contractual effect |
 | --- | --- | --- |
-| `Current source-to-owner dry-run inventory` and its required report | Investigation/decision gate for the future Persona/Organization owner mapping; it is read-only inventory work, not retention execution. | It does not require or imply a `RetentionPurgeJob` preview API. |
+| Former `Current source-to-owner dry-run inventory` label and its required report | Investigation/decision gate for the future Persona/Organization owner mapping; it is read-only inventory work, not retention execution. | It does not require or imply a `RetentionPurgeJob` preview API. |
 | Isolated data-transformation dry run before encryption/backfill or other migration work | Safety gate for a separately approved data transformation. | It applies only when that transformation is approved; it does not add a retention purge interface. |
 | Promotional unsubscribe preview | Optional, scoped to a separate bearer-capability UX and explicitly deferrable. | It is not a retention requirement and must not be implemented merely because the word `preview` appears here. |
 | Historical `audit and dry-run` phase wording | Corrected for retention to `audit and retention-safety verification`; historical source-owner and transformation references retain their separate meanings above. | No new retention feature is implied. |
 
+### Request-body limit status clarification (2026-09-22)
+
+`CF-009` is closed for the Rails-owned JSON origin boundary. The existing
+`RequestBodySizeLimit` Rack middleware is inserted before application routing and parameter
+parsing, applies only to JSON and structured `+json` media types, rejects bodies above the
+explicit 1 MiB limit, bounds reads when `Content-Length` is absent or unusable, rejects malformed
+or negative declared lengths, and rejects compressed JSON without an approved bounded-decompression
+contract. Its focused middleware and Core API tests, including exact-size, chunked oversize,
+malformed-length, and unsupported-encoding cases, are recorded in
+`evidence/2026-09-22-request-body-limit-revalidation-B3C4.md`.
+
+No additional global limit, upload limit, compressed-input implementation, or external edge
+configuration is required by this local closure. Cloudflare/proxy/server-ingress limits and
+non-JSON upload contracts remain separate operational decisions and must not be represented as
+verified merely because the Rails middleware is present.
+
 ### Current execution revalidation (2026-09-21; latest verification 2026-09-22)
 
 The historical environment-blocker notes below remain historical records and are not the current
-test status. In the current Compose-backed execution context, `primary` and `valkey-kvs` resolve,
-the repository test preflight succeeds with the explicitly selected `.env.devcontainer.example`,
-and the Rails suite is executable. The latest full Rails result (2026-09-22) is `11,503 runs,
-73,303 assertions, 0 failures, 0 errors, 5 skips`; the skips were pre-existing and no test was weakened or
-added solely to obtain this result. Focused retention, authentication, OIDC/RP-session, WebAuthn,
-TOTP, Core BFF, schema/retention, and historical blocked-slice groups also pass in the current
-environment. The occurrence migration and schema-load/seed reconstruction proofs are recorded in
+test status. In the earlier Compose-backed execution context, `primary` and `valkey-kvs` resolved,
+the repository test preflight succeeded with the explicitly selected `.env.devcontainer.example`,
+and the Rails suite was executable. The latest complete Rails result including the current
+RP-entry cookie guard (2026-09-22) is `11,507 runs, 73,317 assertions, 0 failures, 0 errors, 5
+skips`; the skips were pre-existing and no test was weakened or added solely to obtain that result.
+The RP-entry result is recorded in `evidence/2026-09-22-rp-entry-authenticated-cookie-guard-Q7R8.md`;
+the retry-window slice and its initial environment retry are recorded in
+`evidence/2026-09-22-processor-notification-retry-window-H4J5.md`. A prior current-checkout runtime record is in
+`evidence/2026-09-22-runtime-revalidation-J7K8.md`. Focused retention, authentication, OIDC/RP-session, WebAuthn,
+TOTP, Core BFF, schema/retention, and historical blocked-slice groups also passed in that
+Compose-backed revalidation environment. The occurrence migration and schema-load/seed
+reconstruction proofs are recorded in
 the dated occurrence evidence below. JavaScript tests/checks, repository-wide RuboCop, Zeitwerk,
 Solid Queue configuration, the bounded test worker pickup, `git diff --check`, and Brakeman pass as
 recorded in the dated evidence files. The worker smoke does not establish production topology or
@@ -81,6 +127,37 @@ skips were not changed. Live Cloudflare/Tunnel, provider receipt/delivery/retry/
 external RP registrations and keys, and destructive/production data operations remain unverified or
 blocked where the corresponding contract is not repository-owned. Those boundaries must not be
 reported as complete merely because repository-side tests pass.
+
+A later focused auth-state test attempt from a non-Compose process on 2026-09-22 stopped during
+Rails schema maintenance because `primary` and `valkey-kvs` were not resolvable; no assertion ran,
+and no fallback host or datastore was used. This does not supersede the Compose-backed passing
+evidence above. The auth-state store, handoff, and token-exchange runtime checks must be repeated
+from the core service before accepting a new database-backed change.
+
+#### Latest repository quality-gate revalidation (2026-09-22)
+
+After the CF-010 cross-store finalization slice, the current Compose-backed checkout completed the
+full Rails suite with `11529 runs, 73449 assertions, 0 failures, 0 errors, 8 skips`. The focused
+authority schema/owner-inventory/security boundary set completed with `10 runs, 276 assertions,
+0 failures, 0 errors, 0 skips`. JavaScript tests passed with 85 files and 1065 tests; the
+repository JavaScript check passed. Brakeman reported 0 errors and 0 security warnings, and
+repository-wide RuboCop inspected 4755 files with no offenses. Evidence:
+`evidence/2026-09-22-integrated-hardening-quality-gates-M7N8.md`.
+
+These repository-side results do not close the explicitly separate regional external RP
+registration, authority owner cutover/backfill, production worker topology, provider receipt/
+delivery/retry/permanent-failure, or live external-network gates.
+
+#### RP Session and refresh revalidation (2026-09-22)
+
+The previously unverified repository-side RP Session/revocation slice was rerun against the
+Compose-backed test services. The focused collection passed with `81 runs, 367 assertions,
+0 failures, 0 errors, 0 skips`. It covers RP-session and parent-scope revocation, parent-first
+locking, stateless Access JWT behavior, refresh rotation/reuse, realm/surface lookup, and
+concurrent refresh attempts. This strengthens local evidence only; it does not close regional
+external RP registration, production topology, authority-owner cutover/backfill, provider
+delivery, or live external-network acceptance. Evidence:
+`evidence/2026-09-22-rp-session-revocation-revalidation-D5E6.md`.
 
 #### Historical follow-up: occurrence catalog reconstruction gap (2026-09-21)
 
@@ -247,7 +324,7 @@ The legacy `organizations` table remains a separate org-principal resource until
 mapping are approved. `Persona = ClientPersona` and `Organization = OperatorOrganization` aliases
 are explicitly prohibited because they would hide the collision instead of migrating references.
 
-### Current source-to-owner dry-run inventory
+### Current source-to-owner inventory (separate read-only decision gate)
 
 | Surface / resource        | Current owner-like source                                                                                                 | What the source actually proves                                                                                                             | Migration status                                         |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
@@ -259,11 +336,12 @@ are explicitly prohibited because they would hide the collision instead of migra
 | org `Bureau`              | No owner column. `AgentMembership` links Agents to a Bureau and unit.                                                     | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; no owner guess.                               |
 | legacy org `Organization` | Nullable `organizations.operator_id` plus legacy hierarchy and `user_organizations`.                                      | A legacy operator reference may exist, but its principal/table/approval semantics are not equivalent to the adopted Operator ownership row. | `BLOCKED`; requires consumer and data inventory.         |
 
-The required dry run must report counts and opaque identifiers for missing owners, multiple
-candidates, disabled principals, cross-surface mismatches, duplicate public IDs, and inconsistent
-assignments. It has not run in this session because the test/database boundary is unavailable. There
-is no safe basis to select the first assignment, promote an administrator, or silently skip an
-ambiguous row.
+The separate read-only source-owner inventory run must report counts and opaque identifiers for
+missing owners, multiple candidates, disabled principals, cross-surface mismatches, duplicate
+public IDs, and inconsistent assignments. This is an investigation gate for the unapproved
+Persona/Organization authority cutover, not a RetentionPurgeJob mode or API. It has not run in this
+session because the test/database boundary is unavailable. There is no safe basis to select the
+first assignment, promote an administrator, or silently skip an ambiguous row.
 
 ### Connection and transaction inventory
 
@@ -564,9 +642,11 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
 - The Auth OIDC-started branch now records only ceremony authentication evidence; it does not call
   `log_in`, rotate the Auth Rails session, or create a root Browser Session. Base remains the owner
   of Browser Session creation during the result/resume handoff. The complete Base-only issuer
-  contract still lacks the fully verified browser binding, one-shot result, issuer/realm, AAL/AMR,
-  session-limit, stale-result, and rollback semantics needed for a safe end-to-end relocation. The
-  affected work remains `CF-010`; this narrow Auth-side boundary does not close it.
+  contract still lacked the fully verified browser binding, result generation, issuer/realm, AAL/AMR,
+  session-limit, stale-result, and rollback semantics needed for a safe end-to-end relocation at
+  the time of this historical review. The later CF-010 closure amendment supplies those
+  boundaries; the earlier source-level blocker remains historical evidence and is not the current
+  status.
 
 #### Follow-up: Auth-side root-session authority regression (2026-09-21)
 
@@ -621,7 +701,7 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
 - Target state: interfaces are real concerns/contracts, concrete table mappings are explicit,
   authority tables are surface-local, one ownership row is enforced, roles are independent, and old
   authority paths are retired only after validated cutover.
-- Dependencies: complete rename/reference matrix, source-owner dry-run, schema shape approval,
+- Dependencies: complete rename/reference matrix, read-only source-owner inventory, schema shape approval,
   connection/lock proof, authorization matrix, encrypted-name cutover, and migration approvals.
 - Likely files: model/concern/association/policy/operation paths, surface-local migrations/models,
   selectors/jobs/GlobalID registries, fixtures/tests, docs and deployment runbook.
@@ -710,7 +790,9 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
    Calendar/Clock/Currency; app Identity exposes its existing Sessions page; org Avatar has a
    navigation-only show-to-edit action. Machine protocol links were removed. The selected
    reachability subset passes with 110 runs / 2,957 assertions; sign-out notice persistence remains
-   blocked by unavailable test Valkey.
+   blocked by unavailable test Valkey. The signed-in Menu/Primary section ordering and context
+   propagation revalidation is recorded in
+   `evidence/2026-09-22-dashboard-menu-links-revalidation-B8C9.md`.
 3. Queue and recurring configuration is explicit, queue workers are exact, recurring task arguments
    are explicit, five ceremony purgers are isolated to `retention`, and `SignUpExpiryJob` is wired.
    OIDC delivery now distinguishes success, retryable failure, and permanent failure. Static config
@@ -726,10 +808,11 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
    use the same operation; the focused public-operation lock-order regressions pass. Independent
    PostgreSQL concurrency, rollback, worker execution, and external logout behavior remain
    unverified.
-7. The current source review for #845 and #846 is recorded as `CF-009` and `CF-010`. The Rails-side
-   JSON body-size middleware and pre-parser boundary for #845 are verified; external edge and
-   non-JSON contracts remain separate. No issuer migration was added without an approved contract;
-   the existing explicit Auth/Base handoff remains intact.
+7. `CF-009` is closed for the Rails-side JSON body-size middleware and pre-parser boundary for
+   #845. External edge and non-JSON contracts remain separate and unverified. `CF-010` is closed
+   for the approved Base/Auth cross-store finalization contract; external RP registration/key
+   deployment, issuer cutover, and live runtime acceptance remain separate gates and are not
+   implied by that closure.
 8. The JWT anomaly occurrence catalog now reproduces through both the full occurrence migration
    path and the schema-load plus standard-seed path. The current catalog has 78 rows and five fixed
    status rows in both clean paths; rerunning the seed is stable and historical rows are retained.
@@ -774,6 +857,33 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
     was attempted but stopped before validation because `BASE_SERVICE_URL` was not supplied; no
     fallback host was invented. Evidence:
     `evidence/2026-09-22-solid-queue-rule-status-E5F6.md`.
+15. Auth ceremony admission rotation now uses the public `rotate_and_admit!` operation so
+    predecessor revocation and replacement admission share one writing-database transaction. The
+    existing predecessor digest records the replacement lineage and prevents a second replacement
+    from the same persisted predecessor after the first commits; a uniqueness failure rolls back
+    the predecessor revocation. Static checks pass, but the focused model tests remain unverified
+    in the current shell because `primary` cannot resolve before Rails test-schema boot. This
+    closes only the Auth-local admission-rotation sub-boundary; the cross-store Base/Valkey
+    handoff, first-admission coordination, and complete Base-only issuer contract remain CF-010.
+    Evidence: `evidence/2026-09-22-auth-ceremony-atomic-rotation-C6D7.md`.
+16. Historical validation-order check: the Base Auth-result POST validated the stored OIDC
+    authorization request before consuming the then-current one-shot Valkey result. The current
+    implementation supersedes that transport detail with a re-readable, generation-bound result
+    and PostgreSQL finalization; this entry remains historical evidence.
+    Evidence: `evidence/2026-09-22-result-validation-before-consume-S1T2.md`.
+17. Historical readiness check: the result endpoint checked that the authorization transaction was
+    unexpired and authenticated before consuming the then-current one-shot result, using the
+    transaction class's writer-database clock. The current implementation retains the DB-clock
+    check and supersedes consumption with generation-bound result validation and idempotent
+    finalization. Evidence:
+    `evidence/2026-09-22-result-readiness-before-consume-T3U4.md`.
+18. Auth admission now evaluates Base authorization-transaction expiry using the matching writer
+    database clock for both login-challenge and transaction expiry. A public app admission
+    regression covers a DB-clock-expired transaction that is still future relative to the
+    application clock and verifies that no Auth ceremony state is created. This closes only the
+    local clock-consistency case; the current CF-010 closure adds the cross-store issuance,
+    recovery, and concurrent handoff semantics. Evidence:
+    `evidence/2026-09-22-auth-admission-db-clock-U5V6.md`.
 
 #### Follow-up: authority and queue contract runtime recheck (2026-09-21)
 
@@ -945,6 +1055,53 @@ queue changes without the shape, connection, migration, and isolated-test gates.
 - This closes only terminal-state overwrite. It does not close CF-011's separate processor
   adapter, provider receipt, bounded retry/exhaustion, or permanent-failure contract.
 - Evidence: `evidence/2026-09-22-processor-notification-terminal-guard-C3D4.md`.
+
+#### Follow-up: processor-notification retry-window guard (2026-09-22)
+
+- A stale duplicate `ProcessorErasureNotificationJob` invocation now returns before recording a
+  request or changing failure metadata when the persisted `next_retry_at` is still in the future,
+  using the notification model's database clock. This is a local retry-window guard only; the
+  pre-dispatch check is advisory for jobs that become due concurrently and does not claim exactly-
+  once request emission. It does not add a provider adapter, receipt ledger, retry-exhaustion
+  policy, or permanent-failure state.
+- The public job regression test and the changed job pass syntax, targeted RuboCop, and
+  `git diff --check`. The focused job/model set passes with 38 runs / 321 assertions and the full
+  Rails suite passes with 11,505 runs / 73,310 assertions / 0 failures / 0 errors / 5 skips. The
+  initial restricted-shell boot failure and the successful Compose-service re-run are both recorded
+  in `evidence/2026-09-22-processor-notification-retry-window-H4J5.md`.
+
+#### Revalidation: retention, notification, and RP route contracts (2026-09-22)
+
+- The focused retention, notification-state, and Core route contract set passed with 59 runs / 374
+  assertions / 0 failures / 0 errors / 0 skips against the Compose-backed test services. This
+  revalidation covers the existing retention allowlist, bounded batches, writer-clock eligibility,
+  hold and enforcement protection, kill switch, notification retry-window and terminal-state
+  guards, and the canonical RP callback route.
+- `git diff --check`, changed-file syntax, and targeted RuboCop passed. The latest complete Rails
+  result including the retry-window implementation remains 11,505 runs / 73,310 assertions / 0
+  failures / 0 errors / 5 skips, recorded in the retry-window evidence.
+- Retention remains `ACCEPTED_AS_EXISTING_IMPLEMENTATION`; dry-run, preview, and simulation APIs
+  are not required and were not added. Provider delivery/receipt/retry-exhaustion/permanent-failure
+  remains `CF-011`, and the Auth/Base authority and external RP/deployment gates remain open.
+- Evidence: `evidence/2026-09-22-retention-notification-route-revalidation-N6P7.md` and the final
+  plan re-review in `evidence/2026-09-22-retention-frozen-plan-rereview-R9S0.md`.
+
+#### Follow-up: RP-authenticated neutral-entry refusal (2026-09-22)
+
+- Adversarial review found that `POST /sign` rejected only the legacy/root Browser Session
+  predicate. A browser carrying a valid same-RP `oidc_rp_access` credential could therefore start a
+  second OIDC flow, contrary to the server-side already-authenticated RP contract.
+- `OidcRpSignEntry` now reuses the existing host, client, audience, issuer, and resource-type
+  validation in `OidcRpBrowserCredentialContract` before allowing a new POST flow. It does not
+  inspect refresh credentials, create an RP-session lookup, accept another surface's cookie, or
+  alter Rails CSRF protection. Invalid, expired, or cross-surface credentials remain eligible for
+  their normal failure/new-flow behavior rather than being treated as authentication.
+- TDD RED reproduced the valid same-RP cookie path as a 302 authorization redirect instead of the
+  required plain 409 refusal. The focused neutral-entry contract then passed with 10 runs / 173
+  assertions. The broader RP callback, cookie-isolation, browser-flow, access-token, and API
+  boundary set passed with 73 runs / 546 assertions. Full Base/Auth handoff semantics, external RP
+  registrations, and deployment/runtime acceptance remain open under `CF-010`/`CF-007`.
+- Evidence: `evidence/2026-09-22-rp-entry-authenticated-cookie-guard-Q7R8.md`.
 
 #### Follow-up: authority migration index contract (2026-09-18)
 

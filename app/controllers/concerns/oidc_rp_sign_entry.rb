@@ -23,10 +23,24 @@ module OidcRpSignEntry
 
   def reject_authenticated_rp_start!
     return unless request.post?
-    return unless logged_in?
+    return unless logged_in? || authenticated_rp_browser?
 
     response.set_header("Cache-Control", "no-store")
     render plain: AlreadyAuthenticatedError::MESSAGE, status: :conflict
+  end
+
+  def authenticated_rp_browser?
+    access_token = cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.presence
+    return false unless access_token
+
+    client = OidcClientRegistry.find!(oidc_client_id)
+    resource_type = OidcIssuer.resource_type_for_client(client)
+    OidcRpBrowserCredentialContract.decode_access_token(
+      token: access_token,
+      host: request.host,
+      resource_type: resource_type,
+      client_id: client.client_id,
+    ).present?
   end
 
   def neutral_sign_form_url

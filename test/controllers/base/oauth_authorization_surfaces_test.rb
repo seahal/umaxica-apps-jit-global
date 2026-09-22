@@ -146,14 +146,16 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
   end
 
-  test "com authorize resumes an authenticated result exactly once" do
+  test "com authorize reuses a finalized browser session without creating another root session" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    visitor = visitors(:reserved_visitor)
+    token_count_before = VisitorToken.where(visitor_id: visitor.id).count
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
     )
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "com", login_challenge: issuance.transaction.login_challenge,
-      actor: visitors(:reserved_visitor), session_ref: "com-resume-session", auth_method: "passkey",
+      actor: visitor, session_ref: "com-resume-session", auth_method: "passkey",
       authentication_event_at: Time.current,
     )
 
@@ -163,23 +165,30 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_predicate issuance.transaction.reload, :consumed?
+    browser_session_ref = issuance.transaction.browser_session_ref
+
+    assert_predicate browser_session_ref, :present?
+    assert_equal token_count_before + 1, VisitorToken.where(visitor_id: visitor.id).count
 
     post base_com_oauth_authorization_url(host: host),
          params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
-    assert_response :bad_request
-    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
+    assert_response :redirect
+    assert_equal browser_session_ref, issuance.transaction.reload.browser_session_ref
+    assert_equal token_count_before + 1, VisitorToken.where(visitor_id: visitor.id).count
   end
 
-  test "org authorize resumes an authenticated result exactly once" do
+  test "org authorize reuses a finalized browser session without creating another root session" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    operator = operators(:one)
+    token_count_before = OperatorToken.where(staff_id: operator.id).count
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
     )
     result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "org", login_challenge: issuance.transaction.login_challenge,
-      actor: operators(:one), session_ref: "org-resume-session", auth_method: "passkey",
+      actor: operator, session_ref: "org-resume-session", auth_method: "passkey",
       authentication_event_at: Time.current,
     )
 
@@ -189,13 +198,18 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_predicate issuance.transaction.reload, :consumed?
+    browser_session_ref = issuance.transaction.browser_session_ref
+
+    assert_predicate browser_session_ref, :present?
+    assert_equal token_count_before + 1, OperatorToken.where(staff_id: operator.id).count
 
     post base_org_oauth_authorization_url(host: host),
          params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
-    assert_response :bad_request
-    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
+    assert_response :redirect
+    assert_equal browser_session_ref, issuance.transaction.reload.browser_session_ref
+    assert_equal token_count_before + 1, OperatorToken.where(staff_id: operator.id).count
   end
 
   test "com authorize refuses a result whose ceremony is not ready" do
@@ -203,15 +217,32 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
     )
-    result = BaseAuthAdmissionCoordinator.issue_result!(transaction: issuance.transaction)
+    result_code = Valkey::AuthState::OpaqueAdmissionStore.new.issue!(
+      purpose: "authentication_result",
+      actor_type: "visitor",
+      surface: "com",
+      subject_ref: issuance.transaction.transaction_id,
+    )
 
     post base_com_oauth_authorization_url(host: host),
-         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
+         params: { result: result_code, transaction_ref: issuance.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
-    assert_equal "authorization transaction is not ready", response.parsed_body.fetch("error_description")
+    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
     assert_not issuance.transaction.reload.consumed?
+
+    still_available = Valkey::AuthState::OpaqueAdmissionStore.new.consume!(
+      purpose: "authentication_result",
+      raw_code: result_code,
+      expected: {
+        actor_type: "visitor",
+        surface: "com",
+        subject_ref: issuance.transaction.transaction_id,
+      },
+    )
+
+    assert_predicate still_available, :success?
   end
 
   test "org authorize refuses a result whose ceremony is not ready" do
@@ -219,67 +250,98 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
     )
-    result = BaseAuthAdmissionCoordinator.issue_result!(transaction: issuance.transaction)
+    result_code = Valkey::AuthState::OpaqueAdmissionStore.new.issue!(
+      purpose: "authentication_result",
+      actor_type: "operator",
+      surface: "org",
+      subject_ref: issuance.transaction.transaction_id,
+    )
+
+    post base_org_oauth_authorization_url(host: host),
+         params: { result: result_code, transaction_ref: issuance.transaction.transaction_id },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
+
+    assert_response :bad_request
+    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
+    assert_not issuance.transaction.reload.consumed?
+
+    still_available = Valkey::AuthState::OpaqueAdmissionStore.new.consume!(
+      purpose: "authentication_result",
+      raw_code: result_code,
+      expected: {
+        actor_type: "operator",
+        surface: "org",
+        subject_ref: issuance.transaction.transaction_id,
+      },
+    )
+
+    assert_predicate still_available, :success?
+  end
+
+  test "com authorize refuses an expired result ceremony" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
+    )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: "com", login_challenge: issuance.transaction.login_challenge,
+      actor: visitors(:reserved_visitor), session_ref: "com-expired-session", auth_method: "passkey",
+      authentication_event_at: Time.current,
+    )
+    decision_time = issuance.transaction.class.database_now
+    issuance.transaction.update!(login_challenge_expires_at: decision_time - 1.second)
+
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+
+    assert_response :bad_request
+    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
+
+    still_available = Valkey::AuthState::OpaqueAdmissionStore.new.consume!(
+      purpose: "authentication_result",
+      raw_code: result.code,
+      expected: {
+        actor_type: "visitor",
+        surface: "com",
+        subject_ref: result.transaction.transaction_id,
+      },
+    )
+
+    assert_predicate still_available, :success?
+  end
+
+  test "org authorize refuses an expired result ceremony" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
+    )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: "org", login_challenge: issuance.transaction.login_challenge,
+      actor: operators(:one), session_ref: "org-expired-session", auth_method: "passkey",
+      authentication_event_at: Time.current,
+    )
+    decision_time = issuance.transaction.class.database_now
+    issuance.transaction.update!(login_challenge_expires_at: decision_time - 1.second)
 
     post base_org_oauth_authorization_url(host: host),
          params: { result: result.code, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
     assert_response :bad_request
-    assert_equal "authorization transaction is not ready", response.parsed_body.fetch("error_description")
-    assert_not issuance.transaction.reload.consumed?
-  end
+    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
 
-  test "com authorize refuses an expired result ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    now = Time.current
-    issuance = result = nil
-    travel_to(now) do
-      issuance = OidcAuthorizationTransactionCoordinator.issue!(
-        surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
-        login_challenge_ttl: 1.second, now: now,
-      )
-      result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
-        surface: "com", login_challenge: issuance.transaction.login_challenge,
-        actor: visitors(:reserved_visitor), session_ref: "com-expired-session", auth_method: "passkey",
-        authentication_event_at: now,
-      )
-    end
+    still_available = Valkey::AuthState::OpaqueAdmissionStore.new.consume!(
+      purpose: "authentication_result",
+      raw_code: result.code,
+      expected: {
+        actor_type: "operator",
+        surface: "org",
+        subject_ref: result.transaction.transaction_id,
+      },
+    )
 
-    travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
-      post base_com_oauth_authorization_url(host: host),
-           params: { result: result.code, transaction_ref: result.transaction.transaction_id },
-           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
-    end
-
-    assert_response :bad_request
-    assert_equal "authorization transaction expired", response.parsed_body.fetch("error_description")
-  end
-
-  test "org authorize refuses an expired result ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    now = Time.current
-    issuance = result = nil
-    travel_to(now) do
-      issuance = OidcAuthorizationTransactionCoordinator.issue!(
-        surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
-        login_challenge_ttl: 1.second, now: now,
-      )
-      result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
-        surface: "org", login_challenge: issuance.transaction.login_challenge,
-        actor: operators(:one), session_ref: "org-expired-session", auth_method: "passkey",
-        authentication_event_at: now,
-      )
-    end
-
-    travel_to(issuance.transaction.login_challenge_expires_at + 1.second) do
-      post base_org_oauth_authorization_url(host: host),
-           params: { result: result.code, transaction_ref: result.transaction.transaction_id },
-           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
-    end
-
-    assert_response :bad_request
-    assert_equal "authorization transaction expired", response.parsed_body.fetch("error_description")
+    assert_predicate still_available, :success?
   end
 
   test "com result binding mismatch does not consume the result" do
@@ -309,6 +371,42 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_predicate first.transaction.reload, :consumed?
+  end
+
+  test "com invalid authorization parameters do not consume a valid result" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "com",
+      intent: "sign_in",
+      params: authorize_params(realm: "visitor").merge(
+        redirect_uri: "https://attacker.example/callback",
+      ),
+    )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: "com", login_challenge: issuance.transaction.login_challenge,
+      actor: visitors(:reserved_visitor), session_ref: "com-invalid-params-session", auth_method: "passkey",
+      authentication_event_at: Time.current,
+    )
+
+    post base_com_oauth_authorization_url(host: host),
+         params: { result: result.code, transaction_ref: result.transaction.transaction_id },
+         headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+
+    assert_response :bad_request
+    assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
+    assert_predicate issuance.transaction.reload, :authenticated?
+
+    replay = Valkey::AuthState::OpaqueAdmissionStore.new.consume!(
+      purpose: "authentication_result",
+      raw_code: result.code,
+      expected: {
+        actor_type: "visitor",
+        surface: "com",
+        subject_ref: result.transaction.transaction_id,
+      },
+    )
+
+    assert_predicate replay, :success?
   end
 
   test "com authorize does not consume a result with a different purpose" do

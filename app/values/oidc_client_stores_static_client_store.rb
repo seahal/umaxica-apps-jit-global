@@ -10,7 +10,7 @@ module OidcClientStoresStaticClientStore
   def clients
     first_party_browser_rp_clients
       .merge(deprecated_shared_browser_rp_clients)
-      .merge(native_and_content_rp_clients)
+      .merge(native_rp_clients)
       .freeze
   end
 
@@ -85,11 +85,11 @@ module OidcClientStoresStaticClientStore
     }
   end
 
-  def native_and_content_rp_clients
+  def native_rp_clients
     {
       "app-ios-rp" => native_rp_client(["umaxica://oidc/callback"], "App iOS RP"),
       "app-android-rp" => native_rp_client(["com.umaxica.app:/oidc/callback"], "App Android RP"),
-    }.merge(content_surface_rp_clients)
+    }
   end
 
   def sign_rp_client
@@ -227,54 +227,6 @@ module OidcClientStoresStaticClientStore
     }
   end
 
-  def content_surface_rp_clients
-    {
-      "docs_app" => content_rp_client(
-        "DOCS_SERVICE_URL", "docs.app.localhost", "umaxica-docs-app", "client",
-        "Docs App",
-      ),
-      "docs_org" => content_rp_client(
-        "DOCS_STAFF_URL", "docs.org.localhost", "umaxica-docs-org", "operator",
-        "Docs Org",
-      ),
-      "docs_com" => content_rp_client(
-        "DOCS_CORPORATE_URL", "docs.com.localhost", "umaxica-docs-com", "visitor", "Docs Com",
-      ),
-      "news_app" => content_rp_client(
-        "NEWS_SERVICE_URL", "news.app.localhost", "umaxica-news-app", "client",
-        "News App",
-      ),
-      "news_org" => content_rp_client(
-        "NEWS_STAFF_URL", "news.org.localhost", "umaxica-news-org", "operator",
-        "News Org",
-      ),
-      "news_com" => content_rp_client(
-        "NEWS_CORPORATE_URL", "news.com.localhost", "umaxica-news-com", "visitor", "News Com",
-      ),
-      "help_app" => content_rp_client(
-        "HELP_SERVICE_URL", "help.app.localhost", "umaxica-help-app", "client",
-        "Help App",
-      ),
-      "help_org" => content_rp_client(
-        "HELP_STAFF_URL", "help.org.localhost", "umaxica-help-org", "operator",
-        "Help Org",
-      ),
-      "help_com" => content_rp_client(
-        "HELP_CORPORATE_URL", "help.com.localhost", "umaxica-help-com", "visitor", "Help Com",
-      ),
-    }
-  end
-
-  def content_rp_client(env_key, default_host, aud, resource_type, name)
-    {
-      redirect_uris: build_redirect_uris(env_key, default_host),
-      aud: aud,
-      resource_type: resource_type,
-      name: name,
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-    }
-  end
-
   # default_host is only consulted for env keys boot_host_for does not map; keys it maps resolve
   # from boot config and must not carry a literal default that can drift from the real host.
   def build_redirect_uris(env_key, default_host = nil, path: "/oidc/callback")
@@ -353,9 +305,8 @@ module OidcClientStoresStaticClientStore
   end
 
   private_class_method :first_party_browser_rp_clients, :deprecated_shared_browser_rp_clients,
-                       :native_and_content_rp_clients, :sign_rp_client, :base_rails_rp_client,
+                       :native_rp_clients, :sign_rp_client, :base_rails_rp_client,
                        :side_rails_rp_client, :core_next_rp_client, :native_rp_client,
-                       :content_surface_rp_clients, :content_rp_client,
                        :face_rp_client, :build_redirect_uris, :build_post_logout_redirect_uris,
                        :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
                        :normalize_host

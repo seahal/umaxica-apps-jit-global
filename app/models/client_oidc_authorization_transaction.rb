@@ -11,6 +11,9 @@
 #  actor_ref                  :string
 #  auth_method                :string
 #  authenticated_at           :datetime
+#  authorization_grant_redeemed_at :datetime
+#  base_finalized_at          :datetime
+#  browser_session_ref        :string
 #  code_challenge             :string           not null
 #  code_challenge_method      :string           not null
 #  consumed_at                :datetime
@@ -20,6 +23,10 @@
 #  login_challenge_expires_at :datetime         not null
 #  nonce                      :string           not null
 #  redirect_uri               :string           not null
+#  result_consumed_at         :datetime
+#  result_digest              :string
+#  result_expires_at          :datetime
+#  result_generation          :integer          default(0), not null
 #  response_type              :string           not null
 #  scope                      :string           not null
 #  session_ref                :string

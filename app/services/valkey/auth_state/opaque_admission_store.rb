@@ -25,7 +25,7 @@ module Valkey
       STATES = %w(issued consumed).freeze
       FIELDS = %w(
         version purpose state actor_type surface subject_ref base_session_ref
-        ceremony_session_ref reference issued_at expires_at consumed_at
+        ceremony_session_ref reference result_generation issued_at expires_at consumed_at
       ).freeze
 
       ConsumeResult =
@@ -124,15 +124,16 @@ module Valkey
       end
 
       def issue!(purpose:, actor_type:, surface:, subject_ref: nil, base_session_ref: nil,
-                 ceremony_session_ref: nil, reference: nil, ttl: CODE_TTL, now: Time.current)
+                 ceremony_session_ref: nil, reference: nil, result_generation: nil, raw_code: nil,
+                 ttl: CODE_TTL, now: Time.current)
         purpose = purpose.to_s
         raise ArgumentError, "unsupported admission purpose" unless PURPOSES.include?(purpose)
 
-        raw = SecureRandom.urlsafe_base64(CODE_BYTES, padding: false)
+        raw = raw_code.to_s.presence || SecureRandom.urlsafe_base64(CODE_BYTES, padding: false)
         reference = reference.to_s.presence || SecureRandom.uuid
         raise ArgumentError, "admission reference is blank" if reference.blank?
 
-        digest = Digest::SHA256.hexdigest("#{purpose}:#{raw}")
+        digest = self.class.digest_for(purpose:, raw_code: raw)
         key = @connection.key("admission:#{purpose}:#{digest}")
         reference_key = reference_storage_key(reference)
         payload = {
@@ -145,6 +146,7 @@ module Valkey
           "base_session_ref" => base_session_ref.to_s.presence,
           "ceremony_session_ref" => ceremony_session_ref.to_s.presence,
           "reference" => reference,
+          "result_generation" => result_generation,
           "issued_at" => now.iso8601,
           "expires_at" => (now + ttl).iso8601,
         }.compact
@@ -164,6 +166,26 @@ module Valkey
       rescue Redis::BaseError, IOError, SystemCallError => e
         raise Umaxica::Valkey::Unavailable, "Valkey admission issue unavailable", cause: e
       end
+
+      def read(raw_code, purpose: "authentication_result")
+        encoded = @connection.call("GET", storage_key(purpose, raw_code))
+        return nil if encoded.blank?
+
+        JSON.parse(encoded)
+      rescue Redis::BaseError, IOError, SystemCallError => e
+        raise Umaxica::Valkey::Unavailable, "Valkey admission read unavailable", cause: e
+      rescue JSON::ParserError => e
+        raise Umaxica::Valkey::SerializationError, "admission payload is corrupt", cause: e
+      end
+
+      def digest_for(purpose:, raw_code:)
+        self.class.digest_for(purpose:, raw_code:)
+      end
+
+      def self.digest_for(purpose:, raw_code:)
+        Digest::SHA256.hexdigest("#{purpose}:#{raw_code}")
+      end
+      public_class_method :digest_for
 
       def consume!(purpose:, raw_code:, expected: {}, now: Time.current, tombstone_ttl: CODE_TTL)
         expected = normalize_expected(expected)
@@ -241,7 +263,7 @@ module Valkey
       def storage_key(purpose, raw_code)
         raise ArgumentError, "admission code is blank" if raw_code.to_s.blank?
 
-        digest = Digest::SHA256.hexdigest("#{purpose}:#{raw_code}")
+        digest = self.class.digest_for(purpose:, raw_code: raw_code)
         @connection.key("admission:#{purpose}:#{digest}")
       end
 

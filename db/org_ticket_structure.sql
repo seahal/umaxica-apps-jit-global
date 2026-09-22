@@ -298,7 +298,15 @@ CREATE UNLOGGED TABLE public.operator_oidc_authorization_transactions (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     oidc_prompt character varying,
-    oidc_max_age integer
+    oidc_max_age integer,
+    result_generation integer DEFAULT 0 NOT NULL,
+    result_digest character varying(64),
+    result_expires_at timestamp(6) with time zone,
+    result_consumed_at timestamp(6) with time zone,
+    browser_session_ref character varying,
+    base_finalized_at timestamp(6) with time zone,
+    authorization_grant_redeemed_at timestamp(6) with time zone,
+    CONSTRAINT operator_oidc_auth_transactions_result_generation_nonnegative CHECK ((result_generation >= 0))
 );
 
 
@@ -2531,6 +2539,10 @@ ALTER TABLE ONLY public.operator_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260922120100'),
+('20260922120000'),
+('20260921140100'),
+('20260921140000'),
 ('20260921133000'),
 ('20260920151000'),
 ('20260920150000'),

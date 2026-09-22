@@ -9,6 +9,7 @@ module OidcAuthorizationTransactionable
   STATUS_CONSUMED = "consumed"
   STATUSES = [STATUS_PENDING, STATUS_AUTHENTICATED, STATUS_CONSUMED].freeze
   RETENTION_PERIOD = 15.minutes
+  RESULT_TTL = 60.seconds
 
   included do
     class_attribute :oidc_authorization_surface_name, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
@@ -82,6 +83,8 @@ module OidcAuthorizationTransactionable
     end
   end
 
+  public
+
   def authenticated?
     status == STATUS_AUTHENTICATED
   end
@@ -96,6 +99,101 @@ module OidcAuthorizationTransactionable
 
   def login_challenge_expired?(now: Time.current)
     login_challenge_expires_at.to_i <= now.to_i
+  end
+
+  # PostgreSQL records the current result generation and digest before the raw
+  # result is placed in Valkey. Valkey is transport only; a failed issue can be
+  # retried with a newer generation without changing actor authentication data.
+  def prepare_result_delivery!(result_digest:, ttl: RESULT_TTL, now: nil)
+    raise ArgumentError, "result digest is required" if result_digest.to_s.blank?
+
+    self.class.connection_owner.connected_to(role: :writing) do
+      self.class.transaction do
+        locked = self.class.lock.find(id)
+        decision_time = now || self.class.database_now
+        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
+        raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated?
+        raise ArgumentError, "authorization result is already finalized" if locked.base_finalized_at.present?
+
+        generation = locked.result_generation.to_i + 1
+        locked.update!(
+          result_generation: generation,
+          result_digest: result_digest.to_s,
+          result_expires_at: decision_time + ttl,
+          result_consumed_at: nil,
+          updated_at: decision_time,
+        )
+        [locked, generation]
+      end
+    end
+  end
+
+  def result_delivery_matches?(result_digest:, result_generation:, now: nil)
+    decision_time = now || self.class.database_now
+    return false if result_digest.blank? || result_digest.to_s.length != 64
+    return false unless result_generation.to_i == self[:result_generation].to_i
+    return false if result_expires_at.blank? || result_expires_at <= decision_time
+    return false unless result_digest.to_s.match?(/\A[0-9a-f]{64}\z/i)
+
+    ActiveSupport::SecurityUtils.secure_compare(self[:result_digest].to_s, result_digest.to_s)
+  end
+
+  # Base finalization is serialized by the surface-local transaction row. The
+  # block performs the surface-specific Browser Session operation and returns a
+  # successful browser_session_ref. Retries reuse the persisted reference.
+  def finalize_base!(now: nil)
+    self.class.connection_owner.connected_to(role: :writing) do
+      self.class.transaction do
+        locked = self.class.lock.find(id)
+        decision_time = now || self.class.database_now
+        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
+        raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated? ||
+          locked.base_finalized_at.present?
+
+        result = yield(locked, decision_time)
+        if result.is_a?(Hash) && result[:status] == :success && result[:browser_session_ref].present? &&
+            locked.base_finalized_at.blank?
+          browser_session_ref = result[:browser_session_ref].to_s
+          raise ArgumentError, "browser session reference is required" if browser_session_ref.blank?
+
+          locked.update!(
+            browser_session_ref: browser_session_ref,
+            result_consumed_at: decision_time,
+            base_finalized_at: decision_time,
+            status: STATUS_CONSUMED,
+            consumed_at: decision_time,
+            updated_at: decision_time,
+          )
+        end
+        result
+      end
+    end
+  end
+
+  # The durable authorization grant is redeemed in the same surface ticket
+  # database as the RP Session. A Valkey code is transport cleanup, not the
+  # correctness authority for this one-time transition.
+  def claim_authorization_grant!(now: nil)
+    self.class.connection_owner.connected_to(role: :writing) do
+      self.class.transaction do
+        locked = self.class.lock.find(id)
+        decision_time = now || self.class.database_now
+        locked.claim_authorization_grant_locked!(now: decision_time)
+      end
+    end
+  end
+
+  # The caller must already hold a row lock in the surface ticket database.
+  # Keeping this primitive separate lets token exchange claim the durable grant
+  # in the same transaction that creates the RP Session.
+  def claim_authorization_grant_locked!(now:)
+    raise ArgumentError, "authorization transaction expired" if expired?(now: now)
+    raise ArgumentError, "authorization transaction is not finalized" if base_finalized_at.blank?
+
+    return false if authorization_grant_redeemed_at.present?
+
+    update!(authorization_grant_redeemed_at: now, updated_at: now)
+    true
   end
 
   def authorize_params

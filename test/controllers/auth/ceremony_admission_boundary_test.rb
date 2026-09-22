@@ -56,6 +56,30 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     assert_valid_admission_challenge!(SURFACES.fetch(2))
   end
 
+  test "admission rejects a transaction expired by the writer database clock" do
+    surface = SURFACES.first
+    host = ENV.fetch(surface.fetch(:host_env))
+    host! host
+    issuance = issue_transaction!(surface)
+    reference = handoff_reference(issuance)
+    application_now = Time.current
+    database_now = application_now + 1.minute
+    issuance.transaction.update!(login_challenge_expires_at: database_now - 1.second)
+
+    issuance.transaction.class.stub(:database_now, database_now) do
+      redeem_auth_ceremony_entry!(
+        public_send(surface.fetch(:sign_in)),
+        reference: reference,
+        params: { ri: "jp" },
+        headers: { "Host" => host },
+      )
+    end
+
+    assert_response :bad_request
+    assert_nil session[:oidc_authorization_login_challenge]
+    assert_nil auth_ceremony_record_for(surface.fetch(:name))
+  end
+
   test "replayed admission is rejected and does not create a Base session token" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     issuance = issue_transaction!(SURFACES.first)

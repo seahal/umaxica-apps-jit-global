@@ -117,6 +117,15 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     def issue_result!(transaction:, ceremony_session_ref: nil, store: default_store)
       purpose = result_purpose_for(transaction.intent)
       reference = SecureRandom.uuid
+      raw_code = SecureRandom.urlsafe_base64(Valkey::AuthState::OpaqueAdmissionStore::CODE_BYTES, padding: false)
+      result_digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(
+        purpose: purpose,
+        raw_code: raw_code,
+      )
+      _locked_transaction, generation = transaction.prepare_result_delivery!(
+        result_digest: result_digest,
+        ttl: Valkey::AuthState::OpaqueAdmissionStore::CODE_TTL,
+      )
       code = store.issue!(
         purpose: purpose,
         actor_type: SURFACE_ACTOR.fetch(transaction.surface),
@@ -124,8 +133,37 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         subject_ref: transaction.transaction_id,
         reference: reference,
         ceremony_session_ref: ceremony_session_ref,
+        result_generation: generation,
+        raw_code: raw_code,
       )
       Issuance.new(transaction: transaction, code: code, reference: reference)
+    end
+
+    def read_result!(raw_code:, surface:, transaction_ref:, expected_intent:, store: default_store)
+      raise Denied, "admission binding mismatch" if transaction_ref.to_s.blank?
+
+      purpose = result_purpose_for(expected_intent)
+      payload = store.read(raw_code, purpose: purpose)
+      raise Denied, "admission missing" if payload.blank?
+
+      validate_payload!(payload, surface: surface)
+      raise Denied, "admission purpose mismatch" unless payload.fetch("purpose") == purpose
+      raise Denied, "admission binding mismatch" unless payload.fetch("subject_ref") == transaction_ref.to_s
+
+      transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+        surface: surface,
+        transaction_id: transaction_ref,
+      )
+      generation = Integer(payload.fetch("result_generation").to_s, 10)
+      digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose:, raw_code: raw_code)
+      raise Denied, "admission binding mismatch" unless transaction.result_delivery_matches?(
+        result_digest: digest,
+        result_generation: generation,
+      )
+
+      payload
+    rescue KeyError, ArgumentError
+      raise Denied, "admission rejected"
     end
 
     def consume_result!(raw_code:, surface:, transaction_ref:, expected_intent:, store: default_store)
@@ -148,17 +186,27 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def register_result_and_issue!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
-                                   authentication_event_at: nil, ceremony_session_ref: nil)
-      issuance = OidcAuthorizationTransactionCoordinator.register_result!(
+                                   authentication_event_at: nil, ceremony_session_ref: nil,
+                                   store: default_store)
+      transaction = OidcAuthorizationTransactionCoordinator.model_for(surface).find_by!(
         surface: surface,
         login_challenge: login_challenge,
-        actor: actor,
-        session_ref: session_ref,
-        auth_method: auth_method,
-        acr: acr,
-        authentication_event_at: authentication_event_at,
       )
-      issue_result!(transaction: issuance.transaction, ceremony_session_ref: ceremony_session_ref)
+      if transaction.authenticated?
+        raise Denied, "authentication actor mismatch" unless transaction.actor_ref == actor.public_id
+      else
+        transaction = OidcAuthorizationTransactionCoordinator.register_result!(
+          surface: surface,
+          login_challenge: login_challenge,
+          actor: actor,
+          session_ref: session_ref,
+          auth_method: auth_method,
+          acr: acr,
+          authentication_event_at: authentication_event_at,
+        ).transaction
+      end
+
+      issue_result!(transaction: transaction, ceremony_session_ref: ceremony_session_ref, store: store)
     end
 
     def ceremony_session_class(surface)

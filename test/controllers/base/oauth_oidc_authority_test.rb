@@ -846,9 +846,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_scope", response.parsed_body["error"]
   end
 
-  test "base oauth authorize consumes login challenge once" do
+  test "base oauth authorize can retry a finalized result without a second root session" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host!(host)
+    token_count_before = ClientToken.where(user_id: clients(:one).id).count
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app", intent: "sign_in",
       params: oidc_authorize_params,
@@ -878,6 +879,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_predicate query["code"], :present?
     assert_equal oidc_authorize_params[:state], query["state"]
     assert_predicate issuance.transaction.reload, :consumed?
+    browser_session_ref = issuance.transaction.browser_session_ref
+
+    assert_predicate browser_session_ref, :present?
+    assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
 
     post "/oauth/authorize", params: {
       result: result.code,
@@ -887,8 +892,9 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       "Sec-Fetch-Site" => "same-site",
     )
 
-    assert_response :bad_request
-    assert_equal "invalid authorization request", response.parsed_body["error_description"]
+    assert_response :redirect
+    assert_equal browser_session_ref, issuance.transaction.reload.browser_session_ref
+    assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
   end
 
   test "base oauth authorize rejects expired login challenge" do
@@ -911,18 +917,19 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       auth_method: "passkey",
     )
 
-    travel 2.minutes do
-      post "/oauth/authorize", params: {
-        result: result.code,
-        transaction_ref: result.transaction.transaction_id,
-      }, headers: browser_headers.merge(
-        "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
-        "Sec-Fetch-Site" => "same-site",
-      )
-    end
+    result.transaction.update!(
+      login_challenge_expires_at: result.transaction.class.database_now - 1.second,
+    )
+    post "/oauth/authorize", params: {
+      result: result.code,
+      transaction_ref: result.transaction.transaction_id,
+    }, headers: browser_headers.merge(
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
+      "Sec-Fetch-Site" => "same-site",
+    )
 
     assert_response :bad_request
-    assert_equal "authorization transaction expired", response.parsed_body["error_description"]
+    assert_equal "invalid authorization request", response.parsed_body["error_description"]
   end
 
   private

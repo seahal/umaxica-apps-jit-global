@@ -10,6 +10,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   class AuthorizationCodeReplayed < StandardError; end
 
+  class AuthorizationGrantAlreadyRedeemed < StandardError; end
+
   Result =
     Data.define(:success, :token_response, :error, :error_description) do
       def success? = success
@@ -19,7 +21,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     Data.define(
       :raw_code, :client_id, :redirect_uri, :subject, :base_session_ref, :code_challenge,
       :code_challenge_method, :nonce, :scope, :auth_time, :resource_type, :rp_session_ref,
-      :refresh_family_ref, :acr, :amr, :issued_at, :expires_at, :state,
+      :refresh_family_ref, :authorization_transaction_ref, :acr, :amr, :issued_at, :expires_at, :state,
     ) do
       def auth_method = amr
     end
@@ -139,6 +141,10 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
     dpop_jkt = validate_dpop_proof(resource_type: peeked["resource_type"])
     return dpop_jkt if dpop_jkt.is_a?(Result)
+
+    if peeked["authorization_transaction_ref"].present?
+      return issue_tokens_for_authorization_transaction!(peeked, dpop_jkt: dpop_jkt)
+    end
 
     consume_result = code_store.consume!(
       raw_code: code,
@@ -442,6 +448,82 @@ class OidcTokenExchangeCoordinator < ApplicationService
     end
   end
 
+  # Authorization codes issued as aliases of a durable Base authorization
+  # transaction use PostgreSQL as the one-time grant authority. Valkey remains
+  # a short-lived transport and is consumed only after the RP Session and token
+  # issuance transaction has committed.
+  def issue_tokens_for_authorization_transaction!(payload, dpop_jkt:)
+    authorization_code = wrap_payload(payload)
+    resource = resolve_resource(authorization_code)
+    return failure("invalid_grant", "resource is not active") unless resource&.active?
+
+    root_token = resolve_root_token(authorization_code)
+    return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
+
+    client = OidcClientRegistry.find!(client_id)
+    connection_class = connection_class_for(authorization_code.resource_type)
+    transaction_class = authorization_transaction_class_for(authorization_code.resource_type)
+    issuance_result, usage_for_link =
+      connection_class.connected_to(role: :writing) do
+      connection_class.transaction do
+        issue_authorization_transaction_database!(
+          authorization_code: authorization_code,
+          resource: resource,
+          client: client,
+          root_token: root_token,
+          transaction_class: transaction_class,
+          dpop_jkt: dpop_jkt,
+        )
+      end
+    end
+
+    finalize_authorization_code_transport!(payload, usage_for_link) if issuance_result&.success?
+
+    issuance_result || failure("server_error", "authorization grant exchange failed")
+  rescue RpSessionAlreadyExists
+    failure("invalid_grant", "RP Session already exists for this Browser Session and client")
+  end
+
+  def issue_authorization_transaction_database!(authorization_code:, resource:, client:, root_token:,
+                                                transaction_class:, dpop_jkt:)
+    authorization_transaction = transaction_class.lock.find_by(
+      transaction_id: authorization_code.authorization_transaction_ref,
+    )
+    decision_time = transaction_class.database_now
+    unless authorization_grant_matches?(authorization_transaction, authorization_code, now: decision_time)
+      return [failure("invalid_grant", "authorization transaction mismatch"), nil]
+    end
+    unless authorization_transaction.claim_authorization_grant_locked!(now: decision_time)
+      return [failure("invalid_grant", "authorization grant already redeemed"), nil]
+    end
+
+    locked_root_token = root_token.class.lock.find_by(id: root_token.id)
+    unless bound_session_usable_after_code_cas?(locked_root_token, resource)
+      return [failure("invalid_grant", "root session is not active"), nil]
+    end
+
+    usage = prepare_exchanged_usage(
+      authorization_code: authorization_code,
+      resource: resource,
+      client: client,
+      root_token: locked_root_token,
+      dpop_jkt: dpop_jkt,
+      now: decision_time,
+    )
+    refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
+    result = issue_exchanged_token_result(
+      authorization_code: authorization_code,
+      resource: resource,
+      client: client,
+      root_token: locked_root_token,
+      usage: usage,
+      refresh_plain: refresh_plain,
+      dpop_jkt: dpop_jkt,
+      now: decision_time,
+    )
+    [result, usage]
+  end
+
   def prepare_exchanged_usage(authorization_code:, resource:, client:, root_token:, dpop_jkt:, now:)
     OidcConnectionRecorder.call(
       resource: resource,
@@ -489,11 +571,75 @@ class OidcTokenExchangeCoordinator < ApplicationService
       resource_type: payload["resource_type"],
       rp_session_ref: payload["rp_session_ref"],
       refresh_family_ref: payload["refresh_family_ref"],
+      authorization_transaction_ref: payload["authorization_transaction_ref"],
       acr: payload["acr"],
       amr: payload["amr"],
       issued_at: parse_time(payload["issued_at"]),
       expires_at: parse_time(payload["expires_at"]),
       state: payload["state"],
+    )
+  end
+
+  def authorization_transaction_class_for(resource_type)
+    case resource_type.to_s
+    when "client" then ClientOidcAuthorizationTransaction
+    when "visitor" then VisitorOidcAuthorizationTransaction
+    when "operator" then OperatorOidcAuthorizationTransaction
+    else
+      raise ArgumentError, "unsupported OIDC authorization resource type: #{resource_type.inspect}"
+    end
+  end
+
+  def authorization_grant_matches?(transaction, authorization_code, now:)
+    return false unless transaction
+    return false if transaction.expired?(now: now)
+    return false unless transaction.surface == surface_for_resource_type(authorization_code.resource_type)
+    return false unless transaction.client_id == authorization_code.client_id
+    return false unless transaction.redirect_uri == authorization_code.redirect_uri
+    return false unless transaction.code_challenge == authorization_code.code_challenge
+    return false unless transaction.code_challenge_method == authorization_code.code_challenge_method
+    return false unless transaction.nonce == authorization_code.nonce
+    return false unless transaction.scope == authorization_code.scope
+    return false if transaction.base_finalized_at.blank?
+    return false unless transaction.status == OidcAuthorizationTransactionable::STATUS_CONSUMED
+    return false unless transaction.browser_session_ref == authorization_code.base_session_ref
+    return false unless transaction.actor_ref == OidcSubject.public_id_from(
+      authorization_code.subject,
+      resource_type: authorization_code.resource_type,
+    )
+
+    true
+  end
+
+  def surface_for_resource_type(resource_type)
+    case resource_type.to_s
+    when "client" then "app"
+    when "visitor" then "com"
+    when "operator" then "org"
+    else nil
+    end
+  end
+
+  def finalize_authorization_code_transport!(payload, usage)
+    consume_result = code_store.consume!(
+      raw_code: code,
+      expected: {
+        client_id: payload["client_id"],
+        redirect_uri: payload["redirect_uri"],
+        subject: payload["subject"],
+        base_session_ref: payload["base_session_ref"],
+        code_challenge: payload["code_challenge"],
+        code_challenge_method: payload["code_challenge_method"],
+        resource_type: expected_resource_type,
+      },
+    )
+    return unless consume_result.success?
+
+    link_consumed_family!(wrap_payload(consume_result.payload), usage)
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::SerializationError,
+         Umaxica::Valkey::OperationError, AuthorizationCodeReplayed => e
+    Rails.logger.error(
+      "[OidcTokenExchangeCoordinator] authorization code transport cleanup failed: #{e.class}",
     )
   end
 

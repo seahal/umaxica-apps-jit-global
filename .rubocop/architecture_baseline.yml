@@ -979,7 +979,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/identity_ceremony_candidate_record.rb: 1
   app/models/concerns/mfa_level_configurable.rb: 3
   app/models/concerns/mfa_status_trackable.rb: 3
-  app/models/concerns/oidc_authorization_transactionable.rb: 7
   app/models/concerns/oidc_connection_record.rb: 9
   app/models/concerns/operator_secret_credential_kinds.rb: 3
   app/models/concerns/otp_lockable.rb: 10

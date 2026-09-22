@@ -46,6 +46,55 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_kind_of Integer, result.token_response[:expires_in]
   end
 
+  test "transaction-bound authorization code aliases redeem one durable grant" do
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app",
+      intent: "sign_in",
+      params: {
+        response_type: "code",
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "durable-state",
+        nonce: "durable-nonce",
+        scope: "openid profile",
+      },
+    ).transaction
+    transaction = OidcAuthorizationTransactionCoordinator.register_result!(
+      surface: "app",
+      login_challenge: transaction.login_challenge,
+      actor: @user,
+      session_ref: nil,
+      auth_method: "email",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    ).transaction
+    transaction.finalize_base! do |_locked, _now|
+      { status: :success, browser_session_ref: @user_session_token.public_id }
+    end
+
+    first_code = issue_code_for_transaction!(transaction)
+    second_code = issue_code_for_transaction!(transaction)
+
+    first_result =
+      with_authenticated_client do
+        exchange_code(first_code.code)
+      end
+
+    assert_predicate first_result, :success?
+    assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id).count
+    assert_predicate transaction.reload.authorization_grant_redeemed_at, :present?
+
+    second_result =
+      with_authenticated_client do
+        exchange_code(second_code.code)
+      end
+
+    assert_not second_result.success?
+    assert_equal "invalid_grant", second_result.error
+    assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id).count
+  end
+
   test "stamps the OIDC connection with the surface writer database time" do
     code_record = issue_code!
     database_now = Time.utc(2026, 9, 21, 13, 14, 15, 123_456)
@@ -446,20 +495,29 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "rejects client assertion unless private_key_jwt is explicitly registered" do
-    docs_client = OidcClientRegistry.find!("docs_app")
-    code_record = issue_code!(client_id: "docs_app", redirect_uri: docs_client.redirect_uris.first)
-
-    result = OidcTokenExchangeCoordinator.call(
-      grant_type: "authorization_code",
-      code: code_record.code,
-      redirect_uri: docs_client.redirect_uris.first,
-      client_id: "docs_app",
-      client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-      client_assertion: "assertion",
-      code_verifier: @code_verifier,
-      token_endpoint_uri: "https://log.umaxica.app/oauth/token",
-      expected_resource_type: "client",
+    unconfigured_client = visitor_account(
+      client_id: "core-next-rp",
+      redirect_uris: [@redirect_uri],
+      redirect_uris_by_realm: { "client" => [@redirect_uri] },
+      registered_token_endpoint_auth_method: nil,
+      metadata_token_endpoint_auth_method: "client_secret_post",
     )
+    code_record = issue_code!
+
+    result =
+      OidcClientRegistry.stub(:find, ->(client_id) { client_id == "core-next-rp" ? unconfigured_client : nil }) do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code",
+          code: code_record.code,
+          redirect_uri: @redirect_uri,
+          client_id: "core-next-rp",
+          client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "assertion",
+          code_verifier: @code_verifier,
+          token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          expected_resource_type: "client",
+        )
+      end
 
     assert_not result.success?
     assert_equal "invalid_client", result.error
@@ -668,15 +726,16 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_client", result.error
   end
 
-  test "unregistered docs app does not enable public token exchange" do
-    docs_client = OidcClientRegistry.find!("docs_app")
-    code_record = issue_code!(client_id: "docs_app", redirect_uri: docs_client.redirect_uris.first)
+  test "an unregistered content-like client does not enable public token exchange" do
+    client_id = "retired-content-client"
+    redirect_uri = "https://docs.example/oidc/callback"
+    code_record = issue_code!(client_id:, redirect_uri:)
 
     result = OidcTokenExchangeCoordinator.call(
       grant_type: "authorization_code",
       code: code_record.code,
-      redirect_uri: docs_client.redirect_uris.first,
-      client_id: "docs_app",
+      redirect_uri:,
+      client_id:,
       code_verifier: @code_verifier,
       expected_resource_type: "client",
     )
@@ -2752,6 +2811,38 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       resource: resource,
       session_token: session_token,
       authentication_event_at: authentication_event_at,
+    )
+  end
+
+  def issue_code_for_transaction!(transaction)
+    OidcAuthorizationCodeIssuer.call(
+      client: @client,
+      params: {
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        nonce: "durable-nonce",
+        scope: "openid profile",
+      },
+      resource: @user,
+      session_token: @user_session_token,
+      authentication_event_at: transaction.authenticated_at,
+      authorization_transaction_ref: transaction.transaction_id,
+    )
+  end
+
+  def exchange_code(raw_code)
+    OidcTokenExchangeCoordinator.call(
+      grant_type: "authorization_code",
+      code: raw_code,
+      redirect_uri: @redirect_uri,
+      client_id: @client.client_id,
+      client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+      client_assertion: "test-client-assertion",
+      token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+      code_verifier: @code_verifier,
+      expected_resource_type: "client",
     )
   end
 

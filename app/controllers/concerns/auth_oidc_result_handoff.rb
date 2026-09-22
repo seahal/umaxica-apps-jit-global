@@ -3,7 +3,8 @@
 
 # Keeps the Auth -> Base OIDC result out of URLs. The GET action only renders a
 # same-origin CSRF-protected continuation form; the POST action issues the
-# one-shot result and renders the cross-surface form that posts it to Base.
+# short-lived transaction-bound result and renders the cross-surface form that
+# posts it to Base.
 module AuthOidcResultHandoff
   extend ActiveSupport::Concern
 

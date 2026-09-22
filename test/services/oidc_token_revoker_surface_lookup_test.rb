@@ -24,13 +24,13 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "docs_org")
+    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "core-org")
     refresh_token = usage.issue_refresh_token!
 
     result =
       OidcClientRegistry.stub(:authenticate, true) do
         OidcTokenRevoker.call(
-          token: refresh_token, client_id: "docs_org", client_secret: "secret",
+          token: refresh_token, client_id: "core-org", client_secret: "secret",
           token_type_hint: "refresh_token",
         )
       end
@@ -46,13 +46,13 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = VisitorRpSession.create!(visitor_token: token, oidc_client_id: "docs_com")
+    usage = VisitorRpSession.create!(visitor_token: token, oidc_client_id: "core-com")
     refresh_token = usage.issue_refresh_token!
 
     result =
       OidcClientRegistry.stub(:authenticate, true) do
         OidcTokenRevoker.call(
-          token: refresh_token, client_id: "docs_com", client_secret: "secret",
+          token: refresh_token, client_id: "core-com", client_secret: "secret",
           token_type_hint: "refresh_token",
         )
       end
@@ -68,12 +68,12 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "docs_org")
+    usage = OperatorRpSession.create!(operator_token: token, oidc_client_id: "core-org")
     refresh_token = usage.issue_refresh_token!
 
     OidcClientRegistry.stub(:authenticate, true) do
       OidcTokenRevoker.call(
-        token: refresh_token, client_id: "docs_com", client_secret: "secret",
+        token: refresh_token, client_id: "core-com", client_secret: "secret",
         token_type_hint: "refresh_token",
       )
     end
@@ -88,7 +88,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
-      oidc_client_id: "docs_app",
+      oidc_client_id: "core-app",
       oidc_sid: SecureRandom.uuid,
       oidc_jti: SecureRandom.uuid,
     )
@@ -98,7 +98,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       OidcClientRegistry.stub(:authenticate, true) do
         AuthenticationTokenService.stub(:decode_allow_expired, payload) do
           OidcTokenRevoker.call(
-            token: "opaque-access-token", client_id: "docs_app", client_secret: "secret",
+            token: "opaque-access-token", client_id: "core-app", client_secret: "secret",
           )
         end
       end
@@ -113,7 +113,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
-      oidc_client_id: "docs_app",
+      oidc_client_id: "core-app",
       oidc_sid: SecureRandom.uuid,
       oidc_jti: SecureRandom.uuid,
     )
@@ -122,7 +122,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
     OidcClientRegistry.stub(:authenticate, true) do
       AuthenticationTokenService.stub(:decode_allow_expired, payload) do
         OidcTokenRevoker.call(
-          token: "opaque-access-token", client_id: "docs_app", client_secret: "secret",
+        token: "opaque-access-token", client_id: "core-app", client_secret: "secret",
         )
       end
     end

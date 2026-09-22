@@ -14,6 +14,7 @@ class ProcessorErasureNotificationJob < ApplicationJob
   def perform(surface:, public_id:)
     notification = notification_class_for(surface).find_by!(public_id: public_id)
     return if notification.terminal?
+    return if retry_not_due?(notification)
 
     subject = subject_for(notification)
     WithdrawalOccurrenceRecording.record!(
@@ -40,6 +41,10 @@ class ProcessorErasureNotificationJob < ApplicationJob
   end
 
   private
+
+  def retry_not_due?(notification)
+    notification.next_retry_at.present? && notification.next_retry_at > notification.class.database_now
+  end
 
   def notification_class_for(surface)
     case surface.to_s

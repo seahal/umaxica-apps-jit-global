@@ -49,7 +49,9 @@ Each exposes a neutral `GET /sign` entry page, CSRF-protected `POST /sign` flow 
 `GET /sign/callback` protocol callback, and `/sign/out`. The RP does not choose Sign in versus
 Sign up; Auth owns that internal ceremony choice. Shared browser registrations (`sign-rp`,
 `base-rails-rp`, `side-rails-rp`, `core-next-rp`) are retired after the seven flows work. Native
-and content clients remain.
+clients remain as a separate future-facing boundary. The read-only `docs`, `news`, and `help`
+surfaces are Rails content/resource surfaces, not Rails-authenticated OIDC RPs; they have no
+content RP registrations in the current static client registry.
 
 ### Session hierarchy
 
@@ -142,25 +144,46 @@ The canonical first-party browser entry is now `GET /sign` followed by a CSRF-pr
 and are not RP entrypoints. This amendment does not alter the Jump RT cryptographic or key
 architecture.
 
-## OIDC result transport amendment (2026-09-20)
+## Already-authenticated RP-start amendment (2026-09-22)
+
+The neutral `POST /sign` boundary refuses a browser that is already authenticated by the root
+Browser Session or by a valid access credential for that same RP. The refusal is evaluated on the
+server before a new state/nonce/PKCE transaction is created; the browser must sign out before
+starting another RP authentication. A credential for another surface is not accepted as proof for
+the current RP. This check reuses the existing host, issuer, audience, resource-type, and client
+binding of the RP access-cookie contract and does not add a per-request RP Session lookup or weaken
+Rails CSRF protection. `GET /sign` remains a non-mutating entry page.
+
+## OIDC result transport amendment (2026-09-20; amended 2026-09-22)
 
 The browser result from Auth back to Base is POST-only. Auth's local `GET /sign/oidc/handoff`
 renders a same-origin CSRF-protected form; its `POST /sign/oidc/handoff` issues the opaque,
-surface-bound, one-shot result. Auth then renders a cross-surface form that submits the result in
-the body to the matching Base `POST /oauth/authorize` endpoint. The result is never placed in a
+surface-bound result. The result is a short-lived Valkey transport capability, while its digest,
+generation, expiry, and finalization state are persisted on the surface-local PostgreSQL
+authorization transaction. Auth then renders a cross-surface form that submits the result in the
+body to the matching Base `POST /oauth/authorize` endpoint. The result is never placed in a
 redirect URL, query string, fragment, or Rails-session pre-authentication map.
 
 Base accepts the result only from the exact configured Auth origin (plus the existing same-site
-null-origin proxy case), performs atomic one-shot consumption, and checks the surface before
-resuming the pending authorization transaction. `GET /oauth/authorize?result=...` is not a result
+null-origin proxy case), validates the result against the transaction before finalization, and
+checks the surface before resuming the pending authorization transaction. A valid result may be
+retried while its short Valkey TTL remains; PostgreSQL row locking and `base_finalized_at` make
+Browser Session finalization idempotent. `GET /oauth/authorize?result=...` is not a result
 consumer. Rails forgery protection remains enabled; no global CSRF configuration or normal Rails
 CSRF boundary is weakened for this transport. Auth remains ceremony-only and Base remains the
 authority for the authorization transaction and all resulting Browser Session, RP Session, and
 authorization-code state.
 
-This amendment is limited to removing secret result transport from URLs and making the browser
-handoff explicit. It does not yet retire the remaining legacy Base callback/session issuance path;
-that remains a later implementation slice under the authority-boundary plan.
+The result transport is not the one-time authorization grant. Base creates one Browser Session per
+OIDC transaction, and authorization-code aliases reference that durable transaction. The
+surface-local `authorization_grant_redeemed_at` transition is atomically claimed in the same
+ticket-database transaction that creates the RP Session, so a retrying or duplicated alias cannot
+create a second RP Session or replace the first session's metadata. Raw result and authorization
+codes are never stored in PostgreSQL; Valkey stores only their short-lived opaque transport state.
+
+This amendment closes the Base/Auth OIDC finalization slice. It does not claim distributed
+atomicity across PostgreSQL and Valkey: after the durable token transaction commits, Valkey code
+cleanup is best-effort and no credential is returned from an unsuccessful database transaction.
 
 ### Result-purpose binding amendment (2026-09-21)
 

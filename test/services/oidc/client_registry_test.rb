@@ -55,6 +55,16 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     end
   end
 
+  test "read-only content surfaces are not registered as Rails OIDC RPs" do
+    %w(
+      docs_app docs_org docs_com
+      news_app news_org news_com
+      help_app help_org help_com
+    ).each do |client_id|
+      assert_nil OidcClientRegistry.find(client_id), client_id
+    end
+  end
+
   test "valid_redirect_uri? returns true for registered URI" do
     client = OidcClientRegistry.find("core-next-rp")
     uri = client.redirect_uris.first
@@ -185,27 +195,23 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     ].compact_blank.uniq.sort, org_uris.map { |uri| URI.parse(uri).host }.sort
   end
 
-  test "native and content clients do not expose logout receiver uris" do
-    %w(app-ios-rp app-android-rp docs_app docs_org docs_com news_app news_org news_com help_app help_org
-       help_com).each do |client_id|
+  test "native clients do not expose logout receiver uris" do
+    %w(app-ios-rp app-android-rp).each do |client_id|
       client = OidcClientRegistry.find!(client_id)
 
       assert_empty client.backchannel_logout_uris, "#{client_id} should not have back-channel logout URIs"
     end
   end
 
-  test "sign and core clients require back-channel session logout while docs app defaults false" do
+  test "sign and core clients require back-channel session logout" do
     assert OidcClientRegistry.find!("sign-rp").backchannel_logout_session_required
     assert OidcClientRegistry.find!("core-next-rp").backchannel_logout_session_required
-    assert_not OidcClientRegistry.find!("docs_app").backchannel_logout_session_required
   end
 
   test "all expected clients are registered" do
     expected = %w(
       sign-rp base-rails-rp core-next-rp app-ios-rp app-android-rp
-      docs_app docs_org docs_com
-      news_app news_org news_com
-      help_app help_org help_com
+      core-app core-com core-org side-app side-com side-org edit-org
     )
 
     expected.each do |client_id|
@@ -224,15 +230,13 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       "core-next-rp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
       "app-ios-rp" => OidcClientRegistry::PALM_ALLOWED_SCOPES,
       "app-android-rp" => OidcClientRegistry::PALM_ALLOWED_SCOPES,
-      "docs_app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "docs_org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "docs_com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "news_app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "news_org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "news_com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "help_app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "help_org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "help_com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "core-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "core-com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "core-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "side-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "side-com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "side-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "edit-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
     }
 
     expectations.each do |client_id, allowed_scopes|
@@ -243,7 +247,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "org clients have operator resource_type" do
-    %w(docs_org news_org help_org).each do |client_id|
+    %w(core-org side-org edit-org).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "operator", client.resource_type, "#{client_id} should be operator type"
@@ -251,7 +255,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "app clients have client resource_type" do
-    %w(sign-rp base-rails-rp core-next-rp app-ios-rp app-android-rp docs_app news_app help_app).each do |client_id|
+    %w(sign-rp base-rails-rp core-next-rp app-ios-rp app-android-rp core-app side-app).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "client", client.resource_type, "#{client_id} should be client type"
@@ -259,7 +263,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "com clients have visitor resource_type" do
-    %w(docs_com news_com help_com).each do |client_id|
+    %w(core-com side-com).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "visitor", client.resource_type, "#{client_id} should be visitor type"
@@ -342,16 +346,6 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     JitSecurityJwtRegistry.stub(:private_key_for, OpenSSL::PKey::EC.generate("secp384r1")) do
       assert OidcClientRegistry.validate_private_key_jwt_configuration!
     end
-  end
-
-  test "docs app has no registered auth method and remains confidential" do
-    client = OidcClientRegistry.find!("docs_app")
-
-    assert_predicate client.client_secret, :blank?
-    assert_nil client.registered_token_endpoint_auth_method
-    assert_not_predicate client, :public_client?
-    assert_predicate client, :confidential_client?
-    assert_equal "client_secret_post", client.metadata_token_endpoint_auth_method
   end
 
   test "explicit registered none client is public" do

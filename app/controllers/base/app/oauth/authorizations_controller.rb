@@ -66,15 +66,18 @@ module Base
           )
         end
 
-        def issue_authorization_code!(resource, params_hash: authorize_params, authentication_event_at: nil)
+        def issue_authorization_code!(resource, params_hash: authorize_params, authentication_event_at: nil,
+                                      session_token: current_session, auth_method: nil, acr: nil,
+                                      authorization_transaction_ref: nil)
           access_claims = Actor.authn.access_claims
           result = ::OidcAuthorizeCoordinator.call(
             params: params_hash,
             resource: resource,
-            session_token: current_session,
-            auth_method: Array(access_claims&.dig("amr")).first,
-            acr: access_claims&.dig("acr"),
+            session_token: session_token,
+            auth_method: auth_method || Array(access_claims&.dig("amr")).first,
+            acr: acr || access_claims&.dig("acr"),
             authentication_event_at: authentication_event_at || current_authentication_event_at,
+            authorization_transaction_ref: authorization_transaction_ref,
           )
 
           if result.success?
@@ -113,49 +116,75 @@ module Base
         end
 
         def resume_authorization!(transaction)
-          return render(
-            json: { error: "invalid_request", error_description: "authorization transaction expired" },
-            status: :bad_request,
-          ) if transaction.login_challenge_expired?
-          return render(
-            json: { error: "invalid_request", error_description: "authorization transaction already consumed" },
-            status: :bad_request,
-          ) if transaction.consumed?
-          return render(
-            json: { error: "invalid_request", error_description: "authorization transaction is not ready" },
-            status: :bad_request,
-          ) unless transaction.authenticated?
+          decision_time = transaction.class.database_now
+          return render_invalid_authorization_transaction("authorization transaction expired") if
+            transaction.login_challenge_expired?(now: decision_time) || transaction.expired?(now: decision_time)
+          return render_invalid_authorization_transaction("authorization transaction is not ready") unless
+            transaction.authenticated? || (transaction.consumed? && transaction.base_finalized_at.present?)
 
           resource = Client.find_by!(public_id: transaction.actor_ref)
-          login_result =
-            ActiveRecord::Base.connected_to(role: :writing) do
-              log_in(
-                resource,
-                record_login_audit: false,
-                token_kind_id: "BROWSER_WEB",
-                require_totp_check: false,
-                audit_context: { oidc_client_id: transaction.client_id },
-                bootstrap_actor: false,
-                skip_login_cooldown: true,
-                authentication_event_at: transaction.authenticated_at,
-              )
-            end
+          finalization = finalize_authorization_transaction!(resource, transaction)
           return redirect_to_session_limitation!(
             resource,
             transaction,
-          ) if login_result[:status] == :session_limit_hard_reject ||
-            login_result[:session_management_required]
+          ) if finalization[:status] == :session_limit_hard_reject ||
+            finalization[:session_management_required]
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,
-          ) unless login_result[:status] == :success
+          ) unless finalization[:status] == :success
 
-          transaction.consume!
           issue_authorization_code!(
             resource,
             params_hash: transaction.authorize_params,
             authentication_event_at: transaction.authenticated_at,
+            session_token: current_session,
+            auth_method: transaction.auth_method,
+            acr: transaction.acr,
+            authorization_transaction_ref: transaction.transaction_id,
           )
+        end
+
+        def render_invalid_authorization_transaction(description)
+          render json: { error: "invalid_request", error_description: description }, status: :bad_request
+        end
+
+        def finalize_authorization_transaction!(resource, transaction)
+          transaction.finalize_base! do |locked, _finalization_time|
+            if locked.base_finalized_at.present?
+              token_record = find_browser_session_for_oidc(resource, locked.browser_session_ref)
+              next { status: :login_failed } unless token_record
+
+              reissue_login_credentials_for_existing_session(
+                resource: resource,
+                token_record: token_record,
+                token_kind_id: "BROWSER_WEB",
+                authentication_event_at: locked.authenticated_at,
+              ).merge(browser_session_ref: locked.browser_session_ref)
+            else
+              login_result = login_for_oidc(resource, locked)
+              next login_result if login_result[:status] == :session_limit_hard_reject ||
+                login_result[:session_management_required]
+              next login_result unless login_result[:status] == :success
+
+              { status: :success, browser_session_ref: current_session.public_id }
+            end
+          end
+        end
+
+        def login_for_oidc(resource, transaction)
+          ActiveRecord::Base.connected_to(role: :writing) do
+            log_in(
+              resource,
+              record_login_audit: false,
+              token_kind_id: "BROWSER_WEB",
+              require_totp_check: false,
+              audit_context: { oidc_client_id: transaction.client_id },
+              bootstrap_actor: false,
+              skip_login_cooldown: true,
+              authentication_event_at: transaction.authenticated_at,
+            )
+          end
         end
 
         def redirect_to_session_limitation!(resource, transaction)

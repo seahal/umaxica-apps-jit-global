@@ -152,4 +152,57 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
 
     assert_equal "authorization transaction expired", error.message
   end
+
+  test "authorization grant redemption is durable and only succeeds once" do
+    transaction = issue_authenticated_transaction!
+    transaction.finalize_base! do |_locked, _now|
+      { status: :success, browser_session_ref: "browser-session-a" }
+    end
+
+    first = transaction.claim_authorization_grant!
+    second = transaction.reload.claim_authorization_grant!
+
+    assert first
+    assert_not second
+    assert_predicate transaction.reload.authorization_grant_redeemed_at, :present?
+  end
+
+  test "base finalization records one browser session reference without changing actor evidence" do
+    transaction = issue_authenticated_transaction!
+    authentication_time = transaction.authenticated_at
+
+    first =
+      transaction.finalize_base! do |_locked, _now|
+        { status: :success, browser_session_ref: "browser-session-a" }
+      end
+    second =
+      transaction.reload.finalize_base! do |_locked, _now|
+        { status: :success, browser_session_ref: "browser-session-b" }
+      end
+    persisted = transaction.reload
+
+    assert_equal :success, first.fetch(:status)
+    assert_equal :success, second.fetch(:status)
+    assert_equal "browser-session-a", persisted.browser_session_ref
+    assert_equal authentication_time, persisted.authenticated_at
+    assert_predicate persisted.base_finalized_at, :present?
+    assert_predicate persisted.result_consumed_at, :present?
+    assert_predicate persisted, :consumed?
+  end
+
+  private
+
+  def issue_authenticated_transaction!
+    transaction =
+      OidcAuthorizationTransactionCoordinator.issue!(surface: "app", intent: "sign_in", params: @params).transaction
+
+    OidcAuthorizationTransactionCoordinator.register_result!(
+      surface: "app",
+      login_challenge: transaction.login_challenge,
+      actor: @client,
+      session_ref: "session-1",
+      auth_method: "passkey",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    ).transaction
+  end
 end

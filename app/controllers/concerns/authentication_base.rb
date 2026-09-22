@@ -2665,6 +2665,88 @@ module AuthenticationBase
     @current_session = token_record_connection_owner.connected_to(role: :writing, &find_logic)
   end
 
+  # A cross-store OIDC retry may already have committed the Base Browser
+  # Session before the authorization-code response was delivered. Reissue the
+  # credentials from that same root token instead of calling log_in again and
+  # creating a second Browser Session. The token row remains the credential
+  # authority; no raw refresh token is reconstructed from persistence.
+  def reissue_login_credentials_for_existing_session(resource:, token_record:, token_kind_id: "BROWSER_WEB",
+                                                     authentication_event_at: nil)
+    return { status: :login_forbidden } unless resource&.active?
+
+    token_model = token_class_for_resource(resource)
+    issuance = rotate_existing_session_credentials(
+      resource: resource,
+      token_record: token_record,
+      token_model: token_model,
+      token_kind_id: token_kind_id,
+      authentication_event_at: authentication_event_at,
+    )
+    return { status: :login_failed } unless issuance
+
+    install_reissued_login_credentials(resource, issuance)
+  end
+
+  def rotate_existing_session_credentials(
+    resource:, token_record:, token_model:, token_kind_id:, authentication_event_at:
+  )
+    token_record_connection_owner(token_model).connected_to(role: :writing) do
+      token_model.transaction do
+        lookup = { public_id: token_record.public_id }
+        lookup[resource_foreign_key] = resource.id
+        locked = token_model.lock.find_by(lookup)
+        next nil unless locked&.currently_usable?
+
+        now = token_model.database_now
+        refresh_plain = locked.rotate_refresh_token!(now: now)
+        access_expires_at = access_token_expires_at_for(locked, now: now)
+        access_token = encode_login_access_token(
+          resource,
+          locked,
+          token_kind_id: token_kind_id,
+          dpop_jkt: token_record_attribute(locked, :dpop_jkt),
+          access_expires_at: access_expires_at,
+          authentication_event_at: authentication_event_at,
+        )
+        {
+          token: locked,
+          access_token: access_token,
+          refresh_token: refresh_plain,
+          access_expires_at: access_expires_at,
+          now: now,
+        }
+      end
+    end
+  end
+
+  def install_reissued_login_credentials(resource, issuance)
+    oidc_rp_session_state = preserved_oidc_rp_session_state
+    reset_session
+    restore_oidc_rp_session_state!(oidc_rp_session_state)
+    clear_previous_login_cookies!
+
+    @current_resource = resource
+    @current_session = issuance.fetch(:token)
+    @current_session_public_id = token_session_public_id(@current_session)
+    set_login_auth_cookies(
+      @current_session,
+      issuance.fetch(:access_token),
+      issuance.fetch(:refresh_token),
+      issuance.fetch(:access_expires_at),
+    )
+    issue_dbsc_registration_header_for(@current_session)
+    populate_current_attributes!(resource, nil)
+    @_current_resource_resolved = true
+
+    login_success_payload(
+      @current_session,
+      issuance.fetch(:access_token),
+      issuance.fetch(:refresh_token),
+      issuance.fetch(:access_expires_at),
+      issuance.fetch(:now),
+    )
+  end
+
   def token_class_for_resource(resource)
     if resource.is_a?(::Client)
       ::ClientToken
@@ -2674,6 +2756,15 @@ module AuthenticationBase
       ::VisitorToken
     else
       token_class
+    end
+  end
+
+  def find_browser_session_for_oidc(resource, public_id)
+    token_model = token_class_for_resource(resource)
+    token_record_connection_owner(token_model).connected_to(role: :writing) do
+      lookup = { public_id: public_id }
+      lookup[resource_foreign_key] = resource.id
+      token_model.find_by(lookup)
     end
   end
 

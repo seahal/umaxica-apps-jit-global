@@ -14,7 +14,8 @@ module Valkey
       FIELDS = %w(
         version state client_id redirect_uri subject base_session_ref code_challenge
         code_challenge_method nonce scope auth_time resource_type rp_session_ref
-        refresh_family_ref acr amr issued_at expires_at consumed_at replay_detected_at
+        refresh_family_ref authorization_transaction_ref acr amr issued_at expires_at consumed_at
+        replay_detected_at
       ).freeze
 
       ConsumeResult =
@@ -128,7 +129,8 @@ module Valkey
 
       def issue!(client_id:, redirect_uri:, subject:, code_challenge:, code_challenge_method:, nonce: nil,
                  scope: nil, auth_time: nil, resource_type:, base_session_ref: nil, rp_session_ref: nil,
-                 refresh_family_ref: nil, acr: nil, amr: nil, ttl: CODE_TTL, now: Time.current)
+                 refresh_family_ref: nil, authorization_transaction_ref: nil, acr: nil, amr: nil,
+                 ttl: CODE_TTL, now: Time.current)
         raise ArgumentError, "code_challenge_method must be S256" unless code_challenge_method.to_s == "S256"
 
         raw_code = SecureRandom.urlsafe_base64(CODE_BYTES, padding: false)
@@ -147,6 +149,7 @@ module Valkey
           "resource_type" => resource_type.to_s,
           "rp_session_ref" => rp_session_ref.to_s.presence,
           "refresh_family_ref" => refresh_family_ref.to_s.presence,
+          "authorization_transaction_ref" => authorization_transaction_ref.to_s.presence,
           "acr" => acr.to_s.presence,
           "amr" => amr.to_s.presence,
           "issued_at" => now.iso8601,
