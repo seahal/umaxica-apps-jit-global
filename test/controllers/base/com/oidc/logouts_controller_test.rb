@@ -10,7 +10,7 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    @client = OidcClientRegistry.find!("sign-rp")
+    @client = OidcClientRegistry.find!("core-com")
     @visitor = visitors(:reserved_visitor)
     @token = VisitorToken.create!(
       visitor: @visitor,
@@ -43,10 +43,7 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "validated logout request is staged through shared confirmation" do
-    redirect_uri =
-      @client.post_logout_redirect_uris.find do |uri|
-        URI.parse(uri).host == ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
-      end
+    redirect_uri = @client.post_logout_redirect_uris.first
 
     get base_com_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "xyz", ri: "jp" },
@@ -87,14 +84,13 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_not_predicate @token.reload, :revoked?
     assert_nil response.location
-    assert_not_includes response.body, "xyz"
+    assert_not_includes inertia_props.to_json, "xyz"
   end
 
   test "post_logout_redirect_uri registered for another realm never redirects externally" do
-    service_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    cross_realm_uri = @client.post_logout_redirect_uris.find { |uri| URI.parse(uri).host == service_host }
+    cross_realm_uri = OidcClientRegistry.find!("core-app").post_logout_redirect_uris.first
 
-    assert_not_nil cross_realm_uri, "sign-rp should register an app-realm post_logout uri"
+    assert_not_nil cross_realm_uri, "core-app should register an app-realm post_logout uri"
 
     post base_com_oidc_logout_url(host: @host),
          params: { id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz", ri: "jp" },
@@ -118,7 +114,7 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-com",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "core", ri: "jp",
           surface: "com",

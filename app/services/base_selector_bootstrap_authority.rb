@@ -5,6 +5,8 @@ class BaseSelectorBootstrapAuthority
   ISSUER = "base-selector-bootstrap"
   AUDIENCE = "base"
 
+  class PostCutoverBootstrapRejected < StandardError; end
+
   def self.call(surface:, principal:)
     new(surface: surface, principal: principal).call
   end
@@ -18,11 +20,12 @@ class BaseSelectorBootstrapAuthority
     raise ArgumentError, "principal is required" unless principal.is_a?(config.principal_class)
 
     with_writing_connections do
-      config.principal_class.lock.find(principal.id)
       bootstrap_result = nil
 
       transaction_owners.reduce(
         -> {
+          acquire_authority_lock!
+          config.principal_class.lock.find(principal.id)
           ensure_reference_rows!
           rp_account = ensure_rp_account!
           identity = ensure_identity!
@@ -66,6 +69,12 @@ class BaseSelectorBootstrapAuthority
     ].compact
     result.uniq!
     result
+  end
+
+  def acquire_authority_lock!
+    config.authority_lock_class.acquire_for!(
+      **{ config.authority_lock_principal_foreign_key => principal.id },
+    )
   end
 
   def transaction_owners
@@ -118,6 +127,16 @@ class BaseSelectorBootstrapAuthority
 
   def ensure_account!(identity)
     association_key = :"#{config.account_identity_association}_id"
+    existing = config.account_class.find_by(association_key => identity.id)
+    return existing if existing
+
+    lock_resource_family_for!(:account)
+    existing = config.account_class.find_by(association_key => identity.id)
+    return existing if existing
+
+    reject_ineligible_new_resource_after_cutover!(:account)
+    return create_account_with_authority!(identity) if authority_owner_eligible?
+
     create_unique(
       config.account_class,
       { association_key => identity.id, :moniker => config.account_moniker, :title => config.account_title },
@@ -143,7 +162,105 @@ class BaseSelectorBootstrapAuthority
     membership = account.current_memberships.first
     return membership.collective if membership.present?
 
+    lock_resource_family_for!(:organization)
+    membership = account.current_memberships.first
+    return membership.collective if membership.present?
+
+    reject_ineligible_new_resource_after_cutover!(:organization)
+    return create_collective_with_authority! if authority_owner_eligible?
+
     config.collective_class.create!(name: config.collective_name, title: config.collective_title)
+  end
+
+  # Selector bootstrap also assembles the legacy graph required by withdrawal
+  # and other pre-existing flows. Explicit authority creators are reserved for
+  # an eligible principal until family cutover.
+  def authority_owner_eligible?
+    principal.status_id == active_status_id && principal.login_allowed? && principal.access_enabled?
+  end
+
+  def reject_ineligible_new_resource_after_cutover!(category)
+    return if authority_owner_eligible? || !family_cut_over?(category)
+
+    raise PostCutoverBootstrapRejected,
+          "#{category} bootstrap requires an eligible authority owner after family cutover"
+  end
+
+  def lock_resource_family_for!(category)
+    resource_kind = AuthorityOwnerMigrationInventory.resource_kind_for(
+      surface: config.surface,
+      category:,
+    )
+    configuration = AuthorityOwnerMigrationInventory.configuration_for(
+      surface: config.surface,
+      resource_kind:,
+    )
+    AuthorityOwnerMigrationInventory.lock_resource_family!(configuration)
+  end
+
+  def family_cut_over?(category)
+    return false unless AuthorityOwnerMigrationInventory.authority_schema_state(surface: config.surface) == :applied
+
+    resource_kind = AuthorityOwnerMigrationInventory.resource_kind_for(
+      surface: config.surface,
+      category:,
+    )
+    AuthorityOwnerMigrationInventory
+      .configuration_for(surface: config.surface, resource_kind:)
+      .fetch(:cutover_class)
+      .established?
+  end
+
+  def active_status_id
+    status_class =
+      case principal
+      when Client then ClientStatus
+      when Visitor then VisitorStatus
+      when Operator then OperatorStatus
+      else raise ArgumentError, "unsupported bootstrap principal: #{principal.class.name}"
+      end
+
+    status_class::ACTIVE
+  end
+
+  def create_account_with_authority!(identity)
+    attributes = {
+      actor: principal,
+      owner: principal,
+      moniker: config.account_moniker,
+      title: config.account_title,
+    }
+
+    case config.surface
+    when :app
+      ClientPersonaCreator.call(**attributes, client_identity: identity)
+    when :com
+      IndividualCreator.call(**attributes, visitor_identity: identity)
+    when :org
+      AgentCreator.call(**attributes, operator_identity: identity)
+    else
+      raise ArgumentError, "unsupported bootstrap surface: #{config.surface.inspect}"
+    end
+  end
+
+  def create_collective_with_authority!
+    attributes = {
+      actor: principal,
+      owner: principal,
+      name: config.collective_name,
+      title: config.collective_title,
+    }
+
+    case config.surface
+    when :app
+      EnterpriseCreator.call(**attributes)
+    when :com
+      CompanyCreator.call(**attributes)
+    when :org
+      BureauCreator.call(**attributes)
+    else
+      raise ArgumentError, "unsupported bootstrap surface: #{config.surface.inspect}"
+    end
   end
 
   def ensure_root_unit!(collective)

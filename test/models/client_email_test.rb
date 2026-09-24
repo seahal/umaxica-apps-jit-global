@@ -70,6 +70,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     next if @identifier_race_digests.blank?
 
     ClientEmail.where(address_digest: @identifier_race_digests).delete_all
+    ClientAuthorityLock.where(client_id: @identifier_race_client_ids).delete_all if @identifier_race_client_ids.present?
     Client.where(id: @identifier_race_client_ids).delete_all if @identifier_race_client_ids.present?
   end
 

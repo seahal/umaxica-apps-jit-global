@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class IdentityGraphProvisionerTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   setup do
     ensure_reference_rows!
   end

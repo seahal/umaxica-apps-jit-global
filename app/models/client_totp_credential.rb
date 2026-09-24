@@ -9,7 +9,7 @@
 # Database name: app_principal
 #
 #  id                                      :bigint           not null, primary key
-#  last_otp_at                             :datetime         default(-Infinity), not null
+#  last_otp_at                             :datetime
 #  otp_attempts_count                      :integer          default(0), not null
 #  private_key                             :string(1024)     default(""), not null
 #  title                                   :string(32)
@@ -58,7 +58,6 @@ class ClientTotpCredential < AppPrincipalRecord
   attribute :user_identity_totp_credential_status_id, default: ClientTotpCredentialStatus::NOTHING
 
   validates :private_key, presence: true, length: { maximum: 1024 }
-  validates :last_otp_at, presence: true
   validates :otp_attempts_count, numericality: {
     only_integer: true,
     greater_than_or_equal_to: 0,

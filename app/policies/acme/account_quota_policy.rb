@@ -11,7 +11,7 @@ module Acme
     end
 
     def allowed?
-      current_count < limit
+      principal_eligible? && lifecycle_complete? && current_count < limit
     end
 
     def exceeded?
@@ -23,10 +23,15 @@ module Acme
     end
 
     def current_count
-      scope_relation.count
+      lifecycle_class.where(
+        lifecycle_foreign_key => scope_relation.select(:id),
+        :state => AuthorityResourceLifecycleStateValue::ACTIVE,
+      ).count
     end
 
     def remaining
+      return 0 unless principal_eligible? && lifecycle_complete?
+
       [limit - current_count, 0].max
     end
 
@@ -35,59 +40,42 @@ module Acme
     attr_reader :surface, :principal, :scope
 
     def scope_relation
-      owned_resources = account_class.where(id: ownership_relation.select(resource_foreign_key))
-      return owned_resources if scope.nil?
-
-      validate_scope!
-      owned_resources.where(id: scope.select(:id))
+      AuthorityOwnerResourceScopeQuery.call(
+        surface:,
+        resource_kind: authority_configuration.fetch(:resource_kind),
+        principal:,
+        scope:,
+      )
     end
 
-    def account_class
-      case surface
-      when :app then ClientPersona
-      when :org then Agent
-      when :com then Individual
-      else
-        raise ArgumentError, "unsupported surface: #{surface.inspect}"
-      end
+    def lifecycle_complete?
+      !scope_relation.where.not(
+        id: lifecycle_class.where(lifecycle_foreign_key => scope_relation.select(:id)).select(lifecycle_foreign_key),
+      ).exists?
     end
 
-    def ownership_relation
-      case surface
-      when :app
-        validate_principal!(Client)
-        ClientPersonaOwnership.where(client_id: principal.id)
-      when :org
-        validate_principal!(Operator)
-        AgentOwnership.where(operator_id: principal.id)
-      when :com
-        validate_principal!(Visitor)
-        IndividualOwnership.where(visitor_id: principal.id)
-      else
-        raise ArgumentError, "unsupported surface: #{surface.inspect}"
-      end
+    def principal_eligible?
+      principal.status_id == authority_configuration.fetch(:principal_active_status_id) &&
+        principal.login_allowed? &&
+        principal.access_enabled?
     end
 
-    def resource_foreign_key
-      case surface
-      when :app then :client_persona_id
-      when :org then :agent_id
-      when :com then :individual_id
-      else
-        raise ArgumentError, "unsupported surface: #{surface.inspect}"
-      end
+    def authority_configuration
+      AuthorityOwnerMigrationInventory.configuration_for(
+        surface:,
+        resource_kind: AuthorityOwnerMigrationInventory.resource_kind_for(
+          surface:,
+          category: :account,
+        ),
+      )
     end
 
-    def validate_principal!(expected_class)
-      return if principal.instance_of?(expected_class)
-
-      raise ArgumentError, "principal must be a #{expected_class.name} for #{surface.inspect}"
+    def lifecycle_class
+      authority_configuration.fetch(:lifecycle_class)
     end
 
-    def validate_scope!
-      return if scope.respond_to?(:klass) && scope.klass == account_class
-
-      raise ArgumentError, "quota scope must be an #{account_class.name} relation"
+    def lifecycle_foreign_key
+      authority_configuration.fetch(:lifecycle_resource_foreign_key)
     end
   end
 end

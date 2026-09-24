@@ -41,9 +41,10 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
   end
 
-  test "deprecated shared browser clients remain findable until seven flows are proven" do
-    AuthBoundaryAuthorityMap.deprecated_shared_browser_client_ids.each do |client_id|
-      assert_predicate OidcClientRegistry.find(client_id), :present?, client_id
+  test "only the explicitly retained core-next migration client remains findable" do
+    assert_predicate OidcClientRegistry.find("core-next-rp"), :present?
+    %w(sign-rp base-rails-rp side-rails-rp).each do |client_id|
+      assert_nil OidcClientRegistry.find(client_id), client_id
     end
   end
 end

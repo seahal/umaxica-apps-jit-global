@@ -22,6 +22,8 @@ module WithdrawalOccurrenceRecording
     retention_exception_code
     processor_key
     processor_notification_public_id
+    delivery_generation
+    delivery_attempt_number
   ).freeze
 
   def self.record!(subject:, event_type:, actor: nil, request: nil, context: {})

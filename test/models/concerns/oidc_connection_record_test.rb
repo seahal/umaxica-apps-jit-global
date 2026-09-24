@@ -11,7 +11,7 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
 
   test "status helpers classify active and revoked connections" do
     active = ClientOidcConnection.create!(user: @user, client_id: "core-next-rp")
-    revoked = ClientOidcConnection.create!(user: @user, client_id: "docs_app", revoked_at: Time.current)
+    revoked = ClientOidcConnection.create!(user: @user, client_id: "core-app", revoked_at: Time.current)
 
     assert_predicate active, :active?
     assert_not_predicate active, :revoked?
@@ -51,7 +51,7 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
 
   test "active scope excludes revoked connections" do
     active = ClientOidcConnection.create!(user: @user, client_id: "core-next-rp")
-    revoked = ClientOidcConnection.create!(user: @user, client_id: "docs_app", revoked_at: Time.current)
+    revoked = ClientOidcConnection.create!(user: @user, client_id: "core-app", revoked_at: Time.current)
 
     active_connections = ClientOidcConnection.active.to_a
 

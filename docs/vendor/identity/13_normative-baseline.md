@@ -14,6 +14,13 @@ confidentiality: internal-vendor-shareable
 related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
+> **Current-contract supersession (2026-09-23):** This vendor baseline predates the accepted
+> Base/Auth authority decision and is retained for historical assessment context. Its Acme-only
+> authority, signed-result, and legacy RP statements must not be used as current requirements.
+> The active Rails contract is defined by
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` and the current security/architecture
+> documents. Do not implement or register an additional authority from this historical baseline.
+
 # Purpose
 
 Define the exact protocol profile, security baseline, and implementation constraints that govern

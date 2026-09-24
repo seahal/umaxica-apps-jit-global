@@ -1,5 +1,10 @@
 # Social Callback Boundary
 
+> **Legacy Sign/Acme vocabulary:** The signed result handoff in this document is historical
+> context for the former delegation model. In the current Rails OIDC architecture, Auth remains
+> ceremony-only and Base remains the OIDC and session authority; use the current Base/Auth result
+> contract for new work.
+
 ## Boundary
 
 Social provider callbacks may terminate on `sign/id` because provider redirect URLs require stable

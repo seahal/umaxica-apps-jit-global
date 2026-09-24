@@ -330,6 +330,9 @@ Current retention / deletion decisions:
 
 - `adr/retainable-concern-and-retention-purge.md`
 - `adr/retention-lifecycle-column-boundary.md`
+- `adr/processor-erasure-notification-delivery-contract.md` — provider-neutral processor
+  notification receipt, bounded retry, terminal failure, recovery, and parent-retention cascade
+  contract.
 
 Repository / application boundary decisions:
 

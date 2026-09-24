@@ -229,6 +229,11 @@ module ParallelTestDatabaseCloner
         digest << File.binread(migration_path)
       end
     end
+    seed_path = Rails.root.join("db/seeds.rb")
+    if seed_path.file?
+      digest << seed_path.to_s
+      digest << File.binread(seed_path)
+    end
     digest << base_schema_digest(config)
     digest.hexdigest
   end

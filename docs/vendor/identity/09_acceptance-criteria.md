@@ -12,6 +12,13 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** These acceptance rows were authored for the
+> historical Acme/Sign authority model. They remain evidence of the earlier vendor-review scope,
+> but they are not frozen requirements for the current Rails implementation. For current authority,
+> RP, logout, and ceremony acceptance, use `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> the current route/security contracts. A row that names Acme as the Authorization Server must not
+> be used to require Acme routes or shared RP registrations after the Base/Auth decision.
+
 # Purpose
 
 Define the acceptance criteria for reviewing identity docs and current implementation evidence.

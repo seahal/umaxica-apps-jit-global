@@ -12,6 +12,13 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** This vendor inventory preserves historical route
+> evidence from the Acme/Sign migration vocabulary. Its authority and shared-RP descriptions are
+> not the current Rails contract. For current implementation and security decisions, use
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> `plans/backlog/2026-09-17-integrated-hardening-plan.md`: Base is the sole physical IdP/AS, Auth
+> is ceremony-only, and browser RPs use their surface-specific contracts.
+
 # Purpose
 
 Inventory the current route families and their evident ownership.

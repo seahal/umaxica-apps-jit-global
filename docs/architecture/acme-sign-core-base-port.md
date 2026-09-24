@@ -1,5 +1,13 @@
 # Acme, Sign, Core, Base, And Palm Architecture
 
+> **Authentication-boundary supersession (2026-09-22):** The component naming and BFF discussion
+> below is retained as historical architecture context. For the current Rails browser OIDC
+> authority, RP registrations, and ceremony ownership, use
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> `plans/backlog/2026-09-17-integrated-hardening-plan.md`. Base is the sole physical IdP/AS, Auth
+> is ceremony-only, and `sign-rp`, `base-rails-rp`, and `side-rails-rp` are not current local
+> browser registrations. Do not use the historical client list below to add a new registration.
+
 ## Current Boundary
 
 The accepted component model is:

@@ -16,6 +16,7 @@ return if Rails.env.production?
 [
   ClientStatus, ClientVisibility, ClientMfaLevel, ClientMfaStatus,
   ClientEmailStatus, ClientSecretCredentialKind, ClientSecretCredentialStatus,
+  VisitorSecretCredentialKind, VisitorSecretCredentialStatus, VisitorPasskeyStatus,
   OperatorStatus, OperatorVisibility, OperatorMfaLevel, OperatorMfaStatus,
   OperatorEmailStatus, OperatorSecretCredentialKind,
 ].each(&:ensure_defaults!)

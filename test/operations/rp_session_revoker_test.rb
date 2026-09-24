@@ -8,13 +8,13 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     @root = ClientToken.create!(user: Client.create!)
     @session_a = ClientRpSession.create!(
       client_token: @root,
-      oidc_client_id: "core-app-rp",
+      oidc_client_id: "core-app",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
     @session_b = ClientRpSession.create!(
       client_token: @root,
-      oidc_client_id: "side-app-rp",
+      oidc_client_id: "side-app",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -93,7 +93,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     other_root = ClientToken.create!(user: Client.create!)
     other_session = ClientRpSession.create!(
       client_token: other_root,
-      oidc_client_id: "core-app-rp",
+      oidc_client_id: "core-app",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )

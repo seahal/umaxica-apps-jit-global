@@ -166,25 +166,6 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied, "admission rejected"
     end
 
-    def consume_result!(raw_code:, surface:, transaction_ref:, expected_intent:, store: default_store)
-      raise Denied, "admission binding mismatch" if transaction_ref.to_s.blank?
-
-      purpose = result_purpose_for(expected_intent)
-      result = store.consume!(
-        purpose: purpose,
-        raw_code: raw_code,
-        expected: binding_expectations(surface: surface, subject_ref: transaction_ref),
-      )
-      raise Denied, "admission missing" if result.missing?
-      raise Denied, "admission replay" if result.replay?
-      raise Denied, "admission binding mismatch" if result.binding_mismatch?
-      raise Denied, "admission rejected" unless result.success?
-
-      payload = result.payload
-      validate_payload!(payload, surface: surface)
-      payload
-    end
-
     def register_result_and_issue!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
                                    authentication_event_at: nil, ceremony_session_ref: nil,
                                    store: default_store)

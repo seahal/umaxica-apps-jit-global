@@ -53,7 +53,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "core",
           ri: "jp",
@@ -94,7 +94,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign",
           ri: "jp",
@@ -128,7 +128,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign",
           ri: "jp",

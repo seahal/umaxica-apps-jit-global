@@ -3,6 +3,10 @@
 > **Supersession (2026-09-13):** Base `/lobby` and Auth/Base `/dashboard` are retired; Root owns
 > public and authenticated homes. See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
 
+> The historical `base-rails-rp` completion example below is retained for migration context only.
+> It must not be used to restore a shared browser RP registration; current surface-specific
+> registrations are defined by the cited ADR.
+
 ## Status
 
 Accepted; partially superseded (2026-09-13) (2026-09-11)
@@ -59,7 +63,9 @@ completed sign-out sets Inertia `clearHistory` so Back cannot restore a signed-i
 
 `GET /sign/out/complete` is removed from Base app, com, and org. Base OIDC
 `post_logout_redirect_uri` values for Base hosts, and Base logout-transaction completion URLs, point
-at `/lobby`. Side hosts registered on `base-rails-rp` still complete at `/sign/out/complete`.
+at `/lobby`. Historically, Side hosts registered on `base-rails-rp` completed at
+`/sign/out/complete`; that sentence is retained only as migration context and is not a current
+registration instruction.
 
 GET is never a logout mutation.
 

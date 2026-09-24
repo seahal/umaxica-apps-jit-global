@@ -11,8 +11,6 @@ class AgentCreator
 
   class QuotaExceeded < StandardError; end
 
-  LIMIT = Acme::QuotaLimits::ACCOUNT_LIMIT
-
   def self.call(...)
     new(...).call
   end
@@ -38,12 +36,18 @@ class AgentCreator
       validate_owner_active!(locked_owner)
       locked_identity = OperatorIdentity.lock.find_by(id: operator_identity.id)
       validate_identity!(identity: locked_identity, owner: locked_owner)
-      raise QuotaExceeded, "operator #{owner.id} owns the maximum number of personas" if owned_count >= LIMIT
+      unless Acme::AccountQuotaPolicy.new(surface: :org, principal: locked_owner).allowed?
+        raise QuotaExceeded, "operator #{owner.id} cannot create another agent"
+      end
 
       agent = Agent.create!(
         operator_identity: locked_identity,
         moniker: moniker,
         title: title,
+      )
+      AgentLifecycle.create!(
+        agent:,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
       )
       AgentOwnership.create!(agent:, operator: locked_owner, ownership_revision: 0)
       agent
@@ -76,9 +80,5 @@ class AgentCreator
       locked_owner.access_enabled?
 
     raise InactiveOwner, "the owner is not allowed to create an agent"
-  end
-
-  def owned_count
-    AgentOwnership.where(operator_id: owner.id).count
   end
 end

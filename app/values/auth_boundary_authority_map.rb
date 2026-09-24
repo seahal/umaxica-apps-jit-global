@@ -16,6 +16,41 @@ module AuthBoundaryAuthorityMap
     edit-org
   ).freeze
 
+  # Approved expand-and-contract target. The active seven-client registry above remains in place
+  # until each caller, URI, key namespace, and RP-session binding has migrated.
+  REGIONAL_RP_CLIENT_IDS = %w(
+    core-app-jp
+    core-app-us
+    core-com-jp
+    core-com-us
+    core-org-jp
+    core-org-us
+    side-app-jp
+    side-app-us
+    side-com-jp
+    side-com-us
+    side-org-jp
+    side-org-us
+  ).freeze
+
+  APPROVED_RP_CLIENT_IDS = (REGIONAL_RP_CLIENT_IDS + ["edit-org"]).freeze
+
+  APPROVED_RP_FACES = {
+    "core-app-jp" => { surface: "core", face: "app", region: "jp", actor: "client" },
+    "core-app-us" => { surface: "core", face: "app", region: "us", actor: "client" },
+    "core-com-jp" => { surface: "core", face: "com", region: "jp", actor: "visitor" },
+    "core-com-us" => { surface: "core", face: "com", region: "us", actor: "visitor" },
+    "core-org-jp" => { surface: "core", face: "org", region: "jp", actor: "operator" },
+    "core-org-us" => { surface: "core", face: "org", region: "us", actor: "operator" },
+    "side-app-jp" => { surface: "side", face: "app", region: "jp", actor: "client" },
+    "side-app-us" => { surface: "side", face: "app", region: "us", actor: "client" },
+    "side-com-jp" => { surface: "side", face: "com", region: "jp", actor: "visitor" },
+    "side-com-us" => { surface: "side", face: "com", region: "us", actor: "visitor" },
+    "side-org-jp" => { surface: "side", face: "org", region: "jp", actor: "operator" },
+    "side-org-us" => { surface: "side", face: "org", region: "us", actor: "operator" },
+    "edit-org" => { surface: "edit", face: "org", region: nil, actor: "operator" },
+  }.freeze
+
   DEPRECATED_SHARED_BROWSER_CLIENT_IDS = %w(
     sign-rp
     base-rails-rp
@@ -50,6 +85,14 @@ module AuthBoundaryAuthorityMap
 
   def first_party_rp_client_ids
     FIRST_PARTY_RP_CLIENT_IDS
+  end
+
+  def approved_rp_client_ids
+    APPROVED_RP_CLIENT_IDS
+  end
+
+  def approved_rp_faces
+    APPROVED_RP_FACES
   end
 
   def deprecated_shared_browser_client_ids

@@ -11,8 +11,6 @@ class IndividualCreator
 
   class QuotaExceeded < StandardError; end
 
-  LIMIT = Acme::QuotaLimits::ACCOUNT_LIMIT
-
   def self.call(...)
     new(...).call
   end
@@ -38,12 +36,18 @@ class IndividualCreator
       validate_owner_active!(locked_owner)
       locked_identity = VisitorIdentity.lock.find_by(id: visitor_identity.id)
       validate_identity!(identity: locked_identity, owner: locked_owner)
-      raise QuotaExceeded, "visitor #{owner.id} owns the maximum number of personas" if owned_count >= LIMIT
+      unless Acme::AccountQuotaPolicy.new(surface: :com, principal: locked_owner).allowed?
+        raise QuotaExceeded, "visitor #{owner.id} cannot create another individual"
+      end
 
       individual = Individual.create!(
         visitor_identity: locked_identity,
         moniker: moniker,
         title: title,
+      )
+      IndividualLifecycle.create!(
+        individual:,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
       )
       IndividualOwnership.create!(
         individual:,
@@ -80,9 +84,5 @@ class IndividualCreator
       locked_owner.access_enabled?
 
     raise InactiveOwner, "the owner is not allowed to create an individual"
-  end
-
-  def owned_count
-    IndividualOwnership.where(visitor_id: owner.id).count
   end
 end

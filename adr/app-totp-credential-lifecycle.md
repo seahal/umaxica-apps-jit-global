@@ -30,6 +30,10 @@ the `REVOKED` transition are one row-locked PostgreSQL state transition. Time pa
 resend, another browser session, and a correct code received after revocation do not
 reset or revive the credential.
 
+`last_otp_at` is `NULL` until a code has been accepted, and then stores the finite
+timestamp of the accepted code. Replay checks treat `NULL` as never-used; an
+infinite timestamp is not used as a placeholder for an event that has not occurred.
+
 An attempt is bound to exactly one actor-owned credential. One active credential may be
 selected automatically. When two active credentials exist, the client selects the
 credential with its actor-scoped `public_id`; database-local IDs are not accepted from

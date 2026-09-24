@@ -34,7 +34,7 @@ module OidcSsoInitiator
 
   private
 
-  def initiate_oidc_session!(pt: "/", screen_hint: nil, prompt: nil, max_age: nil)
+  def initiate_oidc_session!(pt: "/", prompt: nil, max_age: nil)
     prompt = OidcAuthorizeRequestResolver.normalize_prompt(prompt)
     max_age = OidcAuthorizeRequestResolver.normalize_max_age(max_age)
     verifier = SecureRandom.urlsafe_base64(48)
@@ -53,7 +53,6 @@ module OidcSsoInitiator
     log_oidc_pending_flow_created(state: state, pt: oidc_pt)
 
     oidc_authorization_url(
-      screen_hint: screen_hint,
       code_challenge: challenge,
       state: state,
       nonce: nonce,
@@ -80,7 +79,7 @@ module OidcSsoInitiator
     oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
   end
 
-  def oidc_authorization_url(screen_hint:, code_challenge:, state:, nonce:, prompt: nil, max_age: nil)
+  def oidc_authorization_url(code_challenge:, state:, nonce:, prompt: nil, max_age: nil)
     query = {
       response_type: "code",
       client_id: oidc_client_id,
@@ -97,7 +96,6 @@ module OidcSsoInitiator
       # this concern is also included on controllers that do not mix in `PreferenceGlobal`.
       ri: RequestContextContract.normalize_region(params[:ri]),
     }
-    query[:screen_hint] = screen_hint if screen_hint.present?
     query[:prompt] = prompt if prompt.present?
     query[:max_age] = max_age if max_age.present?
     oidc_acme_service_origin.authorization_endpoint(query: query)

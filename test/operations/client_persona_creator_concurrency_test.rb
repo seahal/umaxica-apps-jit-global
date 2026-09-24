@@ -24,6 +24,7 @@ class ClientPersonaCreatorConcurrencyTest < ActiveSupport::TestCase
     if @identity
       persona_ids = ClientPersona.where(client_identity_id: @identity.id).pluck(:id)
       ClientPersonaOwnership.where(client_persona_id: persona_ids).delete_all
+      ClientPersonaLifecycle.where(client_persona_id: persona_ids).delete_all
       ClientPersona.where(id: persona_ids).delete_all
       ClientIdentity.where(id: @identity.id).delete_all
     end

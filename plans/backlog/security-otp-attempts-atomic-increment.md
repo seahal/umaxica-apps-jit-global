@@ -1,7 +1,7 @@
 # Restore `locked_at` Timestamp When OTP Attempts Reach Threshold
 
-Status: Not Started Severity: Low (audit / diagnostic completeness) Origin: Security review
-follow-up; verified working tree on 2026-05-05.
+Status: ALREADY_SATISFIED (verified 2026-09-22) Severity: Low (audit / diagnostic completeness)
+Origin: Security review follow-up; verified working tree on 2026-05-05.
 
 ## Summary
 
@@ -71,6 +71,18 @@ simplified shape around l.88).
 ## How to Apply
 
 Single small PR. No callers change; this is purely the `locked_at` write at threshold.
+
+## Current verification
+
+The implementation is already present in the shared `OtpLockable` concern, so no additional code
+slice is required. `increment_attempts!` increments under the record lock, uses the writer database
+clock, sets a finite lockout expiry only when the threshold is reached, and leaves the first expiry
+unchanged on later attempts. The concrete Client Email and Client Telephone models exercise the
+same concern; no parallel second implementation is needed.
+
+The Compose-backed focused run on 2026-09-22 passed with 153 runs / 459 assertions / 0 failures /
+0 errors / 0 skips. Evidence:
+`evidence/2026-09-22-otp-lockout-timestamp-revalidation-J4K5.md`.
 
 ## Why this is no longer a "race condition" plan
 

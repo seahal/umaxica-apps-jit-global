@@ -1,5 +1,11 @@
 # Step-Up Ceremony Delegation
 
+> **Legacy Sign/Acme vocabulary:** The `sign/id` → `acme/www` signed-result flow below is historical
+> context. It must not be used to design a new handoff. Current Rails Base/Auth OIDC finalization
+> follows the opaque, generation-bound result contract documented in
+> `docs/security/ceremony-grant-result.md`; the session-bound freshness decision remains owned by
+> the current session authority.
+
 ## Boundary
 
 Step-up has two separate parts:

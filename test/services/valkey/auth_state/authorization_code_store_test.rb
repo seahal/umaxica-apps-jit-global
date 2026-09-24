@@ -4,6 +4,9 @@
 require "test_helper"
 
 class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
+  CLIENT_ID = "core-app"
+  REDIRECT_URI = "https://core.umaxica.app/sign/callback"
+
   setup do
     @suite = "suite-#{SecureRandom.hex(4)}"
     @namespace = Umaxica::Valkey::Namespaces.authorization_codes(
@@ -28,8 +31,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
   test "issue and consume succeed once; second consume is replay" do
     raw = @store.issue!(
-      client_id: "core-app-rp",
-      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       subject: "sub-1",
       code_challenge: "challenge",
       code_challenge_method: "S256",
@@ -40,8 +43,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     first = @store.consume!(
       raw_code: raw,
       expected: {
-        client_id: "core-app-rp",
-        redirect_uri: "https://core.umaxica.app/sign/in/callback",
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
       },
     )
 
@@ -50,8 +53,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     second = @store.consume!(
       raw_code: raw,
       expected: {
-        client_id: "core-app-rp",
-        redirect_uri: "https://core.umaxica.app/sign/in/callback",
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
       },
     )
 
@@ -59,13 +62,13 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
   end
 
   test "unknown code is missing and mismatch fails closed" do
-    missing = @store.consume!(raw_code: "no-such-code", expected: { client_id: "core-app-rp" })
+    missing = @store.consume!(raw_code: "no-such-code", expected: { client_id: CLIENT_ID })
 
     assert_predicate missing, :missing?
 
     raw = @store.issue!(
-      client_id: "core-app-rp",
-      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       subject: "sub-1",
       code_challenge: "challenge",
       code_challenge_method: "S256",
@@ -81,8 +84,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
   test "a consumed code with mismatched ownership fields is not classified as replay" do
     raw = @store.issue!(
-      client_id: "core-app-rp",
-      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       subject: "sub-1",
       code_challenge: "challenge",
       code_challenge_method: "S256",
@@ -92,8 +95,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     consumed = @store.consume!(
       raw_code: raw,
       expected: {
-        client_id: "core-app-rp",
-        redirect_uri: "https://core.umaxica.app/sign/in/callback",
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
       },
     )
 
@@ -103,7 +106,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       raw_code: raw,
       expected: {
         client_id: "other-rp",
-        redirect_uri: "https://core.umaxica.app/sign/in/callback",
+        redirect_uri: REDIRECT_URI,
       },
     )
 
@@ -112,8 +115,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
   test "concurrent consume has a single winner" do
     raw = @store.issue!(
-      client_id: "core-app-rp",
-      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       subject: "sub-1",
       code_challenge: "challenge",
       code_challenge_method: "S256",
@@ -128,8 +131,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
           results[index] = store.consume!(
             raw_code: raw,
             expected: {
-              client_id: "core-app-rp",
-              redirect_uri: "https://core.umaxica.app/sign/in/callback",
+              client_id: CLIENT_ID,
+              redirect_uri: REDIRECT_URI,
             },
           ).status
         end
@@ -142,8 +145,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
   test "family linkage is idempotent for the same owner and rejects a different owner" do
     raw = @store.issue!(
-      client_id: "core-app-rp",
-      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       subject: "sub-1",
       code_challenge: "challenge",
       code_challenge_method: "S256",
@@ -152,8 +155,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     @store.consume!(
       raw_code: raw,
       expected: {
-        client_id: "core-app-rp",
-        redirect_uri: "https://core.umaxica.app/sign/in/callback",
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
       },
     )
 
@@ -224,8 +227,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
   def issued_code
     @store.issue!(
-      client_id: "core-app-rp",
-      redirect_uri: "https://core.umaxica.app/sign/in/callback",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       subject: "sub-1",
       code_challenge: "challenge",
       code_challenge_method: "S256",
@@ -237,7 +240,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     raw = issued_code
     @store.consume!(
       raw_code: raw,
-      expected: { client_id: "core-app-rp", redirect_uri: "https://core.umaxica.app/sign/in/callback" },
+      expected: { client_id: CLIENT_ID, redirect_uri: REDIRECT_URI },
     )
     raw
   end

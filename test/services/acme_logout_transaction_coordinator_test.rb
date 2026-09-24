@@ -13,7 +13,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
   def issue_transaction
     AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "sign",
-      initiating_client_id: "sign-rp",
+      initiating_client_id: "core-app",
       completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
         origin_surface: "sign", ri: "jp", surface: "app",
       ),

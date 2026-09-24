@@ -987,7 +987,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/preference_resettable.rb: 1
   app/models/concerns/privacy_request_due_date.rb: 1
   app/models/concerns/privacy_request_state.rb: 4
-  app/models/concerns/processor_erasure_notification_state.rb: 4
   app/models/concerns/promotional_email_unsubscribable.rb: 3
   app/models/concerns/public_id.rb: 1
   app/models/concerns/publishing_entry_record.rb: 1

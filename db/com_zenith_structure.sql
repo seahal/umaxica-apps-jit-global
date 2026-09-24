@@ -2279,6 +2279,52 @@ ALTER SEQUENCE public.visitor_privacy_requests_id_seq OWNED BY public.visitor_pr
 
 
 --
+-- Name: visitor_processor_erasure_notification_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED TABLE public.visitor_processor_erasure_notification_attempts (
+    id bigint NOT NULL,
+    visitor_processor_erasure_notification_id bigint NOT NULL,
+    delivery_generation bigint NOT NULL,
+    attempt_number integer NOT NULL,
+    processor_key character varying NOT NULL,
+    idempotency_key_digest character varying(64) NOT NULL,
+    outcome character varying NOT NULL,
+    started_at timestamp(6) with time zone NOT NULL,
+    finished_at timestamp(6) with time zone,
+    lease_expires_at timestamp(6) with time zone,
+    receipt_reference_digest character varying(64),
+    error_code character varying DEFAULT ''::character varying NOT NULL,
+    error_message character varying DEFAULT ''::character varying NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_visitor_proc_erase_attempt_generation_positive CHECK ((delivery_generation > 0)),
+    CONSTRAINT chk_visitor_proc_erase_attempt_idempotency_digest CHECK (((idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT chk_visitor_proc_erase_attempt_number_positive CHECK ((attempt_number > 0)),
+    CONSTRAINT chk_visitor_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY ((ARRAY['IN_FLIGHT'::character varying, 'ACCEPTED_PENDING'::character varying, 'SUCCEEDED'::character varying, 'RETRYABLE_FAILURE'::character varying, 'PERMANENT_FAILURE'::character varying])::text[])))
+);
+
+
+--
+-- Name: visitor_processor_erasure_notification_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED SEQUENCE public.visitor_processor_erasure_notification_attempts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_processor_erasure_notification_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_processor_erasure_notification_attempts_id_seq OWNED BY public.visitor_processor_erasure_notification_attempts.id;
+
+
+--
 -- Name: visitor_processor_erasure_notification_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2328,7 +2374,13 @@ CREATE UNLOGGED TABLE public.visitor_processor_erasure_notifications (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_visitor_proc_erase_notifications_retention_order CHECK ((discard_at <= purge_eligible_at))
+    delivery_generation bigint DEFAULT 1 NOT NULL,
+    permanent_failed_at timestamp(6) with time zone,
+    delivery_idempotency_key_digest character varying(64) NOT NULL,
+    CONSTRAINT chk_visitor_proc_erase_notifications_generation_positive CHECK ((delivery_generation > 0)),
+    CONSTRAINT chk_visitor_proc_erase_notifications_idempotency_digest CHECK (((delivery_idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT chk_visitor_proc_erase_notifications_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT chk_visitor_proc_erase_notifications_retry_count_nonnegative CHECK ((retry_count >= 0))
 );
 
 
@@ -3324,6 +3376,13 @@ ALTER TABLE ONLY public.visitor_privacy_requests ALTER COLUMN id SET DEFAULT nex
 
 
 --
+-- Name: visitor_processor_erasure_notification_attempts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts ALTER COLUMN id SET DEFAULT nextval('public.visitor_processor_erasure_notification_attempts_id_seq'::regclass);
+
+
+--
 -- Name: visitor_processor_erasure_notification_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4020,6 +4079,14 @@ ALTER TABLE ONLY public.visitor_privacy_requests
 
 
 --
+-- Name: visitor_processor_erasure_notification_attempts visitor_processor_erasure_notification_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
+    ADD CONSTRAINT visitor_processor_erasure_notification_attempts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: visitor_processor_erasure_notification_statuses visitor_processor_erasure_notification_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4456,6 +4523,13 @@ CREATE INDEX idx_on_visitor_privacy_request_id_4225260194 ON public.visitor_proc
 
 
 --
+-- Name: idx_on_visitor_processor_erasure_notification_id_da29c17a62; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_visitor_processor_erasure_notification_id_da29c17a62 ON public.visitor_processor_erasure_notification_attempts USING btree (visitor_processor_erasure_notification_id);
+
+
+--
 -- Name: idx_on_visitor_secret_credential_kind_id_80c2fa07fe; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4488,6 +4562,27 @@ CREATE UNIQUE INDEX idx_visitor_authority_locks_on_visitor_id ON public.visitor_
 --
 
 CREATE INDEX idx_visitor_privacy_requests_subject_kind_status ON public.visitor_privacy_requests USING btree (visitor_id, request_kind, status_id);
+
+
+--
+-- Name: idx_visitor_proc_erase_attempts_generation_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_visitor_proc_erase_attempts_generation_number ON public.visitor_processor_erasure_notification_attempts USING btree (visitor_processor_erasure_notification_id, delivery_generation, attempt_number);
+
+
+--
+-- Name: idx_visitor_proc_erase_attempts_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_visitor_proc_erase_attempts_idempotency ON public.visitor_processor_erasure_notification_attempts USING btree (visitor_processor_erasure_notification_id, delivery_generation, idempotency_key_digest);
+
+
+--
+-- Name: idx_visitor_proc_erase_attempts_processing; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_visitor_proc_erase_attempts_processing ON public.visitor_processor_erasure_notification_attempts USING btree (visitor_processor_erasure_notification_id, delivery_generation, outcome);
 
 
 --
@@ -5419,7 +5514,7 @@ CREATE INDEX index_visitors_on_withdrawn_at ON public.visitors USING btree (with
 --
 
 ALTER TABLE ONLY public.company_units
-    ADD CONSTRAINT fk_company_units_parent_same_company FOREIGN KEY (parent_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_company_units_parent_same_company FOREIGN KEY (parent_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT;
 
 
 --
@@ -5427,7 +5522,7 @@ ALTER TABLE ONLY public.company_units
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_individual_memberships_unit_same_company FOREIGN KEY (company_unit_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_individual_memberships_unit_same_company FOREIGN KEY (company_unit_id, company_id) REFERENCES public.company_units(id, company_id) ON DELETE RESTRICT;
 
 
 --
@@ -5515,7 +5610,7 @@ ALTER TABLE ONLY public.individual_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_241fa58f6a FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_241fa58f6a FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE;
 
 
 --
@@ -5571,7 +5666,7 @@ ALTER TABLE ONLY public.individual_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.visitor_banners
-    ADD CONSTRAINT fk_rails_329012d103 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_329012d103 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
 
 
 --
@@ -5619,7 +5714,7 @@ ALTER TABLE ONLY public.company_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_39edef8680 FOREIGN KEY (approved_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_39edef8680 FOREIGN KEY (approved_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
 
 
 --
@@ -5643,7 +5738,7 @@ ALTER TABLE ONLY public.visitor_passkeys
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flows
-    ADD CONSTRAINT fk_rails_3e7b55d34f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3e7b55d34f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
 
 
 --
@@ -5707,7 +5802,7 @@ ALTER TABLE ONLY public.company_administration_grants
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_4d4952ecfc FOREIGN KEY (to_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_4d4952ecfc FOREIGN KEY (to_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -5755,7 +5850,7 @@ ALTER TABLE ONLY public.visitor_preference_themes
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
 
 
 --
@@ -5771,7 +5866,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_ceremonies
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_606617dd12 FOREIGN KEY (visitor_withdrawal_flow_id) REFERENCES public.visitor_withdrawal_flows(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_606617dd12 FOREIGN KEY (visitor_withdrawal_flow_id) REFERENCES public.visitor_withdrawal_flows(id);
 
 
 --
@@ -5779,7 +5874,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_641ad18d67 FOREIGN KEY (revoked_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_641ad18d67 FOREIGN KEY (revoked_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
 
 
 --
@@ -5851,7 +5946,7 @@ ALTER TABLE ONLY public.visitor_preference_regions
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_77f6de8097 FOREIGN KEY (membership_kind_id) REFERENCES public.individual_membership_kinds(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_77f6de8097 FOREIGN KEY (membership_kind_id) REFERENCES public.individual_membership_kinds(id);
 
 
 --
@@ -5859,7 +5954,7 @@ ALTER TABLE ONLY public.individual_memberships
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_790f1edfff FOREIGN KEY (membership_state_id) REFERENCES public.individual_membership_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_790f1edfff FOREIGN KEY (membership_state_id) REFERENCES public.individual_membership_states(id);
 
 
 --
@@ -5875,7 +5970,7 @@ ALTER TABLE ONLY public.visitor_retention_holds
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flows
-    ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id);
 
 
 --
@@ -5907,7 +6002,7 @@ ALTER TABLE ONLY public.individual_view_grants
 --
 
 ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -5915,7 +6010,7 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 --
 
 ALTER TABLE ONLY public.individuals
-    ADD CONSTRAINT fk_rails_9297b83ebd FOREIGN KEY (visitor_identity_id) REFERENCES public.visitor_identities(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_9297b83ebd FOREIGN KEY (visitor_identity_id) REFERENCES public.visitor_identities(id) ON DELETE RESTRICT;
 
 
 --
@@ -5987,7 +6082,7 @@ ALTER TABLE ONLY public.company_administration_grants
 --
 
 ALTER TABLE ONLY public.individual_memberships
-    ADD CONSTRAINT fk_rails_ad4bcaff08 FOREIGN KEY (revoke_reason_id) REFERENCES public.individual_membership_revoke_reasons(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ad4bcaff08 FOREIGN KEY (revoke_reason_id) REFERENCES public.individual_membership_revoke_reasons(id);
 
 
 --
@@ -6043,7 +6138,7 @@ ALTER TABLE ONLY public.visitor_privacy_requests
 --
 
 ALTER TABLE ONLY public.visitor_identities
-    ADD CONSTRAINT fk_rails_bc90881f37 FOREIGN KEY (status_id) REFERENCES public.visitor_identity_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_bc90881f37 FOREIGN KEY (status_id) REFERENCES public.visitor_identity_states(id);
 
 
 --
@@ -6215,12 +6310,23 @@ ALTER TABLE ONLY public.company_unit_closures
 
 
 --
+-- Name: visitor_processor_erasure_notification_attempts fk_visitor_proc_erase_attempt_notification; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
+    ADD CONSTRAINT fk_visitor_proc_erase_attempt_notification FOREIGN KEY (visitor_processor_erasure_notification_id) REFERENCES public.visitor_processor_erasure_notifications(id) ON DELETE CASCADE;
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260923160001'),
+('20260923150001'),
+('20260923140001'),
 ('20260921133000'),
 ('20260917120001'),
 ('20260831064102'),

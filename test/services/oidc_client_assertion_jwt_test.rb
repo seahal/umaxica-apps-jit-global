@@ -11,9 +11,9 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
 
   test "issue returns nil when local key refresh still cannot resolve the configured key" do
     with_env(
-      "OIDC_CLIENT_BASE_APP_ACTIVE_KID" => nil,
-      "OIDC_CLIENT_BASE_APP_PRIVATE_KEY" => nil,
-      "OIDC_CLIENT_BASE_APP_PUBLIC_KEYSET" => nil,
+      "OIDC_CLIENT_CORE_APP_ACTIVE_KID" => nil,
+      "OIDC_CLIENT_CORE_APP_PRIVATE_KEY" => nil,
+      "OIDC_CLIENT_CORE_APP_PUBLIC_KEYSET" => nil,
     ) do
       JitSecurityJwtRegistry.reload!
 
@@ -23,7 +23,7 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
                                         raise JitSecurityJwtRegistry::ConfigurationError
                                       },
         ) do
-          assert_nil OidcClientAssertionJwt.issue(client_id: "base-rails-rp", token_url: "https://id.example/token")
+          assert_nil OidcClientAssertionJwt.issue(client_id: "core-app", token_url: "https://id.example/token")
         end
       end
     end
@@ -36,24 +36,24 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
     installed = false
 
     with_env(
-      "OIDC_CLIENT_BASE_APP_ACTIVE_KID" => nil,
-      "OIDC_CLIENT_BASE_APP_PRIVATE_KEY" => nil,
-      "OIDC_CLIENT_BASE_APP_PUBLIC_KEYSET" => nil,
+      "OIDC_CLIENT_CORE_APP_ACTIVE_KID" => nil,
+      "OIDC_CLIENT_CORE_APP_PRIVATE_KEY" => nil,
+      "OIDC_CLIENT_CORE_APP_PUBLIC_KEYSET" => nil,
     ) do
       JitSecurityJwtRegistry.reload!
 
-      assert_nil JitSecurityJwtRegistry.private_key_for("oidc_client:BASE_APP")
+      assert_nil JitSecurityJwtRegistry.private_key_for("oidc_client:CORE_APP")
 
       installer =
         lambda do |**|
           installed = true
-          ENV["OIDC_CLIENT_BASE_APP_ACTIVE_KID"] = "base-app-oidc-recovered"
-          ENV["OIDC_CLIENT_BASE_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
+          ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = "core-app-oidc-recovered"
+          ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
           true
         end
 
       JitSecurityJwtLocalKeysetInstaller.stub(:install!, installer) do
-        assertion = OidcClientAssertionJwt.issue(client_id: "base-rails-rp", token_url: token_url)
+        assertion = OidcClientAssertionJwt.issue(client_id: "core-app", token_url: token_url)
 
         assert installed
         assert_predicate assertion, :present?

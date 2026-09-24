@@ -9,7 +9,7 @@ class OidcBackchannelLogoutNotifierTest < ActiveSupport::TestCase
 
   test "call enqueues logout context for delivery instead of a pre-minted token" do
     sid = SecureRandom.uuid
-    client = OidcClientRegistry.find!("sign-rp")
+    client = OidcClientRegistry.find!("core-app")
     uri = "https://id.app.localhost/oidc/backchannel_logout"
 
     OidcClientRegistry.stub(:logout_clients_for_resource_type, [client]) do
@@ -31,7 +31,7 @@ class OidcBackchannelLogoutNotifierTest < ActiveSupport::TestCase
       assert_equal 1, job.fetch(:args).size
       payload = OutboundSensitivePayload.decrypt_oidc_backchannel_logout(job[:args].first)
 
-      assert_equal "sign-rp", payload.fetch(:client_id)
+      assert_equal "core-app", payload.fetch(:client_id)
       assert_equal "client", payload.fetch(:resource_type)
       assert_equal "subject-1", payload.fetch(:subject)
       assert_equal sid, payload.fetch(:sid)
@@ -42,7 +42,7 @@ class OidcBackchannelLogoutNotifierTest < ActiveSupport::TestCase
 
   test "call batches all logout deliveries for the same client" do
     sid = SecureRandom.uuid
-    client = OidcClientRegistry.find!("sign-rp")
+    client = OidcClientRegistry.find!("core-app")
     uris = [
       "https://id.app.localhost/oidc/backchannel_logout",
       "https://id2.app.localhost/oidc/backchannel_logout",

@@ -13,7 +13,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     end
 
   setup do
-    @client = OidcClientRegistry.find!("sign-rp")
+    @client = OidcClientRegistry.find!("core-app")
     @user = clients(:one)
     @sid = SecureRandom.uuid
     @request = Request.new(host: URI.parse("//#{OidcIssuer.host_for_resource_type("client")}").host, method: "POST")
@@ -47,7 +47,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
   test "id_token_hint takes precedence over legacy logout_request" do
     install_actor_context!
-    legacy = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    legacy = OidcLogoutRequest.issue(client_id: "core-app", ri: "jp")
 
     result = call(id_token_hint: id_token, logout_request: legacy)
 
@@ -77,7 +77,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
   test "rejects client_id mismatch" do
     install_actor_context!
 
-    result = call(id_token_hint: id_token, client_id: "base-rails-rp")
+    result = call(id_token_hint: id_token, client_id: "core-com")
 
     assert_predicate result, :error?
     assert_equal "client_id mismatch", result.error_description
@@ -136,10 +136,13 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
   test "rejects post logout redirect uri registered for another realm" do
     install_actor_context!
-    staff_host = Rails.configuration.x.boot_config.fetch(:hosts).sign_staff.host
-    cross_realm_uri = @client.post_logout_redirect_uris.find { |uri| URI.parse(uri).host == staff_host }
+    staff_host = Rails.configuration.x.boot_config.fetch(:hosts).core_staff.host
+    cross_realm_uri =
+      OidcClientRegistry.find!("core-org").post_logout_redirect_uris.find do |uri|
+        URI.parse(uri).host == staff_host
+      end
 
-    assert_not_nil cross_realm_uri, "sign-rp should register an org-realm post_logout uri"
+    assert_not_nil cross_realm_uri, "core-org should register an org-realm post_logout uri"
 
     result = call(id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz")
 
@@ -149,7 +152,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
   end
 
   test "legacy logout_request verifies on post and preserves replay protection" do
-    token = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    token = OidcLogoutRequest.issue(client_id: "core-app", ri: "jp")
 
     first = call({ logout_request: token })
     second = call({ logout_request: token })
@@ -161,7 +164,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
   end
 
   test "legacy logout_request is not consumed on get" do
-    token = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    token = OidcLogoutRequest.issue(client_id: "core-app", ri: "jp")
     get_request = Request.new(host: @request.host, method: "GET")
 
     result = OidcEndSessionRequest.call(params: { logout_request: token }, request: get_request)
@@ -173,7 +176,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
   # HEAD shares Rails routing with GET, so it must not consume the single-use logout_request token.
   test "legacy logout_request is not consumed on head" do
-    token = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    token = OidcLogoutRequest.issue(client_id: "core-app", ri: "jp")
     head_request = Request.new(host: @request.host, method: "HEAD")
 
     result = OidcEndSessionRequest.call(params: { logout_request: token }, request: head_request)

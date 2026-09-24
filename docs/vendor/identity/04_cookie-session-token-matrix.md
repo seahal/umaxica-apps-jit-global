@@ -14,6 +14,13 @@ confidentiality: internal-vendor-shareable
 related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
+> **Current-contract supersession (2026-09-23):** This artifact matrix records the historical
+> Acme-era storage and authority vocabulary. It remains useful as audit context, but its issuer,
+> session, and RP ownership statements are not current requirements. Use
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> `docs/security/session-token-authority.md` for the active Base/Auth and surface-specific RP
+> contract. Do not add an issuer, shared cookie, or shared browser client based on this matrix.
+
 # Purpose
 
 Show who owns each browser/session/token/credential artifact, how it moves, its security attributes,

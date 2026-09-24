@@ -1,45 +1,74 @@
 # Out-of-Band OTP Lifetime
 
-## Context
+Status: `ALREADY_SATISFIED` (verified 2026-09-22)
 
-The OWASP ASVS 5.0 review of 2026-09-19
-(`evidence/2026-09-19-owasp-asvs-5-checklist-review-V5R8.md`, finding F4) found that email and SMS
-one-time codes stay valid for 12 minutes. ASVS 5.0 requirement 6.5.5 limits out-of-band
-authentication requests, codes, and tokens to a maximum lifetime of 10 minutes.
+## Requirement
 
-This document records the finding. No change was made on 2026-09-19.
+Authentication one-time passwords and SMS signup confirmation codes MUST have a
+finite lifetime of no more than ten minutes. Email signup confirmation is
+evaluated as contact confirmation, but the implementation uses the same shorter
+bound. A shorter lifetime remains valid.
 
-## Current behavior
+The product's accepted deviation for email transport in sign-in and Step-Up is
+recorded in `docs/security/otp-audit.md`; it does not relax expiry, replay,
+rate-limit, purpose-binding, or session-binding requirements.
 
-The lifetime is defined three times, each as `OTP_EXPIRATION_MINUTES = 12`:
+## Current implementation
 
-| Constant | Used for |
-|---|---|
-| `CommonOtp::OTP_EXPIRATION_MINUTES` (`app/controllers/concerns/common_otp.rb`) | `generate_otp_for`, `generate_otp_attributes`; the `expires_at` of sign-up email and telephone sessions (app and com), withdrawal re-entry, enforcement recovery, and `SignEmailRegistrable` |
-| `SignOtpCeremony::OTP_EXPIRATION_MINUTES` (`app/services/sign_otp_ceremony.rb`) | `store_otp` for sign-in email and telephone codes |
-| `SignTelephoneOtpDelivery::OTP_EXPIRATION_MINUTES` (`app/services/sign_telephone_otp_delivery.rb`) | `otp_expires_at` for telephone delivery |
+`CommonOtpPolicy::MAX_OOB_TTL` is the single upper-bound source and is set to
+ten minutes. Purpose-specific policy names remain available so callers retain
+their semantic distinction:
 
-The other controls already meet ASVS: codes are HOTP values from a random base32 key, cleared on
-successful verification under `with_lock`, and limited to 5 attempts followed by a 15-minute lockout
-(`OtpLockable`). No locale string or mail template states the lifetime, so the change does not alter
-user-facing copy.
+| Constant | Meaning | Consumers |
+|---|---|---|
+| `CommonOtpPolicy::AUTHENTICATION_TTL` | Authentication OTP lifetime | `CommonOtp::OTP_EXPIRATION_MINUTES`, including app/com sign-in, Step-Up, recovery, and related record-backed OTP paths |
+| `CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL` | Signup contact-confirmation lifetime | `SignOtpCeremony`, `SignTelephoneOtpDelivery`, and app/com signup confirmation paths |
 
-## Why it matters
+Both purpose-specific constants alias `MAX_OOB_TTL`; they cannot drift to
+different values without changing the shared policy source. Workflow tickets
+that have a separate lifecycle remain separate from the OTP secret lifetime.
 
-A longer window extends the time during which a code intercepted from email or SMS remains usable.
-The margin is small (2 minutes), so the risk is low. It is still a failed Level 1 requirement and
-should be corrected.
+The existing `OtpLockable` concern performs the expiry check using the writer
+database clock and rejects blank, infinite, or otherwise non-comparable expiry
+values. Successful verification consumes the OTP under the record lock. Resend
+does not reset the server-side failed-attempt counter.
 
-## Proposal
+## Verification
 
-1. Define one constant as the source of the out-of-band code lifetime, at 10 minutes or less, and
-   make `SignOtpCeremony` and `SignTelephoneOtpDelivery` reference it instead of keeping their own.
-2. Check that session `expires_at` values derived from the constant still cover the resend flow and
-   the resend cooldown.
-3. Update tests that assert a 12-minute window, and add boundary tests at the new limit: valid just
-   before it and rejected just after it.
+The prior stale description of three independent twelve-minute constants was
+incorrect for the current HEAD. The current policy and public ceremony behavior
+were verified against the real PostgreSQL/Valkey-backed test environment.
 
-## Open questions
+RED contract check before adding the shared bound:
 
-- Whether sign-up and withdrawal re-entry sessions, which reuse the same constant for their own
-  `expires_at`, should keep a separate and longer workflow lifetime from the code itself.
+```text
+NameError: uninitialized constant CommonOtpPolicy::MAX_OOB_TTL
+13 runs, 56 assertions, 0 failures, 1 error, 0 skips
+```
+
+GREEN focused verification after the policy alias and expiry-boundary tests:
+
+```text
+PARALLEL_WORKERS=1 bin/rails test \
+  test/services/sign_otp_ceremony_test.rb \
+  test/services/sign/telephone_otp_delivery_test.rb
+
+15 runs, 77 assertions, 0 failures, 0 errors, 0 skips
+```
+
+The broader app/com signup OTP controller set was also verified at 47 runs,
+298 assertions, 0 failures, 0 errors, 0 skips. No external provider, AWS,
+Cloudflare, production, or shared database was contacted.
+
+The new public behavior tests cover an OTP that succeeds immediately before
+the ten-minute boundary and an OTP rejected at the boundary. Existing tests
+cover database-clock expiry calculation, resend cooldown, failed-attempt
+persistence, and one-time consumption.
+
+## Disposition
+
+No separate dry-run, preview, or simulation path is required for this OTP
+lifetime item. No workflow-ticket lifetime was shortened merely to satisfy the
+OTP bound. The historical ASVS finding should be treated as remediated in the
+current implementation; its original evidence remains historical evidence of
+the earlier twelve-minute state.

@@ -22,6 +22,33 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
   end
 
+  test "approved regional target contains twelve regional clients and one global edit client" do
+    assert_equal 13, AuthBoundaryAuthorityMap.approved_rp_client_ids.size
+    assert_equal 12, AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.size
+    assert_equal "edit-org", AuthBoundaryAuthorityMap.approved_rp_client_ids.last
+    assert_equal AuthBoundaryAuthorityMap.approved_rp_client_ids.sort,
+                 AuthBoundaryAuthorityMap.approved_rp_faces.keys.sort
+    regions = AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.map do |client_id|
+      AuthBoundaryAuthorityMap.approved_rp_faces.fetch(client_id).fetch(:region)
+    end.uniq.sort
+
+    assert_equal %w(jp us), regions
+
+    assert_nil AuthBoundaryAuthorityMap.approved_rp_faces.fetch("edit-org").fetch(:region)
+  end
+
+  test "approved regional client metadata never crosses surface or region" do
+    metadata = AuthBoundaryAuthorityMap.approved_rp_faces
+
+    assert_equal %w(client visitor operator),
+                 %w(app com org).map { |face| metadata.fetch("core-#{face}-jp").fetch(:actor) }
+    assert_equal "jp", metadata.fetch("core-app-jp").fetch(:region)
+    assert_equal "us", metadata.fetch("core-app-us").fetch(:region)
+    assert_equal "core", metadata.fetch("core-app-jp").fetch(:surface)
+    assert_equal "side", metadata.fetch("side-app-us").fetch(:surface)
+    assert_equal "operator", metadata.fetch("edit-org").fetch(:actor)
+  end
+
   test "every RP face maps to surface face and actor" do
     AuthBoundaryAuthorityMap.rp_faces.each do |client_id, meta|
       assert_equal client_id.split("-").first, meta.fetch(:surface)

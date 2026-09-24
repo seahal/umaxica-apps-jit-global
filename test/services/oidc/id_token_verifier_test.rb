@@ -27,7 +27,7 @@ class OidcIdTokenVerifierTest < ActiveSupport::TestCase
     assert_invalid id_token(issuer: "https://evil.example")
 
     assert_invalid token_with_claims("aud" => [])
-    assert_invalid token_with_claims("aud" => ["base-rails-rp"])
+    assert_invalid token_with_claims("aud" => ["retired-client"])
     assert_invalid token_with_claims("aud" => ["evil", @client.client_id])
     assert_invalid token_with_claims("aud" => [@client.client_id, "evil"])
     assert_invalid token_with_claims("aud" => @client.client_id)

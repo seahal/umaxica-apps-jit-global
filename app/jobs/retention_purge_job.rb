@@ -13,6 +13,9 @@
 class RetentionPurgeJob < ApplicationJob
   queue_as :retention
 
+  DEFAULT_BATCH_SIZE = 500
+  MAX_BATCH_SIZE = 500
+
   # Rows are deleted with `delete_all`, which applies database-level FK actions
   # but not AR callbacks. Sign-up flows retain their token references until
   # their own retention window is complete; the corresponding FKs are
@@ -52,34 +55,48 @@ class RetentionPurgeJob < ApplicationJob
   # raising would only requeue work that is deliberately paused.
   FEATURE_NAME = :retention_purge_suspended
 
-  def perform(batch_size: 500)
+  def perform(batch_size: DEFAULT_BATCH_SIZE)
+    limit = normalized_batch_size(batch_size)
+    unless limit&.between?(1, MAX_BATCH_SIZE)
+      raise ArgumentError, "batch_size must be between 1 and #{MAX_BATCH_SIZE}"
+    end
+
     if FeatureFlags.enabled?(FEATURE_NAME)
       Rails.logger.warn(JitLogEvent.format("retention.purge.suspended"))
       return
     end
 
-    SignUpArtifactCleanup.cleanup_pending!(batch_size: batch_size)
+    SignUpArtifactCleanup.cleanup_pending!(batch_size: limit)
 
     RETAINABLE_MODELS.each do |klass|
       now = klass.database_now
 
       if [Client, Visitor].include?(klass)
-        anonymize_accounts(klass, now: now, batch_size: batch_size)
+        anonymize_accounts(klass, now: now, batch_size: limit)
         next
       end
 
       if klass == Operator
-        purge_operators(now: now, batch_size: batch_size)
+        purge_operators(now: now, batch_size: limit)
         next
       end
 
       next unless klass.column_names.include?("purge_eligible_at")
 
-      klass.where(purge_eligible_at: ..now).in_batches(of: batch_size).delete_all
+      klass.where(purge_eligible_at: ..now).in_batches(of: limit).delete_all
     end
   end
 
   private
+
+  def normalized_batch_size(value)
+    return value if value.is_a?(Integer)
+    return Integer(value) if value.is_a?(String)
+
+    nil
+  rescue ArgumentError, TypeError
+    nil
+  end
 
   # Operator rows are removed set-based (no callbacks/`dependent:`), so their
   # non-audit cross-DB children must be purged explicitly before deletion.

@@ -45,7 +45,7 @@ module CommonOtp
   # Generates a new OTP code for a given record
   #
   # @param record [ActiveRecord::Base] The record to generate OTP for (e.g., ClientEmail, ClientTelephone)
-  # @param expiration_minutes [Integer] Minutes until OTP expires (default: 12)
+  # @param expiration_minutes [Integer] Minutes until OTP expires (default: 10)
   # @return [String] The generated OTP code
   #
   # @example
@@ -71,7 +71,7 @@ module CommonOtp
   # Useful for records that need to be saved after OTP generation
   #
   # @param record [ActiveRecord::Base] The record to set OTP attributes on
-  # @param expiration_minutes [Integer] Minutes until OTP expires (default: 12)
+  # @param expiration_minutes [Integer] Minutes until OTP expires (default: 10)
   # @return [String] The generated OTP code
   #
   # @example

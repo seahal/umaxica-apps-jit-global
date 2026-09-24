@@ -12,6 +12,13 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** This vendor inventory preserves historical flow
+> evidence from the Acme/Sign migration vocabulary. Its authority, session-commit, and RP-entry
+> descriptions are not the current Rails contract. For current implementation and security
+> decisions, use `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> `docs/security/sign-in-sequence.md`: Base owns Browser Session/RP Session and OIDC authority,
+> Auth owns credential ceremony continuity, and RP entry is `/sign` with `/sign/callback`.
+
 # Purpose
 
 Inventory the current authentication and ceremony flows.

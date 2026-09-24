@@ -1,11 +1,11 @@
-// React port of `src/controllers/passkey_authentication_controller.js` for the app sign-in page.
+// React passkey sign-in panel for the app/com sign-in pages.
 //
 // The ceremony is unchanged: solve an invisible Turnstile token, POST it to the anonymous options
 // endpoint, run `navigator.credentials.get`, POST the assertion to the verification
 // endpoint, and follow the redirect the server returns. Both endpoints are the same routes with the
-// same rate limits and the same CSRF header; only the code that drives them left Stimulus. The
-// status and error strings were literals in that controller, so they stay literal here rather than
-// becoming new translation keys.
+// same rate limits and the same CSRF header; the current panel keeps the ceremony discoverable and
+// does not collect or submit an account identifier. The status and error strings remain literals
+// rather than becoming new translation keys.
 import { useRef } from "react";
 
 import Button from "@/components/ui/Button";

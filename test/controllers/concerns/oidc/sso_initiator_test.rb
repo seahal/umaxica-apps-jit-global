@@ -20,7 +20,7 @@ class OidcSsoInitiatorTestController < ApplicationController
 
   def hinted
     redirect_to_oidc_authorization_url(
-      initiate_oidc_session!(pt: "/hinted", screen_hint: "signup"),
+      initiate_oidc_session!(pt: "/hinted"),
     )
   end
 
@@ -40,7 +40,7 @@ class OidcSsoInitiatorTestController < ApplicationController
   end
 
   def oidc_client_id
-    "base-rails-rp"
+    "core-app"
   end
 
   def oidc_sign_host
@@ -55,7 +55,7 @@ class OidcSsoInitiatorTestController < ApplicationController
   end
 
   def oidc_callback_url
-    "https://#{Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host}/oidc/callback"
+    OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
   end
 
   def jump_rt_issuer_namespace
@@ -83,7 +83,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
       Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
     end
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
-      "https://#{Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host}/oidc/callback"
+      OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
   end
 
@@ -105,8 +105,8 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     authorize_params = Rack::Utils.parse_nested_query(uri.query)
 
-    assert_equal "base-rails-rp", authorize_params.fetch("client_id")
-    assert_equal "https://#{configured_host(:acme_service)}/oidc/callback", authorize_params.fetch("redirect_uri")
+    assert_equal "core-app", authorize_params.fetch("client_id")
+    assert_equal OidcClientRegistry.find!("core-app").redirect_uris.first, authorize_params.fetch("redirect_uri")
     session_cookie =
       response.headers["Set-Cookie"].to_s.split("\n").find { |line| line.start_with?("session=") }
 
@@ -158,13 +158,13 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     assert_equal 60, session.fetch("oidc_pending_flows").fetch(query.fetch("state")).fetch("max_age")
   end
 
-  test "screen hint does not move PKCE state into scalar session keys" do
+  test "normal flow does not emit screen hint or move PKCE state into scalar session keys" do
     get "/oidc/sso/hinted", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
     query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
 
-    assert_equal "signup", query.fetch("screen_hint")
+    assert_nil query["screen_hint"]
     flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
 
     assert_equal "/hinted", flow.fetch("pt")
@@ -212,7 +212,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     cross_site_acme_host = configured_host(:acme_corporate)
     OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) { cross_site_acme_host }
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
-      "https://#{cross_site_acme_host}/oidc/callback"
+      OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
 
     io = StringIO.new
@@ -243,7 +243,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
       Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host
     end
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
-      "https://#{Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host}/oidc/callback"
+      OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
   end
 
@@ -714,7 +714,7 @@ class OidcSsoInitiatorTestController
     lines.flat_map { |line| line.to_s.split("\n") }.compact_blank
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 

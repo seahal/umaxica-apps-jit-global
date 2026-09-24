@@ -9,8 +9,6 @@ class CompanyCreator
 
   class QuotaExceeded < StandardError; end
 
-  LIMIT = Acme::QuotaLimits::ORGANIZATION_LIMIT
-
   def self.call(...)
     new(...).call
   end
@@ -32,9 +30,15 @@ class CompanyCreator
       VisitorAuthorityLock.acquire_for!(visitor_id: owner.id)
       locked_owner = Visitor.lock.find(owner.id)
       validate_owner_active!(locked_owner)
-      raise QuotaExceeded, "visitor #{owner.id} owns the maximum number of organizations" if owned_count >= LIMIT
+      unless Acme::OrganizationQuotaPolicy.new(surface: :com, principal: locked_owner).allowed?
+        raise QuotaExceeded, "visitor #{owner.id} cannot create another organization"
+      end
 
       company = Company.create!(name:, title:)
+      CompanyLifecycle.create!(
+        company:,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
+      )
       CompanyOwnership.create!(company:, visitor: locked_owner, ownership_revision: 0)
       company
     end
@@ -56,9 +60,5 @@ class CompanyCreator
       locked_owner.access_enabled?
 
     raise InactiveOwner, "the owner is not allowed to create a company"
-  end
-
-  def owned_count
-    CompanyOwnership.where(visitor_id: owner.id).count
   end
 end

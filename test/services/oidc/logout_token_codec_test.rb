@@ -6,9 +6,9 @@ require "test_helper"
 
 class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   test "encodes and verifies a back-channel logout token" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: "subject-1",
         sid: SecureRandom.uuid,
@@ -16,7 +16,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       result = OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
       )
 
@@ -30,9 +30,9 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "encodes and verifies a back-channel logout token without subject" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: nil,
         sid: SecureRandom.uuid,
@@ -40,7 +40,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       result = OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
       )
 
@@ -51,9 +51,9 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects replayed logout token jti" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: "subject-1",
         sid: SecureRandom.uuid,
@@ -61,21 +61,21 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       assert_predicate OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
       ), :success?
       assert_not OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
       ).success?
     end
   end
 
   test "stores a digest instead of raw logout token jti" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: "subject-1",
         sid: SecureRandom.uuid,
@@ -83,7 +83,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       result = OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
       )
 
@@ -99,9 +99,9 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "does not use Rails cache for logout token replay tracking" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: "subject-1",
         sid: SecureRandom.uuid,
@@ -119,7 +119,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
       Rails.stub(:cache, cache) do
         assert_predicate OidcLogoutTokenCodec.decode(
           logout_token: token,
-          client_id: "sign-rp",
+          client_id: "core-app",
           resource_type: "client",
         ), :success?
       end
@@ -127,9 +127,9 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects an audience mismatch" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: "subject-1",
         sid: SecureRandom.uuid,
@@ -146,10 +146,10 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects missing sid at encode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       assert_raises(ArgumentError) do
         OidcLogoutTokenCodec.encode(
-          client_id: "sign-rp",
+          client_id: "core-app",
           resource_type: "client",
           subject: nil,
           sid: nil,
@@ -159,10 +159,10 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects blank sid at encode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       assert_raises(ArgumentError) do
         OidcLogoutTokenCodec.encode(
-          client_id: "sign-rp",
+          client_id: "core-app",
           resource_type: "client",
           subject: "subject-1",
           sid: "   ",
@@ -172,10 +172,10 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects malformed sid at encode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       assert_raises(ArgumentError) do
         OidcLogoutTokenCodec.encode(
-          client_id: "sign-rp",
+          client_id: "core-app",
           resource_type: "client",
           subject: "subject-1",
           sid: "not a sid",
@@ -187,9 +187,9 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   test "encodes and verifies a URL-safe RP session sid" do
     sid = Nanoid.generate(size: 21)
 
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = OidcLogoutTokenCodec.encode(
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
         subject: "subject-1",
         sid: sid,
@@ -197,7 +197,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       result = OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "sign-rp",
+        client_id: "core-app",
         resource_type: "client",
       )
 
@@ -207,7 +207,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects sub-only token at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       payload = base_logout_payload
       payload.delete("sid")
       token = forge_logout_token(resource_type: "client", payload: payload)
@@ -217,7 +217,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects missing sid at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       payload = base_logout_payload
       payload.delete("sid")
       payload.delete("sub")
@@ -228,7 +228,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects malformed sid at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = forge_logout_token(resource_type: "client", payload: base_logout_payload("sid" => "not a sid"))
 
       assert_not_predicate decode_logout_token(token), :success?
@@ -236,7 +236,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects missing iat at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       payload = base_logout_payload
       payload.delete("iat")
       token = forge_logout_token(resource_type: "client", payload: payload)
@@ -246,7 +246,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects invalid iat at decode" do
-    with_oidc_key("ACME_APP") do |key, kid|
+    with_oidc_key("CORE_APP") do |key, kid|
       payload = base_logout_payload("iat" => "not-an-int")
       token = JWT::Token.new(
         payload: payload,
@@ -261,7 +261,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects missing exp at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       payload = base_logout_payload
       payload.delete("exp")
       token = forge_logout_token(resource_type: "client", payload: payload)
@@ -271,7 +271,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects expired token at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = forge_logout_token(resource_type: "client", payload: base_logout_payload("exp" => 1.hour.ago.to_i))
 
       assert_not_predicate decode_logout_token(token), :success?
@@ -279,7 +279,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects nonce present" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = forge_logout_token(resource_type: "client", payload: base_logout_payload("nonce" => SecureRandom.hex(8)))
 
       assert_not_predicate decode_logout_token(token), :success?
@@ -287,7 +287,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects wrong events claim" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = forge_logout_token(
         resource_type: "client",
         payload: base_logout_payload("events" => { "http://other" => {} }),
@@ -298,7 +298,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects missing events claim" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       payload = base_logout_payload
       payload.delete("events")
       token = forge_logout_token(resource_type: "client", payload: payload)
@@ -308,7 +308,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   end
 
   test "rejects wrong issuer at decode" do
-    with_oidc_key("ACME_APP") do
+    with_oidc_key("CORE_APP") do
       token = forge_logout_token(
         resource_type: "client",
         payload: base_logout_payload("iss" => OidcIssuer.for_resource_type("visitor")),
@@ -353,7 +353,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   def base_logout_payload(overrides = {})
     {
       "iss" => OidcIssuer.for_resource_type("client"),
-      "aud" => "sign-rp",
+      "aud" => "core-app",
       "iat" => Time.current.to_i,
       "exp" => 2.minutes.from_now.to_i,
       "jti" => SecureRandom.uuid,
@@ -375,7 +375,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
   def decode_logout_token(token)
     OidcLogoutTokenCodec.decode(
       logout_token: token,
-      client_id: "sign-rp",
+      client_id: "core-app",
       resource_type: "client",
     )
   end

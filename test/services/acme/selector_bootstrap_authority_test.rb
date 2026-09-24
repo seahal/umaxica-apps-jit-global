@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   setup do
     ensure_reference_rows!
   end
@@ -38,6 +40,10 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal 1, AvatarPersonaBinding.where(persona_id: result.account.id).count
     assert_equal 1, AvatarAssignment.where(user_id: user.id, role: "owner").count
     assert_equal 1, result.account.current_memberships.count
+    assert_equal user.id, result.account.reload.ownership.client_id
+    assert_equal "active", result.account.lifecycle.state
+    assert_equal user.id, result.collective.reload.ownership.client_id
+    assert_equal "active", result.collective.lifecycle.state
     assert_predicate result.avatar, :present?
     assert_equal "active", result.avatar.lifecycle_state.key
     assert_equal user.id, result.avatar.client_id
@@ -103,6 +109,14 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal "Agent01", org_result.account.title
     assert_equal "Org01", com_result.collective.title
     assert_equal "Org01", org_result.collective.title
+    assert_equal visitor.id, com_result.account.reload.ownership.visitor_id
+    assert_equal "active", com_result.account.lifecycle.state
+    assert_equal visitor.id, com_result.collective.reload.ownership.visitor_id
+    assert_equal "active", com_result.collective.lifecycle.state
+    assert_equal operator.id, org_result.account.reload.ownership.operator_id
+    assert_equal "active", org_result.account.lifecycle.state
+    assert_equal operator.id, org_result.collective.reload.ownership.operator_id
+    assert_equal "active", org_result.collective.lifecycle.state
     assert_nil com_result.avatar
     assert_nil org_result.avatar
     assert_equal 1, IndividualAssignment.count
@@ -124,6 +138,17 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
     assert_nil ClientIdentity.find_by(source_record_id: user.id)
     assert_nil ClientAccount.find_by(user_id: user.id)
+  end
+
+  test "rejects an ineligible new account after its authority family has cut over" do
+    ClientPersonaAuthorityCutover.create!(id: ClientPersonaAuthorityCutover::CUTOVER_ID)
+    user = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+
+    assert_raises(BaseSelectorBootstrapAuthority::PostCutoverBootstrapRejected) do
+      BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+    end
+
+    assert_nil ClientIdentity.find_by(source_record_id: user.id)
   end
 
   private

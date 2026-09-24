@@ -46,3 +46,25 @@ Make the transport requirement explicit and fail at boot when it is not met, fol
 
 Environment and configuration setup is not covered by Minitest. Boot the application with each
 rejected value and with the accepted value, and record the observed result in `evidence/`.
+
+## Current repository-side verification (2026-09-22)
+
+The application-side fail-closed guards are present in the current checkout. The focused contract
+set passed against the Compose-backed PostgreSQL/Valkey test environment:
+
+```text
+PARALLEL_WORKERS=1 bin/rails test \
+  test/lib/umaxica/valkey/responsibility_urls_test.rb \
+  test/lib/umaxica/valkey/settings_test.rb \
+  test/config/test_environment_edge_contract_test.rb \
+  test/unit/database_password_config_test.rb
+
+28 runs, 174 assertions, 0 failures, 0 errors, 0 skips
+```
+
+The tests cover Valkey scheme rejection/production enforcement and the production PostgreSQL
+`verify-full` configuration contract. No provider value, live TLS handshake, AWS, Cloudflare,
+production, or shared service was contacted. The remaining production-value and live-handshake
+checks therefore remain deployment verification, not an application-code blocker.
+
+Evidence: `evidence/2026-09-22-backend-transport-tls-revalidation-N8P9.md`.

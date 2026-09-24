@@ -25,6 +25,7 @@ class StepUpSessionConsumptionConcurrencyTest < ActiveSupport::TestCase
   teardown do
     ClientStepUpSession.where(id: @step_up_session&.id).delete_all
     ClientToken.where(id: @token&.id).delete_all
+    ClientAuthorityLock.where(client_id: @user&.id).delete_all
     Client.where(id: @user&.id).delete_all
   end
 

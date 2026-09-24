@@ -1,5 +1,11 @@
 # Identity Authority Boundary
 
+> **Current Rails contract note (2026-09-22):** The migration context in this document is retained
+> for historical reference. Its `acme/www` and `sign/id` authority descriptions do not supersede
+> the current Rails OIDC contract in
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical IdP/AS, Auth is a
+> ceremony-only service, and browser RP registrations are surface-specific.
+
 > **Supersession (2026-06-12):** The target component model is now
 > `docs/architecture/acme-sign-core-base-port.md` and `adr/acme-sign-core-base-port-boundary.md`.
 > Acme is the only IdP / Authorization Server, Sign is a special RP, Core is the Next.js web RP/BFF,
@@ -12,13 +18,18 @@
 > supersede the older compatibility-route language below. Retired non-exception Auth settings routes
 > must be removed without redirect, alias, or `410 Gone` compatibility shims.
 
+> **Historical-reading rule:** The migration sections below may mention Acme, Sign, shared
+> `base-rails-rp`, or legacy `/sign/in` routes. Those mentions describe historical state only and
+> are not current registration, authority, or routing instructions. Use
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` for the active Rails contract.
+
 > **Global / Regional database ownership (2026-09-08):** `adr/global-regional-database-ownership.md`
 > confirms that the databases backing this authority — `*_zenith` (Account / Identity /
 > Organization), `*_ticket` (Session / Token / OIDC), `*_setting` (Preference) — are **Global-only**
 > and are never owned or written by the future Regional repository. Regional trusts acme-issued
 > downstream tokens; it does not read a Global database directly.
 
-## Current Boundary
+## Historical Migration Boundary
 
 `acme/www` is the Session, Token, Account, Preference, Authorization, and downstream-token
 Authority. It also owns the general `/identity` settings surface that moved from Sign.
@@ -32,9 +43,10 @@ models, namespaces, and route names do not imply sign-side authority.
 The public sign-up route vocabulary is frozen. The migration target is authority ownership, not
 renaming accepted `/sign/up/*` or `/social/*` paths.
 
-## Implementation Status
+## Historical Migration Status
 
-This document describes the accepted authority boundary. The implementation is still being inverted.
+This section describes the historical migration boundary. The implementation was still being inverted
+when this record was written.
 Some existing `sign/id` routes and controllers may remain reachable as compatibility routes until
 the active implementation slices move or redirect them.
 
@@ -84,6 +96,26 @@ tables and does not implement the full ceremony grant/result protocol.
 `core`, `line`, and future downstream services trust acme-issued downstream tokens. They must not
 trust sign-issued session, access, or downstream tokens.
 
+## Current Rails Result Boundary
+
+The active Rails implementation uses Auth as a credential-ceremony service and Base as the sole
+OIDC Identity Provider / Authorization Server. The Auth-to-Base result is a short-lived opaque
+Valkey transport capability. The matching surface-local PostgreSQL authorization transaction is
+the durable authority for its digest, generation, expiry, and Base finalization state.
+
+Base reads the result only after validating the surface and transaction binding, then rechecks the
+generation while holding the PostgreSQL transaction-row lock. A valid result may be retried while
+its transport TTL remains; Base finalization is idempotent and creates at most one Browser Session
+for the transaction. Authorization-code aliases share one durable grant, and the
+`authorization_grant_redeemed_at` transition is claimed atomically with RP Session creation or
+resolution in the surface ticket database.
+
+Raw result and authorization-code values are not stored in PostgreSQL. Valkey is transport state,
+not the authority for Browser Sessions, RP Sessions, or authorization grants. Rails forgery
+protection remains enabled for the local and cross-surface POST boundaries. This contract does not
+claim distributed ACID across PostgreSQL and Valkey or immediate invalidation of already-issued
+Access JWTs.
+
 ## Sign/ID Gateway
 
 `sign/id` may:
@@ -102,7 +134,7 @@ trust sign-issued session, access, or downstream tokens.
   or authorization decisions;
 - treat physical sign-side tables or models as proof of sign-side authority.
 
-## Result Boundary
+## Historical Result Boundary (superseded for the current Rails flow)
 
 Delegated credential work crosses the boundary through an acme-issued ceremony grant and a signed
 ceremony result.

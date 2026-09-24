@@ -141,7 +141,7 @@ module OidcAuthorizationTransactionable
   # Base finalization is serialized by the surface-local transaction row. The
   # block performs the surface-specific Browser Session operation and returns a
   # successful browser_session_ref. Retries reuse the persisted reference.
-  def finalize_base!(now: nil)
+  def finalize_base!(result_generation: nil, now: nil)
     self.class.connection_owner.connected_to(role: :writing) do
       self.class.transaction do
         locked = self.class.lock.find(id)
@@ -149,6 +149,9 @@ module OidcAuthorizationTransactionable
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
         raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated? ||
           locked.base_finalized_at.present?
+        if result_generation.present? && locked.result_generation.to_i != Integer(result_generation)
+          raise ArgumentError, "authorization result generation is stale"
+        end
 
         result = yield(locked, decision_time)
         if result.is_a?(Hash) && result[:status] == :success && result[:browser_session_ref].present? &&

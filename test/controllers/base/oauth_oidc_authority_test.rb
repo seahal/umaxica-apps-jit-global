@@ -536,12 +536,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
     )
-    logout_request = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    logout_request = OidcLogoutRequest.issue(client_id: "core-app", ri: "jp")
 
     get(
       base_app_oidc_logout_url(host: host),
       params: {
-        client_id: "base-rails-rp",
+        client_id: "core-app",
         logout_request: logout_request,
         ri: "jp",
       },
@@ -554,7 +554,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     post(
       base_app_oidc_logout_url(host: host),
       params: {
-        client_id: "base-rails-rp",
+        client_id: "core-app",
         logout_request: logout_request,
         ri: "jp",
       },
@@ -752,61 +752,63 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "first-party browser RPs keep ordinary authentication intent neutral" do
-    [
-      {
-        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
-        client_id: "core-app",
-        resource_type: "client",
-        surface: "app",
-        transaction_model: ClientOidcAuthorizationTransaction,
-      },
-      {
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
-        client_id: "core-com",
-        resource_type: "visitor",
-        surface: "com",
-        transaction_model: VisitorOidcAuthorizationTransaction,
-      },
-      {
-        host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-        client_id: "core-org",
-        resource_type: "operator",
-        surface: "org",
-        transaction_model: OperatorOidcAuthorizationTransaction,
-      },
-    ].each do |surface|
-      host!(surface.fetch(:host))
-      recognized_route = Rails.application.routes.recognize_path(
-        "https://#{surface.fetch(:host)}/oauth/authorize",
-        method: :get,
-      )
+    ["signup", "signin"].each do |screen_hint|
+      [
+        {
+          host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+          client_id: "core-app",
+          resource_type: "client",
+          surface: "app",
+          transaction_model: ClientOidcAuthorizationTransaction,
+        },
+        {
+          host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+          client_id: "core-com",
+          resource_type: "visitor",
+          surface: "com",
+          transaction_model: VisitorOidcAuthorizationTransaction,
+        },
+        {
+          host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+          client_id: "core-org",
+          resource_type: "operator",
+          surface: "org",
+          transaction_model: OperatorOidcAuthorizationTransaction,
+        },
+      ].each do |surface|
+        host!(surface.fetch(:host))
+        recognized_route = Rails.application.routes.recognize_path(
+          "https://#{surface.fetch(:host)}/oauth/authorize",
+          method: :get,
+        )
 
-      assert_equal "base/#{surface.fetch(:surface)}/oauth/authorizations", recognized_route.fetch(:controller)
-      params = oidc_authorize_params(
-        client_id: surface.fetch(:client_id),
-        resource_type: surface.fetch(:resource_type),
-        screen_hint: "signup",
-      )
-      last_transaction_id = surface.fetch(:transaction_model).order(id: :desc).first&.id
+        assert_equal "base/#{surface.fetch(:surface)}/oauth/authorizations", recognized_route.fetch(:controller)
+        params = oidc_authorize_params(
+          client_id: surface.fetch(:client_id),
+          resource_type: surface.fetch(:resource_type),
+          screen_hint: screen_hint,
+        )
+        last_transaction_id = surface.fetch(:transaction_model).order(id: :desc).first&.id
 
-      get "/oauth/authorize", params: params, headers: browser_headers.merge("Host" => surface.fetch(:host))
+        get "/oauth/authorize", params: params, headers: browser_headers.merge("Host" => surface.fetch(:host))
 
-      assert_response :redirect
-      transaction =
-        surface.fetch(:transaction_model).where("id > ?", last_transaction_id || 0).order(id: :desc).first
+        assert_response :redirect
+        transaction =
+          surface.fetch(:transaction_model).where("id > ?", last_transaction_id || 0).order(id: :desc).first
 
-      assert_not_nil transaction
-      assert_equal "authentication", transaction.intent
+        assert_not_nil transaction
+        assert_equal "authentication", transaction.intent
 
-      uri = URI.parse(jump_rt_url_from_location(response.location))
-      query = Rack::Utils.parse_nested_query(uri.query.to_s)
-      admission = BaseAuthAdmissionCoordinator.consume_entry_reference!(
-        reference: query.fetch("transaction_ref"),
-        surface: surface.fetch(:surface),
-        expected_intent: "authentication",
-      )
+        uri = URI.parse(jump_rt_url_from_location(response.location))
+        query = Rack::Utils.parse_nested_query(uri.query.to_s)
+        admission = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+          reference: query.fetch("transaction_ref"),
+          surface: surface.fetch(:surface),
+          expected_intent: "authentication",
+        )
 
-      assert_equal transaction.transaction_id, admission.fetch("subject_ref")
+        assert_equal transaction.transaction_id, admission.fetch("subject_ref")
+      end
     end
   end
 

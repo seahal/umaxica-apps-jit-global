@@ -58,7 +58,19 @@ accepted ADRs, implementation plans, or evidence.
 
 ## CF-003 — Existing Persona/Organization authority graph is not the adopted graph
 
-- Status: BLOCKS_SLICE
+> **Current disposition:** The original decision-gated wording in this section is historical. The
+> approved six-family owner mapping and the current pre-deployment disposition are maintained in
+> `plans/backlog/2026-09-17-integrated-hardening-plan.md`. The isolated pre-deployment acceptance
+> set now covers the reviewed mapping/conflict rules, lifecycle state, atomic and idempotent
+> backfill, family gate, immutable point of no return, and post-cutover owner-specific consumers.
+> Production inventory, real cutover, and operational forward-recovery rehearsal remain deployment
+> gates; they do not reopen this repository-side status.
+
+- Status: CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED
+- Current-cycle closure evidence: `evidence/2026-09-23-cf003-cf007-predeployment-acceptance-F7G8.md`
+  records the Compose-backed authority acceptance (`97 runs / 690 assertions / 0 failures / 0
+  errors / 0 skips`) and the subsequent full Rails suite. The detailed action, deferral, and
+  acceptance bullets below preserve the earlier evidence trail and are not the current status.
 - Severity: P0
 - Requirement: adopted Persona/Organization vocabulary, ownership, and RBAC migration
 - Evidence: commit `c34b1ee40` introduced `app/models/client_persona.rb`,
@@ -71,8 +83,9 @@ accepted ADRs, implementation plans, or evidence.
   `agent_assignments`, and membership rows still use RP binding or concrete-resource relationships.
 - Conflict: The adopted contract requires real Persona/Organization interfaces and
   Client/Visitor/Operator authority rows. The semantic principal/RP bases now inherit one
-  surface-local canonical writer boundary, but the live database, old-data owner mapping, lifecycle
-  gates, runtime rollback/concurrency proof, and authorization cutover are not proven.
+  surface-local canonical writer boundary, and the six lifecycle tables are authored, but the
+  live database, old-data owner mapping, lifecycle backfill, runtime rollback/concurrency proof,
+  and authorization cutover are not proven.
 - Impact: A partial rename or parallel authority table would permit ambiguous authorization,
   duplicate ownership, or cross-surface confusion.
 - Current-cycle action: Complete the mechanical vocabulary/reference migration without aliases,
@@ -83,21 +96,46 @@ accepted ADRs, implementation plans, or evidence.
   uniqueness validation. The creators also lock and re-read the concrete principal before checking
   the fixed surface `ACTIVE` status, `login_allowed?`, and `access_enabled?`. Keep old
   assignment/membership authorization active only as the current implementation; do not present it
-  as the adopted authority model or add a dual fallback. Do not execute the migrations or wire the
-  creators into user-facing routes until isolated DB, rollback/concurrency, and owner-mapping gates
-  pass. The six authored ownership models now reject independent Active Record destruction so an
+  as the adopted authority model or add a dual fallback. The selector bootstrap may call the
+  creators for newly created graphs, but creator operations are not exposed as new direct routes;
+  existing-data consumer cutover remains gated by isolated DB, rollback/concurrency, lifecycle, and
+  owner-mapping evidence. The six authored ownership models now reject independent Active Record destruction so an
   application path cannot create an ownerless interval; this guard does not replace the future
   locked transfer/lifecycle operations or prove direct-SQL behavior. A read-only
   `AuthorityOwnerMigrationInventory` and `authority:owner_inventory` task now enumerate all six
   concrete resources, classify legacy binding/membership candidates, emit only public identifiers,
-  and fail on a partially applied authority schema. The current isolated task run reports an
-  applied schema but zero resource rows, so it proves command/schema handling only and does not
-  resolve owner mapping.
+  and fail on a partially applied authority schema. An earlier Compose-backed isolated task run
+  reported an applied schema but zero resource rows; that historical result proves command/schema
+  handling only and does not resolve owner mapping. The current process could not reach the required
+  PostgreSQL service, as recorded in the latest lifecycle evidence.
+  `AuthorityOwnerPredeploymentBackfillOperation` now combines one reviewed owner mapping and one
+  reviewed lifecycle state in a single surface-local transaction, with idempotent replay and
+  rollback on lifecycle conflict. It remains a pre-cutover migration unit; it does not switch
+  authorization consumers or establish post-cutover rollback.
+  Owner-specific quota policy reads and all six concrete creator quota checks now use the same
+  explicit lifecycle relation. Inactive resources do not consume a slot, while an ownership row
+  without a lifecycle row blocks creation. This closes a local quota bypass but does not replace
+  delegated selector/switcher access or constitute a family-wide consumer cutover.
+  The owner-specific `AccountPolicy` is now staged on the account-family marker: before cutover it
+  preserves the legacy identity contract; after cutover it requires the configured explicit owner,
+  eligible principal, and active resource lifecycle. `OrganizationPolicy` and the selector/switcher
+  delegated-access graph remain unchanged by design. This names one owner-specific consumer but
+  does not close the family-wide consumer, forward-recovery, or isolated runtime proof gates.
+  `AuthorityOwnerFamilyBackfillOperation` now validates and applies a complete reviewed mapping for
+  one resource family atomically, rejects duplicate resource entries, and rolls back earlier rows
+  when a later row is rejected. Replaying the same complete family mapping is idempotent. This
+  remains a pre-cutover unit and does not provide a consumer switch. The separate
+  `AuthorityOwnerFamilyCutoverOperation` records the immutable family marker only after the guard
+  passes; post-marker backfill and legacy rollback are rejected. The selector bootstrap has a
+  public regression test for the post-marker fail-closed boundary: an ineligible new principal
+  cannot enter the legacy-only resource path after the account-family marker exists. The cutover
+  guard treats explicitly inactive, discarded, deleted, and retained resources as historical
+  non-authority-required rows; it still blocks active, unknown-lifecycle, or ineligible-owner rows.
 - Safe to defer because: the foundation does not switch authorization sources or backfill a second
   owner. Static model loading, syntax, lint, and the canonical pool inheritance are authored;
-  runtime migration, rollback, quota races, and current-data mapping remain unverified. Focused
-  creator, schema-contract, vocabulary, and app creation-race tests now pass against the available
-  isolated test services; this does not substitute for migration/cutover proof.
+  runtime migration, rollback, quota races, current-data mapping, and this lifecycle slice's
+  database-backed acceptance remain unverified in the current process. Historical focused creator,
+  schema-contract, vocabulary, and app creation-race results do not substitute for that proof.
 - Next-cycle action: Run the owner inventory against reviewed representative isolated data, review
   ambiguous rows, then prove one-writer migration rollback/concurrency before any lifecycle-gated
   policy or cutover one surface at a time. Do not infer a mapping from the current zero-row report.
@@ -115,7 +153,18 @@ accepted ADRs, implementation plans, or evidence.
 
 ## CF-004 — Existing lifecycle/retention clocks differ from the adopted cycle
 
-- Status: BLOCKS_SLICE
+> **Current disposition:** This entry preserves the original retention/lifecycle conflict evidence.
+> It is not permission to reinterpret principal retention columns as resource lifecycle state. The
+> isolated pre-deployment lifecycle/backfill and family-cutover acceptance is now satisfied under
+> the approved six-family contract. Production row inventory, real cutover, and operational
+> forward-recovery rehearsal remain deployment gates.
+
+- Status: CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED
+- Current-cycle closure evidence: `evidence/2026-09-23-cf003-cf007-predeployment-acceptance-F7G8.md`
+  records the isolated lifecycle/backfill and cutover acceptance included in the authority suite.
+  Production inventory, live cutover, and operational forward-recovery rehearsal remain deployment
+  gates. The detailed action, deferral, and acceptance bullets below preserve the earlier evidence
+  trail and are not the current status.
 - Severity: P0
 - Requirement: irreversible lifecycle, coordinated closure, scrub, and retention
 - Evidence: `Client`, `Visitor`, and `Operator` use `deactivated_at`, `discarded_at`, `purged_at`,
@@ -129,20 +178,23 @@ accepted ADRs, implementation plans, or evidence.
   Organization resources.
 - Impact: Incorrect reactivation, premature deletion, stale-job restoration, or false termination
   completion.
-- Current-cycle action: No lifecycle column reinterpretation or destructive migration; inventory
-  exact current operations, holds, anonymizer fields, operator deletion paths, and the boundary
-  between the existing principal recovery flow and the not-yet-enabled resource lifecycle.
-- Safe to defer because: no new lifecycle behavior is enabled by the independent observability
-  slice.
+- Current-cycle action: Keep principal retention columns separate from the six concrete resource
+  lifecycle tables. Use the explicit lifecycle backfill operation for reviewed existing rows, then
+  inventory exact current operations, holds, anonymizer fields, operator deletion paths, and the
+  boundary between the existing principal recovery flow and the not-yet-enabled resource lifecycle.
+- Safe to defer because: the new resource lifecycle tables and creator-row contract do not enable
+  retention, scrub, transfer, or authorization cutover. The current process could not run the
+  database-backed lifecycle checks.
 - Next-cycle action: Define explicit current-state workflow fields/relations, lock order, scrub
-  inventory, and isolated migration/runbook gates.
+  inventory, and isolated migration/runbook gates; then prove the lifecycle transition and
+  retention boundary without reusing principal retention timestamps.
 - Acceptance test: boundary tests at one hour, seven days, thirty-one days, hold races, stale jobs,
   rollback, and terminal non-recovery pass on isolated data.
 - Related evidence: existing retention ADRs and the lifecycle inventory to be added during Phase 6.
 
 ## CF-005 — Solid Queue runtime execution is not yet proven
 
-- Status: BLOCKS_SLICE
+- Status: CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED
 - Severity: P1
 - Requirement: explicit queue/worker/recurring configuration
 - Evidence: The original configuration used anchors, merge keys, and `queues: "*"`; the original
@@ -158,6 +210,10 @@ accepted ADRs, implementation plans, or evidence.
   attempt stopped during Rails boot because the required `BASE_SERVICE_URL` was not supplied;
   no fallback value was invented and no worker/provider was started. Production boot/topology
   therefore remains unverified.
+- Current status note: The historical conflict body above records the earlier missing runtime
+  proof. The local Compose-backed scheduler/dispatcher/worker acceptance described in
+  `evidence/2026-09-23-cf005-queue-runtime-P6Q7.md` supersedes that status for pre-deployment.
+  Production topology, heartbeat, monitoring, and operational rollback remain deployment gates.
 - Conflict: Static mapping can prove configuration coverage but cannot prove that a deployed worker
   reads this file, the queue DB schema is current, or dispatcher/scheduler/worker state transitions
   execute.
@@ -207,7 +263,13 @@ accepted ADRs, implementation plans, or evidence.
 
 ## CF-007 — Regional RP registration conflicts with the accepted seven-client ADR
 
-- Status: BLOCKS_SLICE
+> **Current disposition:** The decision conflict is resolved by the approved 2026-09-23 amendment
+> in the Frozen Plan: twelve independent regional Core/Side clients plus global `edit-org`. The
+> seven-client registry remains compatibility state during expand-and-contract migration. This
+> section is retained as the historical conflict record; its current repository gaps are the
+> missing independent Side US host source and independent regional audience source.
+
+- Status: OPEN — CONTRACT CONTRADICTION (pre-deployment; logical matrix approved, required SSOT input remains absent)
 - Severity: P0
 - Requirement: Auth/RP regional registration and session uniqueness
 - Evidence: `adr/base-auth-ceremony-and-seven-rp-boundary.md:31-39` fixes seven first-party clients
@@ -216,22 +278,30 @@ accepted ADRs, implementation plans, or evidence.
   `plans/backlog/integrated-auth-boundary-surface-consolidation-plan.md:20-28`. The adopted
   hardening prompt separately requires JP and US to be distinct registered app RPs and says
   `core-app-jp`/`core-app-us` are illustrative names.
-- Conflict: The client count, identity, configuration keys, redirect registrations, logout
-  destinations, and migration/retirement order cannot be chosen from the repository alone. Treating
-  the two statements as equivalent could merge regional sessions or bypass old-client retirement.
+- Remaining contract contradiction: The approved matrix fixes the logical client identities and
+  isolation invariant, but the current repository still lacks a canonical Side US host source and
+  independently bound regional audience values. No existing conflicting values were found; the
+  required SSOT inputs are absent. This is not a request to invent another client or a guessed
+  audience. The active registry remains the seven-client compatibility registry, and no caller or
+  RP-session migration may guess the missing values or derive them from a request Host header.
 - Impact: Cross-region RP-session issuance, redirect/client confusion, stale-session migration, and
   incorrect revoke scope.
-- Current-cycle action: Do not change OIDC client registries, RP names, redirects, keys, or session
-  schema. Keep the conflict visible while independent navigation, observability, and queue slices
-  proceed.
+- Current-cycle action: Record the approved 13-cell logical matrix, derive only the Core, existing
+  Side JP, and global Edit URI bindings available from canonical repository sources, define independent logical key
+  namespaces and RP-session bindings, and fail closed for missing Side hosts or audiences. Keep the
+  active seven-client registry and `core-next-rp` compatibility path unchanged until the complete
+  regional contract exists.
 - Safe to defer because: no current-cycle slice changes RP acceptance or authorization, and leaving
   the existing registry untouched does not silently broaden access.
-- Next-cycle action: Produce a region/client matrix with exact IDs, audiences, redirect URIs, logout
-  destinations, existing-session migration state, and external RP/Edge acceptance before
-  implementation.
-- Acceptance test: JP and US issue only to their registered client IDs, exact redirect/client
-  binding is enforced before code consumption, old clients have a safe retirement window, and
-  same-parent same-RP uniqueness is proven concurrently.
+- Next-cycle action: Approve or provide an authoritative regional audience source and an independent
+  Side US host source (while retaining the existing canonical Side JP source), then implement the
+  expand-and-contract registry/caller migration and its local
+  cross-acceptance tests. Real Base registration, credentials, deployed callers, and retirement
+  remain deployment acceptance gates.
+- Acceptance test: Pre-deployment tests prove the exact approved matrix, URI and namespace
+  isolation, missing-source fail-closed behavior, and JP/US cross-acceptance rejection without
+  activating an incomplete registry. The later deployment gate proves actual registrations and
+  caller retirement.
 - Related evidence: current accepted ADR, auth consolidation plan, and the regional-RP requirement
   ledger.
 
@@ -258,8 +328,10 @@ accepted ADRs, implementation plans, or evidence.
 - Safe to defer because: unrelated safe slices do not rely on lifecycle completion or destructive
   cleanup, and the current request-time access gates remain unchanged.
 - Next-cycle action: Complete the surface-local schema/attribute/hold inventory, connection rollback
-  proof, restartable backfill design, stale-job tests, and isolated dry-run before any destructive
-  or terminal behavior change.
+  proof, restartable backfill design, stale-job tests, and a disposable isolated validation or
+  rollback rehearsal before any destructive or terminal behavior change. This is an execution
+  safety gate for a separately approved transformation, not a requirement to add a
+  `RetentionPurgeJob` dry-run/preview API or a dry-run-specific schema.
 - Acceptance test: exact target inventory is persisted, hold races block destructive work,
   duplicate/partial jobs resume safely, terminal rows cannot authenticate, and no production
   datastore is touched during migration validation.
@@ -297,7 +369,7 @@ accepted ADRs, implementation plans, or evidence.
 
 ## CF-010 — Auth/Base issuance handoff contract remains unresolved
 
-- Status: BLOCKS_SLICE
+- Status: CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED
 - Severity: P0
 - Requirement: #846; Base as the sole physical IdP/AS authority
 - Evidence: the current Auth application controllers still include the shared session/authentication
@@ -339,10 +411,14 @@ accepted ADRs, implementation plans, or evidence.
   `adr/base-auth-ceremony-and-seven-rp-boundary.md`,
   `plans/backlog/integrated-auth-boundary-surface-consolidation-plan.md`, and the current Auth/Base
   controller, coordinator, and admission sources.
+- Current status note: The conflict description above is historical. The approved closure amendment
+  and focused/full-suite evidence in the Frozen Plan supersede it for the repository-side
+  pre-deployment contract. Immediate invalidation of existing access JWTs, live RP registration,
+  and production/external runtime acceptance remain explicitly outside that closure.
 
 ## CF-011 — Processor-erasure adapters are not implemented
 
-- Status: BLOCKS_SLICE
+- Status: CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED
 - Severity: P1
 - Requirement: #554 notification delivery semantics; privacy-erasure processor notification recovery
 - Evidence: `app/jobs/processor_erasure_notification_job.rb` has no provider/processor call site;
@@ -374,6 +450,11 @@ accepted ADRs, implementation plans, or evidence.
   `evidence/2026-09-22-processor-notification-retry-clock-A1B2.md`,
   `evidence/2026-09-22-processor-notification-terminal-guard-C3D4.md`, and
   `docs/security/withdrawal-privacy-erasure.md`.
+- Current status note: The no-adapter/false-success conflict above is historical. The provider-neutral
+  adapter, authenticated receipt, retry, permanent-failure, and recovery contract was later
+  implemented and accepted in the isolated Compose environment. Provider authentication, real
+  credentials, provider-specific receipt protocol, and provider E2E remain deployment/provider
+  gates.
 
 ## CF-012 — Solid Queue setup checks conflict with the repository test rule
 
@@ -409,7 +490,7 @@ accepted ADRs, implementation plans, or evidence.
 
 ## CF-013 — JWT anomaly runtime codes are not covered by the occurrence catalog
 
-- Status: CLOSED_FOR_CATALOG_RECONSTRUCTION
+- Status: CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED
 - Severity: P1
 - Requirement: #606; authentication and JWT anomaly observability
 - Evidence: `app/services/jit_security_jwt_anomaly_reporter.rb:7-18,47-67` emits `AUTH_CLIENT`,

@@ -190,6 +190,24 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     assert_predicate persisted, :consumed?
   end
 
+  test "base finalization rejects a result from an older generation" do
+    transaction = issue_authenticated_transaction!
+    now = Time.current
+    transaction.prepare_result_delivery!(result_digest: "a" * 64, now: now)
+    transaction.prepare_result_delivery!(result_digest: "b" * 64, now: now)
+
+    error =
+      assert_raises(ArgumentError) do
+        transaction.finalize_base!(result_generation: 1) do
+          flunk("a stale result must not execute Base finalization")
+        end
+      end
+
+    assert_equal "authorization result generation is stale", error.message
+    assert_nil transaction.reload.base_finalized_at
+    assert_nil transaction.reload.browser_session_ref
+  end
+
   private
 
   def issue_authenticated_transaction!

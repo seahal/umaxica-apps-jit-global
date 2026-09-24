@@ -20,13 +20,13 @@ module OidcAuthorizationResultPost
       )
     validate_authorization_request!(transaction.authorize_params)
     validate_authorization_transaction_ready!(transaction)
-    BaseAuthAdmissionCoordinator.read_result!(
+    result_payload = BaseAuthAdmissionCoordinator.read_result!(
       raw_code: params[:result].to_s,
       surface: oidc_result_surface,
       transaction_ref: params[:transaction_ref].to_s,
       expected_intent: transaction.intent,
     )
-    resume_authorization!(transaction)
+    resume_authorization!(transaction, result_generation: result_payload.fetch("result_generation"))
   rescue BaseAuthAdmissionCoordinator::Denied, Umaxica::Valkey::Unavailable,
          Umaxica::Valkey::OperationError, ActiveRecord::RecordNotFound,
          OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri, ArgumentError

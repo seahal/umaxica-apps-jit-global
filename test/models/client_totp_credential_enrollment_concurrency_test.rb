@@ -19,6 +19,7 @@ class ClientTotpCredentialEnrollmentConcurrencyTest < ActiveSupport::TestCase
 
   teardown do
     ClientTotpCredential.where(user_id: @user.id).delete_all
+    ClientAuthorityLock.where(client_id: @user.id).delete_all
     Client.where(id: @user.id).delete_all
   end
 

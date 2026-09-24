@@ -2251,6 +2251,52 @@ ALTER SEQUENCE public.client_privacy_requests_id_seq OWNED BY public.client_priv
 
 
 --
+-- Name: client_processor_erasure_notification_attempts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED TABLE public.client_processor_erasure_notification_attempts (
+    id bigint NOT NULL,
+    client_processor_erasure_notification_id bigint NOT NULL,
+    delivery_generation bigint NOT NULL,
+    attempt_number integer NOT NULL,
+    processor_key character varying NOT NULL,
+    idempotency_key_digest character varying(64) NOT NULL,
+    outcome character varying NOT NULL,
+    started_at timestamp(6) with time zone NOT NULL,
+    finished_at timestamp(6) with time zone,
+    lease_expires_at timestamp(6) with time zone,
+    receipt_reference_digest character varying(64),
+    error_code character varying DEFAULT ''::character varying NOT NULL,
+    error_message character varying DEFAULT ''::character varying NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_proc_erase_attempt_generation_positive CHECK ((delivery_generation > 0)),
+    CONSTRAINT chk_client_proc_erase_attempt_idempotency_digest CHECK (((idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT chk_client_proc_erase_attempt_number_positive CHECK ((attempt_number > 0)),
+    CONSTRAINT chk_client_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY ((ARRAY['IN_FLIGHT'::character varying, 'ACCEPTED_PENDING'::character varying, 'SUCCEEDED'::character varying, 'RETRYABLE_FAILURE'::character varying, 'PERMANENT_FAILURE'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_processor_erasure_notification_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED SEQUENCE public.client_processor_erasure_notification_attempts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_processor_erasure_notification_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_processor_erasure_notification_attempts_id_seq OWNED BY public.client_processor_erasure_notification_attempts.id;
+
+
+--
 -- Name: client_processor_erasure_notification_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2300,7 +2346,13 @@ CREATE UNLOGGED TABLE public.client_processor_erasure_notifications (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_client_proc_erase_notifications_retention_order CHECK ((discard_at <= purge_eligible_at))
+    delivery_generation bigint DEFAULT 1 NOT NULL,
+    permanent_failed_at timestamp(6) with time zone,
+    delivery_idempotency_key_digest character varying(64) NOT NULL,
+    CONSTRAINT chk_client_proc_erase_notifications_generation_positive CHECK ((delivery_generation > 0)),
+    CONSTRAINT chk_client_proc_erase_notifications_idempotency_digest CHECK (((delivery_idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT chk_client_proc_erase_notifications_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT chk_client_proc_erase_notifications_retry_count_nonnegative CHECK ((retry_count >= 0))
 );
 
 
@@ -2710,7 +2762,7 @@ ALTER SEQUENCE public.client_totp_credential_statuses_id_seq OWNED BY public.cli
 CREATE UNLOGGED TABLE public.client_totp_credentials (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    last_otp_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
+    last_otp_at timestamp(6) with time zone,
     private_key character varying(1024) DEFAULT ''::character varying NOT NULL,
     public_id character varying(21) NOT NULL,
     title character varying(32),
@@ -4357,6 +4409,13 @@ ALTER TABLE ONLY public.client_privacy_requests ALTER COLUMN id SET DEFAULT next
 
 
 --
+-- Name: client_processor_erasure_notification_attempts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_processor_erasure_notification_attempts ALTER COLUMN id SET DEFAULT nextval('public.client_processor_erasure_notification_attempts_id_seq'::regclass);
+
+
+--
 -- Name: client_processor_erasure_notification_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5245,6 +5304,14 @@ ALTER TABLE ONLY public.client_privacy_requests
 
 
 --
+-- Name: client_processor_erasure_notification_attempts client_processor_erasure_notification_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_processor_erasure_notification_attempts
+    ADD CONSTRAINT client_processor_erasure_notification_attempts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_processor_erasure_notification_statuses client_processor_erasure_notification_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5798,6 +5865,27 @@ CREATE INDEX idx_client_privacy_requests_on_subject_kind_status ON public.client
 
 
 --
+-- Name: idx_client_proc_erase_attempts_generation_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_proc_erase_attempts_generation_number ON public.client_processor_erasure_notification_attempts USING btree (client_processor_erasure_notification_id, delivery_generation, attempt_number);
+
+
+--
+-- Name: idx_client_proc_erase_attempts_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_proc_erase_attempts_idempotency ON public.client_processor_erasure_notification_attempts USING btree (client_processor_erasure_notification_id, delivery_generation, idempotency_key_digest);
+
+
+--
+-- Name: idx_client_proc_erase_attempts_processing; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_client_proc_erase_attempts_processing ON public.client_processor_erasure_notification_attempts USING btree (client_processor_erasure_notification_id, delivery_generation, outcome);
+
+
+--
 -- Name: idx_client_proc_erase_notifications_retry; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5977,6 +6065,13 @@ CREATE INDEX idx_on_client_id_status_id_expires_at_6c66cf1447 ON public.client_w
 --
 
 CREATE INDEX idx_on_client_privacy_request_id_019e8d95c9 ON public.client_processor_erasure_notifications USING btree (client_privacy_request_id);
+
+
+--
+-- Name: idx_on_client_processor_erasure_notification_id_2c59431eb8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_client_processor_erasure_notification_id_2c59431eb8 ON public.client_processor_erasure_notification_attempts USING btree (client_processor_erasure_notification_id);
 
 
 --
@@ -7324,6 +7419,14 @@ CREATE TRIGGER enforcement_protect_clients_delete BEFORE DELETE ON public.client
 
 
 --
+-- Name: client_processor_erasure_notification_attempts fk_client_proc_erase_attempt_notification; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_processor_erasure_notification_attempts
+    ADD CONSTRAINT fk_client_proc_erase_attempt_notification FOREIGN KEY (client_processor_erasure_notification_id) REFERENCES public.client_processor_erasure_notifications(id) ON DELETE CASCADE;
+
+
+--
 -- Name: legacy_replaced_clients fk_clients_on_client_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7344,7 +7447,7 @@ ALTER TABLE ONLY public.legacy_replaced_clients
 --
 
 ALTER TABLE ONLY public.enterprise_units
-    ADD CONSTRAINT fk_enterprise_units_parent_same_enterprise FOREIGN KEY (parent_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_enterprise_units_parent_same_enterprise FOREIGN KEY (parent_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT;
 
 
 --
@@ -7352,7 +7455,7 @@ ALTER TABLE ONLY public.enterprise_units
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_persona_memberships_unit_same_enterprise FOREIGN KEY (enterprise_unit_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_persona_memberships_unit_same_enterprise FOREIGN KEY (enterprise_unit_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT;
 
 
 --
@@ -7392,7 +7495,7 @@ ALTER TABLE ONLY public.client_banners
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_0d7f5f74b1 FOREIGN KEY (revoke_reason_id) REFERENCES public.persona_membership_revoke_reasons(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_0d7f5f74b1 FOREIGN KEY (revoke_reason_id) REFERENCES public.persona_membership_revoke_reasons(id);
 
 
 --
@@ -7440,7 +7543,7 @@ ALTER TABLE ONLY public.client_emails
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_182816542a FOREIGN KEY (membership_state_id) REFERENCES public.persona_membership_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_182816542a FOREIGN KEY (membership_state_id) REFERENCES public.persona_membership_states(id);
 
 
 --
@@ -7520,7 +7623,7 @@ ALTER TABLE ONLY public.members
 --
 
 ALTER TABLE ONLY public.client_identities
-    ADD CONSTRAINT fk_rails_3045b2b3f6 FOREIGN KEY (status_id) REFERENCES public.client_identity_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3045b2b3f6 FOREIGN KEY (status_id) REFERENCES public.client_identity_states(id);
 
 
 --
@@ -7568,7 +7671,7 @@ ALTER TABLE ONLY public.enterprise_view_grants
 --
 
 ALTER TABLE ONLY public.client_preferences
-    ADD CONSTRAINT fk_rails_39373ef225 FOREIGN KEY (user_id) REFERENCES public.clients(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_39373ef225 FOREIGN KEY (user_id) REFERENCES public.clients(id) ON DELETE CASCADE;
 
 
 --
@@ -7584,7 +7687,7 @@ ALTER TABLE ONLY public.client_preference_currencies
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flows
-    ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id);
 
 
 --
@@ -7672,7 +7775,7 @@ ALTER TABLE ONLY public.enterprise_delegation_grants
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_4f3c994599 FOREIGN KEY (membership_kind_id) REFERENCES public.persona_membership_kinds(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_4f3c994599 FOREIGN KEY (membership_kind_id) REFERENCES public.persona_membership_kinds(id);
 
 
 --
@@ -7680,7 +7783,7 @@ ALTER TABLE ONLY public.persona_memberships
 --
 
 ALTER TABLE ONLY public.client_profiles
-    ADD CONSTRAINT fk_rails_510843a98e FOREIGN KEY (client_status_id) REFERENCES public.client_profile_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_510843a98e FOREIGN KEY (client_status_id) REFERENCES public.client_profile_statuses(id);
 
 
 --
@@ -7704,7 +7807,7 @@ ALTER TABLE ONLY public.persona_memberships
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_529c28deb1 FOREIGN KEY (granted_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_529c28deb1 FOREIGN KEY (granted_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
 
 
 --
@@ -7856,7 +7959,7 @@ ALTER TABLE ONLY public.client_member_revocations
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
 
 
 --
@@ -7952,7 +8055,7 @@ ALTER TABLE ONLY public.client_preference_page_sizes
 --
 
 ALTER TABLE ONLY public.personas
-    ADD CONSTRAINT fk_rails_8dc042a1c9 FOREIGN KEY (client_identity_id) REFERENCES public.client_identities(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_8dc042a1c9 FOREIGN KEY (client_identity_id) REFERENCES public.client_identities(id) ON DELETE RESTRICT;
 
 
 --
@@ -8032,7 +8135,7 @@ ALTER TABLE ONLY public.app_enforcement_identifier_effects
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_9511d96f8c FOREIGN KEY (to_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_9511d96f8c FOREIGN KEY (to_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -8136,7 +8239,7 @@ ALTER TABLE ONLY public.enterprise_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_b55e5a56c4 FOREIGN KEY (client_withdrawal_flow_id) REFERENCES public.client_withdrawal_flows(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b55e5a56c4 FOREIGN KEY (client_withdrawal_flow_id) REFERENCES public.client_withdrawal_flows(id);
 
 
 --
@@ -8176,7 +8279,7 @@ ALTER TABLE ONLY public.persona_assignments
 --
 
 ALTER TABLE ONLY public.client_profiles
-    ADD CONSTRAINT fk_rails_c49c0906dc FOREIGN KEY (status_id) REFERENCES public.client_profile_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_c49c0906dc FOREIGN KEY (status_id) REFERENCES public.client_profile_statuses(id);
 
 
 --
@@ -8200,7 +8303,7 @@ ALTER TABLE ONLY public.clients
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_cdfe640663 FOREIGN KEY (revoked_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_cdfe640663 FOREIGN KEY (revoked_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
 
 
 --
@@ -8272,7 +8375,7 @@ ALTER TABLE ONLY public.user_clients
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_e031c03097 FOREIGN KEY (approved_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_e031c03097 FOREIGN KEY (approved_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
 
 
 --
@@ -8288,7 +8391,7 @@ ALTER TABLE ONLY public.app_enforcement_principal_links
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flows
-    ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id);
 
 
 --
@@ -8360,7 +8463,7 @@ ALTER TABLE ONLY public.client_member_suspensions
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -8482,6 +8585,10 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260923160000'),
+('20260923150000'),
+('20260923140000'),
+('20260922130000'),
 ('20260921133000'),
 ('20260920110001'),
 ('20260920110000'),

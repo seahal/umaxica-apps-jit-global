@@ -22,6 +22,10 @@ class ClientPersona < AppRpRecord
           class_name: "ClientPersonaOwnership",
           dependent: :restrict_with_error,
           inverse_of: :client_persona
+  has_one :lifecycle,
+          class_name: "ClientPersonaLifecycle",
+          dependent: :restrict_with_error,
+          inverse_of: :client_persona
   has_one :owner, through: :ownership, source: :client
   has_many :administration_grants,
            class_name: "ClientPersonaAdministrationGrant",

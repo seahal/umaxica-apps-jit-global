@@ -47,6 +47,25 @@ lock row per principal to serialize quota-affecting authority writes because the
 and RP abstract bases have separate connection specifications even when they point at the same
 physical database. The lock row is a synchronization primitive, not an authorization grant.
 
+## Approved authority-source amendment (2026-09-23)
+
+The concrete ownership row is the sole owner authority after a resource-family cutover. The
+approved mappings are `Client -> Persona/Enterprise`, `Visitor -> Individual/Company`, and
+`Operator -> Agent/Bureau`. Identity bindings, assignments, memberships, administrator relations,
+legacy owner fields, and the legacy `Organization` hierarchy are migration evidence only; the
+legacy `Organization` is not `Bureau`.
+
+Ownership facts and lifecycle eligibility are separate. Suspended principals retain historical
+ownership but cannot exercise authority, while inactive/discarded/deleted principals and
+inactive/retained resources are not auto-adopted as new owners. A zero, ambiguous, inactive-only,
+cross-surface, membership-only, administrator-only, legacy-only, or contradictory candidate is
+rejected or held for manual review/ownerless disposition. No arbitrary candidate tie-breaker is
+permitted. A family-level cutover requires zero unresolved authority-required active rows.
+
+Rollback is allowed before any consumer reads the new relation. After the first such read, normal
+rollback to the legacy authority is forbidden; incident handling must use forward recovery so the
+system cannot enter a split-brain owner state.
+
 ## Consequences
 
 - Model and association references must use explicit concrete class names after the rename.

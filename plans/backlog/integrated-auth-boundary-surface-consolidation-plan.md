@@ -14,6 +14,32 @@ available, while authority-cutover, external RP registration, and deployment gat
 **Scope:** One coordinated implementation project in this Rails repository. No deployment, push, PR,
 or external write is included.
 
+### Current Base/Auth result-finalization amendment (2026-09-22)
+
+This amendment takes precedence over historical wording below that describes a signed or Valkey
+one-shot Auth result being redeemed exactly once. The current Rails contract is:
+
+- Auth remains ceremony-only. Base owns the surface-local authorization transaction, Browser
+  Session, RP Session, authorization code, and durable finalization authority.
+- Auth-to-Base result transport is an opaque short-lived Valkey record. The PostgreSQL transaction
+  stores only the result digest, generation, expiry, and finalization references; raw result and
+  authorization-code values are not persisted there.
+- Base may re-read a valid result while its transport TTL remains. A newer result generation wins;
+  the generation/digest/expiry is rechecked under the locked PostgreSQL transaction row before
+  finalization. Valkey cleanup is transport cleanup, not the durable authority.
+- Browser Session finalization is idempotent and creates at most one root Browser Session for the
+  authorization transaction. Authorization-code aliases refer to one durable grant, whose
+  redemption is claimed atomically in the surface ticket database; an alias or callback failure
+  must not create or replace another RP Session.
+- A failed durable token issuance rolls back the grant claim and does not return credentials. A
+  retryable transport cleanup failure is not represented as distributed ACID behavior.
+
+Historical Sign/Acme and one-shot transport sections below remain for migration context only. New
+work MUST follow this amendment and the accepted
+`adr/base-auth-ceremony-and-seven-rp-boundary.md` contract. Evidence and current implementation
+status are recorded in
+`evidence/2026-09-22-oidc-result-doc-boundary-recheck-W8X9.md`.
+
 ## Executive design
 
 Implement the requested architecture as one boundary change:
@@ -94,6 +120,15 @@ reachable test PostgreSQL service and a permitted debugger socket (or the reposi
 debugger-disable mechanism) are available. This does not block architecture approval, but must be
 resolved before claiming Rails checks green.
 
+The preceding baseline is historical. The current Compose-backed verification boundary is
+available when `.env.devcontainer.example` is selected explicitly: PostgreSQL `primary` and
+`valkey-kvs` resolve, the repository preflight succeeds, and the focused and full Rails suites have
+passed without changing application configuration or weakening tests. The debugger socket issue is
+handled only by the documented process-local `RUBY_DEBUG_ENABLE=0` invocation when required; the
+repository environment file and application code are not changed to bypass it. Evidence:
+`evidence/2026-09-23-boot-dependency-classification-Q3R4.md` and
+`evidence/2026-09-23-cf011-parallel-seed-recheck-M7N8.md`.
+
 The preceding baseline and revalidation paragraphs are historical records. On 2026-09-22, the
 repository-supported Compose test environment was available with `primary` and `valkey-kvs`, and
 the current checkout completed the relevant Rails verification. The full Rails result was 11,507
@@ -132,6 +167,29 @@ audiences; it no longer generates those routes with a loop. The route contract t
 shape, all twelve entry cells, nested publication/archive routes, host isolation, and the absence of
 entry deletion. This is a current-source correction to the historical inventory below, not a new
 route requirement or a reason to alter the Publishing controllers or data model.
+
+### Preference transport follow-up (2026-09-22)
+
+The legacy non-Core `/web/v0/cookie` and `/web/v0/theme` endpoints remain in active use by the
+browser cookie-banner, cookie-toggle, and theme clients. Core already exposes the canonical
+`/api/v0/preferences/*` equivalents, but a namespace-only route change would break the current
+non-Core callers and would not define the replacement ownership or compatibility contract. The
+preference migration therefore remains `NEXT_CYCLE / CONTRACT_UNDEFINED`: define the replacement
+API and caller migration first, then retire the legacy routes with parity coverage. No alias or
+new API was introduced. Evidence:
+`evidence/2026-09-22-preference-legacy-transport-audit-R3S4.md`.
+
+### Regional RP identity gate (2026-09-22)
+
+The current registry still contains seven surface-level first-party browser clients rather than
+independent JP/US client identities. The repository has `ri` request-context propagation, but no
+regional client-ID, exact regional redirect/post-logout/backchannel registration, or independent
+regional key binding. The accepted seven-RP ADR explicitly leaves this conflict unresolved, and
+`core-next-rp` still has local production bridge references. No regional IDs, host matrix, key
+material, or external registration was guessed. This remains `CF-007 / CRITICAL` until the
+regional matrix, credential mapping, deployed-caller migration, and Base-side registration are
+approved and verified. Evidence:
+`evidence/2026-09-22-regional-rp-identity-audit-T5U6.md`.
 
 ### Read-only content RP retirement amendment (2026-09-22)
 
@@ -516,7 +574,8 @@ operations; they do not issue arbitrary update!(state: ...).
    not use wildcard or dynamic host matching.
 4. Base checks static client registration, exact redirect URI, face/realm, enabled state, policy,
    browser session and step-up requirements. If ceremony is required, Base issues a purpose-specific
-   opaque Auth handoff and sends the browser to the fixed Auth /sign/in or /sign/up surface.
+   opaque Auth handoff and sends the browser to the fixed Auth-local `/sign/in/*` or `/sign/up/*`
+   ceremony route. Those routes are not RP entrypoints; the RP entry remains `GET/POST /sign`.
    Temporary code URL is redacted from request logs, response is no-store/no-referrer, and Auth
    redeems atomically before a 303 to clean URL.
 5. Auth starts the existing state machine only after handoff consumption. On success, Auth issues a
@@ -557,9 +616,12 @@ org/operator.
 
 #### Base admission and Auth ceremony
 
-1. Auth public /sign/in and /sign/up remain as entry URLs but only bridge to Base admission. Base is
-   the only component that decides if a flow may begin. Org invitation is submitted through its
-   existing invitation route and distinct policy branch.
+1. Auth-local credential ceremony routes under `/sign/in/*` and `/sign/up/*` remain only where the
+   current ceremony requires them; they are not RP entrypoints. First-party browser RPs start from
+   their neutral `GET/POST /sign` contract. Any Auth-to-Base bridge is permitted only through the
+   approved opaque admission boundary, and Base is the only component that decides if a flow may
+   begin. Org invitation is submitted through its existing invitation route and distinct policy
+   branch.
 2. Base creates or updates a purpose-specific, actor-partitioned handoff record with random 32-byte
    code digest, fixed route destination, face, admission context, created/expires/consumed times and
    safe return target. Expiry defaults to 60 seconds.
@@ -614,7 +676,7 @@ Metadata and no-store contracts; they do not weaken ordinary CSRF protection.
 
 | Current                                                 | Final contract                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth app/com/org /oidc/authorization and /oidc/callback | Retire as RP endpoints. Auth /sign/in and /sign/up stay as Base-admission bridges and ceremony entry URLs. Remove Auth /oidc/backchannel/logout because Auth is no longer a registered RP.                                                                                                     |
+| Auth app/com/org /oidc/authorization and /oidc/callback | Retire as RP endpoints. Retain only the Auth-local `/sign/in/*` and `/sign/up/*` ceremony routes that current flows require; they are not RP entrypoints. Remove Auth /oidc/backchannel/logout because Auth is no longer a registered RP.                                  |
 | Base app/com/org /oidc/authorization and /oidc/callback | Retire Base’s old RP start/callback only. Keep Base /oidc/logout as OIDC Authorization Server end-session; keep /oauth/authorize, token, JWKS, revocation, userinfo, discovery and global OIDC contracts.                                                                                      |
 | Core/Side /oidc/authorization and /oidc/callback        | Replace with GET/POST /sign and GET /sign/callback in Rails. Keep RP backchannel logout; do not implement any OIDC/PKCE/token exchange in TanStack Start.                                                                                                                                        |
 | Edit org (currently no independent RP)                  | Add GET/POST /sign, GET /sign/callback, RP backchannel logout and /sign/out under Edit::Org routes; change client ID to edit-org.                                                                                                                                                            |

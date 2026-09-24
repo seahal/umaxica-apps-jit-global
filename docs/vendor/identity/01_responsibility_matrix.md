@@ -14,6 +14,13 @@ confidentiality: internal-vendor-shareable
 related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
+> **Current-contract supersession (2026-09-23):** This matrix is a historical vendor-review
+> baseline, not the active authority assignment. Its Acme/Sign rows predate the accepted
+> Base/Auth decision. The current Rails authority is defined by
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
+> IdP/Authorization Server, Auth is ceremony-only, and browser RPs are independently registered
+> by surface. Do not treat the matrix's Acme-only or shared-RP rows as implementation instructions.
+
 # Purpose
 
 Define which component owns each identity capability, what a SIer may implement, what is prohibited,

@@ -114,7 +114,7 @@ module Base
           redirect_to_jump_url(sign_url)
         end
 
-        def resume_authorization!(transaction)
+        def resume_authorization!(transaction, result_generation: nil)
           decision_time = transaction.class.database_now
           return render_invalid_authorization_transaction("authorization transaction expired") if
             transaction.login_challenge_expired?(now: decision_time) || transaction.expired?(now: decision_time)
@@ -122,7 +122,9 @@ module Base
             transaction.authenticated? || (transaction.consumed? && transaction.base_finalized_at.present?)
 
           resource = Operator.find_by!(public_id: transaction.actor_ref)
-          finalization = finalize_authorization_transaction!(resource, transaction)
+          finalization = finalize_authorization_transaction!(
+            resource, transaction, result_generation: result_generation,
+          )
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,
@@ -143,8 +145,8 @@ module Base
           render json: { error: "invalid_request", error_description: description }, status: :bad_request
         end
 
-        def finalize_authorization_transaction!(resource, transaction)
-          transaction.finalize_base! do |locked, _finalization_time|
+        def finalize_authorization_transaction!(resource, transaction, result_generation: nil)
+          transaction.finalize_base!(result_generation: result_generation) do |locked, _finalization_time|
             if locked.base_finalized_at.present?
               token_record = find_browser_session_for_oidc(resource, locked.browser_session_ref)
               next { status: :login_failed } unless token_record

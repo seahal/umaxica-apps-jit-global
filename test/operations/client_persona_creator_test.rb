@@ -26,6 +26,7 @@ class ClientPersonaCreatorTest < ActiveSupport::TestCase
 
     assert_equal @client.id, persona.ownership.client_id
     assert_equal 0, persona.ownership.ownership_revision
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, persona.lifecycle.state
     assert_empty persona.administration_grants
     assert_empty persona.delegation_grants
     assert_empty persona.usage_grants
@@ -35,11 +36,13 @@ class ClientPersonaCreatorTest < ActiveSupport::TestCase
   test "rolls back principal and authority writes on the shared app writer" do
     identity = client_identity(label: "rollback")
     original_status_id = @client.status_id
+    persona_id = nil
 
     assert_raises(RollbackProbe) do
       AppZenithRecord.transaction do
         @client.update!(status_id: ClientStatus::INACTIVE)
         persona = ClientPersona.create!(client_identity: identity, title: "Rollback")
+        persona_id = persona.id
         ClientPersonaOwnership.create!(
           client_persona: persona,
           client: @client,
@@ -52,6 +55,7 @@ class ClientPersonaCreatorTest < ActiveSupport::TestCase
     assert_equal original_status_id, Client.find(@client.id).status_id
     assert_nil ClientPersona.find_by(client_identity_id: identity.id)
     assert_empty ClientPersonaOwnership.where(client_id: @client.id)
+    assert_nil ClientPersonaLifecycle.find_by(client_persona_id: persona_id)
   end
 
   test "rejects a client identity belonging to another client" do
@@ -110,6 +114,10 @@ class ClientPersonaCreatorTest < ActiveSupport::TestCase
         client_identity: client_identity_for_another_client(label: "existing-#{index}"),
         title: "P#{index}",
       )
+      ClientPersonaLifecycle.create!(
+        client_persona: persona,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
+      )
       ClientPersonaOwnership.create!(client_persona: persona, client: @client)
     end
 
@@ -118,6 +126,45 @@ class ClientPersonaCreatorTest < ActiveSupport::TestCase
         actor: @client,
         owner: @client,
         client_identity: client_identity(label: "over-quota"),
+        title: "Primary",
+      )
+    end
+  end
+
+  test "does not count an inactive owned persona against the quota" do
+    inactive = ClientPersona.create!(
+      client_identity: client_identity_for_another_client(label: "inactive"),
+      title: "Inactive",
+    )
+    ClientPersonaLifecycle.create!(
+      client_persona: inactive,
+      state: AuthorityResourceLifecycleStateValue::INACTIVE,
+    )
+    ClientPersonaOwnership.create!(client_persona: inactive, client: @client)
+
+    persona = ClientPersonaCreator.call(
+      actor: @client,
+      owner: @client,
+      client_identity: client_identity(label: "after-inactive"),
+      title: "Primary",
+    )
+
+    assert_equal @client.id, persona.ownership.client_id
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, persona.lifecycle.state
+  end
+
+  test "fails closed when an owned persona has no lifecycle row" do
+    unresolved = ClientPersona.create!(
+      client_identity: client_identity_for_another_client(label: "unresolved"),
+      title: "Unresolved",
+    )
+    ClientPersonaOwnership.create!(client_persona: unresolved, client: @client)
+
+    assert_raises(ClientPersonaCreator::QuotaExceeded) do
+      ClientPersonaCreator.call(
+        actor: @client,
+        owner: @client,
+        client_identity: client_identity(label: "blocked"),
         title: "Primary",
       )
     end

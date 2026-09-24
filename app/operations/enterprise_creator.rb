@@ -10,8 +10,6 @@ class EnterpriseCreator
 
   class QuotaExceeded < StandardError; end
 
-  LIMIT = Acme::QuotaLimits::ORGANIZATION_LIMIT
-
   def self.call(...)
     new(...).call
   end
@@ -33,9 +31,15 @@ class EnterpriseCreator
       ClientAuthorityLock.acquire_for!(client_id: owner.id)
       locked_owner = Client.lock.find(owner.id)
       validate_owner_active!(locked_owner)
-      raise QuotaExceeded, "client #{owner.id} owns the maximum number of organizations" if owned_count >= LIMIT
+      unless Acme::OrganizationQuotaPolicy.new(surface: :app, principal: locked_owner).allowed?
+        raise QuotaExceeded, "client #{owner.id} cannot create another organization"
+      end
 
       enterprise = Enterprise.create!(name: name, title: title)
+      EnterpriseLifecycle.create!(
+        enterprise:,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
+      )
       EnterpriseOwnership.create!(enterprise:, client: locked_owner, ownership_revision: 0)
       enterprise
     end
@@ -57,9 +61,5 @@ class EnterpriseCreator
       locked_owner.access_enabled?
 
     raise InactiveOwner, "the owner is not allowed to create an organization"
-  end
-
-  def owned_count
-    EnterpriseOwnership.where(client_id: owner.id).count
   end
 end

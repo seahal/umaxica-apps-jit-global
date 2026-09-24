@@ -449,12 +449,11 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_APP authorize rejects a sign-rp org realm redirect_uri before code issuance" do
-    sign_client = OidcClientRegistry.find("sign-rp")
-    org_redirect_uri = sign_client.redirect_uris_by_realm.fetch("operator").first
+  test "BASE_APP authorize rejects a core app request with an org RP redirect_uri before code issuance" do
+    org_redirect_uri = OidcClientRegistry.find!("core-org").redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
-      params: valid_params.merge(client_id: "sign-rp", redirect_uri: org_redirect_uri),
+      params: valid_params.merge(client_id: "core-app", redirect_uri: org_redirect_uri),
       resource: @user,
     )
 
@@ -462,12 +461,11 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_APP authorize rejects a sign-rp com realm redirect_uri before code issuance" do
-    sign_client = OidcClientRegistry.find("sign-rp")
-    com_redirect_uri = sign_client.redirect_uris_by_realm.fetch("visitor").first
+  test "BASE_APP authorize rejects a core app request with a com RP redirect_uri before code issuance" do
+    com_redirect_uri = OidcClientRegistry.find!("core-com").redirect_uris_by_realm.fetch("visitor").first
 
     result = authorize_service_call(
-      params: valid_params.merge(client_id: "sign-rp", redirect_uri: com_redirect_uri),
+      params: valid_params.merge(client_id: "core-app", redirect_uri: com_redirect_uri),
       resource: @user,
     )
 
@@ -475,15 +473,15 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_ORG authorize rejects a side-rails-rp app realm redirect_uri before code issuance" do
+  test "BASE_ORG authorize rejects a side-app client before code issuance" do
     staff = operators(:one)
-    side_client = OidcClientRegistry.find("side-rails-rp")
-    app_redirect_uri = side_client.redirect_uris_by_realm.fetch("client").first
+    app_client = OidcClientRegistry.find!("side-app")
+    app_redirect_uri = app_client.redirect_uris.first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "side-rails-rp",
+        client_id: "side-app",
         redirect_uri: app_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -498,15 +496,15 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_ORG authorize rejects a side-rails-rp com realm redirect_uri before code issuance" do
+  test "BASE_ORG authorize rejects a side-com client before code issuance" do
     staff = operators(:one)
-    side_client = OidcClientRegistry.find("side-rails-rp")
-    com_redirect_uri = side_client.redirect_uris_by_realm.fetch("visitor").first
+    com_client = OidcClientRegistry.find!("side-com")
+    com_redirect_uri = com_client.redirect_uris.first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "side-rails-rp",
+        client_id: "side-com",
         redirect_uri: com_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",

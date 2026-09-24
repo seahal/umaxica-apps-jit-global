@@ -47,10 +47,12 @@ Re-enable the routes only after a follow-up ADR records:
 ## Consequences
 
 - `POST /mcp` returns the router's not-found response on all six hosts.
-- Tests that exercise the endpoint (`test/integration/mcp_endpoint_test.rb`,
-  `test/integration/mcp_forgery_protection_test.rb`, and the entry-point inventory and seam contract
-  tests that list it) no longer match the routes. They were not run or updated as part of this
-  change, and must be reconciled before the change is merged. Route-dependent tests are removed; the
-  inventory and seam tests are updated to record the endpoint as withdrawn.
+- The former live-endpoint tests were retired with the route contract and replaced by
+  `test/integration/mcp_endpoint_withdrawal_test.rb`, which asserts both route recognition failure
+  and a not-found response on all six former hosts. The public-entrypoint inventory and seam
+  contract tests record the withdrawn boundary. The current focused withdrawal, identity, inventory,
+  and seam contract set passed with 11 runs / 100 assertions / 0 failures / 0 errors / 0 skips on
+  2026-09-22; historical proof is recorded in
+  `evidence/2026-09-22-mcp-withdrawal-revalidation-K6L7.md`.
 - Keeping unreachable controllers is a transitional state bounded by this ADR. If the endpoint is not
   restored, delete the controllers, concern, tools, gem, and tests together.

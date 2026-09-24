@@ -3,6 +3,8 @@
 > **Supersession (2026-09-13):** Physical Rails authority is Base (sole IdP/AS). Auth is a ceremony
 > service, not a special RP. Seven first-party RPs replace shared browser clients. See
 > `adr/base-auth-ceremony-and-seven-rp-boundary.md`. Acme remains conceptual vocabulary.
+> The authority and client-registration decisions in the body below are historical and must not be
+> used to restore Acme/Sign-issued browser sessions or the retired shared browser client IDs.
 
 > Core browser credential transport update:
 > `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` supersedes this ADR's

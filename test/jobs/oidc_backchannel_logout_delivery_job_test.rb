@@ -25,7 +25,7 @@ class OidcBackchannelLogoutDeliveryJobTest < ActiveSupport::TestCase
     stub_outbound_http(stubs) do
       OidcLogoutTokenCodec.stub(
         :encode, proc { |**kwargs|
-                   assert_equal "sign-rp", kwargs.fetch(:client_id)
+                   assert_equal "core-app", kwargs.fetch(:client_id)
                    assert_equal "client", kwargs.fetch(:resource_type)
                    assert_equal "subject-1", kwargs.fetch(:subject)
                    assert_equal sid, kwargs.fetch(:sid)
@@ -34,7 +34,7 @@ class OidcBackchannelLogoutDeliveryJobTest < ActiveSupport::TestCase
       ) do
         encrypted_payload = OutboundSensitivePayload.encrypt_oidc_backchannel_logout(
           uri: LOGOUT_URI,
-          client_id: "sign-rp",
+          client_id: "core-app",
           resource_type: "client",
           subject: "subject-1",
           sid: sid,
@@ -56,16 +56,16 @@ class OidcBackchannelLogoutDeliveryJobTest < ActiveSupport::TestCase
   test "a global suspension mints no token and posts to no relying party" do
     Flipper.enable(:oidc_backchannel_logout_suspended)
 
-    assert_nothing_raised { deliver_to("sign-rp") }
+    assert_nothing_raised { deliver_to("core-app") }
   end
 
   test "an actor suspension stops only the named relying party" do
     Flipper.enable_actor(
       :oidc_backchannel_logout_suspended,
-      OidcClientFlipperActor.new(client_id: "sign-rp"),
+      OidcClientFlipperActor.new(client_id: "core-app"),
     )
 
-    assert_nothing_raised { deliver_to("sign-rp") }
+    assert_nothing_raised { deliver_to("core-app") }
 
     posted_to = deliver_to("other-rp", expect_delivery: true)
 
@@ -206,7 +206,7 @@ class OidcBackchannelLogoutDeliveryJobTest < ActiveSupport::TestCase
   def encrypted_delivery_payload(uri: LOGOUT_URI)
     OutboundSensitivePayload.encrypt_oidc_backchannel_logout(
       uri: uri,
-      client_id: "sign-rp",
+      client_id: "core-app",
       resource_type: "client",
       subject: "subject-1",
       sid: SecureRandom.uuid,

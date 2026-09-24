@@ -122,7 +122,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
     OidcClientRegistry.stub(:authenticate, true) do
       AuthenticationTokenService.stub(:decode_allow_expired, payload) do
         OidcTokenRevoker.call(
-        token: "opaque-access-token", client_id: "core-app", client_secret: "secret",
+          token: "opaque-access-token", client_id: "core-app", client_secret: "secret",
         )
       end
     end

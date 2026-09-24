@@ -308,14 +308,15 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal ClientProcessorErasureNotification.status_id_for("PENDING"), notification.status_id
     assert_predicate notification.requested_at, :present?
 
-    updates = []
-    notification.stub(:update!, ->(attributes) { updates << attributes }) do
-      notification.mark_notified!
-      notification.mark_failed!(code: :temporary, message: "retry")
-    end
+    assert_equal 1, notification.delivery_generation
 
-    assert_equal ClientProcessorErasureNotification.status_id_for("NOTIFIED"), updates.first[:status_id]
-    assert_equal ClientProcessorErasureNotification.status_id_for("FAILED"), updates.last[:status_id]
+    notification.status_id = ClientProcessorErasureNotification.status_id_for("RETRYABLE_FAILURE")
+
+    assert_predicate notification, :retryable_failure?
+
+    notification.status_id = ClientProcessorErasureNotification.status_id_for("PERMANENT_FAILURE")
+
+    assert_predicate notification, :permanent_failure?
 
     notification.status_id = ClientProcessorErasureNotification.status_id_for("SKIPPED")
 

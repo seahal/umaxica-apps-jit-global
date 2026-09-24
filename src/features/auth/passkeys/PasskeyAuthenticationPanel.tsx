@@ -1,13 +1,15 @@
-// React port of `src/controllers/passkey_authentication_controller.js`.
+// Shared React panel for actor-known and discoverable passkey ceremonies.
 //
 // The ceremony is unchanged: solve an invisible Turnstile token, POST it to the anonymous options
 // endpoint, run `navigator.credentials.get`, POST the assertion to the verification
 // endpoint, and follow the redirect the server returns. Both endpoints are the same server-side
-// routes with the same rate limits and the same CSRF header; only the code that drives them moved
-// out of Stimulus.
-import { useRef } from "react";
+// routes with the same rate limits and the same CSRF header. App/com direct sign-in passes a null
+// identifier field and therefore never collects or submits an account identifier; org actor-known
+// ceremonies retain their explicit server-selected contract.
+import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
+import TextField from "@/components/ui/TextField";
 import { csrfToken } from "@/lib/csrf";
 import { readNonEmptyString, readObject, readString } from "@/lib/payload";
 
@@ -73,11 +75,13 @@ export default function PasskeyAuthenticationPanel({
   verification_url: verificationUrl,
   region,
   identifier_param: identifierParam,
+  field,
   turnstile_site_key: turnstileSiteKey,
   turnstile_error_message: turnstileErrorMessage,
   submit_label: submitLabel,
 }: PasskeyAuthenticationPanelProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const [identifier, setIdentifier] = useState("");
   const { error, status, showError, showStatus, clearMessages } = useCeremonyMessages();
 
   const authenticate = async () => {
@@ -97,7 +101,7 @@ export default function PasskeyAuthenticationPanel({
       showStatus(PASSKEY_MESSAGES.fetchingOptions);
 
       const optionsResponse = await postJson(optionsUrl, {
-        ...(identifierParam === null ? {} : { [identifierParam]: "" }),
+        ...(identifierParam === null ? {} : { [identifierParam]: identifier }),
         "cf-turnstile-response": token,
         ri: region || undefined,
       });
@@ -172,6 +176,21 @@ export default function PasskeyAuthenticationPanel({
       {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
 
       <div>
+        {identifierParam !== null && field ? (
+          <TextField
+            label={field.label}
+            name={identifierParam}
+            value={identifier}
+            onChange={setIdentifier}
+            placeholder={field.placeholder}
+            minLength={field.min_length}
+            maxLength={field.max_length}
+            pattern={field.pattern}
+            autoComplete="username"
+            isRequired
+          />
+        ) : null}
+
         <Button
           type="button"
           onPress={() => void authenticate()}

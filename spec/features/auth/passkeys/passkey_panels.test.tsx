@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 // The three fetch-driven passkey ceremonies, driven end to end.
 //
 // Each one talks to the same two server endpoints the Stimulus controllers did, so the assertions
@@ -122,6 +123,41 @@ describe("PasskeyAuthenticationPanel", () => {
     expect(screen.container.querySelector("input#identifier")).toBeNull();
     expect(screen.container.querySelector("label")).toBeNull();
     expect(screen.text("button")).toBe("パスキーでログイン");
+  });
+
+  it("renders and submits an identifier for an actor lookup ceremony", async () => {
+    credentials.get.mockResolvedValue(assertionCredential());
+    const fetchMock = stubFetchQueue(
+      jsonResponse({ challenge_id: "challenge-1", options: REQUEST_OPTIONS }),
+      jsonResponse({ status: "ok", redirect_url: "/identity" }),
+    );
+    stubLocation();
+
+    const screen = mount(
+      <PasskeyAuthenticationPanel
+        {...props}
+        identifier_param="identifier"
+        field={{
+          label: "Operator ID",
+          placeholder: "16-character ID",
+          min_length: 16,
+          max_length: 16,
+          pattern: "[0-9A-F]+",
+        }}
+      />,
+    );
+
+    expect(screen.container.querySelector("label")?.textContent).toBe("Operator ID");
+    const user = userEvent.setup();
+    await user.type(screen.container.querySelector("input")!, "0123456789ABCDEF");
+    screen.click("button");
+    await screen.flush();
+
+    expect(requestBody(fetchMock, 0)).toMatchObject({
+      identifier: "0123456789ABCDEF",
+      "cf-turnstile-response": "turnstile-token",
+      ri: "jp",
+    });
   });
 
   it("starts without an identifier, and sends none, when the server named no field", async () => {

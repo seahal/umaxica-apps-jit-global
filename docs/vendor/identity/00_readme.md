@@ -12,6 +12,14 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** This package was assembled before the accepted
+> Base/Auth authority decision. Its historical Acme-only, Sign, and shared-RP descriptions must not
+> be treated as current implementation requirements. The active Rails contract is
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
+> IdP/Authorization Server, Auth is ceremony-only, and first-party browser RPs use independent
+> surface registrations with `/sign` and `/sign/callback`. The package remains useful as historical
+> vendor-review context until its individual inventories are refreshed.
+
 # Purpose
 
 This package is the stable vendor-facing documentation set for Umaxica identity and control-plane

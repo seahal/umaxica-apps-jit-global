@@ -12,9 +12,9 @@ class ValkeyAuthStateAuthorizationCodeConsumeResultTest < ActiveSupport::TestCas
   end
 
   test "payload is retained for a consumed result" do
-    result = Result.new(status: :consumed, payload: { "client_id" => "core-app-rp" })
+    result = Result.new(status: :consumed, payload: { "client_id" => "core-app" })
 
-    assert_equal({ "client_id" => "core-app-rp" }, result.payload)
+    assert_equal({ "client_id" => "core-app" }, result.payload)
     assert_equal :consumed, result.status
   end
 end

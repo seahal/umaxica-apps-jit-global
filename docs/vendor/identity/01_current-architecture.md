@@ -12,6 +12,14 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** This vendor inventory predates the current
+> physical Rails authority decision. Its references to Acme as the sole IdP/Authorization Server,
+> Sign as an RP gateway, and the surrounding Acme/Sign naming are historical evidence only. The
+> active Rails contract is `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole
+> physical OIDC IdP/Authorization Server, Auth is ceremony-only, and browser RPs use their
+> surface-specific registrations and `/sign` plus `/sign/callback`. Do not use this document to
+> restore retired shared RP clients, Acme-issued browser sessions, or Sign-side authority.
+
 # Purpose
 
 Describe the current identity and control-plane architecture as evidenced in the repository.

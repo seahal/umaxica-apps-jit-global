@@ -40,7 +40,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
 
     AppTicketRecord.connected_to(role: :writing) do
       ClientRpSession.where(client_token_id: @current_session_id).delete_all if defined?(@current_session_id)
-      ClientOidcConnection.where(user_id: @user.id, client_id: "sign-rp").delete_all
+      ClientOidcConnection.where(user_id: @user.id, client_id: "core-app").delete_all
       ClientToken.where(id: @current_session_id).find_each(&:destroy!) if defined?(@current_session_id)
     end
 
@@ -346,7 +346,7 @@ class SignAppOidcBrowserFlowTest
     social_auth_state_from_response
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 

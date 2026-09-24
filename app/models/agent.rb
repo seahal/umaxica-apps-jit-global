@@ -36,6 +36,10 @@ class Agent < OrgRpRecord
           class_name: "AgentOwnership",
           dependent: :restrict_with_error,
           inverse_of: :agent
+  has_one :lifecycle,
+          class_name: "AgentLifecycle",
+          dependent: :restrict_with_error,
+          inverse_of: :agent
   has_one :owner, through: :ownership, source: :operator
   has_many :administration_grants,
            class_name: "AgentAdministrationGrant",

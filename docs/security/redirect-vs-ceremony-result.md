@@ -1,5 +1,10 @@
 # Redirects Versus Ceremony Results
 
+> **Legacy Sign/Acme vocabulary:** References to signed, one-shot results from `sign/id` to
+> `acme/www` below describe the superseded delegation model. For the current Rails browser OIDC
+> flow, use the Base/Auth contract and PostgreSQL finalization authority documented in
+> `docs/security/ceremony-grant-result.md`.
+
 ## Rule
 
 Redirects move browsers. Ceremony results carry credential evidence.
@@ -13,7 +18,7 @@ succeeded.
 Redirect data may preserve safe navigation intent. It must be signed or registry-bound where the
 existing redirect-target rules require it. It must not contain credential result facts.
 
-## Ceremony Results
+## Historical Sign/Acme Ceremony Results
 
 Ceremony results are signed security objects returned from `sign/id` to `acme/www`. They are
 audience-bound, purpose-bound, one-shot, expiring, and transaction/session-bound where applicable.

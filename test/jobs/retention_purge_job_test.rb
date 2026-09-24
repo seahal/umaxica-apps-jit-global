@@ -7,6 +7,52 @@ require "test_helper"
 class RetentionPurgeJobTest < ActiveJob::TestCase
   teardown { Flipper.disable(RetentionPurgeJob::FEATURE_NAME) }
 
+  test "rejects a retention batch size outside the bounded execution range" do
+    error =
+      assert_raises(ArgumentError) do
+        RetentionPurgeJob.perform_now(batch_size: 501)
+      end
+
+    assert_equal "batch_size must be between 1 and 500", error.message
+  end
+
+  test "rejects fractional retention batch sizes instead of truncating them" do
+    error =
+      assert_raises(ArgumentError) do
+        RetentionPurgeJob.perform_now(batch_size: 1.5)
+      end
+
+    assert_equal "batch_size must be between 1 and 500", error.message
+  end
+
+  test "rejects zero negative and missing retention batch sizes" do
+    [0, -1, nil].each do |batch_size|
+      error =
+        assert_raises(ArgumentError) do
+          RetentionPurgeJob.perform_now(batch_size: batch_size)
+        end
+
+      assert_equal "batch_size must be between 1 and 500", error.message
+    end
+  end
+
+  test "accepts both inclusive retention batch-size boundaries before work" do
+    FeatureFlags.stub(:enabled?, true) do
+      [1, 500].each do |batch_size|
+        assert_nothing_raised { RetentionPurgeJob.perform_now(batch_size:) }
+      end
+    end
+  end
+
+  test "accepts an integral string batch size through the public job interface" do
+    FeatureFlags.stub(:enabled?, true) do
+      # The validation is exercised before any destructive work is reached. The kill-switch stub
+      # keeps this boundary test independent of retention rows while still using the public job
+      # entrypoint.
+      assert_nothing_raised { RetentionPurgeJob.perform_now(batch_size: "1") }
+    end
+  end
+
   test "anonymizes account records where purge_eligible_at is in the past" do
     user_to_purge = Client.create!(public_id: "purge_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
     user_to_keep = Client.create!(public_id: "keep_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)

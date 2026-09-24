@@ -29,6 +29,10 @@ class Enterprise < AppRpRecord
           class_name: "EnterpriseOwnership",
           dependent: :restrict_with_error,
           inverse_of: :enterprise
+  has_one :lifecycle,
+          class_name: "EnterpriseLifecycle",
+          dependent: :restrict_with_error,
+          inverse_of: :enterprise
   has_one :owner, through: :ownership, source: :client
   has_many :administration_grants,
            class_name: "EnterpriseAdministrationGrant",

@@ -4,6 +4,8 @@
 require "test_helper"
 
 class AuthoritySchemaContractTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   EXPECTED_TABLES = {
     app: %w(
       client_authority_locks
@@ -55,6 +57,30 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
     org: "db/org_zenith_migrate/20260917120002_create_org_authority_relations.rb",
   }.freeze
 
+  LIFECYCLE_MIGRATIONS = {
+    app: "db/app_zenith_migrate/20260923170000_create_app_authority_resource_lifecycles.rb",
+    com: "db/com_zenith_migrate/20260923170001_create_com_authority_resource_lifecycles.rb",
+    org: "db/org_zenith_migrate/20260923170002_create_org_authority_resource_lifecycles.rb",
+  }.freeze
+
+  EXPECTED_LIFECYCLE_TABLES = {
+    app: %w(client_persona_lifecycles enterprise_lifecycles),
+    com: %w(individual_lifecycles company_lifecycles),
+    org: %w(agent_lifecycles bureau_lifecycles),
+  }.freeze
+
+  CUTOVER_MIGRATIONS = {
+    app: "db/app_zenith_migrate/20260923180000_create_app_authority_cutovers.rb",
+    com: "db/com_zenith_migrate/20260923180001_create_com_authority_cutovers.rb",
+    org: "db/org_zenith_migrate/20260923180002_create_org_authority_cutovers.rb",
+  }.freeze
+
+  EXPECTED_CUTOVER_TABLES = {
+    app: %w(client_persona_authority_cutovers enterprise_authority_cutovers),
+    com: %w(individual_authority_cutovers company_authority_cutovers),
+    org: %w(agent_authority_cutovers bureau_authority_cutovers),
+  }.freeze
+
   test "each surface migration explicitly enumerates its authority tables" do
     MIGRATIONS.each do |surface, relative_path|
       source = Rails.root.join(relative_path).read
@@ -62,6 +88,34 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
 
       assert_equal EXPECTED_TABLES.fetch(surface), actual, "#{surface} migration table inventory changed"
       assert_no_match(/resource_type|identity_type|merge\s*:/, source)
+    end
+  end
+
+  test "each surface lifecycle migration explicitly enumerates concrete lifecycle tables" do
+    LIFECYCLE_MIGRATIONS.each do |surface, relative_path|
+      source = Rails.root.join(relative_path).read
+      actual = source.scan(/create_table\(:([a-z0-9_]+), id: :bigserial\)/).flatten
+
+      assert_equal EXPECTED_LIFECYCLE_TABLES.fetch(surface), actual,
+                   "#{surface} lifecycle migration table inventory changed"
+      assert_no_match(/resource_type|identity_type|merge\s*:/, source)
+    end
+  end
+
+  test "each surface cutover migration enumerates only singleton marker tables" do
+    CUTOVER_MIGRATIONS.each do |surface, relative_path|
+      source = Rails.root.join(relative_path).read
+      actual = source.scan(/create_table\(:([a-z0-9_]+), id: :bigint\)/).flatten
+
+      assert_equal EXPECTED_CUTOVER_TABLES.fetch(surface), actual,
+                   "#{surface} cutover migration table inventory changed"
+      assert_equal EXPECTED_CUTOVER_TABLES.fetch(surface).length,
+                   source.scan(/id = 1/).length,
+                   "#{surface} cutover tables must be singleton rows"
+      assert_equal EXPECTED_CUTOVER_TABLES.fetch(surface).length,
+                   source.scan(/isfinite\(cutover_at\)/).length,
+                   "#{surface} cutover timestamps must be finite"
+      assert_no_match(/resource_type|identity_type|polymorphic|STI/i, source)
     end
   end
 
@@ -99,6 +153,33 @@ class AuthoritySchemaContractTest < ActiveSupport::TestCase
     assert_equal "personas", ClientPersona.table_name
     assert_equal "individuals", Individual.table_name
     assert_equal "agents", Agent.table_name
+    [ClientPersonaLifecycle, EnterpriseLifecycle].each do |lifecycle_class|
+      assert_operator lifecycle_class, :<, AppRpRecord
+    end
+    [IndividualLifecycle, CompanyLifecycle].each do |lifecycle_class|
+      assert_operator lifecycle_class, :<, ComRpRecord
+    end
+    [AgentLifecycle, BureauLifecycle].each do |lifecycle_class|
+      assert_operator lifecycle_class, :<, OrgRpRecord
+    end
+
+    assert_operator ClientPersonaAuthorityCutover, :<, AppRpRecord
+    assert_operator EnterpriseAuthorityCutover, :<, AppRpRecord
+    assert_operator IndividualAuthorityCutover, :<, ComRpRecord
+    assert_operator CompanyAuthorityCutover, :<, ComRpRecord
+    assert_operator AgentAuthorityCutover, :<, OrgRpRecord
+    assert_operator BureauAuthorityCutover, :<, OrgRpRecord
+  end
+
+  test "lifecycle migrations use explicit finite states and restrictive resource references" do
+    LIFECYCLE_MIGRATIONS.each_value do |relative_path|
+      source = Rails.root.join(relative_path).read
+
+      assert_match(/t\.string\(:state, null: false\)/, source)
+      assert_match(/state_changed_at, null: false, default: -> \{ "clock_timestamp\(\)" \}/, source)
+      assert_match(/on_delete: :restrict/, source)
+      assert_match(/state IN \(#{Regexp.escape("'active', 'inactive', 'discarded', 'deleted', 'retained'")}\)/, source)
+    end
   end
 
   test "ownership rows cannot be destroyed independently" do

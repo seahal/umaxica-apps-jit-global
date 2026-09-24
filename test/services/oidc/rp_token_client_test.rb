@@ -25,7 +25,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
         end
       end
 
-    with_oidc_client_key("ACME_APP") do
+    with_oidc_client_key("CORE_APP") do
       stub_outbound_http(stubs) do
         result = exchange(code: "code", code_verifier: "verifier")
 
@@ -67,7 +67,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
 
     event = token_exchange_failure_event(logged)
 
-    assert_equal "base-rails-rp", event.dig("data", "client_id")
+    assert_equal "core-app", event.dig("data", "client_id")
     assert_equal "log.umaxica.app", event.dig("data", "endpoint_host")
     assert_equal 400, event.dig("data", "http_status")
     assert_equal "invalid_grant", event.dig("data", "oauth_error")
@@ -88,7 +88,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
 
     event = token_exchange_failure_event(logged)
 
-    assert_equal "base-rails-rp", event.dig("data", "client_id")
+    assert_equal "core-app", event.dig("data", "client_id")
     assert_equal "log.umaxica.app", event.dig("data", "endpoint_host")
     assert_equal "Faraday::ConnectionFailed", event.dig("data", "error_class")
     assert_no_match(/sensitive-code|sensitive-verifier|secret\.example/, logged.join("\n"))
@@ -106,7 +106,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
         end
       end
 
-    with_oidc_client_key("ACME_APP") do
+    with_oidc_client_key("CORE_APP") do
       stub_outbound_http(stubs) do
         assert_not_predicate exchange(code: "code", code_verifier: "verifier"), :success?
       end
@@ -132,10 +132,10 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
     OutboundHttp::Connection.stub(:build, build_connection) do
       result = OidcRpTokenClient.call(
         token_url: token_url,
-        client_id: "base-rails-rp",
+        client_id: "core-app",
         client_secret: nil,
         code: "code",
-        redirect_uri: "https://auth.app.localhost/oidc/callback",
+        redirect_uri: "https://jp.umaxica.app/sign/callback",
         code_verifier: "verifier",
         require_https: false,
       )
@@ -149,10 +149,10 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
   test "rejects an HTTP token endpoint unless it is explicitly approved" do
     result = OidcRpTokenClient.call(
       token_url: "http://www.app.localhost:3000/oauth/token",
-      client_id: "base-rails-rp",
+      client_id: "core-app",
       client_secret: nil,
       code: "code",
-      redirect_uri: "https://auth.app.localhost/oidc/callback",
+      redirect_uri: "https://jp.umaxica.app/sign/callback",
       code_verifier: "verifier",
     )
 
@@ -165,10 +165,10 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
   def exchange(code:, code_verifier:, client_secret: nil)
     OidcRpTokenClient.call(
       token_url: TOKEN_URL,
-      client_id: "base-rails-rp",
+      client_id: "core-app",
       client_secret: client_secret,
       code: code,
-      redirect_uri: "https://www.umaxica.app/auth/callback",
+      redirect_uri: "https://jp.umaxica.app/sign/callback",
       code_verifier: code_verifier,
     )
   end
@@ -177,7 +177,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
     logged = []
     stubs = Faraday::Adapter::Test::Stubs.new { |stub| stub.post(TOKEN_URL, &response) }
 
-    with_oidc_client_key("ACME_APP") do
+    with_oidc_client_key("CORE_APP") do
       Rails.logger.stub(:info, ->(message) { logged << message }) do
         stub_outbound_http(stubs) do
           yield(exchange(code: "sensitive-code", code_verifier: "sensitive-verifier"))

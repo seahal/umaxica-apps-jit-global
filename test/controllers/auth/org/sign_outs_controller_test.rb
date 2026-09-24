@@ -63,7 +63,7 @@ class Auth::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-org",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign",
           ri: "jp",

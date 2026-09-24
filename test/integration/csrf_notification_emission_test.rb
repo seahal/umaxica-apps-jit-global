@@ -83,10 +83,10 @@ class CsrfNotificationEmissionTest < ActionDispatch::IntegrationTest
   # config/application.rb turns that off so the redacted event is the only record;
   # config/environments/development.rb turns it back on for local diagnosis.
   FRAMEWORK_WARNING_SHAPES = [
-    /didn't match request\.base_url/,
-    /indicates a cross-site request/,
-    /Sec-Fetch-Site header is missing or invalid/,
-    /Can't verify CSRF token authenticity/,
+    /\AHTTP Origin header .*didn't match request\.base_url/,
+    /\ASec-Fetch-Site header \(cross-site\) indicates a cross-site request/,
+    /\ASec-Fetch-Site header is missing or invalid/,
+    /\ACan't verify CSRF token authenticity/,
   ].freeze
 
   # A blocked request also produces `rescue_from handled ActionController::

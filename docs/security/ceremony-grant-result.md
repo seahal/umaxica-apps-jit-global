@@ -1,12 +1,17 @@
 # Ceremony Grant And Result
 
+> **Legacy Sign/Acme vocabulary:** The opening grant/result sections describe the retired
+> `sign/id` → `acme/www` delegation model. They remain as historical context only. The current
+> Rails browser OIDC contract is the Base/Auth contract in the section below; do not add a new
+> signed or one-shot ceremony-result API based on the legacy wording.
+
 ## Purpose
 
 Credential ceremonies delegated to `sign/id` must not smuggle session, account, token, preference,
 or authorization mutations through redirects or provider state. They use an explicit grant/result
 boundary.
 
-## Ceremony Grant
+## Historical Sign/Acme Ceremony Grant
 
 `acme/www` issues the ceremony grant. The grant must be:
 
@@ -20,7 +25,7 @@ boundary.
 The grant authorizes ceremony execution only. It does not authorize `sign/id` to commit account,
 session, preference, token, authorization, or freshness state.
 
-## Ceremony Result
+## Historical Sign/Acme Ceremony Result
 
 `sign/id` returns a signed ceremony result. The result must be:
 

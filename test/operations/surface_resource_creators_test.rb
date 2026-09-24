@@ -27,6 +27,7 @@ class SurfaceResourceCreatorsTest < ActiveSupport::TestCase
 
     assert_equal @visitor.id, individual.ownership.visitor_id
     assert_equal 0, individual.ownership.ownership_revision
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, individual.lifecycle.state
     assert_empty individual.administration_grants
     assert_empty individual.delegation_grants
     assert_empty individual.usage_grants
@@ -38,6 +39,7 @@ class SurfaceResourceCreatorsTest < ActiveSupport::TestCase
 
     assert_equal @visitor.id, company.ownership.visitor_id
     assert_equal 0, company.ownership.ownership_revision
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, company.lifecycle.state
     assert_empty company.administration_grants
     assert_empty company.delegation_grants
     assert_empty company.view_grants
@@ -54,6 +56,7 @@ class SurfaceResourceCreatorsTest < ActiveSupport::TestCase
 
     assert_equal @operator.id, agent.ownership.operator_id
     assert_equal 0, agent.ownership.ownership_revision
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, agent.lifecycle.state
     assert_empty agent.administration_grants
     assert_empty agent.delegation_grants
     assert_empty agent.usage_grants
@@ -65,6 +68,7 @@ class SurfaceResourceCreatorsTest < ActiveSupport::TestCase
 
     assert_equal @operator.id, bureau.ownership.operator_id
     assert_equal 0, bureau.ownership.ownership_revision
+    assert_equal AuthorityResourceLifecycleStateValue::ACTIVE, bureau.lifecycle.state
     assert_empty bureau.administration_grants
     assert_empty bureau.delegation_grants
     assert_empty bureau.view_grants

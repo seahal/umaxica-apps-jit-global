@@ -95,6 +95,50 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id).count
   end
 
+  test "transaction-bound grant claim rolls back when token issuance fails" do
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app",
+      intent: "sign_in",
+      params: {
+        response_type: "code",
+        client_id: @client.client_id,
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "failed-issuance-state",
+        nonce: "durable-nonce",
+        scope: "openid profile",
+      },
+    ).transaction
+    transaction = OidcAuthorizationTransactionCoordinator.register_result!(
+      surface: "app",
+      login_challenge: transaction.login_challenge,
+      actor: @user,
+      session_ref: nil,
+      auth_method: "email",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    ).transaction
+    transaction.finalize_base! do |_locked, _now|
+      { status: :success, browser_session_ref: @user_session_token.public_id }
+    end
+    code_record = issue_code_for_transaction!(transaction)
+    rp_session_count = ClientRpSession.count
+
+    result =
+      AuthenticationTokenService.stub(:encode, nil) do
+        with_authenticated_client do
+          exchange_code(code_record.code)
+        end
+      end
+
+    assert_not result.success?
+    assert_equal "server_error", result.error
+    assert_nil result.token_response
+    assert_equal rp_session_count, ClientRpSession.count
+    assert_nil transaction.reload.authorization_grant_redeemed_at
+    assert_equal "issued", authorization_code_store.read(code_record.code).fetch("state")
+  end
+
   test "stamps the OIDC connection with the surface writer database time" do
     code_record = issue_code!
     database_now = Time.utc(2026, 9, 21, 13, 14, 15, 123_456)
@@ -505,7 +549,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_record = issue_code!
 
     result =
-      OidcClientRegistry.stub(:find, ->(client_id) { client_id == "core-next-rp" ? unconfigured_client : nil }) do
+      OidcClientRegistry.stub(
+        :find,
+        ->(client_id) { (client_id == "core-next-rp") ? unconfigured_client : nil },
+      ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,

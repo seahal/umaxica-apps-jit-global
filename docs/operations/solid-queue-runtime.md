@@ -115,6 +115,7 @@ connection.
 | `Outbound::SmsDeliveryJob`                    | `OutboundSms.deliver_later` from OTP and notification adapters                     | `default`                                                             | `default` worker               | Payload is encrypted; AWS/network errors have bounded retries; invalid or plaintext payloads are permanently discarded only after `ActiveSupport.error_reporter` records the producer/configuration failure.                                           | A — event-driven and connected                                                           |
 | `PasskeyCeremonyTransactionPurgeJob`          | recurring entry `passkey_ceremony_transaction_purge`                               | `retention`                                                           | `retention` worker             | Delegates to the existing purger.                                                                                                                                                                                                                      | A — explicit recurring maintenance                                                       |
 | `ProcessorErasureNotificationJob`             | privacy-erasure request flow enqueues a surface/public-id pair                     | `retention`                                                           | `retention` worker             | Surface and concrete model are allowlisted; terminal state is idempotent. No concrete processor adapter is currently allowlisted, so the job records explicit failure/manual follow-up rather than claiming provider delivery.                         | B — connected but no processor integration enabled                                       |
+| `ProcessorErasureNotificationRetryJob`        | recurring entry `processor_erasure_notification_retry`                            | `retention`                                                           | `retention` worker             | Re-enqueues due `PENDING`/`RETRYABLE_FAILURE` notifications in bounded app/com batches (default 100, hard maximum 500); the notification lock remains the attempt-claim authority and terminal rows are not retried. | B — bounded retry recovery; provider integration remains disabled                        |
 | `RetentionPurgeJob`                           | recurring entry `retention_purge`                                                  | `retention`                                                           | `retention` worker             | Explicit model allowlist, bounded batches, feature kill switch, legal-hold/enforcement checks, and existing cross-database cleanup.                                                                                                                    | A — explicit destructive maintenance; production execution requires operational controls |
 | `SecretCredentialCeremonyTransactionPurgeJob` | recurring entry `secret_credential_ceremony_transaction_purge`                     | `retention`                                                           | `retention` worker             | Delegates to the existing purger.                                                                                                                                                                                                                      | A — explicit recurring maintenance                                                       |
 | `SecurityConsumedJtiPurgeJob`                 | recurring entry `security_consumed_jti_purge`                                      | `retention`                                                           | `retention` worker             | Deletes only rows past the replay-protection `expires_at` in bounded batches.                                                                                                                                                                          | A — explicit recurring maintenance                                                       |
@@ -163,9 +164,29 @@ validation command and should be run for each deploy environment.
 
 In the current worktree, bundled Ruby can load the PostgreSQL driver (`pg 1.6.3`). Rails tests
 require `POSTGRESQL_TEST_HOST` and `VALKEY_KVS_HOST` from the environment contract, not
-hand-exported `VALKEY_TEST_*` URLs. No development or production datastore was used as a fallback. Real worker
-pickup, dispatcher movement, recurring scheduler enqueue, and external provider delivery therefore
-remain unverified in this session; the evidence record names the exact failed preflight commands.
+hand-exported `VALKEY_TEST_*` URLs. No development or production datastore was used as a fallback.
+On 2026-09-23, the explicit local Compose environment passed preflight and an isolated development
+queue run verified scheduler enqueue, dispatcher/worker pickup, successful execution, and an expected
+database mutation. A controlled invalid job input was recorded as a failed execution. The ordinary
+test adapter intentionally does not execute Solid Queue business jobs. Production worker/process,
+heartbeat, monitoring, and external provider delivery remain unverified and are covered by the
+deployment/provider gates; the concrete local results are recorded in
+`evidence/2026-09-23-cf005-queue-runtime-P6Q7.md`.
+
+### Pre-deployment acceptance versus deployment gate
+
+Before deployment, the repository-owned acceptance boundary is the isolated development/test queue:
+the rendered `bin/jobs` topology must include dispatcher, scheduler, and workers; a recurring entry
+must enqueue; a worker must pick up and execute the job; the expected database mutation must be
+observable; and a controlled failure must demonstrate bounded retry and recovery/failure handling.
+The queue assignment and database connection contract are fixed by the configuration and integration
+tests. These checks do not require a production process, heartbeat, monitoring system, or real
+provider.
+
+Production worker/process existence, scheduler and dispatcher heartbeats, production queue database
+connectivity, monitoring, and operational rollback are deployment acceptance gates. They must be
+verified against the actual deployment topology before release and must not be inferred from
+`bin/jobs check` or a local enqueue record.
 
 ## Adding a job or queue
 

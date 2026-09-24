@@ -137,6 +137,8 @@ and signed `rt` tokens.
 provided by the operation's bounded, allowlisted execution rather than by a preview API:
 
 - only the explicit `RETAINABLE_MODELS` allowlist is processed;
+- the public batch-size input is restricted to the inclusive `1..500` range before any destructive
+  work begins;
 - each model is selected using its writer-database retention clock and processed in explicit
   `in_batches` scopes;
 - the `discard_at <= purge_eligible_at` retention invariant keeps an un-discarded Retainable row

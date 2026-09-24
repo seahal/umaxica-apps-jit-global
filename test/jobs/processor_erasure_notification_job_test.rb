@@ -5,7 +5,7 @@ require "test_helper"
 class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
   self.fixture_table_names = []
 
-  test "job does not mark an unimplemented client processor as notified" do
+  test "job marks an unconfigured client processor as permanent failure" do
     client = create_client
     privacy_request = ClientPrivacyRequest.create!(client: client)
     notification = ClientProcessorErasureNotification.create!(
@@ -17,7 +17,7 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
 
     notification.reload
 
-    assert_equal ClientProcessorErasureNotification.status_id_for("FAILED"), notification.status_id
+    assert_equal ClientProcessorErasureNotification.status_id_for("PERMANENT_FAILURE"), notification.status_id
     assert_equal "processor_unavailable", notification.last_error_code
     assert_not_predicate ClientOccurrence.where(event_type: "processor_erasure.notified"), :exists?
     assert_predicate ClientOccurrence.where(event_type: "processor_erasure.failed"), :exists?
@@ -40,7 +40,7 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
     assert_equal VisitorProcessorErasureNotification.status_id_for("NOTIFIED"), notification.reload.status_id
   end
 
-  test "job marks an unsupported visitor processor failed and records the reason" do
+  test "job marks an unsupported visitor processor as permanent failure" do
     visitor = create_visitor
     privacy_request = VisitorPrivacyRequest.create!(visitor: visitor)
     notification = VisitorProcessorErasureNotification.create!(
@@ -50,28 +50,30 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
 
     ProcessorErasureNotificationJob.perform_now(surface: "com", public_id: notification.public_id)
 
-    assert_equal VisitorProcessorErasureNotification.status_id_for("FAILED"), notification.reload.status_id
+    assert_equal VisitorProcessorErasureNotification.status_id_for("PERMANENT_FAILURE"), notification.reload.status_id
     occurrence = VisitorOccurrence.where(event_type: "processor_erasure.failed").order(:id).last
 
     assert_equal "processor_unavailable", occurrence.context.fetch("reason_code")
   end
 
-  test "job does not reprocess a failed notification before its retry time" do
+  test "job does not reprocess a permanent notification" do
     client = create_client
     privacy_request = ClientPrivacyRequest.create!(client: client)
     decision_time = ClientProcessorErasureNotification.database_now
     notification = ClientProcessorErasureNotification.create!(
       client_privacy_request: privacy_request,
       processor_key: "email_delivery",
-      status_id: ClientProcessorErasureNotification.status_id_for("FAILED"),
+      status_id: ClientProcessorErasureNotification.status_id_for("PERMANENT_FAILURE"),
       failed_at: decision_time,
+      permanent_failed_at: decision_time,
       retry_count: 1,
-      next_retry_at: decision_time + 15.minutes,
+      next_retry_at: nil,
       last_error_code: "temporary",
       last_error_message: "retry later",
     )
     before = notification.reload.attributes.slice(
-      "status_id", "failed_at", "retry_count", "next_retry_at", "last_error_code", "last_error_message",
+      "status_id", "failed_at", "permanent_failed_at", "retry_count", "next_retry_at",
+      "last_error_code", "last_error_message",
     )
 
     assert_no_difference -> { ClientOccurrence.count } do
@@ -79,30 +81,34 @@ class ProcessorErasureNotificationJobTest < ActiveJob::TestCase
     end
 
     assert_equal before, notification.reload.attributes.slice(
-      "status_id", "failed_at", "retry_count", "next_retry_at", "last_error_code", "last_error_message",
+      "status_id", "failed_at", "permanent_failed_at", "retry_count", "next_retry_at",
+      "last_error_code", "last_error_message",
     )
   end
 
-  test "job reprocesses a failed notification once its retry time has arrived" do
+  test "job leaves a permanent notification unchanged even when invoked again" do
     client = create_client
     privacy_request = ClientPrivacyRequest.create!(client: client)
     decision_time = ClientProcessorErasureNotification.database_now - 1.second
     notification = ClientProcessorErasureNotification.create!(
       client_privacy_request: privacy_request,
       processor_key: "email_delivery",
-      status_id: ClientProcessorErasureNotification.status_id_for("FAILED"),
+      status_id: ClientProcessorErasureNotification.status_id_for("PERMANENT_FAILURE"),
       failed_at: decision_time,
+      permanent_failed_at: decision_time,
       retry_count: 1,
-      next_retry_at: decision_time,
+      next_retry_at: nil,
       last_error_code: "temporary",
       last_error_message: "retry later",
     )
 
     ProcessorErasureNotificationJob.perform_now(surface: "app", public_id: notification.public_id)
 
-    assert_equal 2, notification.reload.retry_count
-    assert_equal "processor_unavailable", notification.last_error_code
-    assert_predicate ClientOccurrence.where(event_type: "processor_erasure.notification_requested"), :exists?
+    assert_equal 1, notification.reload.retry_count
+    assert_equal "temporary", notification.last_error_code
+    assert_no_difference -> { ClientOccurrence.count } do
+      ProcessorErasureNotificationJob.perform_now(surface: "app", public_id: notification.public_id)
+    end
   end
 
   test "job rejects unsupported surfaces" do

@@ -63,9 +63,21 @@ raw IP addresses. User agents are stored as digests when included.
 
 Privacy erasure requests create processor notification rows and enqueue Solid Queue jobs. The job is
 idempotent: terminal notifications are left unchanged, an implemented processor may move its row to
-`notified` only after its concrete dispatch contract succeeds, and unavailable processors remain
-explicitly failed with retry metadata and an occurrence event. The current repository has no
-concrete processor adapter, so no processor is currently allowlisted as successfully notified.
+`NOTIFIED` only after its adapter has authenticated and normalized a receipt bound to the notification,
+processor, delivery generation, and generation-scoped idempotency digest. Retries in one delivery
+generation reuse that idempotency identity; authorized recovery creates a new generation and identity.
+A dispatch acknowledgement without a verified receipt remains pending and cannot produce a success
+occurrence. Attempts persist their generation, bounded attempt number, processor, the generation's
+digest-only idempotency identity, outcome, and error metadata; raw provider credentials and receipt
+secrets are not persisted.
+
+Retryable failures are bounded by the processor adapter's finite retry policy. Exhaustion produces the
+immutable `PERMANENT_FAILURE` terminal state. An authorized operator may open a new delivery generation
+through the recovery operation; prior attempts and their terminal outcome remain immutable, and the
+worker never retries a permanent generation. The repository provides the provider-neutral adapter,
+receipt, retry, and recovery contracts, while the adapter registry remains intentionally empty until
+an independently approved processor integration supplies authenticated dispatch and receipt behavior.
+Unsupported processors therefore remain explicit failure/manual-follow-up states.
 
 Processor integrations that are not implemented remain explicit failure or manual follow-up states
 instead of silently succeeding.

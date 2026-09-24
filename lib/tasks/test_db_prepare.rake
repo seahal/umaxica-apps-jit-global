@@ -27,8 +27,12 @@ namespace :db do
         next if db_config.replica?
         next unless selected_databases.include?(db_config.database)
 
-        ActiveRecord::Tasks::DatabaseTasks.migrate(db_config)
+        ActiveRecord::Tasks::DatabaseTasks.migrate
       end
+
+      # The test command prepares databases after Rails has booted. Clear pools created during
+      # boot so model schema caches observe tables added by the migration pass.
+      ActiveRecord::Base.connection_handler.clear_all_connections!
     end
   end
 end

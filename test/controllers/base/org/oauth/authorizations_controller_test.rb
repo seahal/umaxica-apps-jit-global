@@ -88,8 +88,8 @@ class Base::Org::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   def authorize_params(**overrides)
     {
       response_type: "code",
-      client_id: "base-rails-rp",
-      redirect_uri: "https://#{@host}/oidc/callback",
+      client_id: "core-org",
+      redirect_uri: OidcClientRegistry.find!("core-org").redirect_uris_by_realm.fetch("operator").first,
       code_challenge: "a" * 43,
       code_challenge_method: "S256",
       scope: "openid",

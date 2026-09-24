@@ -57,7 +57,7 @@ class OpaqueResultTransportTest < ActionDispatch::IntegrationTest
       consumed = false
 
       BaseAuthAdmissionCoordinator.stub(
-        :consume_result!,
+        :read_result!,
         ->(**) { consumed = true; flunk("GET must not consume an OIDC result") },
       ) do
         get(

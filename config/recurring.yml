@@ -65,6 +65,13 @@ development:
     args:
       - batch_size: 500
     schedule: every 15 minutes
+  processor_erasure_notification_retry:
+    class: ProcessorErasureNotificationRetryJob
+    queue: retention
+    priority: 50
+    args:
+      - batch_size: 100
+    schedule: every 15 minutes
   dpop_proof_state_purge:
     class: DpopProofStatePurgeJob
     queue: retention
@@ -165,6 +172,13 @@ production:
     priority: 50
     args:
       - batch_size: 500
+    schedule: every 15 minutes
+  processor_erasure_notification_retry:
+    class: ProcessorErasureNotificationRetryJob
+    queue: retention
+    priority: 50
+    args:
+      - batch_size: 100
     schedule: every 15 minutes
   dpop_proof_state_purge:
     class: DpopProofStatePurgeJob

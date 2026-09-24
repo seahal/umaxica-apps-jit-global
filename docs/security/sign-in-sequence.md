@@ -1,6 +1,40 @@
 # Sign-In Sequence
 
-## Authority
+> **Authority-boundary supersession (2026-09-22):** This document retains the earlier
+> `sign/id`–`acme/www` migration vocabulary for historical context. The current Rails contract is
+> defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
+> IdP/Authorization Server, Auth performs credential ceremony only, and each first-party browser RP
+> uses its own registered client. In particular, do not reintroduce `base-rails-rp`, `sign-rp`, or
+> `side-rails-rp` from the historical examples below.
+
+> **Reading rule:** The sections below retain the earlier `sign/id`–`acme/www` vocabulary as a
+> migration record. They are not a description of the current Rails authority boundary. For the
+> active result contract, use the current section immediately below and the Base/Auth ADR.
+
+## Current Rails result contract
+
+Auth owns credential ceremony continuity and authentication evidence only. Base owns the OIDC
+authorization transaction, Base Browser Session, RP Session, authorization code, and token
+authority.
+
+The Auth-to-Base result is a short-lived opaque Valkey transport capability. Its digest, generation,
+expiry, and Base finalization references are stored on the matching surface-local PostgreSQL
+authorization transaction. Base reads the transport only after validating the transaction, then
+rechecks the generation under the locked PostgreSQL row before finalizing. A current result may be
+retried while its transport TTL remains; `base_finalized_at` makes Browser Session finalization
+idempotent and a transaction creates at most one Browser Session.
+
+The transport is not the authorization grant. Authorization-code aliases may be issued for the
+same durable transaction, while `authorization_grant_redeemed_at` is claimed atomically in the
+same surface ticket-database transaction that creates or resolves the RP Session. Raw result and
+authorization-code values are never stored in PostgreSQL. Valkey cleanup is transport cleanup, not
+the durable session or grant authority. Rails forgery protection remains enabled for both local
+and cross-surface POST boundaries.
+
+The historical `sign/id` and `acme/www` sections that follow must therefore not be used to infer
+that a result is signed, Valkey-one-shot, or owned by Acme in the current Rails implementation.
+
+## Historical migration vocabulary: Authority
 
 Sign-in has two boundaries:
 
@@ -58,7 +92,7 @@ authority issuer.
 `core`, `line`, and future downstream services must trust acme-issued downstream tokens, not
 sign-issued tokens.
 
-## Ceremony Result Flow
+## Historical migration vocabulary: Ceremony Result Flow
 
 The sign-in flow uses the credential grant/result boundary:
 

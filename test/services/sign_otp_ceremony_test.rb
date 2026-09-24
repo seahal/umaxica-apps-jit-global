@@ -4,6 +4,12 @@
 require "test_helper"
 
 class SignOtpCeremonyTest < ActiveSupport::TestCase
+  test "authentication and confirmation OTPs share one finite lifetime bound" do
+    assert_equal 10.minutes, CommonOtpPolicy::MAX_OOB_TTL
+    assert_equal CommonOtpPolicy::MAX_OOB_TTL, CommonOtpPolicy::AUTHENTICATION_TTL
+    assert_equal CommonOtpPolicy::MAX_OOB_TTL, CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL
+  end
+
   test "rejects an app email sign-up ticket with no bound contact record" do
     flow = create_email_flow
     result = SignOtpCeremony.issue!(
@@ -262,6 +268,70 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
     assert_predicate issued, :success?
     assert_operator email.reload.otp_counter.to_i, :<, 1 << 64
     assert_operator email.reload.otp_expires_at, :<=, 10.minutes.from_now + 1.second
+  end
+
+  test "sign-up OTP remains valid immediately before its ten-minute expiry" do
+    issue_time = Time.zone.local(2026, 9, 22, 12, 0, 0)
+    email = create_verified_client_email("sign-otp-expiry-before@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    issued =
+      ClientEmail.stub(:database_now, issue_time) do
+        OtpAdapter.stub(:for, adapter) do
+          SignOtpCeremony.issue!(
+            purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+            destination: email.address, session_nonce: flow.public_id,
+          )
+        end
+      end
+
+    result =
+      ClientEmail.stub(
+        :database_now,
+        issue_time + CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL - 1.second,
+      ) do
+        SignOtpCeremony.verify!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+          destination: email.address, code: issued.code, session_nonce: flow.public_id,
+        )
+      end
+
+    assert_predicate result, :success?
+    assert_equal :verified, result.status
+  end
+
+  test "sign-up OTP is rejected at its ten-minute expiry boundary" do
+    issue_time = Time.zone.local(2026, 9, 22, 12, 0, 0)
+    email = create_verified_client_email("sign-otp-expiry-boundary@example.test")
+    flow = create_email_flow(pending_contact_id: email.id)
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**| nil }
+
+    issued =
+      ClientEmail.stub(:database_now, issue_time) do
+        OtpAdapter.stub(:for, adapter) do
+          SignOtpCeremony.issue!(
+            purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+            destination: email.address, session_nonce: flow.public_id,
+          )
+        end
+      end
+
+    result =
+      ClientEmail.stub(
+        :database_now,
+        issue_time + CommonOtpPolicy::SIGN_UP_CONFIRMATION_TTL,
+      ) do
+        SignOtpCeremony.verify!(
+          purpose: :sign_up, surface: :app, channel: :email, subject: flow,
+          destination: email.address, code: issued.code, session_nonce: flow.public_id,
+        )
+      end
+
+    assert_not result.success?
+    assert_equal :missing_otp, result.status
   end
 
   test "issue uses one writer database clock for OTP expiry and sent timestamp" do

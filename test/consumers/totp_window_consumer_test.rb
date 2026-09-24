@@ -90,7 +90,7 @@ class TotpWindowConsumerTest < ActiveSupport::TestCase
 
     assert_equal 100, @credential.otp_attempts_count
     assert_equal ClientTotpCredentialStatus::REVOKED, @credential.user_identity_totp_credential_status_id
-    assert_predicate @credential.last_otp_at, :infinite?
+    assert_nil @credential.last_otp_at
   end
 
   test "a successful verification resets only the selected credential" do

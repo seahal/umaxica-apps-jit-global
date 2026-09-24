@@ -9,8 +9,6 @@ class BureauCreator
 
   class QuotaExceeded < StandardError; end
 
-  LIMIT = Acme::QuotaLimits::ORGANIZATION_LIMIT
-
   def self.call(...)
     new(...).call
   end
@@ -32,9 +30,15 @@ class BureauCreator
       OperatorAuthorityLock.acquire_for!(operator_id: owner.id)
       locked_owner = Operator.lock.find(owner.id)
       validate_owner_active!(locked_owner)
-      raise QuotaExceeded, "operator #{owner.id} owns the maximum number of organizations" if owned_count >= LIMIT
+      unless Acme::OrganizationQuotaPolicy.new(surface: :org, principal: locked_owner).allowed?
+        raise QuotaExceeded, "operator #{owner.id} cannot create another organization"
+      end
 
       bureau = Bureau.create!(name:, title:)
+      BureauLifecycle.create!(
+        bureau:,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
+      )
       BureauOwnership.create!(bureau:, operator: locked_owner, ownership_revision: 0)
       bureau
     end
@@ -56,9 +60,5 @@ class BureauCreator
       locked_owner.access_enabled?
 
     raise InactiveOwner, "the owner is not allowed to create a bureau"
-  end
-
-  def owned_count
-    BureauOwnership.where(operator_id: owner.id).count
   end
 end

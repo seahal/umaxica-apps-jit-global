@@ -7,7 +7,7 @@
 # Database name: app_principal
 #
 #  id                                      :bigint           not null, primary key
-#  last_otp_at                             :datetime         default(-Infinity), not null
+#  last_otp_at                             :datetime
 #  private_key                             :string(1024)     default(""), not null
 #  title                                   :string(32)
 #  created_at                              :datetime         not null
@@ -61,6 +61,10 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
   test "database default is the fixed NOTHING status" do
     assert_equal ClientTotpCredentialStatus::NOTHING,
                  ClientTotpCredential.column_defaults.fetch("user_identity_totp_credential_status_id")
+  end
+
+  test "database default leaves last_otp_at unset until a code is accepted" do
+    assert_nil ClientTotpCredential.column_defaults.fetch("last_otp_at")
   end
 
   test "has private_key attribute" do
@@ -129,15 +133,15 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
     assert_predicate record, :valid?
   end
 
-  test "validates presence of last_otp_at" do
+  test "allows an unused credential to have no last_otp_at" do
     record = ClientTotpCredential.new(
       user: @user,
       private_key: @private_key,
       last_otp_at: nil,
     )
 
-    assert_not record.valid?
-    assert_not_empty record.errors[:last_otp_at]
+    assert_predicate record, :valid?
+    assert_empty record.errors[:last_otp_at]
   end
 
   test "validates private_key length maximum" do

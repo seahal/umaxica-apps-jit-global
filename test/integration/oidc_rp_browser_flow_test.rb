@@ -9,19 +9,19 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   SURFACES = [
     { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
-      client_id: "base-rails-rp",
+      client_id: "core-app",
       acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
       resource: -> {
         clients(:one)
       }, },
     { host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-      client_id: "base-rails-rp",
+      client_id: "core-org",
       acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
       resource: -> {
         operators(:one)
       }, },
     { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
-      client_id: "base-rails-rp",
+      client_id: "core-com",
       acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
       resource: -> {
         create_visitor!
@@ -38,7 +38,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     OperatorIdentityState.ensure_defaults!
   end
 
-  test "leftover base RP authorize and callback paths are unroutable" do
+  test "legacy RP authorize and callback paths are unroutable" do
     SURFACES.each do |surface|
       ["/oidc/authorization", "/oidc/callback"].each do |path|
         assert_raises(ActionController::RoutingError) do
@@ -49,9 +49,9 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation revokes one session and resumes authorization" do
-    with_acme_oidc_client_key do
+    with_core_oidc_client_key do
       acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-      client = OidcClientRegistry.find!("base-rails-rp")
+      client = OidcClientRegistry.find!("core-app")
       code_verifier = SecureRandom.urlsafe_base64(48)
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
@@ -90,7 +90,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       callback_uri = URI.parse(jump_rt_url_from_location(response.location))
       callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
 
-      assert_equal "/oidc/callback", callback_uri.path
+      assert_equal "/sign/callback", callback_uri.path
       assert_predicate callback_query["code"], :present?
       assert_predicate issuance.transaction.reload, :consumed?
       assert_predicate resolution.transaction.reload, :resolved?
@@ -98,13 +98,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
       token_url = acme_app_oauth_token_url(host: acme_host)
-      client_assertion = OidcClientAssertionJwt.issue(client_id: "base-rails-rp", token_url: token_url)
+      client_assertion = OidcClientAssertionJwt.issue(client_id: "core-app", token_url: token_url)
       post token_url,
            params: {
              grant_type: "authorization_code",
              code: callback_query.fetch("code"),
              redirect_uri: client.redirect_uris.first,
-             client_id: "base-rails-rp",
+             client_id: "core-app",
              code_verifier: code_verifier,
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: client_assertion,
@@ -122,7 +122,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     previous_core_browser_jwt_cookie_enabled = ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"]
     ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"] = "1"
 
-    with_acme_oidc_client_key do
+    with_core_oidc_client_key do
       TurnstileVerifierStub.challenge_enabled = true
       acme_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "base.app.localhost")
       sign_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
@@ -533,8 +533,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           }, headers: browser_headers,
         )
 
-        # base-rails-rp registers valid redirect_uris for all three base surfaces
-        # (app/org/com), so /oauth/authorize is exposed and redirects on every surface.
+        # Each surface has its own registered RP identity and exact callback.
         assert_equal 302, session.response.status, surface[:client_id]
 
         session.get("/oauth/authorization", headers: browser_headers)
@@ -595,9 +594,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   def redirect_uri_for(surface)
-    OidcClientRegistry.find!(surface[:client_id]).redirect_uris.find do |uri|
-      URI.parse(uri).host == surface[:host]
-    end
+    OidcClientRegistry.find!(surface[:client_id]).redirect_uris.first
   end
 
   def redirect_uri_for_core_app(host)
@@ -630,7 +627,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "base-rails-rp",
+        client_id: "core-app",
         redirect_uri: redirect_uri_for(SURFACES.first),
         scope: "openid profile",
         state: SecureRandom.hex(16),
@@ -674,25 +671,25 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
                     "expected callback response to set #{COOKIE_NAME}"
   end
 
-  def with_acme_oidc_client_key
+  def with_core_oidc_client_key
     original_issuers = JitSecurityJwtRegistry.instance_variable_get(:@issuers)
-    original_active_kid = ENV["OIDC_CLIENT_ACME_APP_ACTIVE_KID"]
-    original_private_key = ENV["OIDC_CLIENT_ACME_APP_PRIVATE_KEY"]
+    original_active_kid = ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"]
+    original_private_key = ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"]
     key = OpenSSL::PKey::EC.generate("secp384r1")
-    ENV["OIDC_CLIENT_ACME_APP_ACTIVE_KID"] = "acme-app-oidc-test"
-    ENV["OIDC_CLIENT_ACME_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
+    ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = "core-app-oidc-test"
+    ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
     JitSecurityJwtRegistry.reload!
     yield
   ensure
     if original_active_kid.nil?
-      ENV.delete("OIDC_CLIENT_ACME_APP_ACTIVE_KID")
+      ENV.delete("OIDC_CLIENT_CORE_APP_ACTIVE_KID")
     else
-      ENV["OIDC_CLIENT_ACME_APP_ACTIVE_KID"] = original_active_kid
+      ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = original_active_kid
     end
     if original_private_key.nil?
-      ENV.delete("OIDC_CLIENT_ACME_APP_PRIVATE_KEY")
+      ENV.delete("OIDC_CLIENT_CORE_APP_PRIVATE_KEY")
     else
-      ENV["OIDC_CLIENT_ACME_APP_PRIVATE_KEY"] = original_private_key
+      ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = original_private_key
     end
     JitSecurityJwtRegistry.instance_variable_set(:@issuers, original_issuers)
   end
@@ -979,7 +976,7 @@ class OidcRpBrowserFlowTest
     social_auth_state_from_response
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 

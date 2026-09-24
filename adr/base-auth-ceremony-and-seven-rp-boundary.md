@@ -47,8 +47,10 @@ Exact independent client IDs, keys, faces, browser transactions, and RP Sessions
 
 Each exposes a neutral `GET /sign` entry page, CSRF-protected `POST /sign` flow starter, exact
 `GET /sign/callback` protocol callback, and `/sign/out`. The RP does not choose Sign in versus
-Sign up; Auth owns that internal ceremony choice. Shared browser registrations (`sign-rp`,
-`base-rails-rp`, `side-rails-rp`, `core-next-rp`) are retired after the seven flows work. Native
+Sign up; Auth owns that internal ceremony choice. The obsolete shared browser registrations
+`sign-rp`, `base-rails-rp`, and `side-rails-rp` are retired from the local registry after the
+surface-specific flows work. `core-next-rp` remains a separately gated compatibility registration
+until its live `CoreRpBridge` path and external registration/key ownership are reconciled. Native
 clients remain as a separate future-facing boundary. The read-only `docs`, `news`, and `help`
 surfaces are Rails content/resource surfaces, not Rails-authenticated OIDC RPs; they have no
 content RP registrations in the current static client registry.
@@ -120,9 +122,66 @@ OIDC revocation is scoped to the matching surface-local RP Session and requires 
 and JTI. The revoker does not fall back from an RP `sid` lookup to a parent Base Browser Session;
 parent termination is a separate explicit logout/revocation scope.
 
-The amendment does not resolve the separate regional JP/US RP-registration conflict with the
-accepted seven-client ADR. Client IDs, redirect registrations, external RP configuration, and
-legacy-session migration remain blocked until that matrix is approved and verified.
+The following paragraph records the state as of the 2026-09-17 amendment and is superseded for the
+regional target by the approved 2026-09-23 regional expansion amendment below. External RP
+configuration, deployed callers, and legacy-session migration remain separately gated.
+
+## Regional RP expansion amendment (2026-09-23)
+
+The prior seven-client target is superseded as the approved end-state for regional Core and Side
+RPs. The approved pre-deployment target is thirteen logical clients: `core-app-jp`,
+`core-app-us`, `core-com-jp`, `core-com-us`, `core-org-jp`, `core-org-us`, `side-app-jp`,
+`side-app-us`, `side-com-jp`, `side-com-us`, `side-org-jp`, `side-org-us`, and global `edit-org`.
+This is an expand-and-contract migration; the current seven-client registry and `core-next-rp`
+compatibility path remain until explicit caller, session, code, key, and retirement evidence exists.
+
+Every regional client is independently bound to its client ID, existing audience semantics, exact
+redirect URI, post-logout URI, backchannel logout URI, private-key-JWT namespace, and RP Session
+client identity. JP and US credentials are rejected across those bindings before authorization-code
+consumption, token issuance, or RP Session issuance. Side/Wide to Warp naming is not part of this
+amendment. Canonical URI and audience values must come from an existing repository SSOT; missing
+values are an implementation gap, not permission to derive registrations from Host headers.
+
+Production Base registration, real key fingerprints, deployed-caller migration, and retirement are
+deployment acceptance gates. This amendment authorizes only repository contracts and isolated
+pre-deployment verification.
+
+The pre-deployment contract is the following single logical matrix; it is not permission to
+activate incomplete registrations:
+
+| Surface | JP | US |
+| --- | --- | --- |
+| Core App | `core-app-jp` | `core-app-us` |
+| Core Com | `core-com-jp` | `core-com-us` |
+| Core Org | `core-org-jp` | `core-org-us` |
+| Side App | `side-app-jp` | `side-app-us` |
+| Side Com | `side-com-jp` | `side-com-us` |
+| Side Org | `side-org-jp` | `side-org-us` |
+
+`edit-org` remains the single global RP. The matrix is a contract source for tests and migration
+ordering; it does not derive an audience from the client ID or derive a registration from an
+arbitrary Host header. Each cell must obtain its exact audience and URI bindings from a canonical
+repository source before it can become an active registry entry. A missing regional audience or
+canonical host is a fail-closed implementation gap, not a value to invent. The existing seven
+client registry and `core-next-rp` remain during expand-and-contract migration until caller,
+session, code, key, and retirement evidence is available.
+
+`RegionalRpClientMatrix.expected_registry_contract` is the repository-side expected Base registry
+contract for these thirteen cells. It is derived from `AuthBoundaryAuthorityMap` and records the
+actor, region, logical key namespace, RP-session client binding, and source of the canonical host
+and audience. It does not activate a registry entry, generate a key, or provide a missing host or
+audience value. The `auth:regional_rp_contract` task evaluates the exact bindings when those sources
+exist and reports missing inputs fail-closed. The active compatibility registry and `core-next-rp`
+therefore remain unchanged in the pre-deployment cycle.
+
+## Shared browser-client retirement amendment (2026-09-22)
+
+The obsolete shared browser registrations and builders for `side-rails-rp`, `sign-rp`, and
+`base-rails-rp` were removed from the local static registry after a repository call-path audit and
+surface-specific test migration. Side, Core, and the app RP callback tests now use independent
+surface registrations. This does not by itself retire any external registration or key. The
+remaining `core-next-rp` registration remains a separate migration gate because its legacy
+`CoreRpBridge` runtime path and external registration/key ownership still require reconciliation.
 
 ## Base-to-Auth admission transport amendment (2026-09-21)
 
@@ -166,9 +225,11 @@ redirect URL, query string, fragment, or Rails-session pre-authentication map.
 
 Base accepts the result only from the exact configured Auth origin (plus the existing same-site
 null-origin proxy case), validates the result against the transaction before finalization, and
-checks the surface before resuming the pending authorization transaction. A valid result may be
-retried while its short Valkey TTL remains; PostgreSQL row locking and `base_finalized_at` make
-Browser Session finalization idempotent. `GET /oauth/authorize?result=...` is not a result
+checks the surface before resuming the pending authorization transaction. The result generation
+read from Valkey is passed into finalization and rechecked while the PostgreSQL transaction row is
+locked, so a result superseded by a newer generation cannot execute Browser Session finalization.
+A valid current result may be retried while its short Valkey TTL remains; PostgreSQL row locking
+and `base_finalized_at` make Browser Session finalization idempotent. `GET /oauth/authorize?result=...` is not a result
 consumer. Rails forgery protection remains enabled; no global CSRF configuration or normal Rails
 CSRF boundary is weakened for this transport. Auth remains ceremony-only and Base remains the
 authority for the authorization transaction and all resulting Browser Session, RP Session, and

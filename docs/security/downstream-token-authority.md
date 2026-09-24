@@ -6,6 +6,11 @@
 > to `acme/www`, `core`, and `line` as downstream-token consumers are historical where they conflict
 > with the Acme / Sign / Core / Base / Palm boundary.
 
+> **Current Rails-contract supersession (2026-09-23):** The later Base/Auth decision supersedes the
+> physical Acme authority wording above. Base is the sole physical OIDC IdP/Authorization Server;
+> Auth is ceremony-only. The Acme vocabulary below is historical and must not be used to introduce
+> an additional issuer, shared browser session, or retired RP registration.
+
 ## Authority
 
 `acme/www` is the downstream-token Authority.

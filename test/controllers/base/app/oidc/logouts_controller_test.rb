@@ -10,7 +10,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    @client = OidcClientRegistry.find!("sign-rp")
+    @client = OidcClientRegistry.find!("core-app")
     @user = clients(:one)
     @token = ClientToken.create!(
       user: @user,
@@ -111,10 +111,9 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "post_logout_redirect_uri registered for another realm never redirects externally" do
-    staff_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
-    cross_realm_uri = @client.post_logout_redirect_uris.find { |uri| URI.parse(uri).host == staff_host }
+    cross_realm_uri = OidcClientRegistry.find!("core-org").post_logout_redirect_uris.first
 
-    assert_not_nil cross_realm_uri, "sign-rp should register an org-realm post_logout uri"
+    assert_not_nil cross_realm_uri, "core-org should register an org-realm post_logout uri"
 
     post base_app_oidc_logout_url(host: @host),
          params: { id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz", ri: "jp" },
@@ -138,7 +137,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -159,7 +158,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -180,7 +179,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -204,7 +203,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -229,7 +228,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "palm",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "palm", ri: "jp",
           surface: "app",

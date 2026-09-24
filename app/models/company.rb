@@ -29,6 +29,10 @@ class Company < ComRpRecord
           class_name: "CompanyOwnership",
           dependent: :restrict_with_error,
           inverse_of: :company
+  has_one :lifecycle,
+          class_name: "CompanyLifecycle",
+          dependent: :restrict_with_error,
+          inverse_of: :company
   has_one :owner, through: :ownership, source: :visitor
   has_many :administration_grants,
            class_name: "CompanyAdministrationGrant",

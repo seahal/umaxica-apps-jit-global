@@ -25,6 +25,22 @@ class AccountPolicyTest < ActiveSupport::TestCase
     assert_not AccountPolicy.new(@other_record, user: @user).show?
   end
 
+  def test_show_after_account_family_cutover_uses_explicit_ownership_not_legacy_identity
+    ClientPersonaAuthorityCutover.establish!
+    @record.ownership.update!(client: @other_user)
+
+    assert_not AccountPolicy.new(@record, user: @user).show?
+    assert_predicate AccountPolicy.new(@record, user: @other_user), :show?
+  end
+
+  def test_show_after_account_family_cutover_rejects_an_ineligible_owner
+    ClientPersonaAuthorityCutover.establish!
+    @other_user.update!(status_id: ClientStatus::INACTIVE)
+    @record.ownership.update!(client: @other_user)
+
+    assert_not AccountPolicy.new(@record, user: @other_user).show?
+  end
+
   def test_create
     assert_not @policy.create?
   end

@@ -2,9 +2,9 @@
 # frozen_string_literal: true
 
 # Creates a ClientPersona and its first ownership row without consulting the
-# legacy assignment or membership graph.  The operation is deliberately not
-# wired to a controller yet: the lifecycle state gate and old-data cutover are
-# separate prerequisites for enabling the new authority path.
+# legacy assignment or membership graph. The selector bootstrap calls this operation;
+# direct controller wiring remains out of scope. Existing-data lifecycle and cutover gates
+# remain separate prerequisites for enabling the new authority path.
 class ClientPersonaCreator
   class InvalidActor < StandardError; end
 
@@ -13,8 +13,6 @@ class ClientPersonaCreator
   class IdentityMismatch < StandardError; end
 
   class QuotaExceeded < StandardError; end
-
-  LIMIT = Acme::QuotaLimits::ACCOUNT_LIMIT
 
   def self.call(...)
     new(...).call
@@ -41,12 +39,18 @@ class ClientPersonaCreator
       validate_owner_active!(locked_owner)
       locked_identity = ClientIdentity.lock.find_by(id: client_identity.id)
       validate_identity!(identity: locked_identity, owner: locked_owner)
-      raise QuotaExceeded, "client #{owner.id} owns the maximum number of personas" if owned_count >= LIMIT
+      unless Acme::AccountQuotaPolicy.new(surface: :app, principal: locked_owner).allowed?
+        raise QuotaExceeded, "client #{owner.id} cannot create another persona"
+      end
 
       persona = ClientPersona.create!(
         client_identity: locked_identity,
         moniker: moniker,
         title: title,
+      )
+      ClientPersonaLifecycle.create!(
+        client_persona: persona,
+        state: AuthorityResourceLifecycleStateValue::ACTIVE,
       )
       ClientPersonaOwnership.create!(
         client_persona: persona,
@@ -83,9 +87,5 @@ class ClientPersonaCreator
       locked_owner.access_enabled?
 
     raise InactiveOwner, "the owner is not allowed to create a persona"
-  end
-
-  def owned_count
-    ClientPersonaOwnership.where(client_id: owner.id).count
   end
 end

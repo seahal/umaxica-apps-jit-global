@@ -17,6 +17,10 @@ app-only.
 
 - Authentication OTPs use a ten-minute maximum lifetime.
 - Signup confirmation codes use the same ten-minute lifetime, including SMS.
+- `CommonOtpPolicy::MAX_OOB_TTL` is the single finite upper-bound source for
+  those two purpose-specific policies; `AUTHENTICATION_TTL` and
+  `SIGN_UP_CONFIRMATION_TTL` retain their semantic names but cannot drift to
+  different values without changing that shared policy.
 - HOTP material and counters are generated with the existing CSPRNG-backed
   `ROTP` and `SecureRandom` paths. Generated codes are compared at their
   fixed six-digit width, preserving leading-zero semantics.
@@ -93,6 +97,14 @@ separate audit of all provider delivery and external observability boundaries.
 The subsequent full Rails suite completed with 11469 runs, 73281 assertions,
 0 failures, 0 errors, and 6 existing skips. No skip was added for this
 regression.
+
+On 2026-09-22, the public signup ceremony boundary tests were revalidated after
+making the shared upper-bound source explicit. An OTP succeeded immediately
+before the ten-minute boundary and was rejected at the boundary. The focused
+ceremony/delivery set passed with 15 runs, 77 assertions, 0 failures, 0 errors,
+and 0 skips; the complete Rails suite passed with 11536 runs, 73426 assertions,
+0 failures, 0 errors, and 8 existing skips. Evidence:
+`evidence/2026-09-22-oob-otp-lifetime-revalidation-M7N8.md`.
 
 ## Writer database clock verification
 

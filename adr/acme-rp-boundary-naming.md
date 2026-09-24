@@ -7,7 +7,15 @@
 > and Authorization Authority. `sign/id` is no longer the IdP; it is a Credential Gateway and
 > Credential Ceremony Zone only. Historical implementation details in this ADR must not be used to
 > reintroduce sign-side sessions, refresh tokens, preference writes, dashboards, account lifecycle,
-> downstream token issuance, authorization decisions, or step-up freshness.
+> downstream token issuance, authorization decisions, or step-up freshness. The historical
+> `base-rails-rp` statement below is also not a current local registry contract; consult
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md` before changing RP registrations.
+
+> **Historical-reading rule:** Every subsequent `base-rails-rp`, Acme/Sign authority, and shared-RP
+> statement in this superseded ADR is historical migration context. In particular, the later
+> sentences that describe `base-rails-rp` as live must not be read as an instruction to restore or
+> register that client. The current local browser RP contract is defined only by the Base/Auth ADR
+> named above.
 
 ## Context
 

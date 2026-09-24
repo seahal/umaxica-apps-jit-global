@@ -14,7 +14,9 @@ module OidcClientStoresStaticClientStore
       .freeze
   end
 
-  # Seven independent first-party browser RPs (AuthBoundaryAuthorityMap).
+  # Seven currently active first-party browser RPs. The approved thirteen-client regional target is
+  # kept in AuthBoundaryAuthorityMap during expand-and-contract migration; it is not active here
+  # until exact caller, URI, audience, key, and RP-session bindings are implemented.
   def first_party_browser_rp_clients
     FIRST_PARTY_RP_SPECS.to_h { |client_id, spec| [client_id, face_rp_client(**spec)] }
   end
@@ -78,9 +80,6 @@ module OidcClientStoresStaticClientStore
   # Shared browser clients retained during migration; prefer first_party_browser_rp_clients.
   def deprecated_shared_browser_rp_clients
     {
-      "sign-rp" => sign_rp_client,
-      "base-rails-rp" => base_rails_rp_client,
-      "side-rails-rp" => side_rails_rp_client,
       "core-next-rp" => core_next_rp_client,
     }
   end
@@ -89,86 +88,6 @@ module OidcClientStoresStaticClientStore
     {
       "app-ios-rp" => native_rp_client(["umaxica://oidc/callback"], "App iOS RP"),
       "app-android-rp" => native_rp_client(["com.umaxica.app:/oidc/callback"], "App Android RP"),
-    }
-  end
-
-  def sign_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("PUBLIC_AUTH_SERVICE_URL") + build_redirect_uris("PRIVATE_AUTH_SERVICE_URL"),
-        "operator" => build_redirect_uris("PUBLIC_AUTH_STAFF_URL") + build_redirect_uris("PRIVATE_AUTH_STAFF_URL"),
-        "visitor" => build_redirect_uris("PUBLIC_AUTH_CORPORATE_URL") +
-          build_redirect_uris("PRIVATE_AUTH_CORPORATE_URL"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("PUBLIC_AUTH_SERVICE_URL") +
-        build_post_logout_redirect_uris("PRIVATE_AUTH_SERVICE_URL") +
-        build_post_logout_redirect_uris("PUBLIC_AUTH_STAFF_URL") +
-        build_post_logout_redirect_uris("PRIVATE_AUTH_STAFF_URL") +
-        build_post_logout_redirect_uris("PUBLIC_AUTH_CORPORATE_URL") +
-        build_post_logout_redirect_uris("PRIVATE_AUTH_CORPORATE_URL"),
-      backchannel_logout_uris: build_logout_uris("PUBLIC_AUTH_SERVICE_URL", "backchannel/logout") +
-        build_logout_uris("PRIVATE_AUTH_SERVICE_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_AUTH_STAFF_URL", "backchannel/logout") +
-        build_logout_uris("PRIVATE_AUTH_STAFF_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_AUTH_CORPORATE_URL", "backchannel/logout") +
-        build_logout_uris("PRIVATE_AUTH_CORPORATE_URL", "backchannel/logout"),
-      backchannel_logout_session_required: true,
-      aud: "sign-rp",
-      resource_type: "client",
-      name: "Sign RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "SIGN_APP",
-    }
-  end
-
-  def base_rails_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("BASE_SERVICE_URL", "www.app.localhost") +
-          build_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost"),
-        "operator" => build_redirect_uris("BASE_STAFF_URL", "www.org.localhost") +
-          build_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost"),
-        "visitor" => build_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost") +
-          build_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris(
-        "BASE_SERVICE_URL", "www.app.localhost", path: "/sign/out",
-      ) +
-        build_post_logout_redirect_uris("BASE_STAFF_URL", "www.org.localhost", path: "/sign/out") +
-        build_post_logout_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost", path: "/sign/out") +
-        build_post_logout_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost") +
-        build_post_logout_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost") +
-        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
-      aud: "base-rails-rp",
-      resource_type: "client",
-      name: "Base Rails RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "BASE_APP",
-    }
-  end
-
-  def side_rails_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost"),
-        "operator" => build_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost"),
-        "visitor" => build_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("SIDE_SERVICE_URL", "wide.app.localhost") +
-        build_post_logout_redirect_uris("SIDE_STAFF_URL", "wide.org.localhost") +
-        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "wide.com.localhost"),
-      backchannel_logout_uris: build_logout_uris("SIDE_SERVICE_URL", "backchannel/logout", "wide.app.localhost") +
-        build_logout_uris("SIDE_STAFF_URL", "backchannel/logout", "wide.org.localhost") +
-        build_logout_uris("SIDE_CORPORATE_URL", "backchannel/logout", "wide.com.localhost"),
-      backchannel_logout_session_required: true,
-      aud: "side-rails-rp",
-      resource_type: "client",
-      name: "Side Rails RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "BASE_APP",
     }
   end
 
@@ -305,8 +224,7 @@ module OidcClientStoresStaticClientStore
   end
 
   private_class_method :first_party_browser_rp_clients, :deprecated_shared_browser_rp_clients,
-                       :native_rp_clients, :sign_rp_client, :base_rails_rp_client,
-                       :side_rails_rp_client, :core_next_rp_client, :native_rp_client,
+                       :native_rp_clients, :core_next_rp_client, :native_rp_client,
                        :face_rp_client, :build_redirect_uris, :build_post_logout_redirect_uris,
                        :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
                        :normalize_host

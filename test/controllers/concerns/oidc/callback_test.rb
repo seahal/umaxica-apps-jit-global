@@ -69,11 +69,11 @@ class OidcCallbackTestController < ApplicationController
   private :pending_flow
 
   def oidc_client_id
-    "base-rails-rp"
+    "core-app"
   end
 
   def oidc_client_secret
-    OidcClientRegistry.find!("base-rails-rp").client_secret
+    OidcClientRegistry.find!("core-app").client_secret
   end
 
   def oidc_token_url
@@ -82,7 +82,7 @@ class OidcCallbackTestController < ApplicationController
   end
 
   def oidc_callback_url
-    OidcClientRegistry.find!("base-rails-rp").redirect_uris.first
+    OidcClientRegistry.find!("core-app").redirect_uris.first
   end
 
   def oidc_resource_type
@@ -141,7 +141,7 @@ class OidcProvisioningCallbackTestController < ApplicationController
   private
 
   def oidc_client_id
-    "base-rails-rp"
+    "core-app"
   end
 
   def oidc_client_secret
@@ -220,7 +220,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
       success?: true,
       payload: {
-        "aud" => ["base-rails-rp"],
+        "aud" => ["core-app"],
         "iss" => issuer,
         "sub" => subject,
         "nonce" => "nonce",
@@ -239,7 +239,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_redirected_to "/after"
     assert_equal client.id, OidcProvisioningCallbackTestController.logged_in_resource_id
-    identity = ClientIdentity.find_by!(issuer: issuer, subject: subject, audience: "base-rails-rp")
+    identity = ClientIdentity.find_by!(issuer: issuer, subject: subject, audience: "core-app")
 
     assert_equal client.id, identity.source_record_id
     assert_equal ClientIdentityState::ACTIVE, identity.status_id
@@ -301,7 +301,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     identity = ClientIdentity.create!(
       issuer: issuer,
       subject: subject,
-      audience: "base-rails-rp",
+      audience: "core-app",
       source_record_id: client.id,
       status_id: ClientIdentityState::ACTIVE,
     )
@@ -319,7 +319,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     id_token_result = Struct.new(:success?, :payload, :error, keyword_init: true).new(
       success?: true,
       payload: {
-        "aud" => ["base-rails-rp"],
+        "aud" => ["core-app"],
         "iss" => issuer,
         "sub" => subject,
         "nonce" => "nonce",

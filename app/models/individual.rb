@@ -36,6 +36,10 @@ class Individual < ComRpRecord
           class_name: "IndividualOwnership",
           dependent: :restrict_with_error,
           inverse_of: :individual
+  has_one :lifecycle,
+          class_name: "IndividualLifecycle",
+          dependent: :restrict_with_error,
+          inverse_of: :individual
   has_one :owner, through: :ownership, source: :visitor
   has_many :administration_grants,
            class_name: "IndividualAdministrationGrant",

@@ -224,8 +224,8 @@ module Auth
           t(translation_key)
         end
 
-        # A credential that has never produced a code carries the epoch rather than nil, so it reads
-        # as "never used" exactly as the table did.
+        # A credential that has never produced a code carries nil, so it reads as "never used"
+        # without storing a sentinel timestamp for an event that has not occurred.
         def formatted_last_otp_at(credential)
           last_otp_at = credential.last_otp_at
           usable =

@@ -29,6 +29,10 @@ class Bureau < OrgRpRecord
           class_name: "BureauOwnership",
           dependent: :restrict_with_error,
           inverse_of: :bureau
+  has_one :lifecycle,
+          class_name: "BureauLifecycle",
+          dependent: :restrict_with_error,
+          inverse_of: :bureau
   has_one :owner, through: :ownership, source: :operator
   has_many :administration_grants,
            class_name: "BureauAdministrationGrant",
