@@ -227,7 +227,7 @@ class << ConfigValues::HostFamilyValues
   end
 
   # Resolves the canonical PUBLIC_WARP input for a Warp surface.
-  def warp_key(env, surface)
+  def warp_key(_env, surface)
     "PUBLIC_WARP_#{surface}_URL"
   end
 

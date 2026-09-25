@@ -9,9 +9,11 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     host! host
 
     get "/sign/in/secret"
+
     assert_response :not_found
 
     post "/sign/in/secret", params: { secret_credential_login_form: { secret_credential_value: "unused" } }
+
     assert_response :not_found
   end
 end

@@ -1045,13 +1045,14 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   def with_oauth_authorize_counter(store, oauth_result:, &test_body)
     backend = store.backend
     regular_increment = backend.method(:increment)
-    increment = lambda do |key, *arguments, **options|
-      if key.include?(":oauth_authorize:")
-        oauth_result.call(key, *arguments, **options)
-      else
-        regular_increment.call(key, *arguments, **options)
+    increment =
+      lambda do |key, *arguments, **options|
+        if key.include?(":oauth_authorize:")
+          oauth_result.call(key, *arguments, **options)
+        else
+          regular_increment.call(key, *arguments, **options)
+        end
       end
-    end
 
     backend.stub(:increment, increment, &test_body)
   end

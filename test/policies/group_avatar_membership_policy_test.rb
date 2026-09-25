@@ -49,10 +49,12 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
       owner_collective_public_id: @bootstrap.collective.public_id, valid_from: Time.current,
     )
     membership = new_membership(group: wrong_group, avatar: @bootstrap.avatar)
+
     assert_not GroupAvatarMembershipPolicy.new(membership, user: @user).create?
     assert_not GroupAvatarMembershipPolicy.new(new_membership(avatar: @bootstrap.avatar), user: Visitor.new).create?
 
     Actor.install_context!(tld: :com)
+
     assert_not GroupAvatarMembershipPolicy.new(
       new_membership(avatar: @bootstrap.avatar), user: Visitor.new,
     ).create?

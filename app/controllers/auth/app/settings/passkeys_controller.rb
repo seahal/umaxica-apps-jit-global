@@ -277,7 +277,6 @@ module Auth
         end
 
         def passkey_registration_log_prefix = "sign.webauthn.registration"
-
       end
     end
   end

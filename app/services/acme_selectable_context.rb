@@ -119,22 +119,23 @@ module AcmeSelectableContext
       owner_collective_public_id: collective.public_id,
       permission: "avatar.view",
     )
-    avatars = if authorized
-      Avatar
-        .joins(:current_ownership_period, :lifecycle_state)
-        .where(
-          avatar_ownership_periods: {
-            owner_surface: config.surface.to_s,
-            owner_collective_public_id: collective.public_id,
-          },
-          avatar_lifecycle_states: { key: "active" },
-        )
-        .where("avatars.discard_at > ?", Time.current)
-        .distinct
-        .order(:created_at, :id)
-    else
-      Avatar.none
-    end
+    avatars =
+      if authorized
+        Avatar
+          .joins(:current_ownership_period, :lifecycle_state)
+          .where(
+            avatar_ownership_periods: {
+              owner_surface: config.surface.to_s,
+              owner_collective_public_id: collective.public_id,
+            },
+            avatar_lifecycle_states: { key: "active" },
+          )
+          .where("avatars.discard_at > ?", Time.current)
+          .distinct
+          .order(:created_at, :id)
+      else
+        Avatar.none
+      end
 
     case config.avatar_mode
     when :required then avatars.to_a
@@ -199,8 +200,7 @@ module AcmeSelectableContext
           },
           avatar_lifecycle_states: { key: "active" },
         )
-        .where("avatars.discard_at > ?", Time.current)
-        .exists?
+        .exists?(["avatars.discard_at > ?", Time.current])
     end
   end
 

@@ -4,10 +4,6 @@
 require "test_helper"
 
 class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
-  setup do
-    skip "AUTH_STATE_REDIS_URL unset" if ENV["AUTH_STATE_REDIS_URL"].blank?
-  end
-
   test "handoff consume is one-shot and bound to surface" do
     transaction = issue_transaction!
 
@@ -75,7 +71,10 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     persisted = transaction.reload
 
     assert_equal 1, persisted.result_generation
-    assert_equal store.digest_for(store.raw_code), persisted.result_digest
+    assert_equal(
+      Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose: store.purpose, raw_code: store.raw_code),
+      persisted.result_digest,
+    )
     assert_operator persisted.result_expires_at, :>, persisted.authenticated_at
     assert_nil persisted.result_consumed_at
     assert_nil persisted.base_finalized_at
@@ -160,10 +159,6 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       @options = options
       @raw_code = raw_code || "opaque-code"
       @raw_code
-    end
-
-    def digest_for(purpose:, raw_code:)
-      Digest::SHA256.hexdigest("#{purpose}:#{raw_code}")
     end
   end
 

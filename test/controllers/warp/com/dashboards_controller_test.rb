@@ -45,11 +45,13 @@ class Warp::Com::DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :found
     location = URI.parse(response.location)
+
     assert_equal "https", location.scheme
     expected_gateway = ConfigValues::JumpGatewayValues.build(
       env: ENV,
       production: Rails.env.production?,
     ).origin
+
     assert_equal expected_gateway.host, location.host
     assert_equal "/", location.path
     assert_equal ["rt"], URI.decode_www_form(location.query).map(&:first)

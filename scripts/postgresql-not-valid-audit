@@ -16,7 +16,7 @@ abort "unsupported database" unless database.match?(/\A(?:development_[a-z_]+_db
 connection = PG.connect(host:, port:, user:, password:, dbname: database, connect_timeout: 3)
 if probe
   abort "probe requires a task-owned database" unless database.start_with?("codex_integrity_20260924_")
-  ownership = connection.exec_params(<<~SQL, [database]).first
+  ownership = connection.exec_params(<<~SQL.squish, [database]).first
     SELECT shobj_description(oid, 'pg_database') AS comment
       FROM pg_database WHERE datname = $1
   SQL
@@ -28,7 +28,7 @@ connection.exec("SET LOCAL statement_timeout = '5s'")
 connection.exec("SET LOCAL lock_timeout = '1s'")
 
 if probe
-  connection.exec(<<~SQL)
+  connection.exec(<<~SQL.squish)
     CREATE TEMP TABLE codex_probe_parent (a integer, b integer, PRIMARY KEY (a, b));
     CREATE TEMP TABLE codex_probe_child (a integer, b integer, c integer, d integer, value integer);
     INSERT INTO codex_probe_parent VALUES (1, 1);
@@ -42,7 +42,7 @@ if probe
   SQL
 end
 
-rows = connection.exec(<<~SQL)
+rows = connection.exec(<<~SQL.squish)
   SELECT con.conname, con.contype, con.confmatchtype,
          format('%I.%I', n.nspname, child.relname) AS child_table,
          CASE WHEN con.contype = 'f' THEN format('%I.%I', pn.nspname, parent.relname) END AS parent_table,

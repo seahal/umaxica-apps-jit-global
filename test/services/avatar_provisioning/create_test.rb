@@ -118,17 +118,18 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
     membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
 
     assert_no_difference -> { Avatar.count + Handle.count + AvatarOwnershipPeriod.count } do
-      error = assert_raises(StandardError) do
-        AvatarProvisioning::Create.call(
-          actor: user,
-          subject_type: :persona,
-          subject: bootstrap.account,
-          avatar_params: { moniker: "Unauthorized" },
-          handle_params: { handle: "unauthorized" },
-          owner_surface: "app",
-          owner_collective_public_id: bootstrap.collective.public_id,
-        )
-      end
+      error =
+        assert_raises(StandardError) do
+          AvatarProvisioning::Create.call(
+            actor: user,
+            subject_type: :persona,
+            subject: bootstrap.account,
+            avatar_params: { moniker: "Unauthorized" },
+            handle_params: { handle: "unauthorized" },
+            owner_surface: "app",
+            owner_collective_public_id: bootstrap.collective.public_id,
+          )
+        end
 
       assert_equal "avatar.update permission required", error.message
     end

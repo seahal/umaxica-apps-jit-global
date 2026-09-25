@@ -121,5 +121,4 @@ class ClientSecretCredential < AppPrincipalRecord
   def to_param
     public_id
   end
-
 end

@@ -60,11 +60,14 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
     assert_response :redirect
 
     refresh_token = cookies[REFRESH_COOKIE_NAME.call]
+
     assert_predicate refresh_token, :present?
     cookies.delete(ACCESS_COOKIE_NAME.call)
-    preference = AppPreference.find_by!(token_digest: AppPreference.digest_refresh_token(
-      AppPreference.parse_refresh_token(refresh_token).last,
-    ))
+    preference = AppPreference.find_by!(
+      token_digest: AppPreference.digest_refresh_token(
+        AppPreference.parse_refresh_token(refresh_token).last,
+      ),
+    )
     before = preference.reload.attributes
 
     get "/preference?ri=jp"

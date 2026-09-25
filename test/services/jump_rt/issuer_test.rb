@@ -217,17 +217,19 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
 
   test "raises a configuration error when the active key id or private key is missing" do
     JumpRtKeyring.stub(:active_kid, nil) do
-      error = assert_raises(JumpRtConfigurationError) do
-        JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
-      end
+      error =
+        assert_raises(JumpRtConfigurationError) do
+          JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
+        end
 
       assert_match(/Jump RT signing key configuration/, error.message)
     end
 
     JumpRtKeyring.stub(:private_key, nil) do
-      error = assert_raises(JumpRtConfigurationError) do
-        JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
-      end
+      error =
+        assert_raises(JumpRtConfigurationError) do
+          JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
+        end
 
       assert_match(/Jump RT signing key configuration/, error.message)
     end
@@ -268,9 +270,10 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   end
 
   test "normalizes unsupported issuer surface names by raising" do
-    error = assert_raises(JumpRtConfigurationError) do
-      JumpRtSurface.normalize_namespace("jump_app")
-    end
+    error =
+      assert_raises(JumpRtConfigurationError) do
+        JumpRtSurface.normalize_namespace("jump_app")
+      end
 
     assert_match(/unsupported Jump RT issuer surface/, error.message)
   end

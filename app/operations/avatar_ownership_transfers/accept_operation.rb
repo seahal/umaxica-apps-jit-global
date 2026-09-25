@@ -99,6 +99,5 @@ module AvatarOwnershipTransfers
 
       raise InvalidTransfer, "ownership transfer identity changed"
     end
-
   end
 end

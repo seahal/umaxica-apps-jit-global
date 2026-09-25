@@ -79,6 +79,7 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
       owner_surface: "org",
       owner_collective_public_id: bootstrap.collective.public_id,
     )
+
     assert_predicate avatar_result, :success?
 
     candidates = BaseSwitcherAuthority.current(
@@ -86,7 +87,11 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
       principal: @operator,
       session: @token,
     ).fetch(:candidates)
-    avatar_candidate = candidates.find { |candidate| candidate.dig(:avatar, :public_id) == avatar_result.avatar.public_id }
+    avatar_candidate =
+      candidates.find { |candidate|
+        candidate.dig(:avatar, :public_id) == avatar_result.avatar.public_id
+      }
+
     assert avatar_candidate
 
     patch base_org_switcher_url(host: @host), headers: as_staff_headers(

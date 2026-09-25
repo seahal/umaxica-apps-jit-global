@@ -21,7 +21,6 @@ class AvatarPermissionResolver
   SURFACES = {
     "app" => {
       actor: Client,
-      actor_status: ClientStatus,
       authority_connection_owner: AppZenithRecord,
       subject: ClientPersona,
       identity_association: :client_identity,

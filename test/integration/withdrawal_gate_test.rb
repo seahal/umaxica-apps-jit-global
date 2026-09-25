@@ -12,9 +12,11 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host! @host
 
-    @deactivated_user = Client.create!(
-      status_id: ClientStatus::ACTIVE,
-      visibility_id: ClientVisibility::USER,
+    @deactivated_user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    # The selector-ready graph exists before withdrawal starts, as it does for a real account;
+    # Avatar provisioning rejects a principal whose withdrawal has already begun.
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @deactivated_user)
+    @deactivated_user.update!(
       withdrawal_started_at: 1.day.ago,
       deactivated_at: Time.current,
       discard_at: Time.current,
@@ -30,7 +32,6 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
     )
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "withdrawal")
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @deactivated_user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @deactivated_user, session: @token)
 
     @headers = as_user_headers(@deactivated_user, host: @host, session_public_id: @token.public_id)

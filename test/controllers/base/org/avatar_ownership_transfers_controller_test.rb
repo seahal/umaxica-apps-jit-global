@@ -19,6 +19,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       owner_surface: "org",
       owner_collective_public_id: @source.collective.public_id,
     )
+
     assert_predicate @avatar_result, :success?, @avatar_result.errors.inspect
     select_source_avatar!
 
@@ -38,6 +39,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_response :success
     transfer_id = response.parsed_body.fetch("transfer_public_id")
     transfer = AvatarOwnershipTransfer.find_by!(public_id: transfer_id)
+
     assert_equal "org", transfer.from_owner_surface
     assert_equal "app", transfer.to_owner_surface
     assert_equal @avatar_result.avatar.id, transfer.avatar_id
@@ -52,7 +54,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "URL-provided Avatar cannot replace a nil selected Avatar" do
-    assert @source.avatar.nil?
+    assert_nil @source.avatar
     @token.update!(selected_avatar_public_id: nil)
     grant_step_up!("avatar_transfer_request")
 

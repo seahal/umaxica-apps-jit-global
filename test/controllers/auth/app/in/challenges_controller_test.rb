@@ -75,10 +75,13 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   private
 
   def establish_pending_mfa_via_email!
-    post auth_app_sign_in_email_path(ri: "jp"), params: {
-      user_email: { address: @email },
-      "cf-turnstile-response": "test_token",
-    }
+    post(
+      auth_app_sign_in_email_path(ri: "jp"), params: {
+        user_email: { address: @email },
+        "cf-turnstile-response": "test_token",
+      },
+    )
+
     assert_response :found
 
     otp_private_key = ROTP::Base32.random_base32
@@ -86,9 +89,11 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
     @email_record.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
 
-    patch auth_app_sign_in_email_path(ri: "jp"), params: {
-      user_email: { pass_code: pass_code },
-    }
+    patch(
+      auth_app_sign_in_email_path(ri: "jp"), params: {
+        user_email: { pass_code: pass_code },
+      },
+    )
 
     assert_response :found
     assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")

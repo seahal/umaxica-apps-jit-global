@@ -2,9 +2,10 @@
 # frozen_string_literal: true
 
 class AvatarMonikerWriterOperation < ApplicationService
-  Result = Data.define(:avatar_moniker, :errors) do
-    def success? = errors.empty?
-  end
+  Result =
+    Data.define(:avatar_moniker, :errors) do
+      def success? = errors.empty?
+    end
 
   EXPECTED_CURRENT_STATES = %i(absent present).freeze
   VALIDATION_TIMESTAMP = Time.utc(2000, 1, 1).freeze
@@ -63,11 +64,11 @@ class AvatarMonikerWriterOperation < ApplicationService
 
     avatar.association(:current_avatar_moniker).reset if errors.empty?
     Result.new(avatar_moniker: avatar_moniker, errors: errors)
-  rescue ActiveRecord::RecordInvalid => error
-    moniker_errors = error.record.errors[:moniker]
+  rescue ActiveRecord::RecordInvalid => e
+    moniker_errors = e.record.errors[:moniker]
     raise if moniker_errors.empty?
 
-    Result.new(avatar_moniker: error.record, errors: { moniker: moniker_errors })
+    Result.new(avatar_moniker: e.record, errors: { moniker: moniker_errors })
   end
 
   private

@@ -38,5 +38,4 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
       assert_includes scoped(policy_class, model.all, user: actor).to_sql, "4242"
     end
   end
-
 end

@@ -106,6 +106,7 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
       owner_surface: "org",
       owner_collective_public_id: bootstrap.collective.public_id,
     )
+
     assert_predicate result, :success?, result.errors.inspect
     result.avatar
   end

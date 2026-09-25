@@ -54,6 +54,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  sections.map { |section| section.fetch("heading") }
 
     menu_links = sections.first.fetch("items")
+
     assert_equal({ "display_name" => "Selected App Persona" }, sections.first.fetch("current_identity"))
     primary_links = sections.second.fetch("items")
     links = sections.flat_map { |section| section.fetch("items") }
@@ -109,6 +110,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_response :success
     identity = inertia_props.fetch("sections").first.fetch("current_identity")
+
     assert_equal "Authenticated App Persona", identity.fetch("display_name")
     assert_equal ["display_name"], identity.keys
     assert_equal selected_account_public_id, token.reload.selected_account_public_id
@@ -120,9 +122,10 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     select_token!(surface: :app, principal: @user, token: token)
     selected_persona(token).update!(moniker: " ")
 
-    error = assert_raises(RuntimeError) do
-      get base_app_dashboard_url(ri: "jp"), headers: session_headers(token)
-    end
+    error =
+      assert_raises(RuntimeError) do
+        get(base_app_dashboard_url(ri: "jp"), headers: session_headers(token))
+      end
 
     assert_match "selected app Persona has no display name", error.message
   end

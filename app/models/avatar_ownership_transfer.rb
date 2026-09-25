@@ -18,7 +18,7 @@ class AvatarOwnershipTransfer < AvatarRecord
   validates :from_owner_collective_public_id, :to_owner_collective_public_id,
             :request_actor_public_id, presence: true
   validates :expires_at, comparison: { greater_than: :requested_at },
-                        if: -> { requested_at.present? && expires_at.present? }
+                         if: -> { requested_at.present? && expires_at.present? }
   validate :source_and_target_owners_differ
   validate :actor_surfaces_match_terminal_state
 
@@ -34,7 +34,7 @@ class AvatarOwnershipTransfer < AvatarRecord
   end
 
   def actor_surfaces_match_terminal_state
-    return unless state.present?
+    return if state.blank?
 
     errors.add(:request_actor_surface, :invalid) if request_actor_surface != from_owner_surface
     errors.add(:accept_actor_surface, :invalid) if accepted_at.present? && accept_actor_surface != to_owner_surface

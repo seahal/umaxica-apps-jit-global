@@ -121,6 +121,47 @@ class GroupManagementTest < ActiveSupport::TestCase
     assert_equal "Owner check", context.fetch(:group).reload.name
   end
 
+  test "principal completed by sign-up as VERIFIED_WITH_SIGN_UP can create a Group" do
+    actor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
+
+    group = GroupManagement::Create.call(
+      account_surface: "app",
+      account_public_id: bootstrap.account.public_id,
+      owner_surface: "app",
+      owner_collective_public_id: bootstrap.collective.public_id,
+      actor: actor,
+      subject_public_id: bootstrap.account.public_id,
+      name: "Signed-up owner",
+    )
+
+    assert_predicate group, :persisted?
+    assert_predicate bootstrap.avatar, :persisted?
+  end
+
+  test "login-blocked RESERVED principal cannot create a Group" do
+    context = owned_group_context(name: "Reserved owner source")
+    client = context.fetch(:actor)
+    client.update!(status_id: ClientStatus::RESERVED)
+
+    assert_no_difference -> { AvatarGroup.count } do
+      error =
+        assert_raises(GroupManagement::Create::AuthorizationDenied) do
+          GroupManagement::Create.call(
+            account_surface: "app",
+            account_public_id: context.fetch(:bootstrap).account.public_id,
+            owner_surface: "app",
+            owner_collective_public_id: context.fetch(:bootstrap).collective.public_id,
+            actor: client,
+            subject_public_id: context.fetch(:bootstrap).account.public_id,
+            name: "Must not be created",
+          )
+        end
+
+      assert_equal "Avatar owner actor must be active", error.message
+    end
+  end
+
   test "administratively locked principal cannot create a Group" do
     context = owned_group_context(name: "Locked owner source")
     operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)

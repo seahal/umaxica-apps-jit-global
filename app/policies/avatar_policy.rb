@@ -59,7 +59,7 @@ class AvatarPolicy < ApplicationPolicy
   def permission_for_selected_collective?(permission)
     surface = avatar_surface
     collective_public_id = Actor.selection.collective_public_id
-    return false unless collective_public_id.present?
+    return false if collective_public_id.blank?
 
     AvatarPermissionResolver.call(
       actor: user,

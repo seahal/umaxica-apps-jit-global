@@ -31,6 +31,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
   test "member guest inactive and cross-principal memberships grant no owner permission" do
     app_membership = @app.account.persona_memberships.find_by!(enterprise: @app.collective)
     app_membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+
     assert_not AvatarPermissionResolver.call(
       actor: @client,
       surface: :app,
@@ -40,6 +41,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
     )
 
     app_membership.update!(membership_kind_id: PersonaMembershipKind::GUEST)
+
     assert_not AvatarPermissionResolver.call(
       actor: @client,
       surface: :app,
@@ -50,6 +52,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
 
     app_membership.update!(membership_kind_id: PersonaMembershipKind::OWNER)
     app_membership.update!(membership_state_id: PersonaMembershipState::NOTHING)
+
     assert_not AvatarPermissionResolver.call(
       actor: @client,
       surface: :app,
@@ -60,6 +63,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
 
     other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
+
     assert_not AvatarPermissionResolver.call(
       actor: other,
       surface: :app,
@@ -88,5 +92,4 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
       )
     end
   end
-
 end

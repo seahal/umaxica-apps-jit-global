@@ -23,7 +23,7 @@ db = PG.connect(
   dbname: database,
   connect_timeout: 3,
 )
-identity = db.exec_params(<<~SQL, [database]).first
+identity = db.exec_params(<<~SQL.squish, [database]).first
   SELECT current_database() AS database, shobj_description(oid, 'pg_database') AS comment
     FROM pg_database WHERE datname = $1
 SQL
@@ -45,14 +45,14 @@ begin
   end
   sessions =
     [[70_001, "same-1"], [70_001, "same-2"], [70_002, "other"]].map do |actor, label|
-      db.exec_params(<<~SQL, ["iso#{prefix[0]}_#{label}", actor]).first.fetch("id").to_i
+      db.exec_params(<<~SQL.squish, ["iso#{prefix[0]}_#{label}", actor]).first.fetch("id").to_i
         INSERT INTO #{session_table} (public_id, #{actor_column}, created_at, updated_at)
         VALUES ($1, $2, clock_timestamp(), clock_timestamp()) RETURNING id
       SQL
     end
   create_token =
     lambda do |actor, session, label|
-      db.exec_params(<<~SQL, ["iso#{prefix[0]}_#{label}", actor, session, kind_id]).first.fetch("id").to_i
+      db.exec_params(<<~SQL.squish, ["iso#{prefix[0]}_#{label}", actor, session, kind_id]).first.fetch("id").to_i
         INSERT INTO #{token_table}
           (public_id, #{actor_column}, device_session_id, #{token_prefix}_kind_id, created_at, updated_at)
         VALUES ($1, $2, $3, $4, clock_timestamp(), clock_timestamp()) RETURNING id
@@ -121,7 +121,7 @@ begin
     end
   end
   # A failed statement and savepoint rollback must leave the valid pointer intact.
-  state = db.exec_params(<<~SQL, [sessions[0]]).first
+  state = db.exec_params(<<~SQL.squish, [sessions[0]]).first
     SELECT #{actor_column}, current_refresh_token_id FROM #{session_table} WHERE id=$1
   SQL
   raise RuntimeError, "failed operation changed session" unless state.fetch(actor_column) == "70001" &&
@@ -136,7 +136,7 @@ begin
     db.exec_params("DELETE FROM #{session_table} WHERE id=$1", [sessions[0]])
   end
   db.exec_params("DELETE FROM #{token_table} WHERE id=$1", [current])
-  cleared = db.exec_params(<<~SQL, [sessions[0]]).first
+  cleared = db.exec_params(<<~SQL.squish, [sessions[0]]).first
     SELECT #{actor_column}, current_refresh_token_id FROM #{session_table} WHERE id=$1
   SQL
   raise RuntimeError, "pointer deletion damaged session identity" unless cleared.fetch(actor_column) == "70001" &&

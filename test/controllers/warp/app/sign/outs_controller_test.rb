@@ -53,6 +53,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     transaction = AcmeLogoutTransaction.find_by!(public_id: handoff_input_value("logout_challenge"))
+
     assert_equal "side", transaction.origin_surface
     location = URI.parse(handoff_form["action"])
     Rack::Utils.parse_nested_query(location.query.to_s)

@@ -59,8 +59,10 @@ class Base::Com::SwitcherControllerTest < ActionDispatch::IntegrationTest
       principal: @visitor,
       session: @token,
     ).fetch(:candidates).first
-    current = @token.reload.slice("selected_account_public_id", "selected_collective_public_id",
-                                  "selected_collective_unit_public_id")
+    current = @token.reload.slice(
+      "selected_account_public_id", "selected_collective_public_id",
+      "selected_collective_unit_public_id",
+    )
 
     patch base_com_switcher_url(host: @host), headers: as_visitor_headers(
       @visitor,

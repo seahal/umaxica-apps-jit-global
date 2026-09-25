@@ -691,9 +691,12 @@ and deployment remain external work.
   requires/default-provisions an Avatar, org permits an optional selected Avatar without
   auto-provisioning, and com has no Avatar capability. This resolves the baseline field blocker; it
   does not define image delivery or authorize making com Avatar-capable.
-- The full suite reports eight skips: six Base/Auth admission tests because `AUTH_STATE_REDIS_URL`
-  is unset, one Flipper UI check because the engine is not mounted in this environment, and one
-  branch-coverage probe for a nonexistent single-use-token model.
+- The full suite reports two skips: one Flipper UI check because the engine is not mounted in this
+  environment, and one branch-coverage probe for a nonexistent single-use-token model. The six
+  Base/Auth admission tests previously skipped on the production-only `AUTH_STATE_REDIS_URL` now run
+  against the configured nonprod Valkey (`evidence/2026-09-25-full-suite-regression-repair-R7M2.md`).
+- Proposals for the open Avatar image delivery and Emergency Credential acknowledgement decisions are
+  in `plans/backlog/2026-09-25-avatar-image-and-emergency-credential-decisions.md`.
 - The read-only route invariant verifies that GET/HEAD do not write authentication or preference
   database state. It does not establish session-cookie-free HTML rendering; the existing legacy CSRF
   strategy currently requires session-backed token behavior, so that narrower condition remains an

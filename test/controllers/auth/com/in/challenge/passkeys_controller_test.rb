@@ -32,7 +32,6 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
       description: "MFA Passkey",
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
-
   end
 
   teardown do

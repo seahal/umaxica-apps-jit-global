@@ -58,13 +58,14 @@ module AvatarOwnershipTransfers
           .pluck(:avatar_group_id)
         new_ids = group_ids.reject { |id| locked_ids.include?(id) }
         AvatarGroup.where(id: new_ids).order(:id).lock.load if new_ids.any?
-        locked_ids.merge(new_ids)
+        locked_ids |= new_ids
 
-        remaining_ids = GroupAvatarMembership.active
-          .where(avatar_id: avatar_id)
-          .distinct
-          .pluck(:avatar_group_id)
-          .reject { |id| locked_ids.include?(id) }
+        remaining_ids =
+          GroupAvatarMembership.active
+            .where(avatar_id: avatar_id)
+            .distinct
+            .pluck(:avatar_group_id)
+            .reject { |id| locked_ids.include?(id) }
         break if remaining_ids.empty?
       end
     end
@@ -76,7 +77,7 @@ module AvatarOwnershipTransfers
         .lock
         .to_a
       group_owners = AvatarGroupOwnershipPeriod.current
-        .where(avatar_group_id: memberships.map(&:avatar_group_id).uniq)
+        .where(avatar_group_id: memberships.map(&:avatar_group_id))
         .index_by(&:avatar_group_id)
 
       memberships.each do |membership|
@@ -87,6 +88,5 @@ module AvatarOwnershipTransfers
         membership.update!(state: "removed", removed_at: at)
       end
     end
-
   end
 end

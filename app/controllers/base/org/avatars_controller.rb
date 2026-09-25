@@ -21,8 +21,10 @@ module Base
           avatar: avatar && { moniker: avatar.moniker },
           empty_message: avatar ? nil : t("base.org.avatars.none_selected"),
           action_link: avatar && { label: t("actions.edit"), href: edit_base_org_avatar_path(ri: params[:ri]) },
-          switcher_link: { label: t("base.shared.dashboard.links.switcher"), href: base_org_switcher_path(ri: params[:ri]) },
-          up_link: { label: t("base.shared.dashboard.links.dashboard"), href: base_org_dashboard_path(ri: params[:ri]) },
+          switcher_link: { label: t("base.shared.dashboard.links.switcher"),
+                           href: base_org_switcher_path(ri: params[:ri]), },
+          up_link: { label: t("base.shared.dashboard.links.dashboard"),
+                     href: base_org_dashboard_path(ri: params[:ri]), },
         }
       end
 
@@ -41,38 +43,39 @@ module Base
         raise AvatarOwnerMembershipLockService::AuthorizationDenied, "org Avatar owner required" unless
           observed_owner.owner_surface == "org"
 
-        result = AvatarOwnerMembershipLockService.call(
-          actor: current_operator,
-          surface: "org",
-          subject_public_id: Actor.selection.account_public_id,
-          owner_collective_public_id: observed_owner.owner_collective_public_id,
-          permission: "avatar.update",
-        ) do
-          Avatar.transaction do
-            current_owner = AvatarOwnershipPeriod.current
-              .where(avatar_id: avatar.id, avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
-              .lock
-              .first || raise(ActiveRecord::RecordNotFound, "Avatar has no current active owner")
-            unless [current_owner.owner_surface, current_owner.owner_collective_public_id] ==
-                [observed_owner.owner_surface, observed_owner.owner_collective_public_id]
-              raise AvatarOwnerMembershipLockService::AuthorizationDenied,
-                    "Avatar owner changed while updating its moniker"
-            end
+        result =
+          AvatarOwnerMembershipLockService.call(
+            actor: current_operator,
+            surface: "org",
+            subject_public_id: Actor.selection.account_public_id,
+            owner_collective_public_id: observed_owner.owner_collective_public_id,
+            permission: "avatar.update",
+          ) do
+            Avatar.transaction do
+              current_owner = AvatarOwnershipPeriod.current
+                .where(avatar_id: avatar.id, avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
+                .lock
+                .first || raise(ActiveRecord::RecordNotFound, "Avatar has no current active owner")
+              unless [current_owner.owner_surface, current_owner.owner_collective_public_id] ==
+                  [observed_owner.owner_surface, observed_owner.owner_collective_public_id]
+                raise AvatarOwnerMembershipLockService::AuthorizationDenied,
+                      "Avatar owner changed while updating its moniker"
+              end
 
-            AvatarMonikerWriterOperation.call(
-              avatar: avatar,
-              moniker: avatar_params[:moniker],
-              expected_current: :present,
-            )
+              AvatarMonikerWriterOperation.call(
+                avatar: avatar,
+                moniker: avatar_params[:moniker],
+                expected_current: :present,
+              )
+            end
           end
-        end
 
         if result.success?
           redirect_to(base_org_avatar_path(ri: params[:ri]), status: :see_other)
         else
           render inertia: "base/org/avatars/edit",
                  props: edit_avatar_props(avatar, moniker_value: avatar_params[:moniker])
-                 .merge(errors: serialize_errors(result.errors)),
+                   .merge(errors: serialize_errors(result.errors)),
                  status: :unprocessable_content
         end
       rescue AvatarOwnerMembershipLockService::AuthorizationDenied

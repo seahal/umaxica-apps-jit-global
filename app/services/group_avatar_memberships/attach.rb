@@ -34,6 +34,7 @@ module GroupAvatarMemberships
           locked_avatar = Avatar.lock.find(avatar.id)
           raise ArgumentError, "group is not active" unless locked_group.active?
           raise ArgumentError, "avatar is not active" unless active_avatar?(locked_avatar)
+
           authorize_same_owner!(locked_group, locked_avatar, observed_group_owner)
 
           GroupAvatarMembership.create!(
@@ -74,7 +75,7 @@ module GroupAvatarMemberships
       end
       unless group_owner.owner_surface == surface &&
           [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
-            [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
+              [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
         raise ArgumentError, "group and Avatar current owners differ"
       end
     end

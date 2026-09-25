@@ -80,8 +80,9 @@ module PreferenceRefreshTokenTransport
     end
 
     @preference_refresh_failed = true
-    event = @preference_refresh_binding_reason.present? ? "preference.token.refresh.binding_denied" :
-      "preference.token.refresh.failed"
+    event =
+      @preference_refresh_binding_reason.present? ? "preference.token.refresh.binding_denied" :
+           "preference.token.refresh.failed"
     Rails.logger.warn(
       JitLogEvent.format(
         event,

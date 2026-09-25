@@ -27,7 +27,7 @@ class Warp::Org::Web::V0::PreferencesControllerTest < ActionDispatch::Integratio
     get warp_org_web_v0_cookie_path, as: :json
 
     assert_response :ok
-    assert_equal true, response.parsed_body.fetch("show_banner")
+    assert response.parsed_body.fetch("show_banner")
   end
 
   test "PATCH cookie stores anonymous consent without issuing preference credentials" do

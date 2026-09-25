@@ -126,6 +126,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       params: { user_email: { address: @address }, "cf-turnstile-response": "test_token" },
       headers: { "Host" => @host },
     )
+
     assert_response :found
 
     otp_private_key = ROTP::Base32.random_base32

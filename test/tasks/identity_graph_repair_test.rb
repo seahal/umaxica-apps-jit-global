@@ -41,6 +41,7 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
     end
 
     identity = ClientIdentity.find_by!(source_record_id: user.id)
+
     assert_equal 1, ClientAccount.where(user_id: user.id).count
     assert_equal 1, ClientPersona.where(client_identity_id: identity.id).count
   end
@@ -98,6 +99,24 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
     assert_equal 1, ClientIdentity.where(source_record_id: second.id).count
   end
 
+  test "skips login-blocked and admin-locked app principals as ineligible without provisioning them" do
+    reserved = Client.create!(status_id: ClientStatus::RESERVED, visibility_id: ClientVisibility::USER)
+    locked = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    locked.update_columns(access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED)
+    eligible = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+    ENV["SURFACE"] = "app"
+    ENV["DRY_RUN"] = "false"
+
+    assert_output(/identity_graph_repair surface=app dry_run=false .*failed=0 ineligible=[2-9]/) do
+      Rake::Task["identity_graph:repair"].reenable
+      Rake::Task["identity_graph:repair"].invoke
+    end
+
+    assert_nil ClientIdentity.find_by(source_record_id: reserved.id)
+    assert_nil ClientIdentity.find_by(source_record_id: locked.id)
+    assert_equal 1, ClientIdentity.where(source_record_id: eligible.id).count
+  end
+
   test "org selector-ready graph does not require an Avatar" do
     operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
     bootstrap = IdentityGraphProvisioner.call!(surface: :org, principal: operator)
@@ -105,14 +124,12 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
     assert IdentityGraphRepair.selector_ready_graph?(AcmeSelector.config_for(:org), operator)
 
     bureau = bootstrap.collective
+
     assert_not Avatar
       .joins(:current_ownership_period)
-      .where(
-        avatar_ownership_periods: {
-          owner_surface: "org",
-          owner_collective_public_id: bureau.public_id,
-        },
-      )
-      .exists?
+      .exists?(avatar_ownership_periods: {
+        owner_surface: "org",
+        owner_collective_public_id: bureau.public_id,
+      })
   end
 end

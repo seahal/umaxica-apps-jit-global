@@ -105,15 +105,16 @@ class SecurityOneTimeRevealConcurrencyTest < ActiveSupport::TestCase
 
     # Separate checked-out connections make PostgreSQL serialize the real row-lock race.
     # rubocop:disable ThreadSafety/NewThread
-    threads = Array.new(2) do
-      Thread.new do
-        SecurityOneTimeReveal.connection_pool.with_connection do
-          ready << true
-          start.pop
-          results << SecurityOneTimeReveal.consume(**attributes)
+    threads =
+      Array.new(2) do
+        Thread.new do
+          SecurityOneTimeReveal.connection_pool.with_connection do
+            ready << true
+            start.pop
+            results << SecurityOneTimeReveal.consume(**attributes)
+          end
         end
       end
-    end
     # rubocop:enable ThreadSafety/NewThread
 
     Timeout.timeout(5) do

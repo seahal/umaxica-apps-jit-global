@@ -79,6 +79,7 @@ class AvatarOwnershipPeriodTest < ActiveSupport::TestCase
 
     record.owner_surface = "org"
     record.owner_collective_public_id = "collective_org_123"
+
     assert_predicate record, :valid?
   end
 

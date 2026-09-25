@@ -102,5 +102,4 @@ class OperatorSecretCredential < OrgPrincipalRecord
   def to_param
     public_id
   end
-
 end

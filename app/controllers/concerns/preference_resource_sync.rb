@@ -24,7 +24,10 @@ module PreferenceResourceSync
     when "ComPreference"
       with_resource_preference_writing_connection(resource) do
         resource.association(:visitor_preference).reset
-        resource.visitor_preference || create_resource_preference_for_write!(VisitorPreference, :visitor_id, resource.id)
+        resource.visitor_preference || create_resource_preference_for_write!(
+          VisitorPreference, :visitor_id,
+          resource.id,
+        )
       end
     end
   end

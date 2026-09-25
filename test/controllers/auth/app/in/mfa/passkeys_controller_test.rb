@@ -28,7 +28,6 @@ module Auth::App::In
         title: "totp",
       )
 
-
       @raw_credential_id = "mfa-credential-123"
       @passkey = ClientPasskey.create!(
         user: @user,

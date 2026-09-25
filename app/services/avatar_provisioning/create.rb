@@ -74,11 +74,11 @@ module AvatarProvisioning
       when "app"
         raise ArgumentError, "app Avatar creation requires the selected Client Persona" unless
           actor.is_a?(Client) && subject_type == "persona" && subject.is_a?(ClientPersona) &&
-          subject.client_identity.source_record_id == actor.id
+            subject.client_identity.source_record_id == actor.id
       when "org"
         raise ArgumentError, "org Avatar creation requires the selected Operator Agent" unless
           actor.is_a?(Operator) && subject_type == "agent" && subject.is_a?(Agent) &&
-          subject.operator_identity.source_record_id == actor.id
+            subject.operator_identity.source_record_id == actor.id
       else
         raise ArgumentError, "unsupported Avatar owner surface: #{owner_surface.inspect}"
       end
@@ -136,6 +136,5 @@ module AvatarProvisioning
       base = handle_params[:handle].presence || avatar_params.fetch(:moniker, "")
       "#{base.to_s.parameterize.presence || "avatar"}-#{SecureRandom.alphanumeric(8).downcase}"
     end
-
   end
 end

@@ -64,6 +64,7 @@ class AuthorityOwnerFamilyCutoverOperationTest < ActiveSupport::TestCase
   test "rejects reviewed backfill after the family point of no return" do
     client, persona = establish_ready_persona_family!
     result = AuthorityOwnerFamilyCutoverOperation.call(surface: :app, resource_kind: :client_persona)
+
     assert_equal :established, result.status
 
     result = AuthorityOwnerDirectBindingBackfillOperation.call(

@@ -18,6 +18,7 @@ namespace :identity_graph do
         "missing=#{result[:missing]}",
         "repaired=#{result[:repaired]}",
         "failed=#{result[:failed]}",
+        "ineligible=#{result[:ineligible]}",
       ].join(" "),
     )
   end
@@ -32,9 +33,16 @@ module IdentityGraphRepair
     missing = 0
     repaired = 0
     failed = 0
+    ineligible = 0
 
     config.principal_class.find_each do |principal|
       checked += 1
+      # Selector bootstrap is reachable only by a signed-in principal, and Avatar provisioning
+      # rejects principals that cannot sign in; report them rather than counting a failure.
+      unless principal.login_allowed? && principal.access_enabled?
+        ineligible += 1
+        next
+      end
       next if selector_ready_graph?(config, principal)
 
       missing += 1
@@ -67,6 +75,7 @@ module IdentityGraphRepair
       missing: missing,
       repaired: repaired,
       failed: failed,
+      ineligible: ineligible,
     }
   end
 
@@ -100,8 +109,7 @@ module IdentityGraphRepair
           },
           avatar_lifecycle_states: { key: "active" },
         )
-        .where("avatars.discard_at > ?", Time.current)
-        .exists?
+        .exists?(["avatars.discard_at > ?", Time.current])
     end
   end
 end

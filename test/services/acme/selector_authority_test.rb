@@ -97,6 +97,7 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
     selector = BaseSelectorAuthority.new(surface: :org, principal: operator, session: token)
 
     initial_candidates = selector.selectable_candidates
+
     assert_equal 1, initial_candidates.size
     assert_nil initial_candidates.first.fetch(:avatar)
 
@@ -109,17 +110,20 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
       owner_surface: "org",
       owner_collective_public_id: bootstrap.collective.public_id,
     )
+
     assert_predicate created, :success?
 
     avatar_candidate = selector.selectable_candidates.find { |candidate| candidate.dig(:public, :avatar_public_id) }
+
     assert_equal created.avatar.public_id, avatar_candidate.dig(:public, :avatar_public_id)
-    BaseSelectorAuthority.select(
+    result = BaseSelectorAuthority.select(
       surface: :org,
       principal: operator,
       session: token,
       params: avatar_candidate.fetch(:public),
     )
 
+    assert_equal "selected", result.fetch(:status)
     assert_equal created.avatar.public_id, token.reload.selected_avatar_public_id
   end
 end

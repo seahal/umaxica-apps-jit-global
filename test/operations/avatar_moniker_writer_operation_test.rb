@@ -11,21 +11,23 @@ class AvatarMonikerWriterOperationTest < ActiveSupport::TestCase
     previous = avatar.current_avatar_moniker
     effective_at = Time.utc(2026, 9, 24, 12, 0, 0)
 
-    result = Time.stub(:current, effective_at) do
-      AvatarMonikerWriterOperation.call(
-        avatar: avatar,
-        moniker: "Updated moniker",
-        expected_current: :present,
-      )
-    end
+    result =
+      Time.stub(:current, effective_at) do
+        AvatarMonikerWriterOperation.call(
+          avatar: avatar,
+          moniker: "Updated moniker",
+          expected_current: :present,
+        )
+      end
     second_effective_at = effective_at + 1.second
-    second_result = Time.stub(:current, second_effective_at) do
-      AvatarMonikerWriterOperation.call(
-        avatar: avatar,
-        moniker: "Second name",
-        expected_current: :present,
-      )
-    end
+    second_result =
+      Time.stub(:current, second_effective_at) do
+        AvatarMonikerWriterOperation.call(
+          avatar: avatar,
+          moniker: "Second name",
+          expected_current: :present,
+        )
+      end
 
     assert_predicate result, :success?
     assert_equal avatar.id, result.avatar_moniker.avatar_id
@@ -142,7 +144,7 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
     )
     @avatar = AvatarTestFactory.create!(
       moniker: "Initial",
-      capability: AvatarCapability.find_by!(id: AvatarCapability::NORMAL),
+      capability: AvatarCapability.find(AvatarCapability::NORMAL),
       active_handle: @handle,
     )
   end
@@ -163,23 +165,24 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
     # Source: https://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/ConnectionPool.html#method-i-release_connection
     AvatarRecord.connection_pool.release_connection
 
-    threads = ["Concurrent One", "Concurrent Two"].map do |moniker|
-      Thread.new do
-        ready << true
-        start.pop
-        AvatarRecord.connection_pool.with_connection do |connection|
-          backend_pid = connection.select_value("SELECT pg_backend_pid()")
-          result = AvatarMonikerWriterOperation.call(
-            avatar: Avatar.find(avatar_id),
-            moniker: moniker,
-            expected_current: :present,
-          )
-          [backend_pid, result]
+    threads =
+      ["Concurrent One", "Concurrent Two"].map do |moniker|
+        Thread.new do
+          ready << true
+          start.pop
+          AvatarRecord.connection_pool.with_connection do |connection|
+            backend_pid = connection.select_value("SELECT pg_backend_pid()")
+            result = AvatarMonikerWriterOperation.call(
+              avatar: Avatar.find(avatar_id),
+              moniker: moniker,
+              expected_current: :present,
+            )
+            [backend_pid, result]
+          end
+        rescue StandardError => e
+          e
         end
-      rescue StandardError => error
-        error
       end
-    end
 
     2.times { ready.pop }
     2.times { start << true }

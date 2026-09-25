@@ -43,12 +43,12 @@ databases.each do |database|
   connection.exec("BEGIN READ ONLY")
   connection.exec("SET LOCAL statement_timeout = '5s'")
   connection.exec("SET LOCAL lock_timeout = '1s'")
-  identity = connection.exec(<<~SQL).first
+  identity = connection.exec(<<~SQL.squish).first
     SELECT current_database() AS database, current_setting('server_version') AS server_version,
            current_user AS username, inet_server_addr()::text AS server_address,
            inet_server_port() AS server_port
   SQL
-  tables = connection.exec(<<~SQL)
+  tables = connection.exec(<<~SQL.squish)
     SELECT n.nspname AS schema, c.relname AS table_name, c.oid AS table_oid,
            c.relkind, c.reltuples::bigint AS estimated_rows, c.relrowsecurity,
            c.relforcerowsecurity, pg_table_size(c.oid) AS table_bytes,
@@ -63,7 +63,7 @@ databases.each do |database|
        AND c.relkind IN ('r', 'p')
      ORDER BY n.nspname, c.relname
   SQL
-  columns = connection.exec(<<~SQL).group_by { |row| row.fetch("table_oid") }
+  columns = connection.exec(<<~SQL.squish).group_by { |row| row.fetch("table_oid") }
     SELECT a.attrelid AS table_oid, a.attname AS column_name,
            format_type(a.atttypid, a.atttypmod) AS data_type,
            a.attnotnull, a.attidentity, a.attgenerated,
@@ -86,7 +86,7 @@ databases.each do |database|
        AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
      ORDER BY a.attrelid, a.attnum
   SQL
-  constraints = connection.exec(<<~SQL).group_by { |row| row.fetch("table_oid") }
+  constraints = connection.exec(<<~SQL.squish).group_by { |row| row.fetch("table_oid") }
     SELECT con.conrelid AS table_oid, con.conname AS name, con.contype AS type,
            con.convalidated AS validated, con.confmatchtype AS match_type,
            con.confupdtype AS update_action, con.confdeltype AS delete_action,
@@ -104,7 +104,7 @@ databases.each do |database|
        AND c.relkind IN ('r', 'p')
      ORDER BY con.conrelid, con.conname
   SQL
-  indexes = connection.exec(<<~SQL).group_by { |row| row.fetch("table_oid") }
+  indexes = connection.exec(<<~SQL.squish).group_by { |row| row.fetch("table_oid") }
     SELECT i.indrelid AS table_oid, ci.relname AS name, i.indisvalid AS valid,
            i.indisready AS ready, i.indisunique AS unique_index, i.indisprimary AS primary_index,
            i.indnkeyatts AS key_count, i.indnatts AS all_column_count,

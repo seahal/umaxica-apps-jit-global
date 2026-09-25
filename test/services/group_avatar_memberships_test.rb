@@ -21,9 +21,10 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
     other_avatar = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_actor).avatar
 
     assert_no_difference -> { GroupAvatarMembership.count } do
-      error = assert_raises(ArgumentError) do
-        GroupAvatarMemberships::Attach.call(**attach_arguments(context).merge(avatar: other_avatar))
-      end
+      error =
+        assert_raises(ArgumentError) do
+          GroupAvatarMemberships::Attach.call(**attach_arguments(context).merge(avatar: other_avatar))
+        end
 
       assert_equal "group and Avatar current owners differ", error.message
     end
@@ -36,9 +37,10 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
       .update!(membership_kind_id: PersonaMembershipKind::MEMBER)
 
     assert_no_difference -> { GroupAvatarMembership.count } do
-      error = assert_raises(GroupAvatarMemberships::Attach::AuthorizationDenied) do
-        GroupAvatarMemberships::Attach.call(**attach_arguments(context))
-      end
+      error =
+        assert_raises(GroupAvatarMemberships::Attach::AuthorizationDenied) do
+          GroupAvatarMemberships::Attach.call(**attach_arguments(context))
+        end
       assert_equal "avatar.group.attach permission required", error.message
     end
   end
@@ -48,17 +50,19 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
     now = Time.current
 
     assert_raises(ActiveRecord::StatementInvalid) do
-      GroupAvatarMembership.insert!({
-        public_id: "group-role-#{SecureRandom.hex(4)}",
-        avatar_group_id: context.fetch(:group).id,
-        avatar_id: context.fetch(:avatar).id,
-        role: "owner",
-        position: 0,
-        state: "active",
-        assigned_at: now,
-        created_at: now,
-        updated_at: now,
-      })
+      GroupAvatarMembership.insert!(
+        {
+          public_id: "group-role-#{SecureRandom.hex(4)}",
+          avatar_group_id: context.fetch(:group).id,
+          avatar_id: context.fetch(:avatar).id,
+          role: "owner",
+          position: 0,
+          state: "active",
+          assigned_at: now,
+          created_at: now,
+          updated_at: now,
+        },
+      )
     end
   end
 
@@ -66,9 +70,10 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
     context = app_context
     context.fetch(:group).update!(state: "archived", archived_at: Time.current)
 
-    error = assert_raises(ArgumentError) do
-      GroupAvatarMemberships::Attach.call(**attach_arguments(context))
-    end
+    error =
+      assert_raises(ArgumentError) do
+        GroupAvatarMemberships::Attach.call(**attach_arguments(context))
+      end
 
     assert_equal "group is not active", error.message
   end
@@ -108,12 +113,14 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
     arguments = authorization_arguments(context).merge(membership: membership)
 
     result = GroupAvatarMemberships::Reorder.call(**arguments, position: 3)
+
     assert_equal membership.id, result.id
     assert_equal 3, membership.reload.position
 
-    error = assert_raises(ArgumentError) do
-      GroupAvatarMemberships::Reorder.call(**arguments, position: -1)
-    end
+    error =
+      assert_raises(ArgumentError) do
+        GroupAvatarMemberships::Reorder.call(**arguments, position: -1)
+      end
     assert_equal "position must be non-negative", error.message
     assert_equal 3, membership.reload.position
   end

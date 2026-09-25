@@ -96,10 +96,11 @@ class AvatarMonikerTest < ActiveSupport::TestCase
 
   test "rejects malformed UTF-8 and prohibited controls" do
     malformed = AvatarMoniker.new(moniker: "\xFF".dup.force_encoding(Encoding::UTF_8))
-    prohibited = [
-      "\u0000", "\u001F", "\u007F", "\u0085", "\t", "\r", "\n", "\u2028", "\u2029",
-      "\uFEFF", "\u200B", "\u061C", "\u200E", "\u200F", "\u202A", "\u202E", "\u2066", "\u2069",
-    ].map { |character| AvatarMoniker.new(moniker: "a#{character}b") }
+    prohibited =
+      [
+        "\u0000", "\u001F", "\u007F", "\u0085", "\t", "\r", "\n", "\u2028", "\u2029",
+        "\uFEFF", "\u200B", "\u061C", "\u200E", "\u200F", "\u202A", "\u202E", "\u2066", "\u2069",
+      ].map { |character| AvatarMoniker.new(moniker: "a#{character}b") }
 
     malformed.valid?
     prohibited.each(&:valid?)
@@ -156,6 +157,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
       lifecycle_state: avatar_lifecycle_states(:active),
     )
     plaintext = "あ\u0300\uFE0F" * 16
+
     assert_equal 128, plaintext.bytesize
     moniker = AvatarMoniker.new(avatar: avatar, moniker: plaintext, valid_from: Time.current)
 
@@ -184,9 +186,11 @@ class AvatarMonikerTest < ActiveSupport::TestCase
       assert_equal plaintext, historical.moniker
     end
 
-    moniker_indexes = AvatarMoniker.connection.indexes(AvatarMoniker.table_name).select do |index|
-      index.columns.include?("moniker")
-    end
+    moniker_indexes =
+      AvatarMoniker.connection.indexes(AvatarMoniker.table_name).select do |index|
+        index.columns.include?("moniker")
+      end
+
     assert_empty moniker_indexes
   end
 

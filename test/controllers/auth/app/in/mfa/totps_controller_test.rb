@@ -24,7 +24,6 @@ module Auth::App::In
         user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         title: "totp",
       )
-
     end
 
     teardown do

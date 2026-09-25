@@ -541,6 +541,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
       reset!
       host!(domain[:host])
       regional_language_path = public_send("edit_base_#{domain[:name]}_preference_language_url", ri: "us")
+
       assert_includes regional_language_path, "ri=us"
       get regional_language_path
 
@@ -555,6 +556,7 @@ class AcmePreferenceTest < ActionDispatch::IntegrationTest
     test "#{domain[:name]} domain preserves an explicit language over regional context" do
       host!(domain[:host])
       prefix = domain[:name].camelize
+
       assert_preference_created(domain)
 
       patch public_send("base_#{domain[:name]}_preference_language_url", ri: "jp"),

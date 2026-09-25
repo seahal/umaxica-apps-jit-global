@@ -17,6 +17,7 @@ class PreferenceRefreshReplayTest < ActionDispatch::IntegrationTest
     public_id, verifier = AppPreference.parse_refresh_token(refresh_token)
     preference = AppPreference.find_by!(public_id: public_id)
     replacement = AppPreference.rotate!(presented_digest: AppPreference.digest_refresh_token(verifier))
+
     assert_predicate replacement, :present?
     before = preference.reload.attributes
     replacement_before = replacement.reload.attributes

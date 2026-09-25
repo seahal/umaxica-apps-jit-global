@@ -43,7 +43,6 @@ class AvatarOwnershipPeriod < AvatarRecord
             uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } }
   validates :owner_surface, inclusion: { in: OWNER_SURFACES }
   validates :owner_collective_public_id, presence: true
-  validates :avatar_ownership_status_id, presence: true
   validates :valid_from, presence: true
   validates :id, length: { maximum: 255 }
 

@@ -37,6 +37,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_response :success
     transfer = AvatarOwnershipTransfer.find_by!(public_id: response.parsed_body.fetch("transfer_public_id"))
+
     assert_equal "pending", transfer.state
     assert_equal @source.avatar.id, transfer.avatar_id
     assert_equal selected_avatar_id, @client_token.reload.selected_avatar_public_id
@@ -57,13 +58,16 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     post base_app_avatar_ownership_transfers_url(host: @host),
          params: request_params,
          headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+
     assert_response :success
     transfer_id = response.parsed_body.fetch("transfer_public_id")
 
     grant_step_up!(@operator_token, scope: "avatar_transfer_accept", surface: "org", method: "passkey")
     post base_org_accept_avatar_ownership_transfer_url(transfer_id, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), ri: "jp"),
-         headers: as_staff_headers(@operator, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-                                   session_public_id: @operator_token.public_id), as: :json
+         headers: as_staff_headers(
+           @operator, host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+                      session_public_id: @operator_token.public_id,
+         ), as: :json
 
     assert_response :success
     assert_equal "accepted", response.parsed_body.fetch("status")

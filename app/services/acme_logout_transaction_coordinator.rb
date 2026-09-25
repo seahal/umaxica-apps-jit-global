@@ -189,12 +189,12 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   # `side` is the established database enum on acme_logout_transactions. Translate it only at
   # this persistence boundary; request/controller routing uses the Warp name.
   def self.persisted_origin_surface_for(origin_surface)
-    origin_surface.to_s == "warp" ? "side" : origin_surface.to_s
+    (origin_surface.to_s == "warp") ? "side" : origin_surface.to_s
   end
 
   # Existing logout rows retain the `side` enum value and can still be completed after deployment.
   def self.route_origin_surface_for(origin_surface)
-    origin_surface.to_s == "side" ? "warp" : origin_surface.to_s
+    (origin_surface.to_s == "side") ? "warp" : origin_surface.to_s
   end
 
   def self.base_completion_helper_name(surface_name)

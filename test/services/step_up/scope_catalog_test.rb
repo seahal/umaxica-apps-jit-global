@@ -99,6 +99,7 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     assert_match StepUpScopeCatalog::APP.fetch("avatar_transfer_cancel"), cancel_path
     assert_no_match StepUpScopeCatalog::APP.fetch("avatar_transfer_accept"), cancel_path
     assert_no_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_cancel"), accept_path
-    assert_no_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_accept"), "/avatar_ownership_transfers/transfer-123/accept-extra"
+    assert_no_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_accept"),
+                    "/avatar_ownership_transfers/transfer-123/accept-extra"
   end
 end

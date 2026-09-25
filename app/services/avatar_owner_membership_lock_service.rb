@@ -45,7 +45,6 @@ class AvatarOwnerMembershipLockService < ApplicationService
     raise AuthorizationDenied, "Avatar owner actor does not match surface" unless actor.is_a?(actor_class)
 
     connection_owner = config.fetch(:authority_connection_owner)
-    status_class = config.fetch(:actor_status)
 
     # Client/PersonaMembership and Operator/AgentMembership share their surface's
     # Zenith connection owner. Lock principal lifecycle before membership, then
@@ -53,8 +52,9 @@ class AvatarOwnerMembershipLockService < ApplicationService
     connection_owner.connected_to(role: :writing) do
       connection_owner.transaction do
         locked_actor = actor_class.lock.find(actor.id)
-        unless locked_actor.status_id == status_class.const_get(:ACTIVE) &&
-            locked_actor.login_allowed? && locked_actor.access_enabled?
+        # Sign-up completes principals as VERIFIED_WITH_SIGN_UP rather than ACTIVE, so
+        # activity follows the predicates that admit a principal to sign in.
+        unless locked_actor.login_allowed? && locked_actor.access_enabled?
           raise AuthorizationDenied, "Avatar owner actor must be active"
         end
 

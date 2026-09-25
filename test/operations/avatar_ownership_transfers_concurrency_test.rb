@@ -159,7 +159,7 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   test "group creation waits for a concurrent owner-membership revocation" do
     assert_group_creation_waits_for_membership_downgrade(
       account_surface: "app",
-      connection_owner: AppRpRecord,
+      connection_owner: AppZenithRecord,
       membership_class: PersonaMembership,
       membership: @membership,
       member_kind_id: PersonaMembershipKind::MEMBER,
@@ -178,7 +178,7 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
 
     assert_group_creation_waits_for_membership_downgrade(
       account_surface: "org",
-      connection_owner: OrgRpRecord,
+      connection_owner: OrgZenithRecord,
       membership_class: AgentMembership,
       membership: membership,
       member_kind_id: AgentMembershipKind::MEMBER,
@@ -317,22 +317,27 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   def start_group_creation_thread(connection_owner:, operation_started:, account_surface:,
                                   subject_public_id:, owner_collective_public_id:, actor:, group_name:)
     Thread.new do
-      connection_owner.connection_pool.with_connection do |connection|
-        backend_pid = Integer(connection.select_value("SELECT pg_backend_pid()"))
-        operation_started << backend_pid
-        begin
-          group = GroupManagement::Create.call(
-            account_surface: account_surface,
-            account_public_id: subject_public_id,
-            owner_surface: account_surface,
-            owner_collective_public_id: owner_collective_public_id,
-            actor: actor.class.find(actor.id),
-            subject_public_id: subject_public_id,
-            name: group_name,
-          )
-          [:created, group.id]
-        rescue GroupManagement::Create::AuthorizationDenied => e
-          [:denied, e.message]
+      # The service locks through the writing role, so the observed backend must be
+      # the writing-role connection that this thread leases.
+      connection_owner.connected_to(role: :writing) do
+        connection_owner.connection_pool.with_connection do |connection|
+          fresh_actor = actor.class.find(actor.id)
+          backend_pid = Integer(connection.select_value("SELECT pg_backend_pid()"))
+          operation_started << backend_pid
+          begin
+            group = GroupManagement::Create.call(
+              account_surface: account_surface,
+              account_public_id: subject_public_id,
+              owner_surface: account_surface,
+              owner_collective_public_id: owner_collective_public_id,
+              actor: fresh_actor,
+              subject_public_id: subject_public_id,
+              name: group_name,
+            )
+            [:created, group.id]
+          rescue GroupManagement::Create::AuthorizationDenied => e
+            [:denied, e.message]
+          end
         end
       end
     end
@@ -343,12 +348,23 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
     waiting_for_lock = false
 
-    loop do
-      activity = connection_owner.connection.select_one(
-        "SELECT wait_event_type, query FROM pg_stat_activity WHERE pid = #{backend_pid}",
+    connection = connection_owner.connection
+    # pg_stat_activity.query can still report an earlier statement for the waiting backend, so
+    # the wait is identified from pg_locks: a row-lock waiter holds the tuple lock on the
+    # contended table while its lock on the holder's transaction is not yet granted.
+    row_lock_wait_sql = <<~SQL.squish
+      SELECT EXISTS (
+        SELECT 1 FROM pg_locks
+        WHERE pid = #{Integer(backend_pid)} AND locktype = 'tuple'
+          AND relation = #{connection.quote(connection.quote_table_name(lock_table_name))}::regclass
+      ) AND EXISTS (
+        SELECT 1 FROM pg_locks WHERE pid = #{Integer(backend_pid)} AND NOT granted
       )
-      waiting_for_lock = activity && activity.fetch("wait_event_type") == "Lock" &&
-        activity.fetch("query").match?(/FROM "#{lock_table_name}".*FOR UPDATE/im)
+    SQL
+
+    loop do
+      # The identical polling statement must bypass the Active Record query cache.
+      waiting_for_lock = connection_owner.uncached { connection.select_value(row_lock_wait_sql) }
       break if waiting_for_lock || !operation_thread.alive?
       raise Timeout::Error, "#{lock_description} did not reach its row lock" if
         Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
@@ -370,11 +386,12 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   end
 
   def delete_org_bootstrap_data!(operator, bootstrap)
-    OrgRpRecord.connected_to(role: :writing) do
-      OrgRpRecord.transaction do
+    OrgZenithRecord.connected_to(role: :writing) do
+      OrgZenithRecord.transaction do
         delete_agent_bootstrap_data!(bootstrap.account)
         OperatorIdentity.where(id: bootstrap.account.operator_identity_id).delete_all
         OperatorAuthorityLock.where(operator_id: operator.id).delete_all
+        OperatorAccount.where(staff_id: operator.id).delete_all
         delete_bureau_bootstrap_data!(bootstrap.collective)
       end
     end

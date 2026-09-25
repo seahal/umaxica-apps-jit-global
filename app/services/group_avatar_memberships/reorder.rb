@@ -37,6 +37,7 @@ module GroupAvatarMemberships
               current_membership.avatar_id == observed_membership.avatar_id
             raise ArgumentError, "membership ownership changed while reordering"
           end
+
           group = AvatarGroup.lock.find(current_membership.avatar_group_id)
           avatar = Avatar.lock.find(current_membership.avatar_id)
           locked_membership = GroupAvatarMembership.lock.find(membership.id)
@@ -46,6 +47,7 @@ module GroupAvatarMemberships
           raise ArgumentError, "membership is not active" unless locked_membership.active?
           raise ArgumentError, "group is not active" unless group.active?
           raise ArgumentError, "position must be non-negative" if position.negative?
+
           authorize_same_owner!(group, avatar, observed_group_owner)
 
           locked_membership.update!(position: position)
@@ -77,7 +79,7 @@ module GroupAvatarMemberships
       end
       unless group_owner.owner_surface == surface &&
           [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
-            [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
+              [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
         raise ArgumentError, "group and Avatar current owners differ"
       end
     end

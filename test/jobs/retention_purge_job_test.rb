@@ -16,7 +16,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     )
     avatar = AvatarTestFactory.create!(
       moniker: "Purge",
-      capability: AvatarCapability.find_by!(id: AvatarCapability::NORMAL),
+      capability: AvatarCapability.find(AvatarCapability::NORMAL),
       active_handle: handle,
     )
     former_moniker = avatar.avatar_monikers.create!(

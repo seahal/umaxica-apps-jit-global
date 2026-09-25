@@ -202,9 +202,9 @@ scope(module: :base, as: :base) do
       end
       post "avatar_ownership_transfers", to: "avatar_ownership_transfers#create", as: :avatar_ownership_transfers
       post "avatar_ownership_transfers/:id/accept", to: "avatar_ownership_transfers#accept",
-                                                     as: :accept_avatar_ownership_transfer
+                                                    as: :accept_avatar_ownership_transfer
       post "avatar_ownership_transfers/:id/cancel", to: "avatar_ownership_transfers#cancel",
-                                                     as: :cancel_avatar_ownership_transfer
+                                                    as: :cancel_avatar_ownership_transfer
 
       namespace :identity do
         resource :standing, only: :show
@@ -471,9 +471,9 @@ scope(module: :base, as: :base) do
       resource :avatar, only: %i(show edit update destroy)
       post "avatar_ownership_transfers", to: "avatar_ownership_transfers#create", as: :avatar_ownership_transfers
       post "avatar_ownership_transfers/:id/accept", to: "avatar_ownership_transfers#accept",
-                                                     as: :accept_avatar_ownership_transfer
+                                                    as: :accept_avatar_ownership_transfer
       post "avatar_ownership_transfers/:id/cancel", to: "avatar_ownership_transfers#cancel",
-                                                     as: :cancel_avatar_ownership_transfer
+                                                    as: :cancel_avatar_ownership_transfer
       resources :organizations, only: %i(index show) do
         resources :memberships, module: :organizations
       end

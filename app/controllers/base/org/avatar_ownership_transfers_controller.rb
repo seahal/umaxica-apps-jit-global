@@ -15,67 +15,70 @@ module Base
 
       def create
         authorize!(AvatarOwnershipTransfer, to: :create?)
-        transfer = with_locked_step_up("avatar_transfer_request") do
-          AvatarOwnershipTransfers::RequestOperation.call(
-            actor: current_operator,
-            surface: "org",
-            subject_public_id: Actor.selection.account_public_id,
-            avatar_public_id: Actor.selection.avatar_public_id,
-            target_surface: transfer_params.fetch(:target_surface, ""),
-            target_collective_public_id: transfer_params.fetch(:target_collective_public_id, ""),
-          )
-        end
+        transfer =
+          with_locked_step_up("avatar_transfer_request") do
+            AvatarOwnershipTransfers::RequestOperation.call(
+              actor: current_operator,
+              surface: "org",
+              subject_public_id: Actor.selection.account_public_id,
+              avatar_public_id: Actor.selection.avatar_public_id,
+              target_surface: transfer_params.fetch(:target_surface, ""),
+              target_collective_public_id: transfer_params.fetch(:target_collective_public_id, ""),
+            )
+          end
         return if performed?
 
         render_transfer(transfer)
       rescue AvatarOwnershipTransfers::Unauthorized
         head :forbidden
-      rescue AvatarOwnershipTransfers::InvalidTransfer => error
-        render plain: error.message, status: :unprocessable_content
+      rescue AvatarOwnershipTransfers::InvalidTransfer => e
+        render plain: e.message, status: :unprocessable_content
       end
 
       def accept
         transfer = find_transfer!
         authorize!(transfer, to: :accept?)
-        accepted = with_locked_step_up("avatar_transfer_accept") do
-          AvatarOwnershipTransfers::AcceptOperation.call(
-            actor: current_operator,
-            surface: "org",
-            subject_public_id: Actor.selection.account_public_id,
-            transfer_public_id: transfer.public_id,
-          )
-        end
+        accepted =
+          with_locked_step_up("avatar_transfer_accept") do
+            AvatarOwnershipTransfers::AcceptOperation.call(
+              actor: current_operator,
+              surface: "org",
+              subject_public_id: Actor.selection.account_public_id,
+              transfer_public_id: transfer.public_id,
+            )
+          end
         return if performed?
 
         render_transfer(accepted)
       rescue AvatarOwnershipTransfers::Unauthorized
         head :forbidden
-      rescue AvatarOwnershipTransfers::Expired => error
-        render plain: error.message, status: :gone
-      rescue AvatarOwnershipTransfers::InvalidTransfer => error
-        render plain: error.message, status: :unprocessable_content
+      rescue AvatarOwnershipTransfers::Expired => e
+        render plain: e.message, status: :gone
+      rescue AvatarOwnershipTransfers::InvalidTransfer => e
+        render plain: e.message, status: :unprocessable_content
       end
 
       def cancel
         transfer = find_transfer!
         authorize!(transfer, to: :cancel?)
-        cancelled = with_locked_step_up("avatar_transfer_cancel") do
-          AvatarOwnershipTransfers::CancelOperation.call(
-            actor: current_operator,
-            surface: "org",
-            subject_public_id: Actor.selection.account_public_id,
-            transfer_public_id: transfer.public_id,
-          )
-        end
+        cancelled =
+          with_locked_step_up("avatar_transfer_cancel") do
+            AvatarOwnershipTransfers::CancelOperation.call(
+              actor: current_operator,
+              surface: "org",
+              subject_public_id: Actor.selection.account_public_id,
+              transfer_public_id: transfer.public_id,
+            )
+          end
         return if performed?
 
         render_transfer(cancelled)
       rescue AvatarOwnershipTransfers::Unauthorized
         head :forbidden
-      rescue AvatarOwnershipTransfers::Expired => error
-        render plain: error.message, status: :gone
-      rescue AvatarOwnershipTransfers::InvalidTransfer => error
-        render plain: error.message, status: :unprocessable_content
+      rescue AvatarOwnershipTransfers::Expired => e
+        render plain: e.message, status: :gone
+      rescue AvatarOwnershipTransfers::InvalidTransfer => e
+        render plain: e.message, status: :unprocessable_content
       end
 
       private

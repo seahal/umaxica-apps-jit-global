@@ -23,7 +23,7 @@ logical_names.each do |logical|
   connection.exec("BEGIN READ ONLY")
   connection.exec("SET LOCAL statement_timeout = '5s'")
   connection.exec("SET LOCAL lock_timeout = '1s'")
-  connection.exec(<<~SQL).each do |row|
+  connection.exec(<<~SQL.squish).each do |row|
     SELECT n.nspname AS schema, cls.relname AS table_name, con.conname AS name,
            con.contype AS type, pg_get_constraintdef(con.oid, true) AS definition,
            con.convalidated AS validated
@@ -41,9 +41,12 @@ keys =
   records.map do |row|
     [row.fetch("schema"), row.fetch("table_name"), row.fetch("type"), row.fetch("definition")]
   end
-raise RuntimeError, "catalog and register counts diverge" unless records.length == catalog.fetch("tables").sum do |table|
-  table.fetch("constraints").count { |constraint| constraint.fetch("validated") == "f" }
-end
+raise RuntimeError,
+      "catalog and register counts diverge" unless records.length == catalog.fetch("tables").sum do |table|
+                                                     table.fetch("constraints").count { |constraint|
+                                                       constraint.fetch("validated") == "f"
+                                                     }
+                                                   end
 
 lines = [
   "# Existing NOT VALID Constraint Approval Register",

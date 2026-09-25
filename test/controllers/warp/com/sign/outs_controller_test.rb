@@ -43,9 +43,12 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "form#sign-out-handoff-form[method=?]", "post", count: 1
-    transaction = AcmeLogoutTransaction.find_by!(public_id: css_select(
-      'form#sign-out-handoff-form input[name="logout_challenge"]',
-    ).first["value"])
+    transaction = AcmeLogoutTransaction.find_by!(
+      public_id: css_select(
+        'form#sign-out-handoff-form input[name="logout_challenge"]',
+      ).first["value"],
+    )
+
     assert_equal "side", transaction.origin_surface
     location = URI.parse(css_select("form#sign-out-handoff-form").first["action"])
     query = Rack::Utils.parse_nested_query(location.query.to_s)

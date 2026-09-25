@@ -55,6 +55,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  sections.map { |section| section.fetch("heading") }
 
     menu_links = sections.first.fetch("items")
+
     assert_equal({ "display_name" => "Selected Com Individual" }, sections.first.fetch("current_identity"))
     primary_links = sections.second.fetch("items")
     links = sections.flat_map { |section| section.fetch("items") }
@@ -100,6 +101,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     assert_response :success
     identity = inertia_props.fetch("sections").first.fetch("current_identity")
+
     assert_equal "Authenticated Com Individual", identity.fetch("display_name")
     assert_equal ["display_name"], identity.keys
     assert_equal selected_account_public_id, token.reload.selected_account_public_id
@@ -111,9 +113,10 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     select_token!(surface: :com, principal: @visitor, token: token)
     selected_persona(token).update!(moniker: " ")
 
-    error = assert_raises(RuntimeError) do
-      get base_com_dashboard_url(ri: "jp"), headers: session_headers(token)
-    end
+    error =
+      assert_raises(RuntimeError) do
+        get(base_com_dashboard_url(ri: "jp"), headers: session_headers(token))
+      end
 
     assert_match "selected com Persona has no display name", error.message
   end

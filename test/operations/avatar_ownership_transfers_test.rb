@@ -65,6 +65,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       session: target_token,
     ).fetch(:candidates)
     candidate = candidates.find { |entry| entry.dig(:avatar, :public_id) == @avatar.public_id }
+
     assert candidate
 
     BaseSwitcherAuthority.switch(
@@ -78,6 +79,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
         avatar_public_id: candidate.dig(:avatar, :public_id),
       },
     )
+
     assert_equal @avatar.public_id, target_token.reload.selected_avatar_public_id
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
@@ -107,6 +109,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
       owner_surface: "org",
       owner_collective_public_id: @target.collective.public_id,
     )
+
     assert_predicate org_avatar_result, :success?, org_avatar_result.errors.inspect
     avatar = org_avatar_result.avatar
     transfer = AvatarOwnershipTransfers::RequestOperation.call(
@@ -129,11 +132,13 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     assert_equal "app", avatar.reload.current_ownership_period.owner_surface
     assert_equal @source.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
     assert_equal prior_selected_avatar_id, @client_token_for_source.reload.selected_avatar_public_id
-    candidate = BaseSwitcherAuthority.current(
-      surface: :app,
-      principal: @source_actor,
-      session: @client_token_for_source,
-    ).fetch(:candidates).find { |entry| entry.dig(:avatar, :public_id) == avatar.public_id }
+    candidate =
+      BaseSwitcherAuthority.current(
+        surface: :app,
+        principal: @source_actor,
+        session: @client_token_for_source,
+      ).fetch(:candidates).find { |entry| entry.dig(:avatar, :public_id) == avatar.public_id }
+
     assert candidate
   end
 
@@ -169,6 +174,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
   test "expiry at the boundary is materialized and cannot transfer ownership" do
     transfer = request_transfer
+
     travel_to transfer.expires_at, with_usec: true do
       assert_raises(AvatarOwnershipTransfers::Expired) do
         AvatarOwnershipTransfers::AcceptOperation.call(
@@ -201,6 +207,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
   test "accept immediately after expiry records expired state and denies ownership change" do
     transfer = request_transfer
+
     travel_to(transfer.expires_at + 1.second, with_usec: true) do
       assert_raises(AvatarOwnershipTransfers::Expired) do
         AvatarOwnershipTransfers::AcceptOperation.call(

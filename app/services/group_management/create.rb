@@ -25,6 +25,7 @@ module GroupManagement
         raise ArgumentError, "group account context is invalid"
       end
       raise ArgumentError, "owner_collective_public_id is required" if owner_collective_public_id.blank?
+
       AvatarOwnerMembershipLockService.call(
         actor: actor,
         surface: owner_surface,

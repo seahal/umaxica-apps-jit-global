@@ -111,5 +111,4 @@ class VisitorSecretCredential < ComPrincipalRecord
   def to_param
     public_id
   end
-
 end

@@ -39,5 +39,4 @@ class Auth::App::Settings::Passkeys::OptionsController < ::Auth::App::Applicatio
   end
 
   def passkey_registration_log_prefix = "sign.webauthn.registration"
-
 end

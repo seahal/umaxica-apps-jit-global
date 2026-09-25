@@ -55,17 +55,18 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
       start = Queue.new
       outcomes = Queue.new
       browsers = Array.new(2) { open_session }
-      threads = browsers.map do |browser|
-        Thread.new do
-          browser.host!(host)
-          ready << true
-          start.pop
-          browser.get(path, headers: session_headers)
-          page = Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']")
-          props = JSON.parse(page.text).fetch("props")
-          outcomes << { status: browser.response.status, passcodes: props.fetch("passcodes") }
+      threads =
+        browsers.map do |browser|
+          Thread.new do
+            browser.host!(host)
+            ready << true
+            start.pop
+            browser.get(path, headers: session_headers)
+            page = Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']")
+            props = JSON.parse(page.text).fetch("props")
+            outcomes << { status: browser.response.status, passcodes: props.fetch("passcodes") }
+          end
         end
-      end
 
       begin
         Timeout.timeout(5) do
@@ -75,9 +76,12 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
         end
 
         responses = 2.times.map { outcomes.pop }
+
         assert_equal [200, 200], responses.map { |response| response.fetch(:status) }.sort,
                      "#{surface.fetch(:name)} parallel reveal requests must render successfully"
-        assert_equal 1, responses.count { |response| response.fetch(:passcodes) == ["parallel-#{surface.fetch(:name)}-passcode"] },
+        assert_equal 1, responses.count { |response|
+          response.fetch(:passcodes) == ["parallel-#{surface.fetch(:name)}-passcode"]
+        },
                      "#{surface.fetch(:name)} parallel GETs may disclose the receipt once"
         assert_equal 1, responses.count { |response| response.fetch(:passcodes).empty? },
                      "#{surface.fetch(:name)} losing the consume race must disclose no passcode"

@@ -39,6 +39,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
       else
         assert_equal expected_region, entry.fetch(:region)
       end
+
       assert_equal metadata.fetch(:actor), entry.fetch(:actor)
       assert_equal client_id, entry.fetch(:rp_session_client_id)
       assert_equal RegionalRpClientMatrix.jwt_namespace_for(client_id), entry.fetch(:jwt_namespace)

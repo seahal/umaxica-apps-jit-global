@@ -3,7 +3,10 @@
 
 class GroupAvatarMembershipPolicy < ApplicationPolicy
   def create?
-    user.is_a?(Client) || user.is_a?(Operator) ? authorized_group_change?("avatar.group.attach", require_same_owner: true) : false
+    (user.is_a?(Client) || user.is_a?(Operator)) ? authorized_group_change?(
+      "avatar.group.attach",
+      require_same_owner: true,
+    ) : false
   end
 
   def update?

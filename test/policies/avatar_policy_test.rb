@@ -40,7 +40,7 @@ class AvatarPolicyTest < ActiveSupport::TestCase
     )
     legacy_owner_assignment.update!(user: @client)
 
-    refute_predicate AvatarPolicy.new(other_bootstrap.avatar.reload, user: @client), :show?
+    assert_not_predicate AvatarPolicy.new(other_bootstrap.avatar.reload, user: @client), :show?
     assert_not AvatarPolicy.new(Avatar, user: @client).apply_scope(
       Avatar.where(id: other_bootstrap.avatar.id),
       type: :active_record_relation,
@@ -51,9 +51,10 @@ class AvatarPolicyTest < ActiveSupport::TestCase
     membership = @bootstrap.account.persona_memberships.find_by!(enterprise: @bootstrap.collective)
     membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
 
-    refute_predicate AvatarPolicy.new(@avatar, user: @client), :show?
+    assert_not_predicate AvatarPolicy.new(@avatar, user: @client), :show?
 
     Actor.install_context!(tld: :com)
-    refute_predicate AvatarPolicy.new(@avatar, user: @client), :show?
+
+    assert_not_predicate AvatarPolicy.new(@avatar, user: @client), :show?
   end
 end

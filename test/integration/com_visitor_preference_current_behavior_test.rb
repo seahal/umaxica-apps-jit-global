@@ -45,7 +45,7 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
     assert_nil visitor.reload.visitor_preference
 
     patch base_com_preference_region_path(ri: "jp"), headers: headers,
-          params: { preference_region: { option_id: ComPreferenceRegionOption::US } }
+                                                     params: { preference_region: { option_id: ComPreferenceRegionOption::US } }
 
     assert_response :redirect
     assert_predicate ComPreference, :exists?

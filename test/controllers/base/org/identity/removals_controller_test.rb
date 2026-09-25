@@ -21,6 +21,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
       description: "Alternative sign-in passkey",
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
+
     assert_equal [:passkey],
                  AuthenticationCredentialInventory.call(@operator, excluding: target).aal1_methods
 

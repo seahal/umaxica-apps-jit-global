@@ -28,6 +28,7 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
     assert_not policy.create?
 
     Actor.install_context!(tld: :com)
+
     assert_not AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new).index?
   end
 
@@ -76,6 +77,7 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
     )
 
     Actor.install_context!(selection: Actor::SelectedContext::NULL)
+
     assert_empty AvatarGroupPolicy.new(AvatarGroup, user: @user).apply_scope(
       AvatarGroup.where(id: group.id),
       type: :active_record_relation,

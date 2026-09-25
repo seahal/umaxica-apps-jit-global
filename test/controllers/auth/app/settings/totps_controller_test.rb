@@ -605,7 +605,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       yield known_secret_credential
     end
   end
-
 end
 
 # DAMP local helper copy for former shared test support.

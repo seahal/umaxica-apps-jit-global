@@ -52,6 +52,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "every RP face maps to surface face and actor" do
     AuthBoundaryAuthorityMap.rp_faces.each do |client_id, meta|
       expected_surface = client_id.start_with?("side-") ? "warp" : client_id.split("-").first
+
       assert_equal expected_surface, meta.fetch(:surface)
       assert_equal client_id.split("-").last, meta.fetch(:face)
       assert_includes %w(client visitor operator), meta.fetch(:actor)

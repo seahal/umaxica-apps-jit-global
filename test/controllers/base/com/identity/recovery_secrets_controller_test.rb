@@ -27,10 +27,12 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     get base_com_identity_recovery_secret_url(token: reveal.token, ri: "jp", host: @host), headers: @headers
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
     props = JSON.parse(page.text).fetch("props")
+
     assert_equal %w(first-passcode second-passcode), props.fetch("passcodes")
     cache_control = response.headers.fetch("Cache-Control")
+
     %w(no-store no-cache must-revalidate private).each do |directive|
       assert_includes cache_control, directive
     end
@@ -42,11 +44,13 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     get base_com_identity_recovery_secret_url(token: reveal.token, ri: "jp", host: @host), headers: @headers
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
     props = JSON.parse(page.text).fetch("props")
+
     assert_empty props.fetch("passcodes")
     assert_predicate props.fetch("missing_message"), :present?
     cache_control = response.headers.fetch("Cache-Control")
+
     %w(no-store no-cache must-revalidate private).each do |directive|
       assert_includes cache_control, directive
     end
@@ -73,7 +77,8 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     get path, headers: @headers
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
+
     assert_equal ["head-protected-passcode"], JSON.parse(page.text).fetch("props").fetch("passcodes")
   end
 
@@ -89,12 +94,13 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     options path, headers: @headers
 
     assert_response :not_found
-    refute_includes response.body, "options-protected-passcode"
+    assert_not_includes response.body, "options-protected-passcode"
 
     get path, headers: @headers
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
+
     assert_equal ["options-protected-passcode"], JSON.parse(page.text).fetch("props").fetch("passcodes")
   end
 
@@ -112,11 +118,12 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
       "HTTP_X_TEST_CURRENT_RESOURCE" => @headers.fetch("X-TEST-CURRENT-RESOURCE"),
       "HTTP_X_TEST_SESSION_PUBLIC_ID" => @headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
     }
-    lost_response_app = lambda do |env|
-      _status, _headers, body = Rails.application.call(env)
-      body.close if body.respond_to?(:close)
-      raise IOError, "simulated response loss after application completion"
-    end
+    lost_response_app =
+      lambda do |env|
+        _status, _headers, body = Rails.application.call(env)
+        body.close if body.respond_to?(:close)
+        raise IOError, "simulated response loss after application completion"
+      end
 
     assert_raises(IOError) do
       Rack::MockRequest.new(lost_response_app).get("https://#{@host}#{path}", request_headers)
@@ -125,8 +132,9 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     get path, headers: @headers
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
     props = JSON.parse(page.text).fetch("props")
+
     assert_empty props.fetch("passcodes")
     assert_predicate props.fetch("missing_message"), :present?
   end
@@ -135,11 +143,13 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     get base_com_identity_recovery_secret_url(token: "malformed", ri: "jp", host: @host), headers: @headers
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
     props = JSON.parse(page.text).fetch("props")
+
     assert_empty props.fetch("passcodes")
     assert_predicate props.fetch("missing_message"), :present?
     cache_control = response.headers.fetch("Cache-Control")
+
     %w(no-store no-cache must-revalidate private).each do |directive|
       assert_includes cache_control, directive
     end
@@ -162,11 +172,13 @@ class Base::Com::Identity::RecoverySecretsControllerTest < ActionDispatch::Integ
     end
 
     assert_response :success
-    page = Nokogiri::HTML(response.body).at_css("script[data-page='app']")
+    page = response.parsed_body.at_css("script[data-page='app']")
     props = JSON.parse(page.text).fetch("props")
+
     assert_empty props.fetch("passcodes")
     assert_predicate props.fetch("missing_message"), :present?
     cache_control = response.headers.fetch("Cache-Control")
+
     %w(no-store no-cache must-revalidate private).each do |directive|
       assert_includes cache_control, directive
     end

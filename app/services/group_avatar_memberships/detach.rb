@@ -35,11 +35,13 @@ module GroupAvatarMemberships
           unless current_membership.avatar_group_id == observed_membership.avatar_group_id
             raise ArgumentError, "membership group changed while detaching"
           end
+
           group = AvatarGroup.lock.find(current_membership.avatar_group_id)
           locked_membership = GroupAvatarMembership.lock.find(membership.id)
           unless locked_membership.avatar_group_id == group.id
             raise ArgumentError, "membership group changed while detaching"
           end
+
           authorize_group_owner!(group, observed_group_owner)
           next locked_membership unless locked_membership.active?
 

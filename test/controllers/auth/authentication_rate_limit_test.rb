@@ -23,14 +23,17 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
   test "retired secret sign-in routes do not reach rate limiting or authentication" do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+
     assert_response :not_found
 
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+
     assert_response :not_found
 
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+
     assert_response :not_found
   end
 

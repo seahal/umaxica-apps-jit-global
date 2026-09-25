@@ -82,10 +82,11 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     before = token_record.reload.attributes
 
     audit_attempts = 0
-    audit_writer = lambda do |**|
-      audit_attempts += 1
-      false
-    end
+    audit_writer =
+      lambda do |**|
+        audit_attempts += 1
+        false
+      end
 
     AuthenticationAuditWriter.stub(:write, audit_writer) do
       cookies_header = "auth_refresh=#{refresh_plain}"
