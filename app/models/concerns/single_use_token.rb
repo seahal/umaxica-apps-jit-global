@@ -7,15 +7,6 @@ module SingleUseToken
 
   PREFERENCE_REFRESH_TTL = 400.days
 
-  # Concurrency grace window for refresh-token rotation. A single page load can
-  # fire several requests that all carry the pre-rotation refresh cookie; the
-  # first rotates it and the rest then present an already-consumed token. Within
-  # this short window such a presentation is treated as a benign sibling request
-  # rather than a stolen-token replay. Kept intentionally tight: it widens the
-  # "consumed token still honored" window, so only just-rotated tokens that still
-  # have a usable replacement qualify (see PreferenceBase grace handling).
-  PREFERENCE_REFRESH_GRACE_WINDOW = 30.seconds
-
   PREFERENCE_CHILD_SUFFIXES = %w(
     cookie region timezone language theme currency date_format time_format
     motion density page_size adult_content_gate
@@ -148,20 +139,6 @@ module SingleUseToken
 
   def replay?
     used_at.present?
-  end
-
-  # True when this token was consumed very recently AND has a linked
-  # replacement, i.e. it looks like a concurrent sibling request from the same
-  # page load rather than a genuine replay. The caller must still confirm the
-  # replacement itself is currently usable before honoring the presentation.
-  #
-  # NOTE: `replaced_by_id` defaults to self on create (self-replacement marker),
-  # so a real rotation is only present when it points at a *different* record.
-  def rotated_within_grace?(window: PREFERENCE_REFRESH_GRACE_WINDOW, now: Time.current)
-    return false if used_at.blank?
-    return false if replaced_by_id.blank? || replaced_by_id == id
-
-    used_at >= now - window
   end
 
   def revoked?

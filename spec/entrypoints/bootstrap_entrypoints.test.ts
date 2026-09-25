@@ -35,9 +35,9 @@ describe.each([
 });
 
 describe.each([
-  ["side/app", "../../src/entrypoints/side/app.ts"],
-  ["side/com", "../../src/entrypoints/side/com.ts"],
-  ["side/org", "../../src/entrypoints/side/org.ts"],
+  ["warp/app", "../../src/entrypoints/warp/app.ts"],
+  ["warp/com", "../../src/entrypoints/warp/com.ts"],
+  ["warp/org", "../../src/entrypoints/warp/org.ts"],
   ["palm/app", "../../src/entrypoints/palm/app.ts"],
 ])("%s entrypoint", (_surface, modulePath) => {
   it("registers the offline service worker without pulling in the Turbo application bundle", async () => {

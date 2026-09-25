@@ -79,7 +79,6 @@ module Auth
       before_action :enforce_withdrawal_gate!
       before_action :enforce_restricted_session_guard!
       before_action :enforce_sign_in_selector_gate!
-      before_action :enforce_required_telephone_registration!
       before_action :enforce_verification_if_required
       before_action :enforce_access_policy!
       before_action :set_current_observability
@@ -151,31 +150,6 @@ module Auth
 
       def after_login_allows_other_host?
         true
-      end
-
-      def enforce_required_telephone_registration!
-        return unless request.format.html?
-        return unless current_visitor&.respond_to?(:verified_telephone?)
-        return if current_visitor.verified_telephone?
-        return if telephone_registration_allowed_path?
-
-        redirect_to_jump_url(
-          new_base_com_identity_telephones_registration_url(
-            ri: params[:ri], host: base_authority_host,
-            protocol: "https",
-          ),
-        )
-      end
-
-      def telephone_registration_allowed_path?
-        # `auth/com/sign/outs` must stay reachable even when telephone
-        # registration is required so a user can cancel the current ceremony
-        # or abort a pending logout before they are forced into registration.
-        allowed = [
-          "base/com/identity/telephones/registrations",
-          "auth/com/sign/outs",
-        ]
-        allowed.include?(controller_path)
       end
 
       def cross_host_redirect_allowed?

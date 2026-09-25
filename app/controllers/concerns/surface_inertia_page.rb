@@ -37,7 +37,7 @@ module SurfaceInertiaPage
   end
 
   # Parent of the signed-in self-service screens is that surface's Root (Auth/Base dashboards
-  # are retired). Core/Side/Edit keep their dashboard routes. The href is a route helper so
+  # are retired). Core/Warp/Edit keep their dashboard routes. The href is a route helper so
   # PreferenceGlobal can attach the request region (`ri`) and any other context params.
   def dashboard_up_link(label: t("actions.up"))
     family, surface = controller_path.to_s.split("/").first(2)

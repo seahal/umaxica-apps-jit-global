@@ -1,0 +1,25 @@
+# frozen_string_literal: true
+
+# Run through the verified isolated Rails runner; emits model metadata only.
+require "json"
+
+Rails.application.eager_load!
+rows =
+  ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |model|
+    next if model.name.nil?
+
+    {
+      "model" => model.name,
+      "table" => model.table_name,
+      "connection" => model.connection_db_config.name,
+      "source" => Object.const_source_location(model.name)&.first,
+      "base_class" => model.base_class.name,
+      "inheritance_column" => model.inheritance_column,
+    }
+  rescue StandardError => e
+    { "model" => model.name, "error" => "#{e.class}: #{e.message.lines.first}" }
+  end.sort_by { |row| row.fetch("model") }
+File.write("tmp/postgresql-model-map.json", JSON.pretty_generate(rows))
+errors = rows.count { |row| row.key?("error") }
+puts "models=#{rows.length} errors=#{errors}"
+raise RuntimeError, "model mapping incomplete" unless errors.zero?

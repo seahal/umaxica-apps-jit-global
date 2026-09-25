@@ -259,6 +259,112 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert logs.any? { |message| message.include?("oidc.authorize.rate_limited") }
   end
 
+  test "base authorize checks IP browser and redirect host limits in order" do
+    profile_set = RateLimitProfiles::AuthorizeProfileSet.new(
+      ip_surface: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+      browser_client: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+      client_redirect_host: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+    )
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    calls = []
+    counts = [1, 2, 3]
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    with_oauth_authorize_counter(
+      store,
+      oauth_result: ->(key, _amount, expires_in:) { calls << [key, expires_in]; counts.shift },
+    ) do
+      RateLimitProfiles.stub(:oauth_authorize, profile_set) do
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid"),
+        ), headers: { "Host" => host }
+      end
+    end
+
+    assert_response :too_many_requests
+    assert_equal "oauth_authorize_client_redirect_host", response.headers["X-RateLimit-Rule"]
+    assert_equal %w(ip_surface browser_client client_redirect_host),
+                 calls.map { |key, _| key.split(":")[2] }
+    assert_equal [1.minute, 1.minute, 1.minute], calls.map(&:last)
+  end
+
+  test "base authorize accepts count below and at the inclusive limit and rejects the next count" do
+    profile_set = RateLimitProfiles::AuthorizeProfileSet.new(
+      ip_surface: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+      browser_client: RateLimitProfiles::Profile.new(to: 100, within: 1.minute, retry_after: 60),
+      client_redirect_host: RateLimitProfiles::Profile.new(to: 100, within: 1.minute, retry_after: 60),
+    )
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    ip_counts = [1, 2, 3]
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    with_oauth_authorize_counter(
+      store,
+      oauth_result: ->(key, *_arguments, **_options) { key.include?(":ip_surface:") ? ip_counts.shift : 1 },
+    ) do
+      RateLimitProfiles.stub(:oauth_authorize, profile_set) do
+        2.times do
+          get base_app_oauth_authorization_url(
+            host: host,
+            **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+          ), headers: { "Host" => host }
+
+          assert_response :redirect
+        end
+
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+        ), headers: { "Host" => host }
+      end
+    end
+
+    assert_response :too_many_requests
+    assert_equal "oauth_authorize_ip_surface", response.headers["X-RateLimit-Rule"]
+  end
+
+  test "nil and malformed authorize counter results return service unavailable" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    [nil, "2", 0, -1, false].each do |counter_result|
+      with_oauth_authorize_counter(
+        store,
+        oauth_result: ->(*_arguments, **_options) { counter_result },
+      ) do
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+        ), headers: { "Host" => host }, as: :json
+      end
+
+      assert_response :service_unavailable
+      assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
+    end
+  end
+
+  test "authorize backend availability and operation errors return service unavailable" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    [Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError].each do |error_class|
+      with_oauth_authorize_counter(
+        store,
+        oauth_result: ->(*_arguments, **_options) { raise error_class, "private backend detail" },
+      ) do
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+        ), headers: { "Host" => host }, as: :json
+      end
+
+      assert_response :service_unavailable
+      assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
+      assert_no_match(/private backend detail/, response.body)
+    end
+  end
+
   test "base userinfo authenticates against base request binding" do
     captured = nil
     result = AuthResult.new(success: false, error: "invalid_token")
@@ -935,6 +1041,20 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def with_oauth_authorize_counter(store, oauth_result:, &test_body)
+    backend = store.backend
+    regular_increment = backend.method(:increment)
+    increment = lambda do |key, *arguments, **options|
+      if key.include?(":oauth_authorize:")
+        oauth_result.call(key, *arguments, **options)
+      else
+        regular_increment.call(key, *arguments, **options)
+      end
+    end
+
+    backend.stub(:increment, increment, &test_body)
+  end
 
   def oidc_authorize_params(
     screen_hint: nil,

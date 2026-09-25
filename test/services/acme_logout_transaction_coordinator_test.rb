@@ -33,6 +33,28 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     assert_not_predicate transaction.reload, :finalized?
   end
 
+  test "Warp route issuance retains the established logout transaction enum" do
+    completion_url = AcmeLogoutTransactionCoordinator.completion_url_for(
+      origin_surface: "warp", ri: "jp", surface: "app",
+    )
+    uri = URI.parse(completion_url)
+
+    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).warp_service.host, uri.host
+    assert_equal "/sign/out", uri.path
+
+    result = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "warp",
+      initiating_client_id: "side-app",
+      completion_url: completion_url,
+      surface: "app",
+      ri: "jp",
+    )
+
+    assert_predicate result, :success?
+    assert_equal "side", result.transaction.origin_surface
+    assert_equal AcmeLogoutTransaction.step_sequence_for("side").first, result.transaction.expected_step
+  end
+
   test "finalizing an unknown challenge reports the transaction as missing" do
     result = AcmeLogoutTransactionCoordinator.finalize!(logout_challenge: "no-such-challenge")
 

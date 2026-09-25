@@ -81,9 +81,10 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     end
 
     assert_response :redirect
-    URI.parse(response.location)
-
-    assert_includes response.location, "rt="
+    assert_redirected_to base_com_root_url(
+      ri: "jp",
+      host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host),
+    )
   end
 
   test "create redirects to edit and creates pending visitor telephone" do

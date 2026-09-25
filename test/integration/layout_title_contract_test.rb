@@ -20,15 +20,15 @@ class LayoutTitleContractTest < ActiveSupport::TestCase
     "app/views/layouts/core/app/application.html.erb" => "APP",
     "app/views/layouts/core/com/application.html.erb" => "COM",
     "app/views/layouts/core/org/application.html.erb" => "ORG",
-    "app/views/layouts/side/app/application.html.erb" => "APP",
-    "app/views/layouts/side/com/application.html.erb" => "COM",
-    "app/views/layouts/side/org/application.html.erb" => "ORG",
+    "app/views/layouts/warp/app/application.html.erb" => "APP",
+    "app/views/layouts/warp/com/application.html.erb" => "COM",
+    "app/views/layouts/warp/org/application.html.erb" => "ORG",
     "app/views/layouts/palm/app/application.html.erb" => "APP",
   }.freeze
 
   # Routing and deployment vocabulary. None of it is brand vocabulary, so none of
   # it may appear in the site title.
-  FORBIDDEN_SITE_WORDS = %w(Auth Base Core Side Palm Jump Global Rails Inertia API).freeze
+  FORBIDDEN_SITE_WORDS = %w(Auth Base Core Warp Palm Jump Global Rails Inertia API).freeze
 
   test "canonical layouts hand the brand contract to meta-tags" do
     CANONICAL_LAYOUTS.each do |path, tld|

@@ -130,20 +130,20 @@ Current visible placement policy:
 | app     | `/sign/up/email/new`                        | `POST /sign/up/email`          | visible required |
 | app     | `/sign/up/telephone/new`                    | `POST /sign/up/telephone`      | visible required |
 | app     | `/sign/in/email/new`, `/sign/in/email/edit` | `POST/PATCH /sign/in/email`    | visible required |
-| app     | `/sign/in/secret/new`                       | `POST /sign/in/secret`         | visible required |
 | app     | `/preference/email/:id/edit`                | `DELETE /preference/email/:id` | visible required |
 | com     | `/sign/up/email/new`                        | `POST /sign/up/email`          | visible required |
 | com     | `/sign/up/telephone/new`                    | `POST /sign/up/telephone`      | visible required |
 | com     | `/sign/in/email/new`, `/sign/in/email/edit` | `POST/PATCH /sign/in/email`    | visible required |
-| com     | `/sign/in/secret/new`                       | `POST /sign/in/secret`         | visible required |
 | com     | `/preference/email/:id/edit`                | `DELETE /preference/email/:id` | visible required |
-| org     | `/sign/in/secret/new`                       | `POST /sign/in/secret`         | visible required |
 | org     | `/sign/up/invitations/new`                  | `POST /sign/up/invitations`    | visible required |
 | org     | `/preference/email/:id/edit`                | `DELETE /preference/email/:id` | visible required |
 
 The table is the implementation checklist for visible Turnstile. If a new public browser-rendered
 entry form is added to sign-up, sign-in, invitation, or external email-preference flows, update this
 table before implementation unless the new route fits an existing documented exception.
+
+Permanent-secret sign-in has been retired on app, com, and org. The retired `/sign/in/secret` routes
+are not entry forms and have no Turnstile contract.
 
 ### Placement Exceptions
 

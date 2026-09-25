@@ -207,6 +207,44 @@ ALTER SEQUENCE public.avatar_follows_id_seq OWNED BY public.avatar_follows.id;
 
 
 --
+-- Name: avatar_group_ownership_periods; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED TABLE public.avatar_group_ownership_periods (
+    id bigint NOT NULL,
+    avatar_group_id bigint NOT NULL,
+    owner_surface character varying NOT NULL,
+    owner_collective_public_id character varying NOT NULL,
+    valid_from timestamp(6) with time zone NOT NULL,
+    valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_group_ownership_periods_owner_collective CHECK (((owner_collective_public_id)::text <> ''::text)),
+    CONSTRAINT chk_avatar_group_ownership_periods_owner_surface CHECK (((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_group_ownership_periods_valid_interval CHECK ((valid_from <= valid_to))
+);
+
+
+--
+-- Name: avatar_group_ownership_periods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED SEQUENCE public.avatar_group_ownership_periods_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_group_ownership_periods_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_group_ownership_periods_id_seq OWNED BY public.avatar_group_ownership_periods.id;
+
+
+--
 -- Name: avatar_groups; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -223,7 +261,7 @@ CREATE UNLOGGED TABLE public.avatar_groups (
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_avatar_groups_account_surface CHECK (((account_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying, 'com'::character varying])::text[]))),
     CONSTRAINT chk_avatar_groups_archive_state CHECK ((((state)::text = 'archived'::text) = (archived_at IS NOT NULL))),
-    CONSTRAINT chk_avatar_groups_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'archived'::character varying])::text[])))
+    CONSTRAINT chk_avatar_groups_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('archived'::character varying)::text])))
 );
 
 
@@ -431,48 +469,18 @@ ALTER SEQUENCE public.avatar_memberships_id_seq OWNED BY public.avatar_membershi
 
 
 --
--- Name: avatar_moniker_statuses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE UNLOGGED TABLE public.avatar_moniker_statuses (
-    id bigint NOT NULL
-);
-
-
---
--- Name: avatar_moniker_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE UNLOGGED SEQUENCE public.avatar_moniker_statuses_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: avatar_moniker_statuses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.avatar_moniker_statuses_id_seq OWNED BY public.avatar_moniker_statuses.id;
-
-
---
 -- Name: avatar_monikers; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE UNLOGGED TABLE public.avatar_monikers (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
-    avatar_moniker_status_id bigint,
     created_at timestamp(6) with time zone NOT NULL,
-    moniker character varying NOT NULL,
-    set_by_actor_id bigint,
+    moniker character varying(512) NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     valid_from timestamp with time zone NOT NULL,
     valid_to timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    CONSTRAINT chk_avatar_monikers_avatar_moniker_status_id_positive CHECK (((avatar_moniker_status_id IS NULL) OR (avatar_moniker_status_id >= 0)))
+    CONSTRAINT chk_avatar_monikers_valid_interval CHECK ((valid_from <= valid_to))
 );
 
 
@@ -543,7 +551,10 @@ CREATE UNLOGGED TABLE public.avatar_ownership_periods (
     updated_at timestamp(6) with time zone NOT NULL,
     valid_from timestamp with time zone NOT NULL,
     valid_to timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    CONSTRAINT chk_avatar_ownership_periods_avatar_ownership_status_id_positiv CHECK (((avatar_ownership_status_id IS NULL) OR (avatar_ownership_status_id >= 0)))
+    owner_surface character varying,
+    owner_collective_public_id character varying,
+    CONSTRAINT chk_avatar_ownership_periods_avatar_ownership_status_id_positiv CHECK (((avatar_ownership_status_id IS NULL) OR (avatar_ownership_status_id >= 0))),
+    CONSTRAINT chk_avatar_ownership_periods_owner_reference CHECK ((((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND (owner_collective_public_id IS NOT NULL) AND ((owner_collective_public_id)::text <> ''::text)))
 );
 
 
@@ -592,6 +603,60 @@ CREATE UNLOGGED SEQUENCE public.avatar_ownership_statuses_id_seq
 --
 
 ALTER SEQUENCE public.avatar_ownership_statuses_id_seq OWNED BY public.avatar_ownership_statuses.id;
+
+
+--
+-- Name: avatar_ownership_transfers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED TABLE public.avatar_ownership_transfers (
+    id bigint NOT NULL,
+    avatar_id bigint NOT NULL,
+    public_id character varying(21) NOT NULL,
+    from_owner_surface character varying NOT NULL,
+    from_owner_collective_public_id character varying NOT NULL,
+    to_owner_surface character varying NOT NULL,
+    to_owner_collective_public_id character varying NOT NULL,
+    state character varying NOT NULL,
+    requested_at timestamp(6) with time zone NOT NULL,
+    expires_at timestamp(6) with time zone NOT NULL,
+    accepted_at timestamp(6) with time zone,
+    cancelled_at timestamp(6) with time zone,
+    expired_at timestamp(6) with time zone,
+    request_actor_surface character varying NOT NULL,
+    request_actor_public_id character varying NOT NULL,
+    accept_actor_surface character varying,
+    accept_actor_public_id character varying,
+    cancel_actor_surface character varying,
+    cancel_actor_public_id character varying,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_ownership_transfer_expiry CHECK (((requested_at < expires_at) AND ((expires_at - requested_at) <= '5 days'::interval))),
+    CONSTRAINT chk_avatar_ownership_transfer_nonblank_ids CHECK ((((public_id)::text ~ '[^[:space:]]'::text) AND ((from_owner_collective_public_id)::text ~ '[^[:space:]]'::text) AND ((to_owner_collective_public_id)::text ~ '[^[:space:]]'::text) AND ((request_actor_public_id)::text ~ '[^[:space:]]'::text) AND ((accept_actor_public_id IS NULL) OR ((accept_actor_public_id)::text ~ '[^[:space:]]'::text)) AND ((cancel_actor_public_id IS NULL) OR ((cancel_actor_public_id)::text ~ '[^[:space:]]'::text)))),
+    CONSTRAINT chk_avatar_ownership_transfer_owner_changed CHECK ((((from_owner_surface)::text <> (to_owner_surface)::text) OR ((from_owner_collective_public_id)::text <> (to_owner_collective_public_id)::text))),
+    CONSTRAINT chk_avatar_ownership_transfer_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_ownership_transfer_surfaces CHECK ((((from_owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((to_owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((request_actor_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((from_owner_surface)::text = (request_actor_surface)::text))),
+    CONSTRAINT chk_avatar_ownership_transfer_terminal_facts CHECK (((((state)::text = 'pending'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'accepted'::text) AND (accepted_at IS NOT NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND ((accept_actor_surface)::text = (to_owner_surface)::text) AND (accept_actor_public_id IS NOT NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'cancelled'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NOT NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND ((cancel_actor_surface)::text = (from_owner_surface)::text) AND (cancel_actor_public_id IS NOT NULL)) OR (((state)::text = 'expired'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NOT NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL))))
+);
+
+
+--
+-- Name: avatar_ownership_transfers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED SEQUENCE public.avatar_ownership_transfers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: avatar_ownership_transfers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.avatar_ownership_transfers_id_seq OWNED BY public.avatar_ownership_transfers.id;
 
 
 --
@@ -731,7 +796,6 @@ CREATE UNLOGGED TABLE public.avatars (
     created_at timestamp(6) with time zone NOT NULL,
     image_data jsonb,
     lock_version integer DEFAULT 0 NOT NULL,
-    moniker character varying NOT NULL,
     owner_organization_id character varying,
     public_id character varying NOT NULL,
     representing_organization_id character varying,
@@ -1004,7 +1068,8 @@ CREATE UNLOGGED TABLE public.group_avatar_memberships (
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_group_avatar_memberships_removed_after_assigned CHECK (((removed_at IS NULL) OR (removed_at >= assigned_at))),
     CONSTRAINT chk_group_avatar_memberships_removed_state CHECK ((((state)::text = 'removed'::text) = (removed_at IS NOT NULL))),
-    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'removed'::character varying])::text[])))
+    CONSTRAINT chk_group_avatar_memberships_role CHECK (((role)::text = 'member'::text)),
+    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('removed'::character varying)::text])))
 );
 
 
@@ -1597,6 +1662,13 @@ ALTER TABLE ONLY public.avatar_follows ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: avatar_group_ownership_periods id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_ownership_periods ALTER COLUMN id SET DEFAULT nextval('public.avatar_group_ownership_periods_id_seq'::regclass);
+
+
+--
 -- Name: avatar_groups id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1639,13 +1711,6 @@ ALTER TABLE ONLY public.avatar_memberships ALTER COLUMN id SET DEFAULT nextval('
 
 
 --
--- Name: avatar_moniker_statuses id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.avatar_moniker_statuses ALTER COLUMN id SET DEFAULT nextval('public.avatar_moniker_statuses_id_seq'::regclass);
-
-
---
 -- Name: avatar_monikers id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1671,6 +1736,13 @@ ALTER TABLE ONLY public.avatar_ownership_periods ALTER COLUMN id SET DEFAULT nex
 --
 
 ALTER TABLE ONLY public.avatar_ownership_statuses ALTER COLUMN id SET DEFAULT nextval('public.avatar_ownership_statuses_id_seq'::regclass);
+
+
+--
+-- Name: avatar_ownership_transfers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_ownership_transfers ALTER COLUMN id SET DEFAULT nextval('public.avatar_ownership_transfers_id_seq'::regclass);
 
 
 --
@@ -1925,6 +1997,14 @@ ALTER TABLE ONLY public.avatar_follows
 
 
 --
+-- Name: avatar_group_ownership_periods avatar_group_ownership_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_ownership_periods
+    ADD CONSTRAINT avatar_group_ownership_periods_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: avatar_groups avatar_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1973,14 +2053,6 @@ ALTER TABLE ONLY public.avatar_memberships
 
 
 --
--- Name: avatar_moniker_statuses avatar_moniker_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.avatar_moniker_statuses
-    ADD CONSTRAINT avatar_moniker_statuses_pkey PRIMARY KEY (id);
-
-
---
 -- Name: avatar_monikers avatar_monikers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2010,6 +2082,14 @@ ALTER TABLE ONLY public.avatar_ownership_periods
 
 ALTER TABLE ONLY public.avatar_ownership_statuses
     ADD CONSTRAINT avatar_ownership_statuses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avatar_ownership_transfers avatar_ownership_transfers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_ownership_transfers
+    ADD CONSTRAINT avatar_ownership_transfers_pkey PRIMARY KEY (id);
 
 
 --
@@ -2274,6 +2354,27 @@ CREATE UNIQUE INDEX idx_avatar_agent_bindings_active_pair ON public.avatar_agent
 
 
 --
+-- Name: idx_avatar_group_ownership_periods_avatar_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_group_ownership_periods_avatar_group ON public.avatar_group_ownership_periods USING btree (avatar_group_id);
+
+
+--
+-- Name: idx_avatar_group_ownership_periods_current_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_group_ownership_periods_current_owner ON public.avatar_group_ownership_periods USING btree (owner_surface, owner_collective_public_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: idx_avatar_group_ownership_periods_one_current; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_group_ownership_periods_one_current ON public.avatar_group_ownership_periods USING btree (avatar_group_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
 -- Name: idx_avatar_individual_bindings_active_avatar; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2299,6 +2400,20 @@ CREATE UNIQUE INDEX idx_avatar_individual_bindings_active_pair ON public.avatar_
 --
 
 CREATE INDEX idx_avatar_ownership_periods_avatar_id_all_rows ON public.avatar_ownership_periods USING btree (avatar_id);
+
+
+--
+-- Name: idx_avatar_ownership_periods_current_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_avatar_ownership_periods_current_owner ON public.avatar_ownership_periods USING btree (owner_surface, owner_collective_public_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: idx_avatar_ownership_transfers_one_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_avatar_ownership_transfers_one_pending ON public.avatar_ownership_transfers USING btree (avatar_id) WHERE ((state)::text = 'pending'::text);
 
 
 --
@@ -2540,13 +2655,6 @@ CREATE INDEX index_avatar_monikers_on_avatar_id_and_valid_from ON public.avatar_
 
 
 --
--- Name: index_avatar_monikers_on_avatar_moniker_status_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_monikers_on_avatar_moniker_status_id ON public.avatar_monikers USING btree (avatar_moniker_status_id);
-
-
---
 -- Name: index_avatar_mutes_on_muted_avatar_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2586,6 +2694,13 @@ CREATE INDEX index_avatar_ownership_periods_on_avatar_ownership_status_id ON pub
 --
 
 CREATE INDEX index_avatar_ownership_periods_on_owner_organization_id ON public.avatar_ownership_periods USING btree (owner_organization_id) WHERE (valid_to = 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: index_avatar_ownership_transfers_on_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_avatar_ownership_transfers_on_public_id ON public.avatar_ownership_transfers USING btree (public_id);
 
 
 --
@@ -3107,7 +3222,7 @@ ALTER TABLE ONLY public.handle_assignments
 --
 
 ALTER TABLE ONLY public.avatar_monikers
-    ADD CONSTRAINT fk_rails_0b04be00c1 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
+    ADD CONSTRAINT fk_rails_0b04be00c1 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -3164,6 +3279,14 @@ ALTER TABLE ONLY public.avatar_mutes
 
 ALTER TABLE ONLY public.client_avatar_oversights
     ADD CONSTRAINT fk_rails_299c73e8e4 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
+
+
+--
+-- Name: avatar_group_ownership_periods fk_rails_31c6d7de2a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_group_ownership_periods
+    ADD CONSTRAINT fk_rails_31c6d7de2a FOREIGN KEY (avatar_group_id) REFERENCES public.avatar_groups(id) ON DELETE RESTRICT;
 
 
 --
@@ -3319,6 +3442,14 @@ ALTER TABLE ONLY public.avatar_blocks
 
 
 --
+-- Name: avatar_ownership_transfers fk_rails_92ecfaa02d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_ownership_transfers
+    ADD CONSTRAINT fk_rails_92ecfaa02d FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: member_avatar_deletions fk_rails_9444feb810; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3332,14 +3463,6 @@ ALTER TABLE ONLY public.member_avatar_deletions
 
 ALTER TABLE ONLY public.avatar_memberships
     ADD CONSTRAINT fk_rails_a87a3bd5c0 FOREIGN KEY (avatar_id) REFERENCES public.avatars(id);
-
-
---
--- Name: avatar_monikers fk_rails_b221a42f2d; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.avatar_monikers
-    ADD CONSTRAINT fk_rails_b221a42f2d FOREIGN KEY (avatar_moniker_status_id) REFERENCES public.avatar_moniker_statuses(id);
 
 
 --
@@ -3461,6 +3584,17 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260924179000'),
+('20260924178000'),
+('20260924177000'),
+('20260924176000'),
+('20260924175500'),
+('20260924175000'),
+('20260924173000'),
+('20260924172000'),
+('20260924171000'),
+('20260924170000'),
+('20260924160000'),
 ('20260921133000'),
 ('20260920152000'),
 ('20260906000002'),

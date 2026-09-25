@@ -19,15 +19,23 @@ export type SignOutConfirmationProps = {
   active: boolean;
   description: string;
   form: SignOutConfirmationForm | null;
-  home_link: { label: string; href: string };
-};
+} & (
+  | { back_link: { label: string; href: string }; home_link?: never }
+  | { home_link: { label: string; href: string }; back_link?: never }
+);
 
-export default function SignOutConfirmation({
-  title,
-  description,
-  form,
-  home_link: homeLink,
-}: SignOutConfirmationProps) {
+export default function SignOutConfirmation(props: SignOutConfirmationProps) {
+  const { title, description, form } = props;
+  if (props.back_link !== undefined && props.home_link !== undefined) {
+    throw new Error("A sign-out page must provide one return link");
+  }
+
+  const returnLink = props.back_link ?? props.home_link;
+
+  if (!returnLink) {
+    throw new Error("A sign-out return link is required");
+  }
+
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold text-fg">{title}</h1>
@@ -71,12 +79,12 @@ export default function SignOutConfirmation({
 
       <p>
         <Link
-          href={homeLink.href}
+          href={returnLink.href}
           className="inline-flex items-center justify-center gap-2 rounded-md border border-line
             bg-surface px-4 py-2 text-sm font-medium text-fg transition-colors
             hover:bg-surface-muted"
         >
-          {homeLink.label}
+          {returnLink.label}
         </Link>
       </p>
     </section>

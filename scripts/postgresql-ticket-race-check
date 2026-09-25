@@ -1,0 +1,161 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Two-connection lock and FK lifecycle regression on a comment-marked task DB.
+require "pg"
+require "securerandom"
+require "timeout"
+
+surface = ARGV.fetch(0)
+prefix, actor_column, token_prefix, kind_id = {
+  "app" => ["client", "user_id", "user_token", 11],
+  "com" => ["visitor", "visitor_id", "visitor_token", 1],
+  "org" => ["operator", "staff_id", "staff_token", 1],
+}.fetch(surface)
+database = "codex_integrity_20260924_#{surface}_ticket"
+args = {
+  host: ENV.fetch("POSTGRESQL_AUDIT_HOST"),
+  port: Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10),
+  user: ENV.fetch("POSTGRESQL_AUDIT_USER"),
+  password: ENV.fetch("POSTGRESQL_AUDIT_PASSWORD"),
+  dbname: database,
+  connect_timeout: 3,
+}
+c1 = PG.connect(**args)
+c2 = PG.connect(**args)
+observer = PG.connect(**args)
+comment = observer.exec_params(
+  "SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname=$1",
+  [database],
+).first&.values&.first
+raise RuntimeError, "task database ownership is unconfirmed" unless comment ==
+  "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"
+
+[c1, c2, observer].each do |db|
+  db.exec("SET statement_timeout = '10s'")
+  db.exec("SET lock_timeout = '8s'")
+end
+session_table = "#{prefix}_device_sessions"
+token_table = "#{prefix}_tokens"
+run_id = SecureRandom.hex(3)
+created_sessions = []
+created_tokens = []
+worker = nil
+begin
+  c1.exec("BEGIN")
+  c1.exec_params("INSERT INTO #{prefix}_token_kinds (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", [kind_id])
+  [[70_001, "a"], [70_001, "b"], [70_001, "c"], [70_001, "d"]].each do |actor, label|
+    id = c1.exec_params(<<~SQL, ["r#{run_id}#{label}", actor]).first.fetch("id").to_i
+      INSERT INTO #{session_table} (public_id, #{actor_column}, created_at, updated_at)
+      VALUES ($1,$2,clock_timestamp(),clock_timestamp()) RETURNING id
+    SQL
+    created_sessions << id
+  end
+  2.times do |index|
+    id = c1.exec_params(<<~SQL, ["r#{run_id}t#{index}", 70_001, created_sessions[0], kind_id]).first.fetch("id").to_i
+      INSERT INTO #{token_table} (public_id, #{actor_column}, device_session_id,
+        #{token_prefix}_kind_id, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,clock_timestamp(),clock_timestamp()) RETURNING id
+    SQL
+    created_tokens << id
+  end
+  c1.exec("COMMIT")
+  pid2 = c2.exec("SELECT pg_backend_pid()").first.fetch("pg_backend_pid").to_i
+
+  await_block =
+    lambda do
+      Timeout.timeout(5) do
+        loop do
+          blockers = observer.exec_params(
+            "SELECT pg_blocking_pids($1)::text AS blockers",
+            [pid2],
+          ).first.fetch("blockers")
+          break if blockers != "{}"
+
+          Thread.pass
+        end
+      end
+    end
+  run_competing =
+    lambda do |sql, params, resolve:|
+      c2.exec("BEGIN")
+      worker =
+        Thread.new do
+          begin
+            c2.exec_params(sql, params)
+            c2.exec("COMMIT")
+            ["success", nil]
+          rescue PG::Error => e
+            state = e.result&.error_field(PG::Result::PG_DIAG_SQLSTATE)
+            constraint = e.result&.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+            c2.exec("ROLLBACK")
+            [state, constraint]
+          end
+        end
+      await_block.call
+      c1.exec(resolve)
+      result = Timeout.timeout(5) { worker.value }
+      worker = nil
+      result
+    end
+
+  # The second current-pointer update waits on the same session row, then wins.
+  c1.exec("BEGIN")
+  c1.exec_params(
+    "UPDATE #{session_table} SET current_refresh_token_id=$1 WHERE id=$2",
+    [created_tokens[0], created_sessions[0]],
+  )
+  result = run_competing.call(
+    "UPDATE #{session_table} SET current_refresh_token_id=$1 WHERE id=$2",
+    [created_tokens[1], created_sessions[0]], resolve: "COMMIT",
+  )
+  raise RuntimeError, "current-pointer race failed: #{result.inspect}" unless result == ["success", nil]
+
+  pointer = observer.exec_params(
+    "SELECT current_refresh_token_id FROM #{session_table} WHERE id=$1",
+    [created_sessions[0]],
+  ).first.fetch("current_refresh_token_id")
+  raise RuntimeError, "wrong final current pointer" unless pointer == created_tokens[1].to_s
+
+  # A delete rolled back after the FK reader blocks allows the token creation to complete.
+  c1.exec("BEGIN")
+  c1.exec_params("DELETE FROM #{session_table} WHERE id=$1", [created_sessions[1]])
+  result = run_competing.call(<<~SQL, ["r#{run_id}rollback", 70_001, created_sessions[1], kind_id], resolve: "ROLLBACK")
+    INSERT INTO #{token_table} (public_id, #{actor_column}, device_session_id,
+      #{token_prefix}_kind_id, created_at, updated_at)
+    VALUES ($1,$2,$3,$4,clock_timestamp(),clock_timestamp())
+  SQL
+  raise RuntimeError, "rollback recovery failed: #{result.inspect}" unless result == ["success", nil]
+
+  # A committed parent deletion makes the waiting token insertion fail at the named FK.
+  c1.exec("BEGIN")
+  c1.exec_params("DELETE FROM #{session_table} WHERE id=$1", [created_sessions[2]])
+  result = run_competing.call(<<~SQL, ["r#{run_id}commit", 70_001, created_sessions[2], kind_id], resolve: "COMMIT")
+    INSERT INTO #{token_table} (public_id, #{actor_column}, device_session_id,
+      #{token_prefix}_kind_id, created_at, updated_at)
+    VALUES ($1,$2,$3,$4,clock_timestamp(),clock_timestamp())
+  SQL
+  expected_fk = "fk_#{prefix}_tokens_on_device_session_id"
+  raise RuntimeError, "wrong delete/insert rejection: #{result.inspect}" unless result == ["23503", expected_fk]
+
+  missing = observer.exec_params(
+    "SELECT count(*) FROM #{token_table} WHERE device_session_id=$1",
+    [created_sessions[2]],
+  ).first.fetch("count")
+  raise RuntimeError, "orphan token after committed delete" unless missing == "0"
+
+  puts "#{surface}: independent connection pointer race, delete/insert rejection, and rollback recovery passed"
+ensure
+  worker&.kill
+  worker&.join(1)
+  [c1, c2].each { |db| db.exec("ROLLBACK") unless db.finished? || db.transaction_status == PG::PQTRANS_IDLE }
+  if !observer.finished? && !created_sessions.empty?
+    ids = created_sessions.map(&:to_i).join(",")
+    observer.exec("BEGIN")
+    observer.exec("UPDATE #{session_table} SET current_refresh_token_id=NULL WHERE id IN (#{ids})")
+    observer.exec("DELETE FROM #{token_table} WHERE device_session_id IN (#{ids})")
+    observer.exec("DELETE FROM #{session_table} WHERE id IN (#{ids})")
+    observer.exec("COMMIT")
+  end
+  [c1, c2, observer].each { |db| db.close unless db.finished? }
+end

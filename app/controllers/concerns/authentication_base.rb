@@ -1574,6 +1574,16 @@ module AuthenticationBase
     @current_resource
   end
 
+  protected
+
+  # Subclasses can opt out for authenticated GET-only informational pages whose contract
+  # requires the request to leave session state unchanged.
+  def track_authenticated_session_activity?
+    !(request.get? || request.head?)
+  end
+
+  private
+
   def load_from_token
     access_token = extract_access_token(ACCESS_COOKIE_KEY)
     request_host = request&.host
@@ -1593,6 +1603,7 @@ module AuthenticationBase
       request_method: request.request_method,
       request_uri: request.original_url,
       jwt_issuer_id: auth_jwt_issuer_id,
+      track_session_activity: track_authenticated_session_activity?,
     ).call
 
     if result.resource.blank? && (authorization_scheme.to_s.casecmp?("DPoP") || dpop_proof.present?)
@@ -2872,10 +2883,9 @@ module AuthenticationBase
   end
 
   def transparent_refresh_allowed?
-    return false unless respond_to?(:request, true) && request.present?
-    return false unless request.get? || request.head?
-
-    request.format.html?
+    # GET and HEAD navigation must not rotate an authentication credential or update a session.
+    # Refresh remains available only through its explicit POST protocol endpoint.
+    false
   end
 
   def best_effort_refresh_side_effect

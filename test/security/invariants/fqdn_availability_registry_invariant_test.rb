@@ -35,10 +35,10 @@ module Security
       # scan above cannot see them. This covers the other half.
       #
       # The check is deliberately scoped to slots a route actually constrains on.
-      # `ConfigValues::HostFamilyValues` also carries slots nothing serves -- `palm_corporate` and
-      # `palm_staff` have configured hostnames but no `constraints(host:)` block, and the `acme_*`
-      # family's values are the `base.*.localhost` development aliases already registered under the
-      # `base_*` slots. Giving those a switch would give an operator a control with no effect.
+      # The `acme_*` family's values are the `base.*.localhost` development aliases already
+      # registered under the `base_*` slots. Giving those duplicate values their own switch would
+      # give an operator a control with no effect. Palm host configuration is app-only because only
+      # that surface has a Palm route.
       test "every boot-config host a route constrains on is registered" do
         unregistered =
           routed_host_slots.filter_map do |member|
@@ -84,6 +84,12 @@ module Security
           assert_equal :availability, flag.polarity,
                        "#{slot} must fail closed; a lost flag store cannot open a surface"
         end
+      end
+
+      test "Warp slots keep their existing persisted Flipper feature names" do
+        assert_equal :fqdn_available_side_service, FqdnAvailabilityRegistry.flag_name_for(:warp_service)
+        assert_equal :fqdn_available_side_corporate, FqdnAvailabilityRegistry.flag_name_for(:warp_corporate)
+        assert_equal :fqdn_available_side_staff, FqdnAvailabilityRegistry.flag_name_for(:warp_staff)
       end
 
       private

@@ -156,7 +156,8 @@ module RegionalRpClientMatrix
       end
     return "EDIT_ORG" if client_id.to_s == "edit-org"
 
-    parts = [metadata.fetch(:surface), metadata.fetch(:face), metadata.fetch(:region)]
+    surface_namespace = { "core" => "CORE", "warp" => "SIDE" }.fetch(metadata.fetch(:surface))
+    parts = [surface_namespace, metadata.fetch(:face), metadata.fetch(:region)]
     parts.compact!
     parts.map! { |part| part.to_s.upcase }
     parts
@@ -176,11 +177,11 @@ module RegionalRpClientMatrix
         surface: metadata.fetch(:face).to_sym,
         region: metadata.fetch(:region),
       ) || raise(MissingCanonicalHost, "no canonical Core host for #{client_id}")
-    when "side"
-      side_host = canonical_side_host_for(metadata)
-      raise MissingCanonicalHost, "no canonical Side host for #{client_id}" if side_host.blank?
+    when "warp"
+      warp_host = canonical_warp_host_for(metadata)
+      raise MissingCanonicalHost, "no canonical Warp host for #{client_id}" if warp_host.blank?
 
-      normalize_origin(side_host)
+      normalize_origin(warp_host)
     when "edit"
       edit_host = ENV.fetch("PUBLIC_EDIT_STAFF_URL", nil).presence
       raise MissingCanonicalHost, "no canonical Edit host for #{client_id}" if edit_host.blank?
@@ -196,10 +197,10 @@ module RegionalRpClientMatrix
     case metadata.fetch(:surface)
     when "core"
       :regional_root_url_registry
-    when "side"
-      return :side_boot_hosts if metadata.fetch(:region) == "jp"
+    when "warp"
+      return :warp_boot_hosts if metadata.fetch(:region) == "jp"
 
-      side_env_key(metadata)
+      warp_env_key(metadata)
     when "edit"
       :public_edit_staff_url
     else
@@ -208,23 +209,23 @@ module RegionalRpClientMatrix
   end
   private_class_method :canonical_host_source_for
 
-  def side_env_key(metadata)
-    "PUBLIC_SIDE_#{metadata.fetch(:face).upcase}_#{metadata.fetch(:region).upcase}_URL"
+  def warp_env_key(metadata)
+    "PUBLIC_WARP_#{metadata.fetch(:face).upcase}_#{metadata.fetch(:region).upcase}_URL"
   end
-  private_class_method :side_env_key
+  private_class_method :warp_env_key
 
-  def canonical_side_host_for(metadata)
-    return ENV.fetch(side_env_key(metadata), nil).presence unless metadata.fetch(:region) == "jp"
+  def canonical_warp_host_for(metadata)
+    return ENV.fetch(warp_env_key(metadata), nil).presence unless metadata.fetch(:region) == "jp"
 
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     host_method = {
-      "app" => :side_service,
-      "com" => :side_corporate,
-      "org" => :side_staff,
+      "app" => :warp_service,
+      "com" => :warp_corporate,
+      "org" => :warp_staff,
     }.fetch(metadata.fetch(:face))
     hosts.public_send(host_method).to_s.presence
   end
-  private_class_method :canonical_side_host_for
+  private_class_method :canonical_warp_host_for
 
   def normalize_origin(value)
     origin = value.to_s

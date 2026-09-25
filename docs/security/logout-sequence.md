@@ -15,7 +15,7 @@ models, services, controllers, or namespaces do not imply sign-side authority.
 
 ## User-Facing Ceremony
 
-The browser ceremony is surface-local. Auth, Core, Side, and Palm use:
+The browser ceremony is surface-local. Auth, Core, Warp, and Palm use:
 
 - `GET /sign/out/new`
 - `GET /sign/out/edit`
@@ -66,7 +66,7 @@ Reachability must stay open because authenticated-only routing would break legit
 - logout confirmation after the session has already expired (TTL lapse mid-flow);
 - the OIDC end-session confirmation, where `/sign/out/edit` is shared with the Acme IdP and session
   state is not stable across the RP↔IdP round trip (see "Acme OIDC End-Session" below);
-- idempotent revisits of Auth/Core/Side `/sign/out/complete` (reload, back button, bookmark), which
+- idempotent revisits of Auth/Core/Warp `/sign/out/complete` (reload, back button, bookmark), which
   must stay safe. Base has no completion GET; revisiting `/lobby` after the notice is consumed shows
   the ordinary anonymous entry.
 
@@ -83,7 +83,7 @@ Acme app/com/org surfaces own direct session mutation. Local logout:
 3. clears acme auth cookies and request-local actor state;
 4. records logout audit through the existing authority path;
 5. stores a one-time completion marker in the fresh session;
-6. redirects to the same surface's `/sign/out/complete` (Auth/Core/Side) or Base `/lobby`.
+6. redirects to the same surface's `/sign/out/complete` (Auth/Core/Warp) or Base `/lobby`.
 
 Acme local logout must not self-redirect to `/oidc/logout` or mint `id_token_hint` for itself.
 

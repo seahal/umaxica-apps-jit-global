@@ -120,7 +120,7 @@ CREATE UNLOGGED TABLE public.visitor_auth_ceremony_sessions (
     authentication_event_at timestamp(6) with time zone,
     CONSTRAINT visitor_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT visitor_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT visitor_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
+    CONSTRAINT visitor_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
     CONSTRAINT visitor_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1))
 );
 
@@ -1101,7 +1101,7 @@ CREATE UNLOGGED TABLE public.visitor_tokens (
     authentication_event_at timestamp(6) with time zone,
     CONSTRAINT chk_customer_tokens_kind_id_positive CHECK ((visitor_token_kind_id >= 0)),
     CONSTRAINT chk_customer_tokens_status_id_positive CHECK ((visitor_token_status_id >= 0)),
-    CONSTRAINT chk_visitor_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying])::text[]))))
+    CONSTRAINT chk_visitor_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text]))))
 );
 
 
@@ -1785,6 +1785,13 @@ CREATE INDEX index_visitor_device_sessions_on_visitor_id ON public.visitor_devic
 
 
 --
+-- Name: index_visitor_device_sessions_on_visitor_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_visitor_device_sessions_on_visitor_id_and_id ON public.visitor_device_sessions USING btree (visitor_id, id);
+
+
+--
 -- Name: index_visitor_dpop_proof_states_on_expires_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2198,10 +2205,10 @@ CREATE UNIQUE INDEX index_visitor_tokens_on_dbsc_session_id ON public.visitor_to
 
 
 --
--- Name: index_visitor_tokens_on_device_session_id; Type: INDEX; Schema: public; Owner: -
+-- Name: index_visitor_tokens_on_device_session_id_and_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_visitor_tokens_on_device_session_id ON public.visitor_tokens USING btree (device_session_id);
+CREATE UNIQUE INDEX index_visitor_tokens_on_device_session_id_and_id ON public.visitor_tokens USING btree (device_session_id, id);
 
 
 --
@@ -2465,12 +2472,43 @@ ALTER TABLE ONLY public.visitor_sign_up_flows
 
 
 --
+-- Name: visitor_device_sessions fk_visitor_device_sessions_on_current_refresh_token_owner; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_device_sessions
+    ADD CONSTRAINT fk_visitor_device_sessions_on_current_refresh_token_owner FOREIGN KEY (id, current_refresh_token_id) REFERENCES public.visitor_tokens(device_session_id, id) ON DELETE SET NULL (current_refresh_token_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: visitor_tokens fk_visitor_tokens_on_device_session_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_tokens
+    ADD CONSTRAINT fk_visitor_tokens_on_device_session_id FOREIGN KEY (device_session_id) REFERENCES public.visitor_device_sessions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: visitor_tokens fk_visitor_tokens_on_visitor_id_and_device_session_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_tokens
+    ADD CONSTRAINT fk_visitor_tokens_on_visitor_id_and_device_session_id FOREIGN KEY (visitor_id, device_session_id) REFERENCES public.visitor_device_sessions(visitor_id, id) ON DELETE RESTRICT;
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260924156000'),
+('20260924155000'),
+('20260924154000'),
+('20260924153000'),
+('20260924152000'),
+('20260924151000'),
+('20260924150000'),
 ('20260922120100'),
 ('20260922120000'),
 ('20260921140100'),

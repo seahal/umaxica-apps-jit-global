@@ -68,7 +68,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal auth_org_sign_in_passkey_options_path(ri: "jp"), panel.fetch("options_url")
     assert_equal auth_org_sign_in_passkey_verification_path(ri: "jp"), panel.fetch("verification_url")
     assert_equal "jp", panel.fetch("region")
-    assert_equal new_auth_org_sign_in_secret_path(ri: "jp"), inertia_props.dig("secret_link", "href")
+    assert_nil inertia_props["secret_link"]
   end
 
   test "new sends the operator back to the entry when no entra transaction is pending" do

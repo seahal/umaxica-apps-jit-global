@@ -83,7 +83,7 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
         @config ||=
           begin
             c = Object.new
-            c.define_singleton_method(:requires_avatar) { false }
+            c.define_singleton_method(:avatar_mode) { :none }
             c.define_singleton_method(:account_class) { Client }
             c
           end

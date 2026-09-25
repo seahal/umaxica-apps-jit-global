@@ -88,10 +88,16 @@ module PreferenceBase
     source = color_theme_preference_source
     theme = normalize_theme(public_option_cookie_value(source, THEME_COOKIE_KEY, :theme))
 
-    write_preference_cookie(THEME_COOKIE_KEY, theme)
-    write_public_option_cookies(source)
+    if preference_state_write_request?
+      write_preference_cookie(THEME_COOKIE_KEY, theme)
+      write_public_option_cookies(source)
+    end
     @color_theme = theme
     nil
+  end
+
+  def preference_state_write_request?
+    !request.get? && !request.head?
   end
 
   def color_theme_preference_source
@@ -279,6 +285,16 @@ module PreferenceBase
   end
 
   def ensure_preferences_record
+    if request.get? || request.head?
+      load_access_token_preference_record!(clear_invalid_cookie: false)
+      return @preferences if @preferences.present?
+
+      # A screen render may read a current preference token, but an ordinary
+      # navigation must not create its server-side record. Explicit preference
+      # writes bootstrap a persisted record through set_preferences_cookie.
+      return @preferences = preference_class.new
+    end
+
     load_access_token_preference_record!
     return @preferences if @preferences.present?
 
@@ -800,12 +816,6 @@ module PreferenceBase
   end
 
   def handle_preference_refresh_replay!(preference)
-    replacement = preference_refresh_grace_replacement(preference)
-    if replacement
-      adopt_preference_refresh_grace!(preference, replacement)
-      return :grace
-    end
-
     now = Time.current
 
     with_preference_connection(:writing) do
@@ -835,47 +845,6 @@ module PreferenceBase
       ),
     )
     :compromised
-  end
-
-  # Concurrency grace: when a just-rotated parent refresh token is presented
-  # again within the grace window by a sibling request from the same page
-  # load, return its still-usable replacement so the request can be served
-  # without tripping compromise handling. Returns nil for genuine replays
-  # (no replacement, replacement no longer usable, or outside the window).
-  def preference_refresh_grace_replacement(preference)
-    return nil unless preference.respond_to?(:rotated_within_grace?)
-    return nil unless preference.rotated_within_grace?
-
-    replacement =
-      with_preference_connection(:writing) do
-        preference_class
-          .includes(preference_associations_to_preload)
-          .find_by(id: preference.replaced_by_id)
-      end
-
-    valid_refresh_preference?(replacement) ? replacement : nil
-  end
-
-  # Adopt the rotated replacement read-only. We deliberately do NOT issue a
-  # new refresh cookie here: the replacement's raw token is only available to
-  # the request that performed the rotation, and the winning sibling already
-  # set the new cookie. Mutating cookies here would race and clobber it.
-  def adopt_preference_refresh_grace!(preference, replacement)
-    @preferences = replacement
-    @preference_refresh_grace = true
-
-    if respond_to?(:preference_current_resource, true) && respond_to?(:adopt_rotated_preference!, true)
-      resource = preference_current_resource
-      adopt_rotated_preference!(resource, replacement) if resource
-    end
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "preference.token.refresh.grace_reuse",
-        replaced_by_id: preference.replaced_by_id,
-        **preference_refresh_log_context(replacement, preference.public_id),
-      ),
-    )
   end
 
   def log_preference_refresh_rotation_failed(preference, refresh_public_id)
@@ -1083,14 +1052,21 @@ module PreferenceBase
   # persists every CHILD_RECORD_TYPES row for a new preference, so a missing
   # row here means a pre-bootstrap-completeness legacy record; the row is
   # backfilled at the next legitimate write point (PATCH/update), not on GET.
-  def load_or_build_preference_child(child_type)
+  def load_or_build_preference_child(child_type, default_attributes = {})
     association_name = "#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
     child = @preferences.public_send(association_name)
     return child if child.present?
 
-    PreferenceClassRegistry.record_class(preference_prefix, child_type).new(
-      preference: @preferences,
-      option_id: PreferenceClassRegistry.default_option_id(preference_prefix, child_type),
-    )
+    attributes = { preference: @preferences }.merge(default_attributes)
+    record_class =
+      if child_type.to_s == "Cookie"
+        PreferenceClassRegistry.cookie_class(preference_prefix)
+      else
+        attributes[:option_id] = PreferenceClassRegistry.default_option_id(preference_prefix, child_type)
+        PreferenceClassRegistry.record_class(preference_prefix, child_type)
+      end
+
+    child = record_class.new(attributes)
+    child
   end
 end

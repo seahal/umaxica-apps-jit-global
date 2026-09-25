@@ -112,12 +112,13 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
       assert_equal "base/app/groups", recognized[:controller]
       assert_equal "index", recognized[:action]
 
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path(
-          "http://#{host}/dashboard",
-          method: :get,
-        )
-      end
+      recognized = Rails.application.routes.recognize_path(
+        "http://#{host}/dashboard",
+        method: :get,
+      )
+
+      assert_equal "base/app/roots", recognized[:controller]
+      assert_equal "show", recognized[:action]
 
       assert_raises(ActionController::RoutingError) do
         Rails.application.routes.recognize_path(
@@ -280,12 +281,13 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "base/com/sitemaps", recognized[:controller]
     assert_equal "show", recognized[:action]
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path(
-        "http://#{BASE_COM_HOST}/dashboard",
-        method: :get,
-      )
-    end
+    recognized = Rails.application.routes.recognize_path(
+      "http://#{BASE_COM_HOST}/dashboard",
+      method: :get,
+    )
+
+    assert_equal "base/com/roots", recognized[:controller]
+    assert_equal "show", recognized[:action]
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
@@ -415,12 +417,13 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "base/org/sitemaps", recognized[:controller]
     assert_equal "show", recognized[:action]
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path(
-        "http://#{BASE_ORG_HOST}/dashboard",
-        method: :get,
-      )
-    end
+    recognized = Rails.application.routes.recognize_path(
+      "http://#{BASE_ORG_HOST}/dashboard",
+      method: :get,
+    )
+
+    assert_equal "base/org/roots", recognized[:controller]
+    assert_equal "show", recognized[:action]
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(

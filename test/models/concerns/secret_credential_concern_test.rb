@@ -55,47 +55,6 @@ class SecretCredentialConcernTest < ActiveSupport::TestCase
     assert_equal ClientSecretCredentialStatus::ACTIVE, record.user_secret_status_id
   end
 
-  test "verify_and_consume! returns true on valid secret_credential" do
-    record, raw = DummySecret.issue!(name: "One Time", user: @user, uses: 1, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-
-    assert record.verify_and_consume!(raw)
-    assert_predicate record.reload, :used?
-    assert_equal 0, record.uses_remaining
-  end
-
-  test "verify_and_consume! returns false on invalid secret_credential" do
-    record, _raw = DummySecret.issue!(name: "One Time", user: @user, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-
-    assert_not record.verify_and_consume!("wrong_secret_credential")
-    assert_predicate record.reload, :active?
-  end
-
-  test "verify_and_consume! returns false when not active" do
-    record, raw = DummySecret.issue!(name: "Inactive", user: @user, status: :revoked, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-
-    assert_not record.verify_and_consume!(raw)
-  end
-
-  test "verify_and_consume! returns false when expired" do
-    record, raw = DummySecret.issue!(name: "Expired", user: @user, discard_at: 1.hour.ago, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-    record.update_columns(created_at: 2.hours.ago)
-
-    assert_not record.verify_and_consume!(raw)
-    assert_predicate record.reload, :expired?
-  end
-
-  test "verify_and_consume! allows multiple uses" do
-    record, raw = DummySecret.issue!(name: "Multi", user: @user, uses: 2, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-
-    assert record.verify_and_consume!(raw)
-    assert_predicate record.reload, :active?
-    assert_equal 1, record.uses_remaining
-
-    assert record.verify_and_consume!(raw)
-    assert_predicate record.reload, :used?
-    assert_equal 0, record.uses_remaining
-  end
-
   test "status predicates" do
     record = DummySecret.new(user_secret_status_id: ClientSecretCredentialStatus::ACTIVE)
 

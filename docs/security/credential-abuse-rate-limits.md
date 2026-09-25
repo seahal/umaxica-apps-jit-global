@@ -7,6 +7,19 @@ limits across the `app`, `com`, and `org` surfaces.
 Current implementation values remain the source of truth for each specific operation until a rule is
 documented here and backed by implementation.
 
+## OAuth Authorize Request Windows
+
+The Base authorization endpoint evaluates its surface-local IP, browser/client, and
+client/redirect-host windows in that order. Each counter result must be a positive integer. A count
+at or below the configured inclusive maximum continues; a count above it returns HTTP 429 and stops
+later checks. A missing or malformed counter result, or an explicit Valkey availability/operation
+error, returns HTTP 503 and does not continue authorization. There is no process-local or alternate
+backend fallback. Operational failures use the `oidc.authorize.rate_limit.backend_failure` log event;
+the exception message and counter value are not logged.
+
+The current limits are owned by `RateLimitProfiles.oauth_authorize`; this document does not create a
+second numeric policy source or a new alert threshold.
+
 This document covers Rails semantic rate limits and related application-aware rejection logic. It
 does not define CloudFront, AWS WAF, ALB, security-group, or task-local firewall policy. Those
 network and edge controls are owned by the CDN / AWS edge boundary described in

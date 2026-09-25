@@ -1,0 +1,155 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Synthetic SQL regression for the approved token/device-session contract.
+# All writes occur in a transaction on a comment-marked task-owned database.
+require "pg"
+
+surface = ARGV.fetch(0)
+suffix = ARGV.fetch(1)
+types = {
+  "app" => ["client", "user_id", "user_token", 11],
+  "com" => ["visitor", "visitor_id", "visitor_token", 1],
+  "org" => ["operator", "staff_id", "staff_token", 1],
+}
+prefix, actor_column, token_prefix, kind_id = types.fetch(surface)
+abort "unrecognized task database suffix" unless %w(ticket ticket_dumpcheck).include?(suffix)
+database = "codex_integrity_20260924_#{surface}_#{suffix}"
+db = PG.connect(
+  host: ENV.fetch("POSTGRESQL_AUDIT_HOST"),
+  port: Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10),
+  user: ENV.fetch("POSTGRESQL_AUDIT_USER"),
+  password: ENV.fetch("POSTGRESQL_AUDIT_PASSWORD"),
+  dbname: database,
+  connect_timeout: 3,
+)
+identity = db.exec_params(<<~SQL, [database]).first
+  SELECT current_database() AS database, shobj_description(oid, 'pg_database') AS comment
+    FROM pg_database WHERE datname = $1
+SQL
+raise RuntimeError, "task database ownership is unconfirmed" unless identity&.fetch("database") == database &&
+  identity.fetch("comment") == "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"
+
+token_table = "#{prefix}_tokens"
+session_table = "#{prefix}_device_sessions"
+current_fk = "fk_#{prefix}_device_sessions_on_current_refresh_token_owner"
+actor_fk = "fk_#{prefix}_tokens_on_#{actor_column}_and_device_session_id"
+session_fk = "fk_#{prefix}_tokens_on_device_session_id"
+
+db.exec("BEGIN")
+db.exec("SET LOCAL statement_timeout = '5s'")
+db.exec("SET LOCAL lock_timeout = '1s'")
+begin
+  { "statuses" => 1, "kinds" => kind_id, "binding_methods" => 0, "dbsc_statuses" => 0 }.each do |part, id|
+    db.exec_params("INSERT INTO #{prefix}_token_#{part} (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", [id])
+  end
+  sessions =
+    [[70_001, "same-1"], [70_001, "same-2"], [70_002, "other"]].map do |actor, label|
+      db.exec_params(<<~SQL, ["iso#{prefix[0]}_#{label}", actor]).first.fetch("id").to_i
+        INSERT INTO #{session_table} (public_id, #{actor_column}, created_at, updated_at)
+        VALUES ($1, $2, clock_timestamp(), clock_timestamp()) RETURNING id
+      SQL
+    end
+  create_token =
+    lambda do |actor, session, label|
+      db.exec_params(<<~SQL, ["iso#{prefix[0]}_#{label}", actor, session, kind_id]).first.fetch("id").to_i
+        INSERT INTO #{token_table}
+          (public_id, #{actor_column}, device_session_id, #{token_prefix}_kind_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, clock_timestamp(), clock_timestamp()) RETURNING id
+      SQL
+    end
+  historic = create_token.call(70_001, sessions[0], "historic")
+  current = create_token.call(70_001, sessions[0], "current")
+  same_actor_other_session = create_token.call(70_001, sessions[1], "same_other")
+  other_actor = create_token.call(70_002, sessions[2], "other")
+  sessionless = create_token.call(70_001, nil, "sessionless")
+  raise RuntimeError, "token history collapsed" unless db.exec_params(
+    "SELECT count(*) FROM #{token_table} WHERE device_session_id = $1", [sessions[0]],
+  ).first.fetch("count") == "2"
+
+  db.exec_params("UPDATE #{session_table} SET current_refresh_token_id=$1 WHERE id=$2", [current, sessions[0]])
+
+  reject =
+    lambda do |expected_constraint, &operation|
+      db.exec("SAVEPOINT expected_rejection")
+      error = nil
+      begin
+        operation.call
+        db.exec("SET CONSTRAINTS #{current_fk} IMMEDIATE")
+      rescue PG::Error => e
+        error = e
+      ensure
+        db.exec("ROLLBACK TO SAVEPOINT expected_rejection")
+        db.exec("RELEASE SAVEPOINT expected_rejection")
+      end
+      raise RuntimeError, "expected rejection from #{expected_constraint}" unless error
+
+      actual_state = error.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+      actual_constraint = error.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      raise RuntimeError, "wrong rejection: #{actual_state}/#{actual_constraint}" unless actual_state == "23503" &&
+        actual_constraint == expected_constraint
+    end
+  # The current pointer may be NULL; any non-NULL value must belong to this exact session.
+  [same_actor_other_session, other_actor, sessionless].each do |bad_token|
+    reject.call(current_fk) do
+      db.exec_params("UPDATE #{session_table} SET current_refresh_token_id=$1 WHERE id=$2", [bad_token, sessions[0]])
+    end
+  end
+  [0, -1].each do |missing_token_id|
+    reject.call(current_fk) do
+      db.exec_params(
+        "UPDATE #{session_table} SET current_refresh_token_id=$1 WHERE id=$2",
+        [missing_token_id, sessions[0]],
+      )
+    end
+  end
+  reject.call(actor_fk) do
+    db.exec_params("UPDATE #{token_table} SET device_session_id=$1 WHERE id=$2", [sessions[2], historic])
+  end
+  reject.call(actor_fk) do
+    db.exec_params("UPDATE #{token_table} SET #{actor_column}=$1 WHERE id=$2", [70_002, historic])
+  end
+  reject.call(actor_fk) do
+    db.exec_params("UPDATE #{session_table} SET #{actor_column}=$1 WHERE id=$2", [70_002, sessions[0]])
+  end
+  reject.call(session_fk) do
+    db.exec_params("UPDATE #{token_table} SET device_session_id=$1 WHERE id=$2", [9_999_999, historic])
+  end
+  [0, -1].each do |missing_session_id|
+    reject.call(session_fk) do
+      db.exec_params("UPDATE #{token_table} SET device_session_id=$1 WHERE id=$2", [missing_session_id, historic])
+    end
+  end
+  # A failed statement and savepoint rollback must leave the valid pointer intact.
+  state = db.exec_params(<<~SQL, [sessions[0]]).first
+    SELECT #{actor_column}, current_refresh_token_id FROM #{session_table} WHERE id=$1
+  SQL
+  raise RuntimeError, "failed operation changed session" unless state.fetch(actor_column) == "70001" &&
+    state.fetch("current_refresh_token_id") == current.to_s
+
+  db.exec_params("DELETE FROM #{token_table} WHERE id=$1", [historic])
+  raise RuntimeError, "historic delete changed pointer" unless db.exec_params(
+    "SELECT current_refresh_token_id FROM #{session_table} WHERE id=$1", [sessions[0]],
+  ).first.fetch("current_refresh_token_id") == current.to_s
+
+  reject.call(session_fk) do
+    db.exec_params("DELETE FROM #{session_table} WHERE id=$1", [sessions[0]])
+  end
+  db.exec_params("DELETE FROM #{token_table} WHERE id=$1", [current])
+  cleared = db.exec_params(<<~SQL, [sessions[0]]).first
+    SELECT #{actor_column}, current_refresh_token_id FROM #{session_table} WHERE id=$1
+  SQL
+  raise RuntimeError, "pointer deletion damaged session identity" unless cleared.fetch(actor_column) == "70001" &&
+    cleared.fetch("current_refresh_token_id").nil?
+
+  db.exec_params("DELETE FROM #{session_table} WHERE id=$1", [sessions[0]])
+  raise RuntimeError, "normal cleanup failed" unless db.exec_params(
+    "SELECT count(*) FROM #{session_table} WHERE id=$1", [sessions[0]],
+  ).first.fetch("count") == "0"
+
+  db.exec("ROLLBACK")
+  puts "#{surface}/#{suffix}: SQL history, NULL boundary, ownership, update, rollback, and cleanup passed"
+ensure
+  db.exec("ROLLBACK") if db.transaction_status != PG::PQTRANS_IDLE
+  db.close
+end

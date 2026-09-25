@@ -1,5 +1,9 @@
 # Core Browser JWT Cookie Transport And Next.js Zero-Cookie Boundary
 
+Current naming note (2026-09-25): references to the Rails `Side` surface in this decision mean the
+current internal namespace `Warp`. OIDC, JWT, MCP, persisted, and public-host identifiers retain
+their established values.
+
 ## Status
 
 Accepted (2026-06-14)

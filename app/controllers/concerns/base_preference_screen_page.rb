@@ -137,11 +137,11 @@ module BasePreferenceScreenPage
     end
   end
 
-  # Timezone options are presented in ascending UTC offset (UTC-12 .. UTC+00 .. UTC+14) rather than
-  # by row id; every other option set keeps its curated id order. The offset is the standard
-  # (non-DST) one, so the list does not reshuffle twice a year -- see TimezoneIdentifier.
+  # Option IDs and names are fixed by each option model. Building unsaved rows from that catalog
+  # keeps a first-time GET read-only; explicit preference writes persist the referenced rows before
+  # they can be selected. Timezones sort by standard UTC offset so DST does not reshuffle the list.
   def preference_ordered_options(option_class, option_type)
-    rows = option_class.order(:id).to_a
+    rows = option_class.const_get(:DEFAULTS, false).map { |id| option_class.new(id: id) }
     return rows unless option_type == :timezone
 
     rows.sort_by { |option| TimezoneIdentifier.utc_offset_sort_key(option.name) }

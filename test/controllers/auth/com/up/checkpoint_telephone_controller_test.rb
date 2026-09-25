@@ -2,11 +2,9 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "base64"
 
 # Corporate-surface sign-up checkpoint chain for a telephone registration:
-# OTP verification, the passkey checkpoint, and the passcode checkpoint that
-# releases the ceremony to the birthdate step.
+# OTP verification, the passkey checkpoint, and the direct birthdate continuation.
 class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
@@ -24,6 +22,9 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
         VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
         VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP,
       ].each { |id| VisitorTelephoneStatus.find_or_create_by!(id: id) }
+      VisitorPasskeyStatus::DEFAULTS.each { |id| VisitorPasskeyStatus.find_or_create_by!(id: id) }
+      VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
+      VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
       VisitorTokenDbscStatus.ensure_defaults!
       VisitorTokenStatus::DEFAULTS.each { |id| VisitorTokenStatus.find_or_create_by!(id: id) }
     end
@@ -93,7 +94,7 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
     assert_predicate body.dig("options", "user", "id"), :present?
   end
 
-  test "passkey checkpoint page exposes the checkpoint version and the passcode continuation" do
+  test "passkey checkpoint page exposes the checkpoint version and direct birthdate continuation" do
     telephone = advance_to_passkey_checkpoint!("+819012390004")
     cycle = VisitorSignUpFlow.order(:id).find_by!(
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -105,52 +106,39 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
     props = inertia_props
 
     assert_equal cycle.checkpoint_version, props.fetch("checkpoint_version")
-    assert_equal auth_com_sign_up_check_telephone_passcode_path(ri: "jp"), props.fetch("success_redirect_url")
+    assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp"), props.fetch("success_redirect_url")
   end
 
-  test "passcode checkpoint issues a one-time secret and releases the ceremony to the birthdate step" do
+  test "registered passkey advances directly to birthdate without issuing a LOGIN credential" do
     telephone = advance_to_passkey_checkpoint!("+819012390005")
     cycle = VisitorSignUpFlow.order(:id).find_by!(
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
     )
-    register_signup_passkey!(cycle, "com_signup_1")
+    register_signup_passkey!(cycle, "com_signup_direct_birthdate")
 
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: @headers
+    assert cycle.reload.requirement_cleared?(:passkey)
+    assert_empty telephone.visitor.visitor_secret_credentials.where(
+      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN,
+    )
+
+    get auth_com_sign_up_check_telephone_birthdate_url(ri: "jp"), headers: @headers
 
     assert_response :success
-    assert_predicate inertia_props.fetch("secret"), :present?
-
-    assert_difference("VisitorSecretCredential.count", 1) do
-      patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-            params: { checkpoint_version: cycle.reload.checkpoint_version }, headers: @headers
-    end
-
-    assert_redirected_to auth_com_sign_up_check_telephone_birthdate_url(ri: "jp")
-    assert cycle.reload.requirement_cleared?(:passcode)
+    assert_predicate inertia_props.fetch("birthdate"), :present?
+    assert_not_includes inertia_props.keys, "passcode"
   end
 
-  test "passcode checkpoint rejects a stale checkpoint version" do
-    telephone = advance_to_passkey_checkpoint!("+819012390006")
+  test "birthdate checkpoint cancels the ceremony on delete" do
+    telephone = advance_to_passkey_checkpoint!("+819012390007")
     cycle = VisitorSignUpFlow.order(:id).find_by!(
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
     )
-    register_signup_passkey!(cycle, "com_signup_2")
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: @headers
+    register_signup_passkey!(cycle, "com_signup_cancel_birthdate")
 
-    assert_no_difference("VisitorSecretCredential.count") do
-      patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-            params: { checkpoint_version: cycle.reload.checkpoint_version - 1 }, headers: @headers
-    end
-
-    assert_not cycle.reload.requirement_cleared?(:passcode)
-  end
-
-  test "passcode checkpoint destroy cancels the sign-up ceremony" do
-    advance_to_passkey_checkpoint!("+819012390007")
-
-    delete auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: @headers
+    delete auth_com_sign_up_check_telephone_birthdate_url(ri: "jp"), headers: @headers
 
     assert_response :redirect
+    assert_nil session[:auth_com_up_sequence_id]
   end
 
   test "birthdate checkpoint finalizes the corporate sign-up for an eligible visitor" do
@@ -159,9 +147,6 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
     )
     register_signup_passkey!(cycle, "com_signup_birthdate")
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version }, headers: @headers
-
     patch auth_com_sign_up_check_telephone_birthdate_url(ri: "jp"),
           params: {
             requirement: "birthdate",
@@ -179,9 +164,6 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
     )
     register_signup_passkey!(cycle, "com_signup_minor")
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version }, headers: @headers
-
     patch auth_com_sign_up_check_telephone_birthdate_url(ri: "jp"),
           params: {
             requirement: "birthdate",
@@ -202,9 +184,6 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
       principal_id: telephone.visitor_id, pending_contact_type: "telephone", pending_contact_id: telephone.id,
     )
     register_signup_passkey!(cycle, "com_signup_checkpoint_page")
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version }, headers: @headers
-
     get auth_com_sign_up_check_telephone_birthdate_url(ri: "jp"), headers: @headers
 
     assert_response :success
@@ -270,5 +249,9 @@ class AuthComUpCheckpointTelephoneControllerTest < ActionDispatch::IntegrationTe
         )
       end
     end
+
+    assert_response :created
+    assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp"),
+                 response.parsed_body.fetch("redirect_url")
   end
 end

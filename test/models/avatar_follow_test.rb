@@ -24,6 +24,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarFollowTest < ActiveSupport::TestCase
   setup do
@@ -83,7 +84,7 @@ class AvatarFollowTest < ActiveSupport::TestCase
   private
 
   def create_avatar(moniker)
-    Avatar.create!(
+    AvatarTestFactory.create!(
       capability: @capability,
       active_handle: @handle,
       moniker: moniker,

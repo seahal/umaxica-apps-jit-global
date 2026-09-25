@@ -1,5 +1,9 @@
 # Core Browser Credential Transport For jp.umaxica.app
 
+Current naming note (2026-09-25): references to the Rails `Side` surface in this superseded ADR are
+historical; its current internal namespace is `Warp`. External host and protocol identifiers remain
+unchanged.
+
 ## Status
 
 Superseded by `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` on

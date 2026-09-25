@@ -48,17 +48,7 @@ class BranchCoverageBatch9SessionsAndZerosTest < ActiveSupport::TestCase
     end
   end
 
-  test "group and membership service early returns" do
-    group = Object.new
-    group.define_singleton_method(:archived?) { true }
-
-    assert_same group, GroupManagement::Archive.new(group: group).call
-
-    membership = Object.new
-    membership.define_singleton_method(:active?) { false }
-
-    assert_same membership, GroupAvatarMemberships::Detach.new(membership: membership).call
-
+  test "membership service invalid-state outcomes" do
     membership2 = Object.new
     membership2.define_singleton_method(:revoked?) { true }
     assert_raises(CollectiveMembership::InactiveMembership) do

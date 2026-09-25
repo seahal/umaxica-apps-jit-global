@@ -33,8 +33,10 @@ this phase.
 ## Cell records
 
 Audience maps to public registrable domain: `app` → `umaxica.app`, `com` → `umaxica.com`, `org` →
-`umaxica.org`. Private Rails origins in this repository are `*.localhost` Host-Authorization
-targets, not public DNS.
+`umaxica.org`. Development private Rails origins default to `*.localhost`. Production Rails
+ingress uses the surface-local `PRIVATE_DOCS_*_URL` and `PRIVATE_NEWS_*_URL` boot-config values;
+these private hosts are admitted by Rails Host Authorization and remain separate from public Edge
+DNS. Public HTML remains on Edge.
 
 ### app × info
 
@@ -82,7 +84,7 @@ targets, not public DNS.
 | Edge unit                     | `app/docs` in umaxica-apps-edge                       |
 | Rails namespace/controller    | `Docs::App::*`                                        |
 | Public host                   | `docs.jp.umaxica.app`                                 |
-| Private Rails host            | `docs.app.localhost`                                  |
+| Private Rails host            | `docs.app.localhost` in development; `PRIVATE_DOCS_SERVICE_URL` in production |
 | Audience                      | End-user application (`app`)                          |
 | Surface                       | `docs`                                                |
 | Current implementation status | Rails thin root, health, and CMS read API implemented |
@@ -95,7 +97,7 @@ targets, not public DNS.
 | Edge unit                     | `com/docs` in umaxica-apps-edge                       |
 | Rails namespace/controller    | `Docs::Com::*`                                        |
 | Public host                   | `docs.jp.umaxica.com`                                 |
-| Private Rails host            | `docs.com.localhost`                                  |
+| Private Rails host            | `docs.com.localhost` in development; `PRIVATE_DOCS_CORPORATE_URL` in production |
 | Audience                      | Public / corporate (`com`)                            |
 | Surface                       | `docs`                                                |
 | Current implementation status | Rails thin root, health, and CMS read API implemented |
@@ -108,7 +110,7 @@ targets, not public DNS.
 | Edge unit                     | `org/docs` in umaxica-apps-edge                       |
 | Rails namespace/controller    | `Docs::Org::*`                                        |
 | Public host                   | `docs.jp.umaxica.org`                                 |
-| Private Rails host            | `docs.org.localhost`                                  |
+| Private Rails host            | `docs.org.localhost` in development; `PRIVATE_DOCS_STAFF_URL` in production |
 | Audience                      | Staff / organization (`org`)                          |
 | Surface                       | `docs`                                                |
 | Current implementation status | Rails thin root, health, and CMS read API implemented |
@@ -121,7 +123,7 @@ targets, not public DNS.
 | Edge unit                     | `app/news` in umaxica-apps-edge                       |
 | Rails namespace/controller    | `News::App::*`                                        |
 | Public host                   | `news.jp.umaxica.app`                                 |
-| Private Rails host            | `news.app.localhost`                                  |
+| Private Rails host            | `news.app.localhost` in development; `PRIVATE_NEWS_SERVICE_URL` in production |
 | Audience                      | End-user application (`app`)                          |
 | Surface                       | `news`                                                |
 | Current implementation status | Rails thin root, health, and CMS read API implemented |
@@ -134,7 +136,7 @@ targets, not public DNS.
 | Edge unit                     | `com/news` in umaxica-apps-edge                       |
 | Rails namespace/controller    | `News::Com::*`                                        |
 | Public host                   | `news.jp.umaxica.com`                                 |
-| Private Rails host            | `news.com.localhost`                                  |
+| Private Rails host            | `news.com.localhost` in development; `PRIVATE_NEWS_CORPORATE_URL` in production |
 | Audience                      | Public / corporate (`com`)                            |
 | Surface                       | `news`                                                |
 | Current implementation status | Rails thin root, health, and CMS read API implemented |
@@ -147,7 +149,7 @@ targets, not public DNS.
 | Edge unit                     | `org/news` in umaxica-apps-edge                       |
 | Rails namespace/controller    | `News::Org::*`                                        |
 | Public host                   | `news.jp.umaxica.org`                                 |
-| Private Rails host            | `news.org.localhost`                                  |
+| Private Rails host            | `news.org.localhost` in development; `PRIVATE_NEWS_STAFF_URL` in production |
 | Audience                      | Staff / organization (`org`)                          |
 | Surface                       | `news`                                                |
 | Current implementation status | Rails thin root, health, and CMS read API implemented |

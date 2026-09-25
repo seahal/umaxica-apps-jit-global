@@ -71,6 +71,15 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     end
   end
 
+  test "returns nil for a query whose nested parameter shapes conflict" do
+    token = JumpRtIssuer.call(
+      namespace: "SIGN_APP",
+      url: "https://target.example/?a=scalar&a[b]=nested",
+    )
+
+    assert_nil token
+  end
+
   test "can mark issued jump rt as one-time replay policy" do
     with_env("JWT_SIGN_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
       JumpRtKeyring.stub(:private_key, @private_key) do
@@ -206,17 +215,29 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     end
   end
 
-  test "refuses missing key material" do
-    with_env("JWT_SIGN_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
-      JumpRtKeyring.stub(:private_key, nil) do
-        assert_nil JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
+  test "raises a configuration error when the active key id or private key is missing" do
+    JumpRtKeyring.stub(:active_kid, nil) do
+      error = assert_raises(JumpRtConfigurationError) do
+        JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
       end
+
+      assert_match(/Jump RT signing key configuration/, error.message)
+    end
+
+    JumpRtKeyring.stub(:private_key, nil) do
+      error = assert_raises(JumpRtConfigurationError) do
+        JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://target.example/")
+      end
+
+      assert_match(/Jump RT signing key configuration/, error.message)
     end
   end
 
   test "refuses unsupported issuer surface" do
-    assert_raises(ArgumentError) do
-      JumpRtIssuer.call(namespace: "JUMP_APP", url: "https://target.example/")
+    ["JUMP_APP", nil, ""].each do |namespace|
+      assert_raises(JumpRtConfigurationError, namespace.inspect) do
+        JumpRtIssuer.call(namespace: namespace, url: "https://target.example/")
+      end
     end
   end
 
@@ -228,14 +249,28 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_equal "BASE_APP", JumpRtSurface.namespace_for_controller("Base::App::RootsController")
     assert_equal "CORE_ORG", JumpRtSurface.namespace_for_controller("Core::Org::RootsController")
     assert_equal "BASE_COM", JumpRtSurface.namespace_for_controller("Base::Com::RootsController")
-    assert_nil JumpRtSurface.namespace_for_controller("Jump::App::RootsController")
+    assert_raises(JumpRtConfigurationError) do
+      JumpRtSurface.namespace_for_controller("Jump::App::RootsController")
+    end
+  end
+
+  test "Warp uses independent Jump RT issuers while OIDC side client identifiers remain fixed" do
+    assert_equal "WARP_APP", JumpRtSurface.namespace_for_controller("Warp::App::RootsController")
+    assert_equal "WARP_COM", JumpRtSurface.namespace_for_controller("Warp::Com::RootsController")
+    assert_equal "WARP_ORG", JumpRtSurface.namespace_for_controller("Warp::Org::RootsController")
+    assert_equal "https://www-jp.umaxica.app", JumpRtSurface.issuer_origin("WARP_APP")
+    assert_equal "https://www-jp.umaxica.com", JumpRtSurface.issuer_origin("WARP_COM")
+    assert_equal "https://www-jp.umaxica.org", JumpRtSurface.issuer_origin("WARP_ORG")
+    warp_app = OidcClientStoresStaticClientStore::FIRST_PARTY_RP_SPECS.fetch("side-app")
+
+    assert_equal "side-app", warp_app.fetch(:aud)
+    assert_equal "SIDE_APP", warp_app.fetch(:jwt_namespace)
   end
 
   test "normalizes unsupported issuer surface names by raising" do
-    error =
-      assert_raises(ArgumentError) do
-        JumpRtSurface.normalize_namespace("jump_app")
-      end
+    error = assert_raises(JumpRtConfigurationError) do
+      JumpRtSurface.normalize_namespace("jump_app")
+    end
 
     assert_match(/unsupported Jump RT issuer surface/, error.message)
   end

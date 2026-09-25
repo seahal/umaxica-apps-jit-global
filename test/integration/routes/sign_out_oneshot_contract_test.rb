@@ -9,7 +9,7 @@ class SignOutOneshotContractTest < ActionDispatch::IntegrationTest
       Rails.application.routes.recognize_path("/sign/out/complete", method: :get)
     end
 
-    %w(Auth Core Side).each do |surface|
+    %w(Auth Core Warp).each do |surface|
       %w(App Com Org).each do |face|
         assert_not Object.const_defined?("#{surface}::#{face}::Sign::Outs::CompletionsController")
       end

@@ -112,12 +112,14 @@ class PreferenceBoosterTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "sets preference cookie on request" do
+  test "GET request does not create preference state or cookies" do
+    preference_count = AppPreference.count
     get "/test_preference", env: { "HTTP_HOST" => "localhost" }
 
     assert_response :success
-    assert_not_nil cookies[PreferenceCookieName.access(surface: :app)]
-    assert_not_nil cookies[PreferenceCookieName.refresh(surface: :app)]
+    assert_equal preference_count, AppPreference.count
+    assert_nil cookies[PreferenceCookieName.access(surface: :app)]
+    assert_nil cookies[PreferenceCookieName.refresh(surface: :app)]
   end
 
   test "edits and updates region" do

@@ -6,9 +6,10 @@ require "test_helper"
 class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
   test "theme update ignores invalid option id without changing canonical preference" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    get base_app_preference_path(ri: "jp")
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     preference = AppPreference.order(:created_at).last
     original_option_id = preference.app_preference_theme.option_id
@@ -22,9 +23,10 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
   test "timezone update ignores invalid timezone without changing canonical preference" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    get base_app_preference_path(ri: "jp")
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     preference = AppPreference.order(:created_at).last
     original_option_id = preference.app_preference_timezone.option_id
@@ -38,9 +40,10 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
   test "timezone update resolves each spelling of an option name to the same option" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    get base_app_preference_path(ri: "jp")
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     preference = AppPreference.order(:created_at).last
 
@@ -61,9 +64,10 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
   test "timezone update accepts a numeric option id given as a string" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    get base_app_preference_path(ri: "jp")
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     preference = AppPreference.order(:created_at).last
 
@@ -76,9 +80,10 @@ class PreferenceOptionTamperingTest < ActionDispatch::IntegrationTest
 
   test "timezone update treats constant and environment names as unknown options" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    get base_app_preference_path(ri: "jp")
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     preference = AppPreference.order(:created_at).last
     original_option_id = preference.app_preference_timezone.option_id

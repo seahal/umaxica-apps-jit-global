@@ -44,24 +44,24 @@ module OidcClientStoresStaticClientStore
       jwt_namespace: "CORE_ORG",
     },
     "side-app" => {
-      env_key: "SIDE_SERVICE_URL",
-      default_host: "wide.app.localhost",
+      env_key: "PUBLIC_WARP_SERVICE_URL",
+      default_host: "warp.app.localhost",
       resource_type: "client",
       aud: "side-app",
       name: "Side App RP",
       jwt_namespace: "SIDE_APP",
     },
     "side-com" => {
-      env_key: "SIDE_CORPORATE_URL",
-      default_host: "wide.com.localhost",
+      env_key: "PUBLIC_WARP_CORPORATE_URL",
+      default_host: "warp.com.localhost",
       resource_type: "visitor",
       aud: "side-com",
       name: "Side Com RP",
       jwt_namespace: "SIDE_COM",
     },
     "side-org" => {
-      env_key: "SIDE_STAFF_URL",
-      default_host: "wide.org.localhost",
+      env_key: "PUBLIC_WARP_STAFF_URL",
+      default_host: "warp.org.localhost",
       resource_type: "operator",
       aud: "side-org",
       name: "Side Org RP",
@@ -201,9 +201,9 @@ module OidcClientStoresStaticClientStore
       when "BASE_SERVICE_URL" then hosts.base_service.to_s
       when "BASE_STAFF_URL" then hosts.base_staff.to_s
       when "BASE_CORPORATE_URL" then hosts.base_corporate.to_s
-      when "SIDE_SERVICE_URL" then hosts.side_service.to_s
-      when "SIDE_STAFF_URL" then hosts.side_staff.to_s
-      when "SIDE_CORPORATE_URL" then hosts.side_corporate.to_s
+      when "PUBLIC_WARP_SERVICE_URL" then hosts.warp_service.to_s
+      when "PUBLIC_WARP_STAFF_URL" then hosts.warp_staff.to_s
+      when "PUBLIC_WARP_CORPORATE_URL" then hosts.warp_corporate.to_s
       when "PUBLIC_CORE_SERVICE_URL", "CORE_SERVICE_URL" then hosts.core_service.to_s
       when "PUBLIC_CORE_STAFF_URL", "CORE_STAFF_URL" then hosts.core_staff.to_s
       when "PUBLIC_CORE_CORPORATE_URL", "CORE_CORPORATE_URL" then hosts.core_corporate.to_s

@@ -203,6 +203,13 @@ Not everything examined was broken. The following were verified and are correct:
 
 ## 4. Shrine/S3 readiness — AUDIT ONLY, NO FEATURE IMPLEMENTATION
 
+> **Current-state note (2026-09-25):** this section records the 2026-08-11 audit snapshot. Since
+> then, Shrine gained boundary-specific attachment persistence: test uses memory storage,
+> development/staging use configured S3-compatible storage, and production uses AWS S3 through the
+> platform credential provider. See `lib/object_storage_shrine_configuration.rb` and
+> `docs/dds.md`. The historical findings below are retained; authenticated Avatar image delivery,
+> its URL namespace, and CDN contract remain undecided.
+
 No Shrine or S3 code was written, and no Shrine configuration was changed.
 
 **What exists.** `shrine 3.9.0`, `image_processing`, `ruby-vips`, and `aws-sdk-s3 1.229.0` are in
@@ -334,16 +341,12 @@ not allowed):
 - a hypothetical `/health/diagnostics` returns `403`, pinning the no-inheritance property;
 - an allowed host reaches the application on every path.
 
-### 5.2 `palm_corporate` and `palm_staff` are configured but unrouted
+### 5.2 Palm configuration for com/org — resolved 2026-09-24
 
-`ConfigValues::HostFamilyValues` defines `palm_corporate` and `palm_staff` with real hostnames
-(`palm-jp.umaxica.com`, `palm-jp.umaxica.org`), but `config/routes/palm.rb` constrains on
-`palm_service` only [repo]. They are configuration for surfaces that do not exist.
-
-Surfaced by the new registry invariant, which is deliberately scoped to routed slots and carries a
-comment explaining the exclusion. Giving them an availability switch would give an operator a
-control with no effect. Either the routes are missing or the configuration is dead; that is a
-product question, not one this audit can answer from evidence.
+At the time of this audit, `ConfigValues::HostFamilyValues` defined `palm_corporate` and
+`palm_staff` with hostnames, but `config/routes/palm.rb` constrained only `palm_service`. The
+integrated F9 cleanup removed the unrouted com/org values and Host Authorization entries while
+retaining the routed Palm app host. No Palm com/org route was added.
 
 Related and already documented in the repository: `config/environments/production.rb:186-193`
 records that the docs and news surfaces have no production host entry.

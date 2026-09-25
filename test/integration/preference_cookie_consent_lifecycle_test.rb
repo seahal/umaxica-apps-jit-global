@@ -8,13 +8,12 @@ require "test_helper"
 class PreferenceCookieConsentLifecycleTest < ActionDispatch::IntegrationTest
   test "granting consent records when it was given and withdrawing it clears the record" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    get base_app_preference_path(ri: "jp")
-
-    assert_response :success
-    preference = AppPreference.order(:created_at).last
 
     patch base_app_preference_cookie_path(ri: "jp"),
           params: { preference_cookie: { consented: "1", functional: "1", performant: "0", targetable: "0" } }
+
+    assert_response :redirect
+    preference = AppPreference.order(:created_at).last
 
     cookie = preference.reload.app_preference_cookie.reload
 

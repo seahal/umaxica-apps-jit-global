@@ -12,14 +12,20 @@ module PreferenceResourceSync
 
     case preference_class.name
     when "AppPreference"
-      resource.user_preference || create_resource_preference_for_write!(ClientPreference, :user_id, resource.id)
+      with_resource_preference_writing_connection(resource) do
+        resource.association(:user_preference).reset
+        resource.user_preference || create_resource_preference_for_write!(ClientPreference, :user_id, resource.id)
+      end
     when "OrgPreference"
-      resource.staff_preference || create_resource_preference_for_write!(OperatorPreference, :staff_id, resource.id)
+      with_resource_preference_writing_connection(resource) do
+        resource.association(:staff_preference).reset
+        resource.staff_preference || create_resource_preference_for_write!(OperatorPreference, :staff_id, resource.id)
+      end
     when "ComPreference"
-      resource.visitor_preference || create_resource_preference_for_write!(
-        VisitorPreference, :visitor_id,
-        resource.id,
-      )
+      with_resource_preference_writing_connection(resource) do
+        resource.association(:visitor_preference).reset
+        resource.visitor_preference || create_resource_preference_for_write!(VisitorPreference, :visitor_id, resource.id)
+      end
     end
   end
 

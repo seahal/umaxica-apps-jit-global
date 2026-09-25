@@ -221,59 +221,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     assert_predicate preference, :revoked?
   end
 
-  test "rotated_within_grace? is true for a just-consumed token with a replacement" do
-    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discard_at: 1.day.from_now)
-    preference = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      used_at: Time.current,
-      replaced_by_id: replacement.id,
-    )
-
-    assert_predicate preference, :rotated_within_grace?
-  end
-
-  test "rotated_within_grace? honors the window boundary" do
-    now = Time.current
-    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discard_at: 1.day.from_now)
-    window = SingleUseToken::PREFERENCE_REFRESH_GRACE_WINDOW
-    preference = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      replaced_by_id: replacement.id,
-    )
-
-    # Just inside the window it is a benign concurrent sibling.
-    preference.update!(used_at: now - window + 1.second)
-
-    assert preference.rotated_within_grace?(window: window, now: now)
-
-    # Just past the window it is a genuine replay, not grace.
-    preference.update!(used_at: now - window - 1.second)
-
-    assert_not preference.rotated_within_grace?(window: window, now: now)
-  end
-
-  test "rotated_within_grace? is false for self-replacement or without consumption" do
-    # Self-replacement (the create-time default) is not a real rotation even if
-    # the row is somehow marked consumed.
-    self_replaced = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      used_at: Time.current,
-    )
-    not_consumed = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discard_at: 1.day.from_now,
-      replaced_by_id: self_replaced.id,
-    )
-
-    assert_equal self_replaced.id, self_replaced.replaced_by_id, "default replaced_by points at self"
-    assert_not self_replaced.rotated_within_grace?
-    assert_not not_consumed.rotated_within_grace?
-  end
-
-  test "rotate! produces a parent that qualifies for the concurrency grace window" do
+  test "rotate! consumes the presented refresh token exactly once" do
     digest = AppPreference.digest_refresh_token("rotate-grace")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
@@ -286,9 +234,10 @@ class AppPreferenceTest < ActiveSupport::TestCase
     preference.reload
 
     assert_predicate preference, :replay?
-    assert_predicate preference, :rotated_within_grace?
     assert_equal rotated.id, preference.replaced_by_id
     assert_not_predicate rotated, :replay?, "replacement must remain unconsumed for sibling requests"
+    assert_nil AppPreference.rotate!(presented_digest: digest),
+               "a consumed refresh token cannot produce another replacement"
   end
 
   test "rotate! creates replacement and links replaced_by_id" do

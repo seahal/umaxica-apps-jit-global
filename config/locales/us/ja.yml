@@ -892,6 +892,12 @@ ja:
       を設定してください。
   base:
     app:
+      avatars:
+        moniker_validation:
+          blank: 名前を入力してください。
+          invalid: 名前に使用できない文字または前後の空白があります。
+          max_bytes: 名前は UTF-8 で最大 %{count} バイトです。
+          max_graphemes: 名前は最大 %{count} 文字です。
       identity:
         credential_warning:
           body:
@@ -1938,6 +1944,7 @@ ja:
       cookie:
         invalid_access_token: Preference のアクセストークンが不正、または未設定です。
     rate_limit:
+      backend_unavailable: 認証を一時的に利用できません。しばらくしてからもう一度お試しください。
       exceeded: リクエストが多すぎます。しばらくしてからもう一度お試しください。
       retry_later: 時間をおいて再度お試しください。
       too_many_requests: アクセスが集中しています。時間をおいて再度お試しください。
@@ -2804,10 +2811,6 @@ ja:
               title: 生年月日の確認
             complete: 登録に必要な項目は完了しています。
             page_title: 登録を完了
-            passcode:
-              action: パスコードを保存
-              description: 登録を完了する前にサインイン用パスコードを確認してください。
-              title: パスコードの保存
             passkey:
               action: パスキーを登録
               description: 登録を完了する前にパスキーを追加してください。
@@ -3293,10 +3296,6 @@ ja:
               title: 生年月日の確認
             complete: 登録に必要な項目は完了しています。
             page_title: 登録を完了
-            passcode:
-              action: パスコードを保存
-              description: 登録を完了する前にサインイン用パスコードを確認してください。
-              title: パスコードの保存
             passkey:
               action: パスキーを登録
               description: 登録を完了する前にパスキーを追加してください。
@@ -3534,6 +3533,7 @@ ja:
             passkeys: パスキー
             passkeys_desc: 登録済み %{count} 件
             reset_request: MFAリセットを申請する
+            reset_title: MFA リセット
             reset_unavailable: 現在、MFAをリセットできません。
             secret_credentials: シークレット
             secret_credentials_desc: 有効 %{count} 件

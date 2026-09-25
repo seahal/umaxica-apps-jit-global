@@ -30,6 +30,7 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarOwnershipPeriodTest < ActiveSupport::TestCase
   test "has the approved all-rows avatar lookup index alongside the current-row unique index" do
@@ -56,23 +57,53 @@ class AvatarOwnershipPeriodTest < ActiveSupport::TestCase
     assert_not period.valid?
   end
 
-  test "validates id is numeric" do
-    # With bigint ID, length validation is irrelevant
-    # Test that record validation works with all required fields
-    AvatarOwnershipStatus.find_or_create_by!(id: 1)
-    avatar = Avatar.create!(
+  test "accepts app and org owner references independent of the legacy organization column" do
+    AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
+    avatar = AvatarTestFactory.create!(
+      moniker: "Test",
       capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
       active_handle: Handle.create!(handle: "test-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
-      moniker: "Test",
     )
     record = AvatarOwnershipPeriod.new(
       id: 99,
       avatar: avatar,
       owner_organization_id: "org_123",
+      owner_surface: "app",
+      owner_collective_public_id: "collective_app_123",
+      avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
       valid_from: Time.current,
     )
 
     assert_predicate record, :valid?
     assert_kind_of Integer, record.id
+
+    record.owner_surface = "org"
+    record.owner_collective_public_id = "collective_org_123"
+    assert_predicate record, :valid?
+  end
+
+  test "rejects com ownership and a missing owner collective" do
+    avatar = AvatarTestFactory.create!(
+      moniker: "Owner boundary",
+      capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),
+      active_handle: Handle.create!(handle: "owner-boundary-#{SecureRandom.hex(4)}", cooldown_until: Time.current),
+    )
+    period = AvatarOwnershipPeriod.new(
+      avatar: avatar,
+      owner_organization_id: "legacy-id",
+      owner_surface: "com",
+      owner_collective_public_id: "collective-id",
+      avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE,
+      valid_from: Time.current,
+    )
+
+    assert_not period.valid?
+    assert period.errors.of_kind?(:owner_surface, :inclusion)
+
+    period.owner_surface = "app"
+    period.owner_collective_public_id = nil
+
+    assert_not period.valid?
+    assert period.errors.of_kind?(:owner_collective_public_id, :blank)
   end
 end

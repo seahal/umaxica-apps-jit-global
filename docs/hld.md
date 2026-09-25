@@ -21,7 +21,8 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 - Turbo/React front-end with pnpm-managed tooling (`src/**`)
 - Multi-database Active Record setup (`app_principal`, `org_ticket`, `com_setting`, etc.)
 - Supporting infrastructure: PostgreSQL primary/replica pairs, Valkey, Grafana/Loki/Tempo, and an
-  opt-in RustFS object-storage profile
+  opt-in RustFS object-storage profile for local integration checks; Shrine storage is configured
+  per boundary for development, staging, and production
 - CI/CD automation (GitHub Actions, Lefthook) and local workflows (Foreman + Podman Compose)
 
 ### 1.3 References
@@ -286,7 +287,7 @@ Sensitive columns leverage Active Record encryption.
 | SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                                          |
 | Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound.    |
 | OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                                               |
-| Object storage | S3-compatible | Opt-in RustFS smoke-test integration for local development; production storage is deferred.                                                                 |
+| Object storage | S3-compatible | Shrine selects a boundary-specific bucket in development/staging and AWS S3 in production. Objects are private; the Avatar user-facing delivery API/CDN namespace is undefined. RustFS remains an opt-in local integration target. |
 
 ---
 

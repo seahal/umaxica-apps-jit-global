@@ -196,7 +196,7 @@ module Concerns
     end
 
     # Wedge: every full-lifecycle surface controller must enforce the restricted-session
-    # guard. Regression guard against core/side surfaces silently dropping it again.
+    # guard. Regression guard against core/Warp surfaces silently dropping it again.
     test "all lifecycle application controllers enforce the restricted session guard" do
       lifecycle_controllers.each do |controller|
         content = controller[:content]

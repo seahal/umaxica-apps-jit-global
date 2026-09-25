@@ -32,7 +32,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
   # The JS-readable `language` cookie is a write-only mirror for the browser. Rails resolves the
   # locale from the preference JWT (via Actor.preferences) and the `?lx` overlay only; a stale or
   # forged `language` cookie must not become a second source of truth that overrides it. The
-  # resolution code is shared by the base, auth, and side application controllers.
+  # resolution code is shared by the base, auth, and Warp application controllers.
   test "a conflicting language cookie does not override the region-seeded locale" do
     cookies[PreferenceIoKeys::Cookies::LANGUAGE] = "en"
 

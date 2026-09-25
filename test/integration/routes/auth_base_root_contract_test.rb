@@ -13,7 +13,7 @@ class AuthBaseRootContractTest < ActionDispatch::IntegrationTest
     "base.org.localhost" => "/",
   }.freeze
 
-  test "six Auth/Base roots are routable and retired paths are not" do
+  test "six Auth/Base roots are routable and authority-specific retired paths remain recorded" do
     FACES.each_key do |_host|
       assert_nothing_raised do
         Rails.application.routes.recognize_path("/", method: :get)
@@ -26,7 +26,8 @@ class AuthBaseRootContractTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_includes AuthBoundaryAuthorityMap.retired_browser_paths, "/dashboard"
+    assert_includes AuthBoundaryAuthorityMap.retired_auth_browser_paths, "/dashboard"
+    assert_not_includes AuthBoundaryAuthorityMap.retired_browser_paths, "/dashboard"
     assert_includes AuthBoundaryAuthorityMap.retired_browser_paths, "/lobby"
   end
 

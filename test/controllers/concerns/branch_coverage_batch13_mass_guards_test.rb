@@ -15,7 +15,6 @@ class BranchCoverageBatch13MassGuardsTest < ActiveSupport::TestCase
     "Auth::Com::Sign::In::SessionsController",
     "Base::App::Sign::In::LimitationsController",
     "Auth::App::Sign::In::EmailsController",
-    "Auth::Org::Sign::In::SecretsController",
     "Auth::App::Settings::TotpsController",
     "Base::App::Social::Authentication::CompletionsController",
   ].freeze

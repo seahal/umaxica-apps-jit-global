@@ -18,7 +18,7 @@ const nodeSpecs = [
   "spec/features/landing/root_landing.test.tsx",
   "spec/features/auth/auth_com_screens.test.tsx",
   "spec/pages/base/app/identity/identity_pages.test.tsx",
-  "spec/features/dashboards/side_dashboard.test.tsx",
+  "spec/features/dashboards/warp_dashboard.test.tsx",
   "spec/features/base_com/base_com_identity_pages.test.tsx",
   "spec/features/auth/session/sign_out_screens.test.tsx",
   "spec/features/auth/dashboard/surface_dashboard.test.tsx",

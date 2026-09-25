@@ -12,9 +12,10 @@ module Security
       test "a preference token in the access cookie does not authenticate a protected route" do
         host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
         host! host
-        get base_app_preference_path(ri: "jp")
+        patch base_app_preference_region_path(ri: "jp"),
+              params: { preference_region: { option_id: "JP" } }
 
-        assert_response :success
+        assert_response :redirect
         preference_token = cookies[PreferenceCookieName.access(production: false, surface: :app)]
 
         assert_predicate preference_token, :present?
@@ -28,9 +29,10 @@ module Security
       test "a preference token sent as a bearer token does not authenticate a protected route" do
         host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
         host! host
-        get base_app_preference_path(ri: "jp")
+        patch base_app_preference_region_path(ri: "jp"),
+              params: { preference_region: { option_id: "JP" } }
 
-        assert_response :success
+        assert_response :redirect
         preference_token = cookies[PreferenceCookieName.access(production: false, surface: :app)]
 
         assert_predicate preference_token, :present?

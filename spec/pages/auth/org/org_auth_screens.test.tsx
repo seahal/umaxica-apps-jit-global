@@ -14,7 +14,6 @@ import OrgPasskeySettingsNew from "@/pages/auth/org/settings/passkeys/new";
 import OrgMfaPasskeyPage from "@/pages/auth/org/sign/in/challenge/passkeys/new";
 import OrgEmergencyPasskeySignInPage from "@/pages/auth/org/sign/in/emergency/passkeys/new";
 import OrgPasskeySignInPage from "@/pages/auth/org/sign/in/passkeys/new";
-import OrgSecretSignInPage from "@/pages/auth/org/sign/in/secrets/new";
 import OrgSignInEntry from "@/pages/auth/org/sign/ins/show";
 import OrgInvitationPage from "@/pages/auth/org/sign/up/invitations/new";
 import OrgSignUpEntry from "@/pages/auth/org/sign/ups/show";
@@ -316,65 +315,6 @@ const turnstile = {
   cdata: null,
 };
 
-describe("OrgSecretSignInPage", () => {
-  it("posts the secret with the CSRF token, and asks for no identifier", () => {
-    const screen = mount(
-      <OrgSecretSignInPage
-        title="パスワードでログイン"
-        form_action="/org/sign/in/secret"
-        hidden_fields={{ pt: "pending", ri: "jp" }}
-        errors_title="入力を確認してください"
-        errors={["認証に失敗しました"]}
-        secret={{
-          name: "staff_secret_credential_login_form[secret_credential_value]",
-          label: "パスワード",
-          placeholder: "••••",
-        }}
-        submit_label="送信する"
-        back_link={BACK}
-        turnstile={turnstile}
-      />,
-    );
-
-    expect(screen.container.querySelector("form")?.getAttribute("action")).toBe(
-      "/org/sign/in/secret",
-    );
-    expect(
-      screen.container.querySelector<HTMLInputElement>('input[name="authenticity_token"]')?.value,
-    ).toBe("csrf-value");
-    expect(screen.container.querySelector('input[name="pt"]')?.getAttribute("value")).toBe(
-      "pending",
-    );
-    expect(screen.container.textContent).toContain("認証に失敗しました");
-    // Entra ID already selected the operator; a submitted identifier could only
-    // be an attempt to substitute a different one.
-    expect(screen.container.querySelector('input[type="text"]')).toBeNull();
-    expect(screen.container.textContent).not.toContain("ID");
-  });
-
-  it("omits the pending-token field when the server sent none", () => {
-    const screen = mount(
-      <OrgSecretSignInPage
-        title="パスワードでログイン"
-        form_action="/org/sign/in/secret"
-        hidden_fields={{ pt: null, ri: "jp" }}
-        errors_title="入力を確認してください"
-        errors={[]}
-        secret={{
-          name: "staff_secret_credential_login_form[secret_credential_value]",
-          label: "パスワード",
-          placeholder: "••••",
-        }}
-        submit_label="送信する"
-        back_link={BACK}
-        turnstile={turnstile}
-      />,
-    );
-
-    expect(screen.container.querySelector('input[name="pt"]')).toBeNull();
-  });
-});
-
 describe("OrgInvitationPage", () => {
   it("posts the invitation code", () => {
     const screen = mount(
@@ -442,21 +382,18 @@ describe("Org passkey ceremony pages", () => {
 
   // The panel itself is mocked here; that it renders no identifier field for a
   // null one is covered in spec/features/auth/passkeys/passkey_panels.test.tsx.
-  it("renders operator passkey sign-in with an identifier-less panel and the secret fallback", () => {
+  it("renders operator passkey sign-in without a permanent-secret fallback", () => {
     const screen = mount(
       <OrgPasskeySignInPage
         title="パスキー"
         description="登録済みのパスキー"
         panel={panel}
-        secret_link={{ label: "シークレットを使う", href: "/org/sign/in/secret/new" }}
         back_link={BACK}
       />,
     );
 
     expect(screen.container.textContent).toContain("パスキーでログイン");
-    expect(screen.container.querySelector('a[href="/org/sign/in/secret/new"]')?.textContent).toBe(
-      "シークレットを使う",
-    );
+    expect(screen.container.querySelector('a[href*="/sign/in/secret"]')).toBeNull();
   });
 
   // Emergency Access has no earlier stage to name the operator, so it is

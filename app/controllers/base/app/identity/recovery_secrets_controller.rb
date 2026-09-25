@@ -5,25 +5,56 @@ module Base
   module App
     module Identity
       class RecoverySecretsController < BaseController
+        include ::SurfaceInertiaPage
+        include ::SignSettingsSecretCredentialCacheControl
+
         REVEAL_PURPOSE = "client.recovery_secret_credential"
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
         before_action :authenticate_client!
+        before_action :set_no_store_for_secret_credential_pages
+        before_action :reject_head_reveal!, only: :show
         before_action :authorize_secrets!, only: :show
+        prepend_after_action :set_no_store_for_secret_credential_pages, only: :show
+
+        protected
+
+        def track_authenticated_session_activity?
+          return false if (request.get? || request.head?) && action_name == "show"
+
+          super
+        end
+
+        public
+
         def show
+          response.headers["Referrer-Policy"] = "no-referrer"
           reveal = IdentityOneTimeReveal.consume!(
             actor: current_client, session_nonce: current_client.public_id,
             token: params[:token], purpose: REVEAL_PURPOSE,
           )
-          @recovery_passcodes = Array(reveal&.value).map(&:to_s)
-          @missing_recovery_passcodes = reveal.blank?
-          @back_to_settings_url = base_app_identity_url(ri: params[:ri])
-          render "shared/recovery_passcodes/show"
+          render inertia: true, props: {
+            title: t("sign.recovery_passcodes.show.title"),
+            description: t("sign.recovery_passcodes.show.description"),
+            one_time_notice: t("sign.recovery_passcodes.show.one_time_notice"),
+            inventory_notice: t("sign.recovery_passcodes.show.inventory_notice"),
+            missing_message: t("sign.recovery_passcodes.show.missing"),
+            passcodes: Array(reveal&.value).map(&:to_s),
+            back_link: {
+              label: t("sign.recovery_passcodes.show.back_to_settings"),
+              href: base_app_identity_path(ri: params[:ri]),
+            },
+          }
         end
 
         private
+
+        def reject_head_reveal!
+          head :method_not_allowed if request.head?
+          head :not_found if request.options?
+        end
 
         def authorize_secrets! = authorize!(current_client, to: :show?)
       end

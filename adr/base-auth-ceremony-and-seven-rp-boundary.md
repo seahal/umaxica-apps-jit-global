@@ -4,6 +4,10 @@
 
 Accepted (2026-09-13)
 
+Current naming note (2026-09-25): `Side`/`Wide` in this decision name the Rails RP surface now
+implemented internally as `Warp`. The registered RP protocol identifiers and persisted values retain
+their established names.
+
 Supersedes conflicting authority claims in:
 
 - `adr/acme-sign-core-base-port-boundary.md` where it calls Base an RP or Auth/Sign a special RP
@@ -93,6 +97,14 @@ and surface roles. Live registries, routes, and docs must converge on it.
 - Preserve Google/Apple/Entra callback contracts, Core/Side/Edit dashboards, and global `/oauth`.
 
 ## Implementation progress
+
+### 2026-09-24 Base Dashboard route amendment
+
+The earlier removal of `/dashboard` applied to the then-current Auth/Base route set. The Base app,
+com, and org control-plane now expose a named `GET /dashboard` destination for authenticated
+navigation; each route uses its surface-local Dashboard controller and existing selected-actor
+authorization. Base `/` keeps its existing landing and authenticated behavior. Auth and RP surfaces
+continue to have no `/dashboard` route. See `adr/base-dashboard-return-navigation.md`.
 
 See `evidence/2026-09-13-auth-boundary-consolidation.md` for phase SHAs and remaining gaps.
 
@@ -290,3 +302,14 @@ usable. GET sign-out pages do not perform authoritative mutation, and existing R
 protection remains in force for POST mutation. Revocation prevents refresh and new Access JWT
 issuance; it does not claim immediate invalidation of an Access JWT already issued, which remains
 usable until its natural expiry and verifier clock-skew boundary.
+
+## Rails surface naming amendment (2026-09-24)
+
+The Rails-internal namespace for the www app/com/org surface is `Warp`, with matching `warp/`
+controller, view, route, page, and entrypoint paths. This naming change does not rename protocol or
+persistent identifiers: OIDC client IDs and audiences remain `side-*`, OIDC client signing keys
+remain `OIDC_CLIENT_SIDE_*`, the MCP realm remains `side`, logout transaction rows retain
+`origin_surface = "side"`, and FQDN availability retains its existing `fqdn_available_side_*`
+Flipper keys. The public `www-jp.umaxica.app`, `www-jp.umaxica.com`, and `www-jp.umaxica.org`
+hosts and their route paths remain unchanged. Jump RT uses independent `WARP_APP`, `WARP_COM`, and
+`WARP_ORG` issuer namespaces.

@@ -3,146 +3,147 @@
 
 require "test_helper"
 
-# A preference refresh token is single use. When a request rotates it, the old token stays valid
-# only for a sibling request from the same page load inside the short grace window; presenting it
-# after that is treated as theft: the request is refused and the preference is marked compromised.
 class PreferenceRefreshReplayTest < ActionDispatch::IntegrationTest
-  test "a rotated preference refresh token replayed after the grace window is refused and compromises the preference" do
+  test "a consumed refresh token is rejected immediately and GET does not change either row" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     access_name = PreferenceCookieName.access(production: false, surface: :app)
     refresh_name = PreferenceCookieName.refresh(production: false, surface: :app)
-    get base_app_preference_path(ri: "jp")
 
-    assert_response :success
-    original_refresh = cookies[refresh_name]
-    preference = AppPreference.order(:created_at).last
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
+
+    assert_response :redirect
+    refresh_token = cookies[refresh_name]
+    public_id, verifier = AppPreference.parse_refresh_token(refresh_token)
+    preference = AppPreference.find_by!(public_id: public_id)
+    replacement = AppPreference.rotate!(presented_digest: AppPreference.digest_refresh_token(verifier))
+    assert_predicate replacement, :present?
+    before = preference.reload.attributes
+    replacement_before = replacement.reload.attributes
 
     cookies.delete(access_name)
     get base_app_preference_path(ri: "jp")
 
-    assert_response :success
-    assert_not_equal original_refresh, cookies[refresh_name]
-
-    travel SingleUseToken::PREFERENCE_REFRESH_GRACE_WINDOW + 1.second do
-      cookies.delete(access_name)
-      cookies[refresh_name] = original_refresh
-      get base_app_preference_path(ri: "jp")
-
-      assert_response :unauthorized
-      assert_predicate preference.reload, :revoked?
-      assert_predicate cookies[refresh_name].to_s, :empty?
-    end
+    assert_response :unauthorized
+    assert_equal before, preference.reload.attributes
+    assert_equal replacement_before, replacement.reload.attributes
+    assert_equal refresh_token, cookies[refresh_name]
   end
 
-  test "a rotated preference refresh token replayed inside the grace window is served without compromise" do
+  test "a valid refresh cookie renders read-only without rotation when its access cookie is absent" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     access_name = PreferenceCookieName.access(production: false, surface: :app)
     refresh_name = PreferenceCookieName.refresh(production: false, surface: :app)
-    get base_app_preference_path(ri: "jp")
 
-    assert_response :success
-    original_refresh = cookies[refresh_name]
-    preference = AppPreference.order(:created_at).last
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
 
+    assert_response :redirect
+    refresh_token = cookies[refresh_name]
+    public_id, = AppPreference.parse_refresh_token(refresh_token)
+    preference = AppPreference.find_by!(public_id: public_id)
+    before = preference.reload.attributes
+    preference_count = AppPreference.count
     cookies.delete(access_name)
+
     get base_app_preference_path(ri: "jp")
 
     assert_response :success
-    rotated_refresh = cookies[refresh_name]
-
-    cookies.delete(access_name)
-    cookies[refresh_name] = original_refresh
-    get base_app_preference_path(ri: "jp")
-
-    assert_response :success
-    assert_not_predicate preference.reload, :revoked?
-    assert_not_equal rotated_refresh, original_refresh
+    assert_equal before, preference.reload.attributes
+    assert_equal preference_count, AppPreference.count
+    assert_equal refresh_token, cookies[refresh_name]
   end
-  test "a DBSC-bound preference cannot refresh without its bound session cookie" do
+
+  test "a DBSC-bound preference rejects missing or mismatched binding without mutating GET state" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     access_name = PreferenceCookieName.access(production: false, surface: :app)
     refresh_name = PreferenceCookieName.refresh(production: false, surface: :app)
     dbsc_name = PreferenceCookieName.dbsc(production: false, surface: :app)
-    get base_app_preference_path(ri: "jp")
 
-    assert_response :success
-    refresh = cookies[refresh_name]
-    preference = AppPreference.order(:created_at).last
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
+
+    assert_response :redirect
+    refresh_token = cookies[refresh_name]
+    public_id, = AppPreference.parse_refresh_token(refresh_token)
+    preference = AppPreference.find_by!(public_id: public_id)
     preference.update_columns(
       binding_method_id: AppPreferenceBindingMethod::DBSC,
       dbsc_status_id: AppPreferenceDbscStatus::ACTIVE,
       dbsc_session_id: "bound-preference-session",
     )
-
+    before = preference.reload.attributes
     cookies.delete(access_name)
-    cookies.delete(dbsc_name)
+
     get base_app_preference_path(ri: "jp")
 
     assert_response :unauthorized
-    assert_predicate cookies[refresh_name].to_s, :empty?
+    assert_equal before, preference.reload.attributes
+    assert_equal refresh_token, cookies[refresh_name]
 
-    cookies[refresh_name] = refresh
     cookies[dbsc_name] = "another-session"
     get base_app_preference_path(ri: "jp")
 
     assert_response :unauthorized
+    assert_equal before, preference.reload.attributes
+    assert_equal refresh_token, cookies[refresh_name]
   end
 
-  test "a DBSC-bound preference whose DBSC lifecycle is not active cannot refresh" do
+  test "a DBSC-bound preference with an inactive binding is rejected without mutation on GET" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     access_name = PreferenceCookieName.access(production: false, surface: :app)
+    refresh_name = PreferenceCookieName.refresh(production: false, surface: :app)
     dbsc_name = PreferenceCookieName.dbsc(production: false, surface: :app)
-    get base_app_preference_path(ri: "jp")
 
-    assert_response :success
-    preference = AppPreference.order(:created_at).last
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
+
+    assert_response :redirect
+    refresh_token = cookies[refresh_name]
+    public_id, = AppPreference.parse_refresh_token(refresh_token)
+    preference = AppPreference.find_by!(public_id: public_id)
     preference.update_columns(
       binding_method_id: AppPreferenceBindingMethod::DBSC,
       dbsc_status_id: AppPreferenceDbscStatus::FAILED,
       dbsc_session_id: "bound-preference-session",
     )
-
+    before = preference.reload.attributes
     cookies.delete(access_name)
     cookies[dbsc_name] = "bound-preference-session"
+
     get base_app_preference_path(ri: "jp")
 
     assert_response :unauthorized
+    assert_equal before, preference.reload.attributes
+    assert_equal refresh_token, cookies[refresh_name]
   end
-  test "a DBSC-bound preference refreshes with its bound session cookie and keeps the binding" do
+
+  test "a valid DBSC binding reads without rotating the refresh token on GET" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     access_name = PreferenceCookieName.access(production: false, surface: :app)
     refresh_name = PreferenceCookieName.refresh(production: false, surface: :app)
     dbsc_name = PreferenceCookieName.dbsc(production: false, surface: :app)
-    get base_app_preference_path(ri: "jp")
 
-    assert_response :success
-    original_refresh = cookies[refresh_name]
-    preference = AppPreference.order(:created_at).last
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
+
+    assert_response :redirect
+    refresh_token = cookies[refresh_name]
+    public_id, = AppPreference.parse_refresh_token(refresh_token)
+    preference = AppPreference.find_by!(public_id: public_id)
     preference.update_columns(
       binding_method_id: AppPreferenceBindingMethod::DBSC,
       dbsc_status_id: AppPreferenceDbscStatus::ACTIVE,
       dbsc_session_id: "bound-preference-session",
     )
-
+    before = preference.reload.attributes
     cookies.delete(access_name)
     cookies[dbsc_name] = "bound-preference-session"
+
     get base_app_preference_path(ri: "jp")
 
     assert_response :success
-    assert_not_equal original_refresh, cookies[refresh_name]
-    bound = AppPreference.where(dbsc_session_id: "bound-preference-session").to_a
-
-    assert_equal 1, bound.size
-    assert_not_equal preference.id, bound.first.id
-    assert_equal AppPreferenceBindingMethod::DBSC, bound.first.binding_method_id
-
-    travel SingleUseToken::PREFERENCE_REFRESH_GRACE_WINDOW + 1.second do
-      cookies.delete(access_name)
-      cookies[refresh_name] = original_refresh
-      cookies[dbsc_name] = "bound-preference-session"
-      get base_app_preference_path(ri: "jp")
-
-      assert_response :unauthorized
-    end
+    assert_equal before, preference.reload.attributes
+    assert_equal refresh_token, cookies[refresh_name]
   end
 end

@@ -53,7 +53,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     assert_operator access_token.fetch("iat"), :>=, event_at
     owner_session = ClientRpSession.order(:created_at).last
     owner_digest = owner_session.refresh_token_digest
-    side_client = OidcClientRegistry.find("side-app")
+    warp_client = OidcClientRegistry.find("side-app")
 
     OidcClientRegistry.stub(
       :authenticate_assertion,
@@ -63,7 +63,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
-             redirect_uri: side_client.redirect_uris.first,
+             redirect_uri: warp_client.redirect_uris.first,
              client_id: "side-app",
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: "side-app-client-assertion",

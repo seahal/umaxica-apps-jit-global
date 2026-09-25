@@ -8,11 +8,11 @@ module Security
     self.fixture_table_names = []
 
     APP_CONTROLLER_PREFIXES = %w(
-      auth base core side docs guid help info news palm
+      auth base core warp docs guid help info news palm
     ).freeze
 
     APPLICATION_CLASS_PREFIXES = %w(
-      Auth:: Base:: Core:: Side:: Docs:: Guid:: Help:: Info:: News:: Palm::
+      Auth:: Base:: Core:: Warp:: Docs:: Guid:: Help:: Info:: News:: Palm::
     ).freeze
 
     PUBLIC_MODES = %i(bare open guest).freeze
@@ -21,6 +21,7 @@ module Security
     DOCUMENT_PATH = Rails.root.join("docs/security/public-entrypoints.md")
     DOCUMENTED_CATEGORY_IDS = %w(
       PUBLIC_ROOTS
+      PUBLIC_BASE_DASHBOARD
       PUBLIC_LOCAL_AUTH_ADMISSION
       PUBLIC_LOBBY
       PUBLIC_HEALTH
@@ -43,7 +44,7 @@ module Security
       PUBLIC_CORE_API
       PUBLIC_PALM_API
       PUBLIC_AUTH_ORG_REDIRECTS
-      PUBLIC_SIDE_SETTINGS
+      PUBLIC_WARP_SETTINGS
       PUBLIC_APPLE_NOTIFICATIONS
       PUBLIC_MCP
       PUBLIC_GUID_RESOLUTION
@@ -106,7 +107,7 @@ module Security
           [route.verb, route.path.spec.to_s.sub(/\(\.:format\)\z/, ""), route.defaults[:action].to_s]
         end
 
-      assert_equal 20, entries.size, "expected two PWA endpoints on each of the ten base/auth/side/palm hosts"
+      assert_equal 20, entries.size, "expected two PWA endpoints on each of the ten base/auth/warp/palm hosts"
       assert_equal ["GET"], entries.map(&:first).uniq
       assert_equal(
         [["/offline", "offline"], ["/service-worker", "service_worker"]],
@@ -173,6 +174,7 @@ module Security
 
     def documented_public_content?(entry)
       public_root?(entry) ||
+        public_base_dashboard?(entry) ||
         public_local_auth_admission?(entry) ||
         public_lobby?(entry) ||
         public_health?(entry) ||
@@ -200,17 +202,17 @@ module Security
       public_core_api?(entry) ||
         public_palm_api?(entry) ||
         public_auth_org_redirect?(entry) ||
-        public_side_settings?(entry) ||
+        public_warp_settings?(entry) ||
         public_apple_notification?(entry) ||
         public_mcp?(entry) ||
         public_guid_resolution?(entry)
     end
 
-    # Base and Side only. Auth and the content surfaces do not serve MCP, so an MCP route appearing
+    # Base and Warp only. Auth and the content surfaces do not serve MCP, so an MCP route appearing
     # under them is an undocumented entrypoint rather than a covered one.
     def public_mcp?(entry)
       post?(entry) && entry.path == "/mcp" &&
-        entry.controller_path.match?(%r{\A(base|side)/(app|com|org)/mcps\z})
+        entry.controller_path.match?(%r{\A(base|warp)/(app|com|org)/mcps\z})
     end
 
     def public_guid_resolution?(entry)
@@ -219,6 +221,12 @@ module Security
     end
 
     def public_root?(entry) = get?(entry) && entry.path == "/"
+
+    def public_base_dashboard?(entry)
+      get?(entry) && entry.path == "/dashboard" &&
+        entry.action == "show" &&
+        entry.controller_path.match?(%r{\Abase/(app|com|org)/(dashboards|roots)\z})
+    end
 
     def public_local_auth_admission?(entry)
       post?(entry) && entry.path == "/" &&
@@ -311,8 +319,8 @@ module Security
         %w(/accounts /audit /billing /configuration /iam /support /system).include?(entry.path)
     end
 
-    def public_side_settings?(entry)
-      get?(entry) && entry.controller_path.start_with?("side/") && entry.path == "/settings"
+    def public_warp_settings?(entry)
+      get?(entry) && entry.controller_path.start_with?("warp/") && entry.path == "/settings"
     end
 
     def public_apple_notification?(entry) = post?(entry) && entry.path == "/apple/notifications"

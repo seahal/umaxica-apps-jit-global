@@ -10,6 +10,8 @@ class RecoveryPasscodeTopUpTest < ActiveSupport::TestCase
   setup do
     @client = create_verified_user_with_email(email_address: "recovery-top-up-#{SecureRandom.hex(4)}@example.com")
     @client.client_secret_credentials.destroy_all
+    VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::RECOVERY)
+    VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::ACTIVE)
   end
 
   test "issues ten recovery passcodes when none are active and usable" do

@@ -5,9 +5,48 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Core::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
+  fixtures :visitors, :visitor_token_kinds
+
   setup do
     @host = ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")
     host! @host
+  end
+
+  test "get confirmation does not rotate the authentication refresh token without an access cookie" do
+    visitor = visitors(:reserved_visitor)
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    auth_refresh_token = token.rotate_refresh_token!
+    auth_refresh_digest = token.reload.refresh_token_digest
+    auth_refresh_generation = token.refresh_token_generation
+    access_token = AuthenticationToken.encode(
+      visitor,
+      host: @host,
+      session_public_id: token.public_id,
+      resource_type: "visitor",
+      jwt_issuer_id: "surface:CORE_COM",
+    )
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
+
+    get edit_core_com_sign_out_url(ri: "jp"), headers: { "Authorization" => "Bearer #{access_token}" }
+
+    assert_response :success
+    assert_equal auth_refresh_digest, token.reload.refresh_token_digest
+    assert_equal auth_refresh_generation, token.refresh_token_generation
+  end
+
+  test "post sign out does not rotate the authentication refresh token" do
+    visitor = visitors(:reserved_visitor)
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    auth_refresh_token = token.rotate_refresh_token!
+    auth_refresh_digest = token.reload.refresh_token_digest
+    auth_refresh_generation = token.refresh_token_generation
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
+
+    post core_com_sign_out_url(ri: "jp")
+
+    assert_response :unauthorized
+    assert_equal auth_refresh_digest, token.reload.refresh_token_digest
+    assert_equal auth_refresh_generation, token.refresh_token_generation
   end
 
   test "get sign out without a one-shot notice is not found" do

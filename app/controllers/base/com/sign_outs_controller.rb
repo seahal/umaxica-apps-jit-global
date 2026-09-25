@@ -11,6 +11,7 @@ module Base
       include ::SurfaceInertiaPage
 
       AUTHENTICATION_MODE = :open
+      skip_before_action :set_preferences_cookie, only: %i(new edit)
       # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
       # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
       # response body.
@@ -19,12 +20,22 @@ module Base
       declare_authentication_mode! :open
       after_action :sign_out_notice_cache_headers!, only: %i(edit create)
 
+      protected
+
+      def track_authenticated_session_activity?
+        return false if (request.get? || request.head?) && %w(new edit).include?(action_name)
+
+        super
+      end
+
+      public
+
       def new
         redirect_to(sign_out_edit_path, status: :see_other)
       end
 
       def edit
-        render inertia: "base/com/sign_outs/edit", props: sign_out_edit_page_props
+        render inertia: "base/com/sign_outs/edit", props: sign_out_edit_page_props(back_to_dashboard: true)
       end
 
       def create
@@ -38,7 +49,7 @@ module Base
         super
       end
 
-      def sign_out_edit_page_props
+      def sign_out_edit_page_props(back_to_dashboard: false)
         active = sign_out_active_context_present?
 
         {
@@ -47,7 +58,7 @@ module Base
           description: active ? t("sign.shared.sign_out.confirm_description") :
             t("sign.shared.sign_out.already_signed_out"),
           form: active ? sign_out_confirmation_form : nil,
-          home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path },
+          **sign_out_return_link_props(back_to_dashboard: back_to_dashboard),
         }
       end
 

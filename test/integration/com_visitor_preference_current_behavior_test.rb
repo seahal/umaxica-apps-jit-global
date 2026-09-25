@@ -14,7 +14,7 @@ class ComVisitorPreferenceCurrentBehaviorTest < ActiveSupport::TestCase
 end
 
 class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTest
-  test "base com signed-in visitor preference recreation synchronizes visitor mirror" do
+  test "Base Com GET leaves the visitor preference unchanged, while an explicit write syncs it" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
     VisitorStatus.find_or_create_by!(id: VisitorStatus::ACTIVE)
@@ -37,12 +37,19 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
 
     cookies.delete(PreferenceCookieName.refresh(surface: :com))
 
-    get base_com_root_path,
-        headers: as_visitor_headers(visitor, host: host)
+    headers = as_visitor_headers(visitor, host: host)
+    get base_com_root_path, headers: headers
 
     assert_response :redirect
-    assert_predicate ComPreference, :exists?, "expected the request to bootstrap a ComPreference"
+
+    assert_nil visitor.reload.visitor_preference
+
+    patch base_com_preference_region_path(ri: "jp"), headers: headers,
+          params: { preference_region: { option_id: ComPreferenceRegionOption::US } }
+
+    assert_response :redirect
+    assert_predicate ComPreference, :exists?
     assert_not_nil visitor.reload.visitor_preference,
-                   "expected PreferenceAdoption to synchronize the VisitorPreference mirror"
+                   "an explicit preference write must synchronize the VisitorPreference mirror"
   end
 end

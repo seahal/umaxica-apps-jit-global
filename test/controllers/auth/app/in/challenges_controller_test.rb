@@ -6,7 +6,6 @@ require "test_helper"
 
 class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_passkey_statuses,
-           :client_secret_credential_kinds, :client_secret_credential_statuses,
            :client_email_statuses, :client_totp_credential_statuses
 
   setup do
@@ -15,19 +14,12 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @user = Client.create!(mfa_level_enabled: true)
     @email = "challenge_hub_#{SecureRandom.hex(4)}@example.com".freeze
-    @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
     ClientTotpCredential.create!(
       user: @user,
       private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
       title: "totp",
-    )
-    _secret_credential, @raw_secret_credential = ClientSecretCredential.issue!(
-      name: "Hub secret_credential",
-      user_id: @user.id,
-      user_secret_kind_id: ClientSecretCredentialKind::PERMANENT,
-      uses: 10,
-      status: :active,
     )
   end
 
@@ -44,15 +36,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "show renders for pending_mfa user with MFA enabled" do
-    post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @email,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    establish_pending_mfa_via_email!
 
     follow_redirect!
 
@@ -67,15 +51,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   test "show does not display totp method when disabled" do
     @user.client_totp_credentials.delete_all
 
-    post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @email,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    establish_pending_mfa_via_email!
 
     follow_redirect!
 
@@ -87,20 +63,34 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   test "show does not display passkey method when disabled" do
     @user.client_passkeys.delete_all
 
-    post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @email,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    establish_pending_mfa_via_email!
 
     follow_redirect!
 
     assert_response :success
     assert_not_includes inertia_props.fetch("methods").map { |method| method.fetch("label") },
                         I18n.t("sign.app.in.mfa.methods.passkey")
+  end
+
+  private
+
+  def establish_pending_mfa_via_email!
+    post auth_app_sign_in_email_path(ri: "jp"), params: {
+      user_email: { address: @email },
+      "cf-turnstile-response": "test_token",
+    }
+    assert_response :found
+
+    otp_private_key = ROTP::Base32.random_base32
+    otp_counter = 55_555
+    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
+    @email_record.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+
+    patch auth_app_sign_in_email_path(ri: "jp"), params: {
+      user_email: { pass_code: pass_code },
+    }
+
+    assert_response :found
+    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
   end
 end

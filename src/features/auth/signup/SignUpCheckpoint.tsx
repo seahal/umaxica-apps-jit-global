@@ -30,7 +30,6 @@ export type SignUpCheckpointProps = {
   title: string;
   birthdate: SignUpCheckpointBirthdate | null;
   passkey: SignUpCheckpointRequirementLink | null;
-  passcode: SignUpCheckpointRequirementLink | null;
   complete_message: string | null;
   cancellation: { label: string; action: string } | null;
 };
@@ -54,7 +53,6 @@ export default function SignUpCheckpoint({
   title,
   birthdate,
   passkey,
-  passcode,
   complete_message: completeMessage,
   cancellation,
 }: SignUpCheckpointProps) {
@@ -113,7 +111,6 @@ export default function SignUpCheckpoint({
       ) : null}
 
       {passkey ? <RequirementLink {...passkey} /> : null}
-      {passcode ? <RequirementLink {...passcode} /> : null}
 
       {completeMessage ? (
         <p className="rounded-md border border-line bg-surface-muted p-3 text-sm text-fg">

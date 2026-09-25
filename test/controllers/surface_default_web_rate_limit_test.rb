@@ -34,9 +34,9 @@ class SurfaceDefaultWebRateLimitTest < ActionDispatch::IntegrationTest
     "core app" => ["PUBLIC_CORE_SERVICE_URL", :core_app_api_v0_preferences_theme_path],
     "core com" => ["PUBLIC_CORE_CORPORATE_URL", :core_com_api_v0_preferences_theme_path],
     "core org" => ["PUBLIC_CORE_STAFF_URL", :core_org_api_v0_preferences_theme_path],
-    "side app" => ["PUBLIC_SIDE_SERVICE_URL", :side_app_dashboard_path],
-    "side com" => ["PUBLIC_SIDE_CORPORATE_URL", :side_com_dashboard_path],
-    "side org" => ["PUBLIC_SIDE_STAFF_URL", :side_org_dashboard_path],
+    "warp app" => ["PUBLIC_WARP_SERVICE_URL", :warp_app_dashboard_path],
+    "warp com" => ["PUBLIC_WARP_CORPORATE_URL", :warp_com_dashboard_path],
+    "warp org" => ["PUBLIC_WARP_STAFF_URL", :warp_org_dashboard_path],
     "palm app" => ["PUBLIC_PALM_SERVICE_URL", :palm_app_sign_out_path],
   }.freeze
 

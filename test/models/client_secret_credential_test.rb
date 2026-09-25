@@ -55,7 +55,6 @@
 #
 
 require "test_helper"
-require "concurrent"
 
 class ClientSecretCredentialTest < ActiveSupport::TestCase
   setup do
@@ -110,62 +109,6 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
     assert_not_includes record.attributes.values, raw_secret_credential
   end
 
-  test "verify_and_consume! decrements uses_remaining" do
-    record, raw_secret_credential = ClientSecretCredential.issue!(
-      name: "API Key", user: @user, uses: 2,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-    )
-
-    assert record.verify_and_consume!(raw_secret_credential)
-    assert_equal 1, record.reload.uses_remaining
-  end
-
-  test "verify_and_consume! marks used when uses_remaining reaches zero" do
-    record, raw_secret_credential = ClientSecretCredential.issue!(
-      name: "API Key", user: @user, uses: 1,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-    )
-
-    assert record.verify_and_consume!(raw_secret_credential)
-    assert_equal ClientSecretCredentialStatus::USED, record.reload.user_secret_status_id
-  end
-
-  test "verify_and_consume! expires secret_credentials past their expiry" do
-    record, raw_secret_credential = ClientSecretCredential.issue!(
-      name: "API Key",
-      user: @user,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-    )
-    record.update_columns(discard_at: 1.minute.ago, created_at: 2.minutes.ago)
-
-    assert_not record.verify_and_consume!(raw_secret_credential)
-    assert_equal ClientSecretCredentialStatus::EXPIRED, record.reload.user_secret_status_id
-  end
-
-  test "verify_and_consume! only allows one consumer for a single use" do
-    record, raw_secret_credential = ClientSecretCredential.issue!(
-      name: "API Key", user: @user, uses: 1,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-    )
-    gate = Queue.new
-
-    futures =
-      2.times.map do
-        Concurrent::Future.execute do
-          ActiveRecord::Base.connection_pool.with_connection do
-            gate.pop
-            ClientSecretCredential.find(record.id).verify_and_consume!(raw_secret_credential)
-          end
-        end
-      end
-
-    2.times { gate << true }
-    results = futures.map(&:value!)
-
-    assert_equal 1, results.count(true)
-    assert_equal 0, record.reload.uses_remaining
-  end
-
   test "invalid when password_digest is nil" do
     record = ClientSecretCredential.new(user: @user, name: "Key", password: nil)
 
@@ -193,12 +136,26 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
     assert_match(/\A[1-9A-HJ-NP-Za-km-z]+\z/, secret_credential)
   end
 
-  test "sample fixture secret_credential authenticates with fixed raw secret_credential" do
+  test "sample legacy fixture retains its stored password digest without sign-in eligibility" do
     secret_credential = client_secret_credentials(:sample_login)
 
     assert secret_credential.authenticate("00000000000000000000000000000000")
-    assert_equal ClientSecretCredentialKind::PERMANENT, secret_credential.user_secret_kind_id
+    assert_equal ClientSecretCredentialKind::LOGIN, secret_credential.user_secret_kind_id
     assert_equal ClientSecretCredentialStatus::ACTIVE, secret_credential.user_secret_status_id
+  end
+
+  test "legacy LOGIN credentials cannot authenticate through the new-axis verifier" do
+    legacy, raw = ClientSecretCredential.issue!(
+      name: "Legacy login secret",
+      user: @user,
+      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
+    )
+
+    result = SignSecretVerify.call(secret_credential: legacy, raw_secret_credential: raw)
+
+    assert_equal :secret_credential_mismatch, result.reason
+    assert_nil result.secret_credential
+    assert_equal ClientSecretCredentialKind::LOGIN, legacy.reload.user_secret_kind_id
   end
 
   test "value maps to password accessor" do
@@ -218,50 +175,6 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
     record.user_secret_status_id = ClientSecretCredentialStatus::REVOKED
 
     assert_not record.enabled?
-  end
-
-  test "usable_for_secret_credential_sign_in? rejects revoked kind and expired secret_credentials" do
-    record, _raw = ClientSecretCredential.issue!(name: "Sign In Secret", user: @user, user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-
-    assert_predicate record, :usable_for_secret_credential_sign_in?
-
-    record.user_identity_secret_status_id = ClientSecretCredentialStatus::REVOKED
-
-    assert_not record.usable_for_secret_credential_sign_in?
-
-    record.user_identity_secret_status_id = ClientSecretCredentialStatus::ACTIVE
-    record.user_secret_kind_id = ClientSecretCredentialKind::TOTP
-
-    assert_not record.usable_for_secret_credential_sign_in?
-
-    record.user_secret_kind_id = ClientSecretCredentialKind::LOGIN
-    record.define_singleton_method(:discard_at) { 1.minute.ago }
-
-    assert_not record.usable_for_secret_credential_sign_in?
-
-    record.define_singleton_method(:discard_at) { nil }
-
-    assert_predicate record, :usable_for_secret_credential_sign_in?
-  end
-
-  test "verify_for_secret_credential_sign_in! rejects wrong secret_credential and disallowed states" do
-    record, raw_secret_credential = ClientSecretCredential.issue!(
-      name: "Sign In Secret", user: @user,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-    )
-
-    assert_not record.verify_for_secret_credential_sign_in!("wrong-secret_credential")
-
-    record.update!(user_identity_secret_status_id: ClientSecretCredentialStatus::REVOKED)
-
-    assert_not record.verify_for_secret_credential_sign_in!(raw_secret_credential)
-
-    record.update!(
-      user_identity_secret_status_id: ClientSecretCredentialStatus::ACTIVE,
-      user_secret_kind_id: ClientSecretCredentialKind::TOTP,
-    )
-
-    assert_not record.verify_for_secret_credential_sign_in!(raw_secret_credential)
   end
 
   test "validates kind_id is required" do

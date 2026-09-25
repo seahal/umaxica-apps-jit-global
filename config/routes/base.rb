@@ -20,6 +20,7 @@ scope(module: :base, as: :base) do
       # resource :mcp, only: :create
 
       resource :welcome, only: :show
+      resource :dashboard, only: :show, controller: :roots
       resource :selector, only: %i(show update)
       resource :switcher, only: %i(show update)
       resources :billings, only: :index
@@ -135,7 +136,7 @@ scope(module: :base, as: :base) do
           namespace :token do
             resource :status, only: :show, path: "check", controller: :checks, as: :check
             resource :dbsc, only: :create
-            resource :renewal, only: :create, path: "refresh", controller: :refreshes, as: :refresh
+            resource :refresh, only: :create
           end
         end
       end
@@ -199,9 +200,15 @@ scope(module: :base, as: :base) do
         resource :block, controller: "avatars/blocks", only: %i(create destroy)
         resource :mute, controller: "avatars/mutes", only: %i(create destroy)
       end
+      post "avatar_ownership_transfers", to: "avatar_ownership_transfers#create", as: :avatar_ownership_transfers
+      post "avatar_ownership_transfers/:id/accept", to: "avatar_ownership_transfers#accept",
+                                                     as: :accept_avatar_ownership_transfer
+      post "avatar_ownership_transfers/:id/cancel", to: "avatar_ownership_transfers#cancel",
+                                                     as: :cancel_avatar_ownership_transfer
 
       namespace :identity do
         resource :standing, only: :show
+        resource :recovery_secret, only: :show, path: "recovery-secret"
         resource :recovery, only: :show do
           resource :completion, only: :create, module: :recovery
         end
@@ -210,7 +217,7 @@ scope(module: :base, as: :base) do
           resources :appeals, only: :create
         end
         namespace :mfa do
-          resource :reset, only: %i(show create)
+          resource :reset, only: :show
           resource :challenge, only: %i(show update)
         end
 
@@ -229,11 +236,6 @@ scope(module: :base, as: :base) do
         resources :telephones, only: %i(index new create edit destroy)
 
         resource :birthdate, only: :show
-
-        resources :secrets, controller: :secrets, only: %i(index show new edit create update destroy) do
-          resource :rotation, only: :create, module: :secrets
-          resource :removal, only: :create, module: :secrets
-        end
 
         resources :sessions, only: %i(index show destroy)
         resource :revocation, only: :destroy, path: "other_sessions", controller: "revocations/others",
@@ -272,6 +274,7 @@ scope(module: :base, as: :base) do
       # resource :mcp, only: :create
 
       resource :welcome, only: :show
+      resource :dashboard, only: :show, controller: :roots
       resource :selector, only: %i(show update)
       resource :switcher, only: %i(show update)
       resources :accounts, only: %i(index show)
@@ -377,7 +380,7 @@ scope(module: :base, as: :base) do
           namespace :token do
             resource :status, only: :show, path: "check", controller: :checks, as: :check
             resource :dbsc, only: :create
-            resource :renewal, only: :create, path: "refresh", controller: :refreshes, as: :refresh
+            resource :refresh, only: :create
           end
         end
       end
@@ -396,6 +399,10 @@ scope(module: :base, as: :base) do
       resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
         resource :standing, only: :show
+        resource :recovery_secret, only: :show, path: "recovery-secret"
+        namespace :mfa do
+          resource :reset, only: :show
+        end
         resource :recovery, only: :show do
           resource :completion, only: :create, module: :recovery
         end
@@ -457,10 +464,16 @@ scope(module: :base, as: :base) do
       # resource :mcp, only: :create
 
       resource :welcome, only: :show
+      resource :dashboard, only: :show, controller: :roots
       resource :selector, only: %i(show update)
       resource :switcher, only: %i(show update)
       resource :preference, only: :show
       resource :avatar, only: %i(show edit update destroy)
+      post "avatar_ownership_transfers", to: "avatar_ownership_transfers#create", as: :avatar_ownership_transfers
+      post "avatar_ownership_transfers/:id/accept", to: "avatar_ownership_transfers#accept",
+                                                     as: :accept_avatar_ownership_transfer
+      post "avatar_ownership_transfers/:id/cancel", to: "avatar_ownership_transfers#cancel",
+                                                     as: :cancel_avatar_ownership_transfer
       resources :organizations, only: %i(index show) do
         resources :memberships, module: :organizations
       end
@@ -597,7 +610,7 @@ scope(module: :base, as: :base) do
           namespace :token do
             resource :status, only: :show, path: "check", controller: :checks, as: :check
             resource :dbsc, only: :create
-            resource :renewal, only: :create, path: "refresh", controller: :refreshes, as: :refresh
+            resource :refresh, only: :create
           end
         end
       end
@@ -616,6 +629,9 @@ scope(module: :base, as: :base) do
       resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
         resource :standing, only: :show
+        namespace :mfa do
+          resource :reset, only: :show
+        end
         namespace :emails do
           resource :registration, only: %i(new create edit update)
         end

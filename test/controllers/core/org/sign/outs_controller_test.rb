@@ -5,9 +5,48 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Core::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
+  fixtures :operators, :operator_token_kinds
+
   setup do
     @host = ENV.fetch("PUBLIC_CORE_STAFF_URL", ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"))
     host! @host
+  end
+
+  test "get confirmation does not rotate the authentication refresh token without an access cookie" do
+    operator = operators(:one)
+    token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    auth_refresh_token = token.rotate_refresh_token!
+    auth_refresh_digest = token.reload.refresh_token_digest
+    auth_refresh_generation = token.refresh_token_generation
+    access_token = AuthenticationToken.encode(
+      operator,
+      host: @host,
+      session_public_id: token.public_id,
+      resource_type: "operator",
+      jwt_issuer_id: "surface:CORE_ORG",
+    )
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
+
+    get edit_core_org_sign_out_url(ri: "jp"), headers: { "Authorization" => "Bearer #{access_token}" }
+
+    assert_response :success
+    assert_equal auth_refresh_digest, token.reload.refresh_token_digest
+    assert_equal auth_refresh_generation, token.refresh_token_generation
+  end
+
+  test "post sign out does not rotate the authentication refresh token" do
+    operator = operators(:one)
+    token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    auth_refresh_token = token.rotate_refresh_token!
+    auth_refresh_digest = token.reload.refresh_token_digest
+    auth_refresh_generation = token.refresh_token_generation
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
+
+    post core_org_sign_out_url(ri: "jp")
+
+    assert_response :unauthorized
+    assert_equal auth_refresh_digest, token.reload.refresh_token_digest
+    assert_equal auth_refresh_generation, token.refresh_token_generation
   end
 
   test "get sign out without a one-shot notice is not found" do

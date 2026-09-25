@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
@@ -32,24 +33,16 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
 
   test "index lists the selected account's groups, archived included, and nothing else" do
     account_public_id = @bootstrap.account.public_id
-    AvatarGroup.create!(
-      account_surface: "app", account_public_id: account_public_id, name: "Own active",
-      state: "active",
-    )
-    AvatarGroup.create!(
-      account_surface: "app", account_public_id: account_public_id, name: "Own archived",
-      state: "archived", archived_at: Time.current,
-    )
+    create_group(name: "Own active", account_public_id: account_public_id)
+    create_group(name: "Own archived", account_public_id: account_public_id, state: "archived")
     other = BaseSelectorBootstrapAuthority.call(
       surface: :app, principal: Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER),
     )
-    AvatarGroup.create!(
-      account_surface: "app", account_public_id: other.account.public_id, name: "Other account", state: "active",
+    create_group(
+      name: "Other account", account_public_id: other.account.public_id,
+      owner_collective_public_id: other.collective.public_id,
     )
-    AvatarGroup.create!(
-      account_surface: "com", account_public_id: account_public_id, name: "Other surface",
-      state: "active",
-    )
+    create_group(name: "Other surface", account_surface: "com", account_public_id: account_public_id)
 
     get base_app_groups_url(ri: "jp", host: @host), headers: as_user_headers(@user, host: @host)
 
@@ -78,6 +71,8 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
     group = AvatarGroup.order(:id).last
 
     assert_equal "Coverage Group", group.name
+    assert_equal "app", group.current_ownership_period.owner_surface
+    assert_equal @bootstrap.collective.public_id, group.current_ownership_period.owner_collective_public_id
 
     get base_app_group_url(group.public_id, ri: "jp", host: @host),
         headers: as_user_headers(@user, host: @host)
@@ -86,12 +81,41 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_equal group.public_id, response.parsed_body.dig("group", "public_id")
   end
 
+  test "create returns forbidden when owner membership changes after policy authorization" do
+    membership = @bootstrap.account.persona_memberships.find_by!(enterprise: @bootstrap.collective)
+    membership_downgraded = false
+    locked_recheck_observed = false
+    sql_subscription =
+      lambda do |_name, _started, _finished, _unique_id, payload|
+        sql = payload[:sql]
+        next unless sql
+
+        if !membership_downgraded &&
+            sql.match?(/SELECT .*FROM "persona_memberships".*INNER JOIN "enterprises"/im) &&
+            !sql.match?(/FOR UPDATE/i)
+          membership_downgraded = true
+          membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+        end
+        locked_recheck_observed ||= sql.match?(
+          /FROM "persona_memberships".*FOR UPDATE OF "persona_memberships"/im,
+        )
+      end
+
+    assert_no_difference -> { AvatarGroup.count } do
+      ActiveSupport::Notifications.subscribed(sql_subscription, "sql.active_record") do
+        post base_app_groups_url(ri: "jp", host: @host),
+             params: { group: { name: "Revoked during create" } },
+             headers: as_user_headers(@user, host: @host)
+      end
+    end
+
+    assert membership_downgraded, "the policy authorization query must precede the downgrade"
+    assert locked_recheck_observed, "the create service must lock and recheck owner membership"
+    assert_response :forbidden
+  end
+
   test "client updates and archives a selected-account group" do
-    account_public_id = @bootstrap.account.public_id
-    group = AvatarGroup.create!(
-      account_surface: "app", account_public_id: account_public_id,
-      name: "Original Group", description: "Original", state: "active",
-    )
+    group = create_group(name: "Original Group", description: "Original")
 
     patch base_app_group_url(group.public_id, ri: "jp", host: @host),
           params: { group: { name: "Updated Group", description: "Updated" } },
@@ -108,67 +132,59 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "client attaches an avatar to a selected-account group" do
-    group = AvatarGroup.new(
-      public_id: "group-public-id", account_surface: "app", account_public_id: @bootstrap.account.public_id,
-      name: "Membership Group", state: "active",
-    )
-    avatar = Avatar.new(public_id: "avatar-public-id", moniker: "Member")
-    membership = GroupAvatarMembership.new(
-      public_id: "membership-public-id", avatar_group: group, avatar: avatar,
-      role: "member", position: 2, state: "active",
-    )
+    group = create_group(name: "Membership Group")
+    avatar = @bootstrap.avatar
 
-    AvatarGroup.stub(:find_by!, group) do
-      Avatar.stub(:find_by!, avatar) do
-        GroupAvatarMemberships::Attach.stub(:call, membership) do
-          post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
-               params: { membership: { avatar_public_id: avatar.public_id, role: "member", position: 2 } },
-               headers: as_user_headers(@user, host: @host)
-        end
-      end
-    end
+    post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+         params: { membership: { avatar_public_id: avatar.public_id, position: 2 } },
+         headers: as_user_headers(@user, host: @host)
 
     assert_response :created
-    assert_equal "membership-public-id", response.parsed_body.dig("membership", "public_id")
-    assert_equal "avatar-public-id", response.parsed_body.dig("membership", "avatar_public_id")
+    assert_equal avatar.public_id, response.parsed_body.dig("membership", "avatar_public_id")
+    assert_equal "member", response.parsed_body.dig("membership", "role")
+    assert_equal 2, response.parsed_body.dig("membership", "position")
+  end
+
+  test "membership request cannot assign a caller-selected role" do
+    group = create_group(name: "Fixed role group")
+    avatar = @bootstrap.avatar
+
+    post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+         params: { membership: { avatar_public_id: avatar.public_id, role: "owner", position: 0 } },
+         headers: as_user_headers(@user, host: @host)
+
+    assert_response :created
+    assert_equal "member", response.parsed_body.dig("membership", "role")
+    assert_equal "member", GroupAvatarMembership.order(:id).last.role
+  end
+
+  test "group account-management scope accepts app org and com" do
+    assert_predicate AvatarGroup.new(account_surface: "app", account_public_id: "a", name: "App", state: "active"),
+                     :valid?
+    assert_predicate AvatarGroup.new(account_surface: "org", account_public_id: "o", name: "Org", state: "active"),
+                     :valid?
+    assert_predicate AvatarGroup.new(account_surface: "com", account_public_id: "c", name: "Com", state: "active"),
+                     :valid?
   end
 
   test "client reorders and detaches a selected-account membership" do
-    group = AvatarGroup.new(
-      public_id: "group-public-id", account_surface: "app", account_public_id: @bootstrap.account.public_id,
-      name: "Membership Group", state: "active",
-    )
-    avatar = Avatar.new(public_id: "avatar-public-id", moniker: "Member")
-    membership = GroupAvatarMembership.new(
-      public_id: "membership-public-id", avatar_group: group, avatar: avatar,
-      role: "member", position: 1, state: "active",
-    )
-    memberships = Object.new
-    memberships.define_singleton_method(:find_by!) { |**| membership }
-    group.define_singleton_method(:group_avatar_memberships) { memberships }
-    reordered = membership.dup
-    reordered.avatar_group = group
-    reordered.avatar = avatar
-    reordered.position = 4
+    group = create_group(name: "Membership Group")
+    avatar = @bootstrap.avatar
+    post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+         params: { membership: { avatar_public_id: avatar.public_id, position: 1 } },
+         headers: as_user_headers(@user, host: @host)
+    membership = GroupAvatarMembership.order(:id).last
 
-    AvatarGroup.stub(:find_by!, group) do
-      GroupAvatarMemberships::Reorder.stub(:call, reordered) do
-        patch base_app_group_avatar_membership_url(
-          group.public_id, membership.public_id, ri: "jp", host: @host,
-        ), params: { membership: { position: 4 } }, headers: as_user_headers(@user, host: @host)
-      end
-    end
+    patch base_app_group_avatar_membership_url(
+      group.public_id, membership.public_id, ri: "jp", host: @host,
+    ), params: { membership: { position: 4 } }, headers: as_user_headers(@user, host: @host)
 
     assert_response :success
     assert_equal 4, response.parsed_body.dig("membership", "position")
 
-    AvatarGroup.stub(:find_by!, group) do
-      GroupAvatarMemberships::Detach.stub(:call, membership) do
-        delete base_app_group_avatar_membership_url(
-          group.public_id, membership.public_id, ri: "jp", host: @host,
-        ), headers: as_user_headers(@user, host: @host)
-      end
-    end
+    delete base_app_group_avatar_membership_url(
+      group.public_id, membership.public_id, ri: "jp", host: @host,
+    ), headers: as_user_headers(@user, host: @host)
 
     assert_response :no_content
   end
@@ -177,6 +193,27 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
+  end
+
+  def create_group(name:, account_surface: "app", account_public_id: @bootstrap.account.public_id,
+                   owner_surface: "app", owner_collective_public_id: @bootstrap.collective.public_id,
+                   state: "active", description: nil)
+    archived_at = Time.current if state == "archived"
+    group = AvatarGroup.create!(
+      account_surface: account_surface,
+      account_public_id: account_public_id,
+      name: name,
+      description: description,
+      state: state,
+      archived_at: archived_at,
+    )
+    AvatarGroupOwnershipPeriod.create!(
+      avatar_group: group,
+      owner_surface: owner_surface,
+      owner_collective_public_id: owner_collective_public_id,
+      valid_from: Time.current,
+    )
+    group
   end
 end
 

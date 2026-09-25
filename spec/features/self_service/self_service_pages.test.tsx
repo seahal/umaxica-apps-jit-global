@@ -321,7 +321,18 @@ describe("AvatarForm", () => {
     action: "/avatars?ri=jp",
     method: "post" as const,
     submit_label: "Create Avatar",
-    moniker: { label: "Name", value: "", maxlength: 120 },
+    moniker: {
+      label: "Name",
+      value: "",
+      max_bytes: 128,
+      max_grapheme_clusters: 16,
+      client_validation: {
+        blank: "Name is required.",
+        invalid: "Name contains unsupported characters.",
+        max_bytes: "Name is too long in UTF-8 bytes.",
+        max_graphemes: "Name has too many visible characters.",
+      },
+    },
     handle: { label: "Handle", value: "", maxlength: 80 },
   };
   const editProps = {
@@ -331,7 +342,7 @@ describe("AvatarForm", () => {
     action: "/avatars/av_1?ri=jp",
     method: "patch" as const,
     submit_label: "Update Avatar",
-    moniker: { label: "Name", value: "First Avatar", maxlength: 120 },
+    moniker: { ...createProps.moniker, value: "First Avatar" },
     handle: null,
   };
 
@@ -393,6 +404,89 @@ describe("AvatarForm", () => {
 
     expect(patch).toHaveBeenCalledWith("/avatars/av_1?ri=jp");
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("accepts 127 and 128 UTF-8 bytes and rejects the 129-byte boundary without native maxlength", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    expect(moniker.getAttribute("maxlength")).toBeNull();
+
+    for (const value of [
+      "あ\u0300\uFE0F".repeat(15) + "a\uFE0F\uFE0F",
+      "あ\u0300\uFE0F".repeat(16),
+    ]) {
+      act(() => {
+        descriptor.call(moniker, value);
+        moniker.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      act(() => {
+        element
+          .querySelector("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+    }
+
+    expect(post).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      descriptor.call(moniker, "あ\u0300\uFE0F".repeat(15) + "あ\u0300\u0301\u0302");
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(element.textContent).toContain("Name is too long in UTF-8 bytes.");
+  });
+
+  it("accepts 15 and 16 grapheme clusters and rejects the 17-cluster boundary", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    for (const value of ["あ".repeat(15), "あ".repeat(16)]) {
+      act(() => {
+        descriptor.call(moniker, value);
+        moniker.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      act(() => {
+        element
+          .querySelector("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+    }
+
+    expect(post).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      descriptor.call(moniker, "あ".repeat(17));
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(element.textContent).toContain("Name has too many visible characters.");
   });
 });
 

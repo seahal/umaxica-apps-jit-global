@@ -58,7 +58,10 @@ ClientToken / OperatorToken / VisitorToken
 Rules:
 
 1. `sid` represents `device_sessions.public_id`, not token row `public_id`.
-2. Refresh/access token rows belong to a `device_session`.
+2. Refresh/access token rows issued by flows that use a `device_session` carry its ID. The database
+   column remains nullable for token records whose established contract has no device session;
+   nullability does not authorize a flow that uses a session to fall back to another authentication
+   path.
 3. Normal logout revokes the current `device_session` and token rows linked to it.
 4. Normal logout must not revoke every token for the actor.
 5. All-session clear remains an explicit configuration/session-management action.
@@ -71,6 +74,61 @@ Rules:
 Surface databases remain separate. The model layer therefore uses surface-specific models
 (`ClientDeviceSession`, `OperatorDeviceSession`, `VisitorDeviceSession`) over per-surface
 `device_sessions` tables rather than one cross-surface model.
+
+## PostgreSQL reference enforcement (2026-09-24)
+
+The `app_ticket`, `com_ticket`, and `org_ticket` databases each own their token and device-session
+tables. Their references are local to each physical database; no cross-database foreign key is
+created.
+
+For session-aware token rows, nullable `tokens.device_session_id` references the matching
+`device_sessions.id` with `ON DELETE RESTRICT`. The existing token history remains many-to-one with
+the session. The unique index on `(device_session_id, id)` supports the composite reference below
+and replaces the former non-unique index on `device_session_id`; it does not make the session ID
+unique by itself.
+
+The nullable `device_sessions.current_refresh_token_id` remains optional. A deferred composite
+foreign key from `(device_sessions.id, device_sessions.current_refresh_token_id)` to
+`(tokens.device_session_id, tokens.id)` ensures a non-null pointer identifies a token in that same
+session at transaction commit. PostgreSQL's default `MATCH SIMPLE` permits a null current-token
+pointer. Deleting the pointed token sets only `current_refresh_token_id` to null, preserving the
+session row. Deleting a session while any token still references it is restricted. The Rails
+association uses `dependent: :restrict_with_exception` to preserve the same rule for model deletes;
+actor deletion continues to remove tokens before device sessions.
+
+Migration rollout has three stages in each ticket database:
+
+1. Build the composite unique index concurrently, then remove the replaced one-column token index.
+2. Add both foreign keys as `NOT VALID`. They enforce new writes while existing rows remain unchecked.
+3. Validate the token-to-session foreign key in its own migration.
+4. Validate the current-token ownership foreign key in another migration. Each validation stops if
+   existing rows violate its reference contract; neither migration rewrites or guesses at ownership.
+
+At the request boundary, an access token whose token row names a missing or inactive device session
+is rejected. The token actor and, when present, session actor must match the access-token subject.
+Sessionless token kinds remain valid under their existing contract. A further composite foreign key
+from `(tokens.actor_id, tokens.device_session_id)` to `(device_sessions.actor_id,
+device_sessions.id)` enforces token/session actor equality in each ticket database. The actor column
+is `user_id`, `visitor_id`, or `staff_id` on its respective surface. A unique index on the matching
+session `(actor_id, id)` pair supports this foreign key; nullable `device_session_id` retains the
+established sessionless-token shape.
+
+The index migration uses a five-second lock timeout and a thirty-minute statement timeout. It
+compares a same-named index's key definitions (including order, collation, and operator class),
+access method, uniqueness/null semantics, included-column and predicate/expression state, and
+valid/ready state before resuming or replacing an interrupted index build. An unexpected definition
+stops the migration for inspection. Constraint addition and validation use the same finite lock and
+statement timeouts inside their migration transactions. Validation is monotonic in PostgreSQL; its
+down migration is a no-op, and rolling back the preceding migration removes the constraints.
+
+This migration requires PostgreSQL 15 or newer because it uses a column list with
+`ON DELETE SET NULL`. PostgreSQL 15 documents that syntax in its
+[CREATE TABLE reference](https://www.postgresql.org/docs/15/sql-createtable.html). PostgreSQL 17
+documents the `NOT VALID` then `VALIDATE CONSTRAINT` rollout in its
+[ALTER TABLE reference](https://www.postgresql.org/docs/17/sql-altertable.html). Rails documents
+the single-column foreign-key migration interface and deferrable options in its
+[Active Record Migrations guide](https://guides.rubyonrails.org/active_record_migrations.html); the
+same-session ownership rule therefore uses explicit SQL for its composite foreign key.
 
 ## Consequences
 

@@ -6,13 +6,13 @@ import CoreAppRootsIndex from "@/pages/core/app/roots/index";
 import CoreComRootsIndex from "@/pages/core/com/roots/index";
 import CoreOrgRootsIndex from "@/pages/core/org/roots/index";
 import PalmAppRootsIndex from "@/pages/palm/app/roots/index";
-import SideAppRootsIndex from "@/pages/side/app/roots/index";
-import SideComRootsIndex from "@/pages/side/com/roots/index";
-import SideOrgRootsIndex from "@/pages/side/org/roots/index";
+import WarpAppRootsIndex from "@/pages/warp/app/roots/index";
+import WarpComRootsIndex from "@/pages/warp/com/roots/index";
+import WarpOrgRootsIndex from "@/pages/warp/org/roots/index";
 
 const props: RootLandingProps = {
   title: null,
-  heading: "Side App",
+  heading: "Warp App",
   description: "Thin landing endpoint.",
   sign_up: null,
   links: [
@@ -35,7 +35,7 @@ describe("RootLanding extra destinations", () => {
   it("renders the heading a surface without a page title of its own still shows", () => {
     const markup = renderToStaticMarkup(<RootLanding {...props} />);
 
-    expect(markup).toContain("Side App");
+    expect(markup).toContain("Warp App");
     expect(markup).toContain("Thin landing endpoint.");
   });
 
@@ -51,16 +51,16 @@ describe("RootLanding extra destinations", () => {
   });
 });
 
-describe("core, side and palm root pages", () => {
+describe("Core, Warp, and Palm root pages", () => {
   // Each surface resolves pages only from its own directory, so every surface needs its own module
   // for the shared landing.
   it.each([
     ["core/app", CoreAppRootsIndex],
     ["core/com", CoreComRootsIndex],
     ["core/org", CoreOrgRootsIndex],
-    ["side/app", SideAppRootsIndex],
-    ["side/com", SideComRootsIndex],
-    ["side/org", SideOrgRootsIndex],
+    ["warp/app", WarpAppRootsIndex],
+    ["warp/com", WarpComRootsIndex],
+    ["warp/org", WarpOrgRootsIndex],
     ["palm/app", PalmAppRootsIndex],
   ])("%s renders the shared landing", (_surface, Page) => {
     expect(Page).toBe(RootLanding);

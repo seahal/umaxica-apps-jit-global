@@ -1,0 +1,81 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Explicit single-worker Rails test path for the 2026-09-24 task-owned databases.
+require "pg"
+require "json"
+require "securerandom"
+
+settings = File.readlines(".env.local", chomp: true).filter_map do |line|
+  match = line.match(/\A([A-Z][A-Z0-9_]*)=(.*)\z/)
+  match && [match[1], match[2].sub(/\A["']/, "").sub(/["']\z/, "")]
+end.to_h
+example_hosts = File.readlines(".env.devcontainer.example", chomp: true).filter_map do |line|
+  match = line.match(/\A((?:PUBLIC|PRIVATE)_[A-Z][A-Z0-9_]*)=(.*)\z/)
+  match && [match[1], match[2].sub(/\A["']/, "").sub(/["']\z/, "")]
+end.to_h
+host = "primary"
+port = Integer(settings.fetch("POSTGRESQL_PORT", "5432"), 10)
+user = settings.fetch("POSTGRESQL_USER")
+password = settings.fetch("POSTGRESQL_PASSWORD")
+run_id = "20260924"
+logical = Dir.glob("db/*structure.sql").map do |path|
+  file = File.basename(path)
+  (file == "structure.sql") ? "primary" : file.delete_suffix("_structure.sql")
+end.sort
+raise RuntimeError, "expected 20 Global logical databases" unless logical.length == 20
+
+names = logical.map { |name| "codex_integrity_#{run_id}_#{name}" }
+admin = PG.connect(host:, port:, user:, password:, dbname: "postgres", connect_timeout: 3)
+admin.exec("BEGIN READ ONLY")
+admin.exec("SET LOCAL statement_timeout = '5s'")
+admin.exec("SET LOCAL lock_timeout = '1s'")
+rows = admin.exec_params(<<~SQL, ["{#{names.join(",")}}"])
+  SELECT datname AS name, oid::text AS oid, pg_get_userbyid(datdba) AS owner,
+         shobj_description(oid, 'pg_database') AS comment
+    FROM pg_database WHERE datname = ANY($1::text[]) ORDER BY datname
+SQL
+admin.exec("ROLLBACK")
+admin.close
+comment = "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"
+raise RuntimeError, "missing task databases" unless rows.map { |row| row.fetch("name") } == names.sort
+raise RuntimeError, "task database ownership mismatch" unless rows.all? do |row|
+  row.fetch("owner") == user && row.fetch("comment") == comment
+end
+
+manifest = { "run_id" => run_id,
+             "host" => host,
+             "port" => port,
+             "user" => user,
+             "databases" => rows.map(&:to_h), }
+manifest_path = File.expand_path("tmp/postgresql-isolated-test-20260924.json")
+if File.exist?(manifest_path)
+  raise RuntimeError, "existing task manifest differs" unless JSON.parse(File.read(manifest_path)) == manifest
+else
+  File.write(manifest_path, JSON.pretty_generate(manifest))
+end
+environment = example_hosts.merge(settings).merge(
+  {
+    "RAILS_ENV" => "test",
+    "RACK_ENV" => "test",
+    "PARALLEL_WORKERS" => "1",
+    "POSTGRESQL_ISOLATED_TEST_RUN_ID" => run_id,
+    "POSTGRESQL_ISOLATED_TEST_MANIFEST" => manifest_path,
+    "POSTGRESQL_TEST_HOST" => host,
+    "POSTGRESQL_PORT" => port.to_s,
+    "POSTGRESQL_USER" => user,
+    "POSTGRESQL_PASSWORD" => password,
+    "POSTGRESQL_DATABASE" => "postgres",
+    "POSTGRESQL_TEST_PREPARE_DATABASES" => names.join(","),
+    "VALKEY_KVS_HOST" => "valkey-kvs",
+    "VALKEY_KVS_PORT" => "6379",
+    "VALKEY_CACHE_HOST" => "valkey-cache",
+    "VALKEY_CACHE_PORT" => "6379",
+    "VALKEY_DIAGNOSTIC_HOST" => "valkey-diagnostic",
+    "VALKEY_DIAGNOSTIC_PORT" => "6379",
+    "VALKEY_NAMESPACE_RUN_ID" => "pg-audit-#{run_id}-#{SecureRandom.hex(4)}",
+    "VALKEY_NAMESPACE_WORKER_ID" => "parent",
+  },
+)
+puts "Isolated Rails target manifest: #{names.length} task-owned databases, single worker, primary server"
+exec(environment, "bin/rails", *(ARGV.empty? ? ["test"] : ARGV))

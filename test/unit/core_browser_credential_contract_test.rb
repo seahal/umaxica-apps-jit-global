@@ -25,13 +25,13 @@ class CoreBrowserCredentialContractTest < ActiveSupport::TestCase
     assert_equal "/", oidc.fetch(:path)
   end
 
-  test "native and side audiences are classified as non core browser" do
-    assert CoreBrowserCredentialContract.native_or_side_audience?("aud" => ["palm-api"])
-    assert CoreBrowserCredentialContract.native_or_side_audience?("aud" => ["side-service"])
-    assert_not CoreBrowserCredentialContract.native_or_side_audience?(
+  test "native and retained external RP audiences are classified as non core browser" do
+    assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["palm-api"])
+    assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["side-service"])
+    assert_not CoreBrowserCredentialContract.native_or_warp_audience?(
       "aud" => [CoreBrowserCredentialContract::ACCESS_AUDIENCE],
     )
-    assert_not CoreBrowserCredentialContract.native_or_side_audience?("aud" => ["port-api"])
+    assert_not CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["port-api"])
   end
 
   test "core browser access token expiry is capped by the root session deadline" do

@@ -25,19 +25,19 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       callback_controller: "core/org/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost") },
-      controller: "side/app/sign/entries",
-      callback_controller: "side/app/oidc/callbacks",
+      host: -> { ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost") },
+      controller: "warp/app/sign/entries",
+      callback_controller: "warp/app/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost") },
-      controller: "side/com/sign/entries",
-      callback_controller: "side/com/oidc/callbacks",
+      host: -> { ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost") },
+      controller: "warp/com/sign/entries",
+      callback_controller: "warp/com/oidc/callbacks",
     },
     {
-      host: -> { ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost") },
-      controller: "side/org/sign/entries",
-      callback_controller: "side/org/oidc/callbacks",
+      host: -> { ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost") },
+      controller: "warp/org/sign/entries",
+      callback_controller: "warp/org/oidc/callbacks",
     },
     {
       host: -> { ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost") },
@@ -77,9 +77,9 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       app/controllers/core/app/oidc/authorizations_controller.rb
       app/controllers/core/com/oidc/authorizations_controller.rb
       app/controllers/core/org/oidc/authorizations_controller.rb
-      app/controllers/side/app/oidc/authorizations_controller.rb
-      app/controllers/side/com/oidc/authorizations_controller.rb
-      app/controllers/side/org/oidc/authorizations_controller.rb
+      app/controllers/warp/app/oidc/authorizations_controller.rb
+      app/controllers/warp/com/oidc/authorizations_controller.rb
+      app/controllers/warp/org/oidc/authorizations_controller.rb
       app/controllers/edit/org/oidc/authorizations_controller.rb
     )
 

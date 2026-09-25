@@ -2,6 +2,11 @@
 
 This directory stores accepted architecture and design decisions.
 
+Current Rails naming note (2026-09-25): references to the Rails `Side`/`Wide` surface in older
+decisions are historical. Its current internal namespace is `Warp`; registered OIDC client IDs,
+JWT namespaces, MCP realm, persisted logout values, and public hostnames retain their established
+values.
+
 - Write ADRs in English. Do not add Japanese or other non-English prose unless the ADR explicitly
   discusses localization, translation data, or a quoted source whose original language matters.
 - Keep decision records focused on what was decided and why.

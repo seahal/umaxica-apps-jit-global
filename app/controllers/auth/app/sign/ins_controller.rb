@@ -48,11 +48,6 @@ module Auth
             { key: "passkey",
               label: page_t("#{scope}.links.passkey"),
               href: new_auth_app_sign_in_passkey_path(pt: pt), },
-            {
-              key: "secret_credential",
-              label: page_t("#{scope}.links.secret_credential"),
-              href: new_auth_app_sign_in_secret_path(pt: pt),
-            },
           ]
         end
 

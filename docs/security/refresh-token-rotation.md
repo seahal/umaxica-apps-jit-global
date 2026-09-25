@@ -10,7 +10,7 @@
 Refresh token families are Base authority.
 
 Base owns refresh token issuance, rotation, replay detection, family revocation, compromise state,
-DBSC/device binding interaction, transparent refresh, explicit refresh endpoints, and audit. Auth
+DBSC/device binding interaction, explicit refresh endpoints, and audit. Auth
 must not issue, rotate, refresh, revoke, or list refresh tokens. It must not issue access tokens or
 downstream tokens.
 
@@ -133,22 +133,12 @@ user-attention event.
 Step-up freshness is not sticky across refresh. A refresh must not extend `recent_auth`, `sudo`,
 `last_step_up_at`, or equivalent freshness.
 
-## Browser Transparent Refresh
+## Browser Refresh
 
-Transparent refresh is a Base browser recovery path for expired or missing access cookies. It is not
-an Auth credential ceremony and not an Auth token endpoint.
-
-Transparent refresh is allowed only when Base policy permits it, typically when:
-
-- the request is `GET` or `HEAD`;
-- the negotiated request format is HTML;
-- the access-token cookie is absent or expired;
-- the refresh-token cookie is present;
-- the current request has not already attempted transparent refresh.
-
-Transparent refresh must not run for state-changing methods, JSON requests, malformed HTML-like
-`Accept` headers, requests that already carry a valid access-token cookie, or credential ceremony
-routes on Auth.
+Browser GET/HEAD navigation does not refresh an authentication token, rotate a refresh credential,
+or update session activity. Refresh remains available only through the existing explicit POST
+protocol endpoint, subject to its surface, client, device-binding, and session checks. Auth remains
+a credential ceremony service and does not issue or rotate Base refresh tokens.
 
 ## Replay And Compromise
 

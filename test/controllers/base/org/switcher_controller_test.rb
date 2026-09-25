@@ -26,21 +26,84 @@ class Base::Org::SwitcherControllerTest < ActionDispatch::IntegrationTest
     ), as: :json
 
     assert_response :success
-    assert_equal "stub", response.parsed_body.fetch("status")
+    assert_equal "ok", response.parsed_body.fetch("status")
     assert_predicate @token.reload, :selected_actor_context?
+  end
+
+  test "HTML switcher page displays the optional Avatar candidate context" do
+    select_token!
+    get base_org_switcher_url(host: @host, ri: "jp"), headers: as_staff_headers(
+      @operator,
+      host: @host,
+      session_public_id: @token.public_id,
+    )
+
+    assert_response :success
+    assert_equal "base/org/switchers/show", inertia_component
+    assert_equal base_org_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
+    assert_nil inertia_props.fetch("candidates").first.fetch("avatar_public_id")
   end
 
   test "authenticated operator can access switcher update" do
     select_token!
+    candidate = BaseSwitcherAuthority.current(
+      surface: :org,
+      principal: @operator,
+      session: @token,
+    ).fetch(:candidates).first
     patch base_org_switcher_url(host: @host), headers: as_staff_headers(
       @operator,
       host: @host,
       session_public_id: @token.public_id,
-    ), as: :json
+    ), params: {
+      account_public_id: candidate.fetch(:public_id),
+      organization_public_id: candidate.dig(:organization, :public_id),
+      organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+      avatar_public_id: candidate.dig(:avatar, :public_id),
+    }, as: :json
 
     assert_response :success
-    assert_equal "stub", response.parsed_body.fetch("status")
+    assert_equal "switched", response.parsed_body.fetch("status")
     assert_predicate @token.reload, :selected_actor_context?
+  end
+
+  test "operator can select an org-owned Avatar without making it the operator identity" do
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    avatar_result = AvatarProvisioning::Create.call(
+      actor: @operator,
+      subject_type: :agent,
+      subject: bootstrap.account,
+      avatar_params: { moniker: "Bureau avatar" },
+      handle_params: { handle: "bureau-avatar" },
+      owner_surface: "org",
+      owner_collective_public_id: bootstrap.collective.public_id,
+    )
+    assert_predicate avatar_result, :success?
+
+    candidates = BaseSwitcherAuthority.current(
+      surface: :org,
+      principal: @operator,
+      session: @token,
+    ).fetch(:candidates)
+    avatar_candidate = candidates.find { |candidate| candidate.dig(:avatar, :public_id) == avatar_result.avatar.public_id }
+    assert avatar_candidate
+
+    patch base_org_switcher_url(host: @host), headers: as_staff_headers(
+      @operator,
+      host: @host,
+      session_public_id: @token.public_id,
+    ), params: {
+      account_public_id: avatar_candidate.fetch(:public_id),
+      organization_public_id: avatar_candidate.dig(:organization, :public_id),
+      organization_unit_public_id: avatar_candidate.dig(:organization, :unit_public_id),
+      avatar_public_id: avatar_candidate.dig(:avatar, :public_id),
+    }, as: :json
+
+    assert_response :success
+    assert_equal "switched", response.parsed_body.fetch("status")
+    assert_equal avatar_result.avatar.public_id, @token.reload.selected_avatar_public_id
+    assert_equal bootstrap.account.public_id, @token.selected_account_public_id
   end
 
   private

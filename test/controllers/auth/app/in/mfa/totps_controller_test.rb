@@ -6,8 +6,9 @@ require "test_helper"
 
 module Auth::App::In
   class MfaTotpsControllerTest < ActionDispatch::IntegrationTest
-    fixtures :client_statuses, :client_passkey_statuses, :client_secret_credential_kinds,
-             :client_secret_credential_statuses, :client_email_statuses, :client_totp_credential_statuses
+    include AuthEmailMfaHelper
+
+    fixtures :client_statuses, :client_passkey_statuses, :client_email_statuses, :client_totp_credential_statuses
 
     setup do
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
@@ -16,7 +17,7 @@ module Auth::App::In
 
       @user = Client.create!(mfa_level_enabled: true)
       @email = "mfa_totp_#{SecureRandom.hex(4)}@example.com".freeze
-      @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+      @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
       @totp = ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,
@@ -24,13 +25,6 @@ module Auth::App::In
         title: "totp",
       )
 
-      _secret_credential, @raw_secret_credential = ClientSecretCredential.issue!(
-        name: "TOTP MFA secret_credential",
-        user_id: @user.id,
-        user_secret_kind_id: ClientSecretCredentialKind::PERMANENT,
-        uses: 10,
-        status: :active,
-      )
     end
 
     teardown do
@@ -44,7 +38,7 @@ module Auth::App::In
 
     test "new renders form with stealth when pending_mfa exists" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       with_prosopite_paused do
@@ -79,7 +73,7 @@ module Auth::App::In
         user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         title: "second authenticator",
       )
-      with_prosopite_paused { establish_pending_mfa_via_secret_credential! }
+      with_prosopite_paused { establish_pending_mfa_via_email! }
 
       with_prosopite_paused do
         get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
@@ -105,11 +99,11 @@ module Auth::App::In
 
     test "create with valid TOTP code redirects to settings" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       # Verify pending_mfa was set
-      assert_predicate session[:pending_mfa], :present?, "pending_mfa should be set after secret_credential login"
+      assert_predicate session[:pending_mfa], :present?, "pending_mfa should be set after email sign-in"
       user_id = session[:pending_mfa]["user_id"]
       user = Client.find(user_id)
 
@@ -157,7 +151,7 @@ module Auth::App::In
 
     test "a correct TOTP code submitted after the pending sign-in expired does not sign in" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       expires_at = session[:pending_mfa]["expires_at"]
@@ -179,7 +173,7 @@ module Auth::App::In
 
     test "create with invalid TOTP code renders form with error" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       with_prosopite_paused do
@@ -194,7 +188,7 @@ module Auth::App::In
 
     test "create with valid TOTP code and stealth failure renders form with error" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       TurnstileVerifierStub.challenge_response = { "success" => false }
@@ -219,7 +213,7 @@ module Auth::App::In
     # pre-setting last_otp_at to the window timestamp before the request arrives.
     test "create rejects TOTP code whose window has already been consumed" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       # The window computed here must be the window the request verifies against, so
@@ -246,7 +240,7 @@ module Auth::App::In
     # credential counter must still permanently revoke only the credential being guessed.
     test "create permanently revokes the credential even when the rate-limit store is unreachable" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       freeze_time do
@@ -270,7 +264,7 @@ module Auth::App::In
 
     test "the PostgreSQL terminal revocation survives a rate-limit store flush" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       freeze_time do
@@ -290,7 +284,7 @@ module Auth::App::In
 
     test "a successful TOTP verification clears the recorded failures" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       freeze_time do
@@ -346,20 +340,10 @@ module Auth::App::In
       ("000000".."999999").find { |candidate| valid.exclude?(candidate) }
     end
 
-    def establish_pending_mfa_via_secret_credential!
+    def establish_pending_mfa_via_email!
       with_prosopite_paused do
-        post(
-          auth_app_sign_in_secret_path(ri: "jp"), params: {
-            secret_credential_login_form: {
-              identifier: @email,
-              secret_credential_value: @raw_secret_credential,
-            },
-            "cf-turnstile-response": "test_token",
-          },
-        )
+        sign_in_with_email_to_mfa!(surface: :app, email_record: @email_record, email: @email)
       end
-
-      assert_response :redirect
     end
   end
 end

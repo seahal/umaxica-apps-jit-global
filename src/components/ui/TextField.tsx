@@ -9,9 +9,8 @@
 // it to generate the ids, set `aria-invalid` on the input and point `aria-describedby` at the
 // description and the message. None of that is written by hand below.
 //
-// Validation itself stays on the server, which is the authority: `errorMessage` arrives as an
-// already-translated string in the page props. This component never decides whether a value is
-// valid and never authors visitor-facing copy.
+// The server remains authoritative. A form may also perform a narrow client-side preflight for
+// faster feedback; callers pass either rejection as already-translated text.
 import {
   TextField as AriaTextField,
   type TextFieldProps as AriaTextFieldProps,
@@ -27,7 +26,7 @@ export type TextFieldProps = Omit<AriaTextFieldProps, "isInvalid" | "children"> 
   label: string;
   /** Helper text rendered under the control and referenced by `aria-describedby`. */
   description?: string;
-  /** The server's rejection message. Its presence is what marks the field invalid. */
+  /** An already-translated rejection message. Its presence marks the field invalid. */
   errorMessage?: string;
   /** Renders a `<textarea>` instead of an `<input>`. */
   multiline?: boolean;

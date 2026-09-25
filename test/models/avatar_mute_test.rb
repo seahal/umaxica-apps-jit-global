@@ -25,6 +25,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarMuteTest < ActiveSupport::TestCase
   setup do
@@ -90,7 +91,7 @@ class AvatarMuteTest < ActiveSupport::TestCase
   end
 
   test "mute creation does not destroy follow state" do
-    muter = create_avatar("Mute Keeps Follow")
+    muter = create_avatar("Mute Follow")
     target = create_avatar("Mute Target")
     muter.outgoing_follows.create!(followed_avatar: target)
 
@@ -103,7 +104,7 @@ class AvatarMuteTest < ActiveSupport::TestCase
   private
 
   def create_avatar(moniker)
-    Avatar.create!(
+    AvatarTestFactory.create!(
       capability: @capability,
       active_handle: @handle,
       moniker: moniker,

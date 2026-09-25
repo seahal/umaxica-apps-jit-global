@@ -159,42 +159,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
   end
 
-  test "app secret credential sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_secret_url(ri: "jp", host: host),
-           params: { client_secret_credential: { identifier: "burst@example.com", secret_credential_value: "x" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
-  test "com secret credential sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_secret_url(ri: "jp", host: host),
-           params: { visitor_secret_credential: { identifier: "burst@example.com", secret_credential_value: "x" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
-  test "org secret credential sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_org_sign_in_secret_url(ri: "jp", host: host),
-           params: { staff_secret_credential: { identifier: "0123456789ABCDEF", secret_credential_value: "x" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
   test "app email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
@@ -219,18 +183,9 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
   end
 
-  # The secret-credential and email sign-in endpoints declare a sustained limiter
-  # alongside the burst one, with a longer retry hint. Only the burst arm was
-  # exercised, so a sustained limiter that stopped firing would have gone unnoticed.
+  # Email sign-in declares a sustained limiter alongside the burst one, with a
+  # longer retry hint. A sustained limiter that stopped firing would go unnoticed.
   {
-    "app secret credential sign-in" => [
-      :auth_app_sign_in_secret_url, "PUBLIC_AUTH_SERVICE_URL",
-      { client_secret_credential: { identifier: "sustained@example.com", secret_credential_value: "x" } },
-    ],
-    "com secret credential sign-in" => [
-      :auth_com_sign_in_secret_url, "PUBLIC_AUTH_CORPORATE_URL",
-      { visitor_secret_credential: { identifier: "sustained@example.com", secret_credential_value: "x" } },
-    ],
     "app email sign-in" => [
       :auth_app_sign_in_email_url, "PUBLIC_AUTH_SERVICE_URL",
       { client_email: { address: "sustained@example.com" } },
@@ -446,54 +401,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       post auth_app_sign_in_challenge_totp_url(ri: "jp", host: host),
            params: { totp_challenge_form: { token: "000000" } }
     end
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
-
-  test "org secret credential sign-in answers 429 once one identifier has spent its allowance" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-    params = { secret_credential_login_form: { identifier: "0123456789ABCDEF", secret_credential_value: "x" } }
-
-    (ACCOUNT_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times { post auth_org_sign_in_secret_url(ri: "jp", host: host), params: params }
-      end
-    end
-
-    travel((ACCOUNT_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_org_sign_in_secret_url(ri: "jp", host: host), params: params
-    end
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
-
-  test "org secret credential sign-in answers 429 once one source has spent its allowance across identifiers" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-    attempt = 0
-    spend =
-      lambda do
-        attempt += 1
-        post(
-          auth_org_sign_in_secret_url(ri: "jp", host: host),
-          params: {
-            secret_credential_login_form: {
-              identifier: format("%016d", attempt),
-              secret_credential_value: "x",
-            },
-          },
-        )
-      end
-
-    # A different identifier each time, so only the per-source rules accumulate.
-    (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) { BURST_ALLOWANCE.times { spend.call } }
-    end
-
-    travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) { spend.call }
 
     assert_response :too_many_requests
     assert_equal "900", response.headers["Retry-After"]

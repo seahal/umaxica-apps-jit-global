@@ -60,6 +60,7 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 require "support/external_identity_test_helper"
 
 class ClientTest < ActiveSupport::TestCase
@@ -240,19 +241,6 @@ class ClientTest < ActiveSupport::TestCase
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { token.reload }
-  end
-
-  test "owned_avatars association" do
-    capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
-    handle = Handle.create!(
-      handle: "owned_handle-#{SecureRandom.hex(4)}",
-      cooldown_until: Time.current,
-    )
-    member = Member.create!(user: @user, public_id: "m_#{SecureRandom.hex(8)}")
-    avatar = Avatar.create!(member: member, capability: capability, active_handle: handle, moniker: "Owned")
-    avatar.avatar_assignments.create!(user: @user, role: "owner")
-
-    assert_includes @user.owned_avatars, avatar
   end
 
   test "purge_eligible_at query picks clients with past purge_eligible_at" do

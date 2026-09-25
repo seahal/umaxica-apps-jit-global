@@ -35,18 +35,18 @@ module FqdnAvailabilityRegistry
     core_corporate: ->(hosts) { [hosts.core_corporate.host, ENV["PRIVATE_CORE_CORPORATE_URL"]] },
     core_staff: ->(hosts) { [hosts.core_staff.host, ENV["PRIVATE_CORE_STAFF_URL"]] },
     core_network: lambda { |_hosts|
-      [ENV["PRIVATE_CORE_NETWORK_URL"] || ENV["CORE_NETWORK_URL"], "core.net.localhost"]
+      [ENV["PRIVATE_CORE_NETWORK_URL"], "core.net.localhost"]
     },
     core_developer: lambda { |_hosts|
-      [ENV["PUBLIC_CORE_DEVELOPER_URL"], ENV["PRIVATE_CORE_DEVELOPER_URL"] || ENV["CORE_DEVELOPER_URL"],
+      [ENV["PUBLIC_CORE_DEVELOPER_URL"], ENV["PRIVATE_CORE_DEVELOPER_URL"],
        "core.dev.localhost",]
     },
-    docs_service: ->(_hosts) { [ENV["PRIVATE_DOCS_SERVICE_URL"], "docs.jp.umaxica.app", "docs.app.localhost"] },
-    docs_corporate: ->(_hosts) { [ENV["PRIVATE_DOCS_CORPORATE_URL"], "docs.jp.umaxica.com", "docs.com.localhost"] },
-    docs_staff: ->(_hosts) { [ENV["PRIVATE_DOCS_STAFF_URL"], "docs.jp.umaxica.org", "docs.org.localhost"] },
-    news_service: ->(_hosts) { [ENV["PRIVATE_NEWS_SERVICE_URL"], "news.jp.umaxica.app", "news.app.localhost"] },
-    news_corporate: ->(_hosts) { [ENV["PRIVATE_NEWS_CORPORATE_URL"], "news.jp.umaxica.com", "news.com.localhost"] },
-    news_staff: ->(_hosts) { [ENV["PRIVATE_NEWS_STAFF_URL"], "news.jp.umaxica.org", "news.org.localhost"] },
+    docs_service: ->(hosts) { [hosts.docs_service.host, "docs.jp.umaxica.app", "docs.app.localhost"] },
+    docs_corporate: ->(hosts) { [hosts.docs_corporate.host, "docs.jp.umaxica.com", "docs.com.localhost"] },
+    docs_staff: ->(hosts) { [hosts.docs_staff.host, "docs.jp.umaxica.org", "docs.org.localhost"] },
+    news_service: ->(hosts) { [hosts.news_service.host, "news.jp.umaxica.app", "news.app.localhost"] },
+    news_corporate: ->(hosts) { [hosts.news_corporate.host, "news.jp.umaxica.com", "news.com.localhost"] },
+    news_staff: ->(hosts) { [hosts.news_staff.host, "news.jp.umaxica.org", "news.org.localhost"] },
     help_service: ->(hosts) { [hosts.help_service.host, "help.jp.umaxica.app", "help.app.localhost"] },
     help_corporate: ->(hosts) { [hosts.help_corporate.host, "help.jp.umaxica.com", "help.com.localhost"] },
     help_staff: ->(hosts) { [hosts.help_staff.host, "help.jp.umaxica.org", "help.org.localhost"] },
@@ -81,19 +81,29 @@ module FqdnAvailabilityRegistry
     swagger: lambda { |_hosts|
       [ENV["PUBLIC_SWAGGER_URL"], ENV["PRIVATE_SWAGGER_URL"], "swagger.core.dev.localhost"]
     },
-    side_service: ->(hosts) { [hosts.side_service.host, "wide.app.localhost"] },
-    side_corporate: ->(hosts) { [hosts.side_corporate.host, "wide.com.localhost"] },
-    side_staff: ->(hosts) { [hosts.side_staff.host, "wide.org.localhost"] },
+    warp_service: ->(hosts) { [hosts.warp_service.host, "warp.app.localhost"] },
+    warp_corporate: ->(hosts) { [hosts.warp_corporate.host, "warp.com.localhost"] },
+    warp_staff: ->(hosts) { [hosts.warp_staff.host, "warp.org.localhost"] },
     palm_service: ->(hosts) { [hosts.palm_service.host, "palm.app.localhost"] },
   }.freeze
 
   SLOT_NAMES = SLOT_SOURCES.keys.freeze
 
   FLAG_PREFIX = "fqdn_available_"
+  # Flipper feature names are persisted operational keys. Keep the historic keys while the
+  # application-facing slots and routes use Warp terminology.
+  PERSISTED_FLAG_SLOT_NAMES = {
+    warp_service: :side_service,
+    warp_corporate: :side_corporate,
+    warp_staff: :side_staff,
+  }.freeze
 
   module_function
 
-  def flag_name_for(slot) = :"#{FLAG_PREFIX}#{slot}"
+  def flag_name_for(slot)
+    persisted_slot = PERSISTED_FLAG_SLOT_NAMES.fetch(slot.to_sym, slot)
+    :"#{FLAG_PREFIX}#{persisted_slot}"
+  end
 
   def flag_names = SLOT_NAMES.map { |slot| flag_name_for(slot) }
 

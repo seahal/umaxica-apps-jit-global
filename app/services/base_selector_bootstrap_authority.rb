@@ -65,7 +65,7 @@ class BaseSelectorBootstrapAuthority
       connection_owner(config.principal_class),
       connection_owner(config.rp_account_class),
       connection_owner(config.token_class),
-      (connection_owner(Avatar) if config.requires_avatar),
+      (connection_owner(Avatar) if config.provision_default_avatar),
     ].compact
     result.uniq!
     result
@@ -86,7 +86,7 @@ class BaseSelectorBootstrapAuthority
       connection_owner(config.collective_class),
       connection_owner(config.unit_class),
       connection_owner(config.membership_class),
-      (connection_owner(Avatar) if config.requires_avatar),
+      (connection_owner(Avatar) if config.provision_default_avatar),
     ].compact
     result.uniq!
     result
@@ -103,11 +103,11 @@ class BaseSelectorBootstrapAuthority
       config.identity_state_class,
       config.membership_kind_class,
       config.membership_state_class,
-      (AvatarCapability if config.requires_avatar),
-      (HandleStatus if config.requires_avatar),
+      (AvatarCapability if config.provision_default_avatar),
+      (HandleStatus if config.provision_default_avatar),
     ].compact.each { |klass| klass.ensure_defaults! if klass.respond_to?(:ensure_defaults!) }
 
-    AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL) if config.requires_avatar
+    AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL) if config.provision_default_avatar
   end
 
   def ensure_rp_account!
@@ -289,9 +289,28 @@ class BaseSelectorBootstrapAuthority
   def provision_avatar!(account:, collective:)
     # The avatar hook is always part of the surface bootstrap interface.
     # App persists an avatar; com/org traverse the same hook and return nil.
-    return nil unless config.requires_avatar
+    return nil unless config.provision_default_avatar
 
-    existing_avatar = AvatarAssignment.where(user_id: principal.id, role: "owner").first&.avatar
+    unless AvatarPermissionResolver.call(
+      actor: principal,
+      surface: config.surface,
+      subject_public_id: account.public_id,
+      owner_collective_public_id: collective.public_id,
+      permission: "avatar.update",
+    )
+      raise AvatarProvisioning::Create::Unauthorized, "avatar.update permission required"
+    end
+
+    existing_avatar = Avatar
+      .joins(:current_ownership_period)
+      .where(
+        avatar_ownership_periods: {
+          owner_surface: config.surface.to_s,
+          owner_collective_public_id: collective.public_id,
+        },
+      )
+      .order(:created_at, :id)
+      .first
     return existing_avatar if existing_avatar.present?
 
     result = AvatarProvisioning::Create.call(
@@ -300,14 +319,24 @@ class BaseSelectorBootstrapAuthority
       subject: account,
       avatar_params: { moniker: "Default Avatar" },
       handle_params: { handle: default_handle },
-      organization_public_id: collective.public_id,
+      owner_surface: config.surface.to_s,
+      owner_collective_public_id: collective.public_id,
     )
 
     raise result.errors.first if result.errors.any?
 
     result.avatar
   rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-    AvatarAssignment.where(user_id: principal.id, role: "owner").first&.avatar || raise
+    Avatar
+      .joins(:current_ownership_period)
+      .where(
+        avatar_ownership_periods: {
+          owner_surface: config.surface.to_s,
+          owner_collective_public_id: collective.public_id,
+        },
+      )
+      .order(:created_at, :id)
+      .first || raise
   end
 
   def bind_avatar_account!(avatar:, account:)

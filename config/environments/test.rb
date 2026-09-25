@@ -102,6 +102,8 @@ Rails.application.configure do
   # Raise on SQL warnings from PostgreSQL.
   config.active_record.db_warnings_action = :raise
   config.active_record.dump_schema_after_migration = false
+  # Fixture rows for encrypted attributes use the Rails encrypted-fixture serializer.
+  config.active_record.encryption.encrypt_fixtures = true
 
   # Detect N+1 queries and raise errors immediately.
   config.active_record.strict_loading_by_default = true
@@ -170,11 +172,11 @@ Rails.application.configure do
     self.create_unlogged_tables = true
   end
 
-  config.after_initialize do
-    # Rails' fixture FK validation deadlocks under this multi-DB test suite; the
-    # database constraints still enforce integrity when fixtures are loaded.
-    ActiveRecord.verify_foreign_keys_for_fixtures = false
-  end
+  # Rails applies this configured value after the application callbacks. Assigning the
+  # ActiveRecord singleton in after_initialize was overwritten by the Rails default and
+  # fixture loading silently validated existing NOT VALID foreign keys in disposable DBs.
+  # Keep the established fixture policy while ordinary FK enforcement remains active.
+  config.active_record.verify_foreign_keys_for_fixtures = false
 
   # Log slow queries over 100ms.
   config.active_record.query_log_tags_enabled = true

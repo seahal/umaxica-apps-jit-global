@@ -66,6 +66,24 @@ class PreferenceInertiaPageContractTest < ActionDispatch::IntegrationTest
 
       # AUTHENTICATION_MODE is :open, so the preference authority answers unauthenticated requests.
       assert_response :success
+      assert_equal public_send("base_#{name}_root_path", ri: "jp"),
+                   inertia_page.dig("props", "up_link", "href")
+    end
+
+    test "base_#{name} guest return link preserves JP and US request context" do
+      [{ ri: "jp", lx: "ja", ct: "sy", tz: "asia/tokyo" },
+       { ri: "us", lx: "en", ct: "dr", tz: "utc" },].each do |context|
+        get_preference_index(surface, **context)
+
+        assert_response :success
+        href = inertia_page.dig("props", "up_link", "href")
+        uri = URI.parse(href)
+        query = Rack::Utils.parse_query(uri.query)
+
+        assert_equal "/", uri.path
+        context.each { |key, value| assert_equal value, query.fetch(key.to_s) }
+        assert_equal query.keys.uniq, query.keys
+      end
     end
 
     test "base_#{name} props carry every screen link with the request region" do
@@ -236,13 +254,16 @@ class PreferenceInertiaPageContractTest < ActionDispatch::IntegrationTest
     ENV.fetch(surface.fetch(:host_env), surface.fetch(:fallback_host))
   end
 
-  def preference_url(surface)
-    public_send("base_#{surface.fetch(:name)}_preference_url", host: surface_host(surface), ri: "jp")
+  def preference_url(surface, ri: "jp", **context)
+    public_send(
+      "base_#{surface.fetch(:name)}_preference_url",
+      host: surface_host(surface), ri: ri, **context,
+    )
   end
 
-  def get_preference_index(surface, headers: nil)
+  def get_preference_index(surface, headers: nil, ri: "jp", **context)
     host!(surface_host(surface))
-    get(preference_url(surface), headers: headers)
+    get(preference_url(surface, ri: ri, **context), headers: headers)
   end
 
   def inertia_headers(surface, version:)

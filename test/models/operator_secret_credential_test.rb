@@ -95,26 +95,6 @@ class OperatorSecretCredentialTest < ActiveSupport::TestCase
     assert_not_includes record.attributes.values, raw_secret_credential
   end
 
-  test "verify_and_consume! marks secret_credential as used after success" do
-    record, raw_secret_credential = OperatorSecretCredential.issue!(
-      name: "API Key", staff: @staff, uses: 2,
-      staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN,
-    )
-
-    assert record.verify_and_consume!(raw_secret_credential)
-    assert_equal OperatorSecretCredentialStatus::USED, record.reload.staff_secret_status_id
-  end
-
-  test "verify_and_consume! marks used when uses_remaining reaches zero" do
-    record, raw_secret_credential = OperatorSecretCredential.issue!(
-      name: "API Key", staff: @staff, uses: 1,
-      staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN,
-    )
-
-    assert record.verify_and_consume!(raw_secret_credential)
-    assert_equal OperatorSecretCredentialStatus::USED, record.reload.staff_secret_status_id
-  end
-
   test "sample fixture secret_credential authenticates with fixed raw secret_credential" do
     secret_credential = operator_secret_credentials(:sample_login)
 
@@ -150,103 +130,6 @@ class OperatorSecretCredentialTest < ActiveSupport::TestCase
     record = OperatorSecretCredential.new(staff: @staff, name: "Key", staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN)
 
     assert_predicate record, :login_secret_credential?
-  end
-
-  test "permanent_secret_credential? predicate returns true for LOGIN kind" do
-    record = OperatorSecretCredential.new(staff: @staff, name: "Key", staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN)
-
-    assert_predicate record, :permanent_secret_credential?
-    assert_not record.one_time_secret_credential?
-  end
-
-  test "usable_for_secret_credential_sign_in? rejects revoked kind and expired secret_credentials" do
-    record, _raw_secret_credential = OperatorSecretCredential.issue!(
-      name: "Sign In Secret", staff: @staff,
-      staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN,
-    )
-
-    assert_predicate record, :usable_for_secret_credential_sign_in?
-
-    record.staff_secret_status_id = OperatorSecretCredentialStatus::REVOKED
-
-    assert_not record.usable_for_secret_credential_sign_in?
-
-    record.staff_secret_status_id = OperatorSecretCredentialStatus::ACTIVE
-    record.staff_secret_kind_id = OperatorSecretCredentialKind::NOTHING
-
-    assert_not record.usable_for_secret_credential_sign_in?
-
-    record.staff_secret_kind_id = OperatorSecretCredentialKind::LOGIN
-    record.define_singleton_method(:expires_at) { 1.minute.ago }
-
-    assert_not record.usable_for_secret_credential_sign_in?
-  end
-
-  test "verify_for_secret_credential_sign_in! rejects wrong secret_credential and disallowed states" do
-    record, raw_secret_credential = OperatorSecretCredential.issue!(
-      name: "Sign In Secret", staff: @staff,
-      staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN,
-    )
-
-    assert_not record.verify_for_secret_credential_sign_in!("wrong-secret_credential")
-
-    record.update!(staff_identity_secret_status_id: OperatorSecretCredentialStatus::REVOKED)
-
-    assert_not record.verify_for_secret_credential_sign_in!(raw_secret_credential)
-
-    record.update!(
-      staff_identity_secret_status_id: OperatorSecretCredentialStatus::ACTIVE,
-      staff_secret_kind_id: OperatorSecretCredentialKind::NOTHING,
-    )
-
-    assert_not record.verify_for_secret_credential_sign_in!(raw_secret_credential)
-  end
-
-  test "verify_for_secret_credential_sign_in! keeps permanent login secret_credential active" do
-    record, raw_secret_credential = OperatorSecretCredential.issue!(
-      name: "Permanent Key", staff: @staff,
-      staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN,
-    )
-
-    assert record.verify_for_secret_credential_sign_in!(raw_secret_credential)
-    assert_equal OperatorSecretCredentialStatus::ACTIVE, record.reload.staff_secret_status_id
-    assert_predicate record.last_used_at, :present?
-  end
-
-  test "verify_for_secret_credential_sign_in! allows repeated use for permanent login secret_credential" do
-    record, raw_secret_credential = OperatorSecretCredential.issue!(
-      name: "Permanent Key", staff: @staff,
-      staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN,
-    )
-
-    assert record.verify_for_secret_credential_sign_in!(raw_secret_credential)
-    first_last_used_at = record.reload.last_used_at
-
-    travel 1.second do
-      assert record.verify_for_secret_credential_sign_in!(raw_secret_credential)
-    end
-
-    record.reload
-
-    assert_equal OperatorSecretCredentialStatus::ACTIVE, record.staff_secret_status_id
-    assert_operator record.last_used_at, :>, first_last_used_at
-  end
-
-  test "allowed_for_secret_credential_sign_in excludes non login secret_credentials" do
-    login_secret_credential, = OperatorSecretCredential.issue!(name: "Login Key", staff: @staff, staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN)
-    non_login_secret_credential, = OperatorSecretCredential.issue!(
-      name: "Inactive Key", staff: @staff,
-      staff_secret_kind_id: OperatorSecretCredentialKind::NOTHING,
-    )
-
-    assert_includes OperatorSecretCredential.allowed_for_secret_credential_sign_in, login_secret_credential
-    assert_not_includes OperatorSecretCredential.allowed_for_secret_credential_sign_in, non_login_secret_credential
-  end
-
-  test "usable_for_secret_credential_sign_in? allows records until discard_at" do
-    secret_credential, = OperatorSecretCredential.issue!(name: "Permanent Key", staff: @staff, staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN)
-
-    assert_predicate secret_credential, :usable_for_secret_credential_sign_in?
   end
 
   test "public_id is automatically generated on create" do

@@ -77,7 +77,7 @@ class ViteEntrypointContractTest < ActiveSupport::TestCase
   end
 
   # The base family typography is not a surface of its own: it is imported by the three base surface
-  # stylesheets and by nothing else, so a family rule cannot reach the auth, side, palm, or core
+  # stylesheets and by nothing else, so a family rule cannot reach the Auth, Warp, Palm, or Core
   # surfaces.
   BASE_FAMILY_IMPORT = %(@import "../base_family.css";)
   BASE_FAMILY_STYLESHEETS = %w(base_app.css base_com.css base_org.css).freeze

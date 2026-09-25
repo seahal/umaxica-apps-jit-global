@@ -4,7 +4,10 @@
 # News owns the public news content surface.
 scope module: :news, as: :news do
   # App news host.
-  constraints host: [ENV["PRIVATE_NEWS_SERVICE_URL"], "news.jp.umaxica.app", "news.app.localhost"].compact do
+  constraints host: [
+    Rails.configuration.x.boot_config.fetch(:hosts).news_service.host,
+    "news.jp.umaxica.app", "news.app.localhost",
+  ].compact do
     # App surface controllers.
     scope module: :app, as: :app do
       # Thin landing endpoint.
@@ -52,7 +55,10 @@ scope module: :news, as: :news do
   end
 
   # Corporate news host.
-  constraints host: [ENV["PRIVATE_NEWS_CORPORATE_URL"], "news.jp.umaxica.com", "news.com.localhost"].compact do
+  constraints host: [
+    Rails.configuration.x.boot_config.fetch(:hosts).news_corporate.host,
+    "news.jp.umaxica.com", "news.com.localhost",
+  ].compact do
     # Corporate surface controllers.
     scope module: :com, as: :com do
       # Thin landing endpoint.
@@ -100,7 +106,10 @@ scope module: :news, as: :news do
   end
 
   # Staff news host.
-  constraints host: [ENV["PRIVATE_NEWS_STAFF_URL"], "news.jp.umaxica.org", "news.org.localhost"].compact do
+  constraints host: [
+    Rails.configuration.x.boot_config.fetch(:hosts).news_staff.host,
+    "news.jp.umaxica.org", "news.org.localhost",
+  ].compact do
     # Staff surface controllers.
     scope module: :org, as: :org do
       # Thin landing endpoint.

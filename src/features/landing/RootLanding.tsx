@@ -58,7 +58,7 @@ export type RootLandingProps = {
   description: string;
   sign_in?: RootLandingDestination | null;
   sign_up: RootLandingDestination | null;
-  // Surfaces that offer more than one destination (side settings, palm per-platform sign-up) send
+  // Surfaces that offer more than one destination (Warp settings, Palm per-platform sign-up) send
   // them here; the server has already decided which ones the visitor may see.
   links?: RootLandingLink[] | null;
 };

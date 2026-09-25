@@ -2,12 +2,9 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "base64"
 
-# Drives the com sign-up checkpoint sequence end to end: telephone -> OTP -> guard -> passkey ->
-# passcode. Both checkpoint controllers are exercised through the real sequence rather than by
-# assembling checkpoint state in the test, so the requirement bookkeeping in
-# SignUpSequenceControllerSupport is covered along the way.
+# Drives the com telephone sign-up checkpoint sequence through public endpoints so the
+# requirement bookkeeping is exercised through the real sequence.
 class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch::IntegrationTest
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
@@ -54,63 +51,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     register_passkey!(cycle, "com_checkpoint_1")
 
     assert cycle.reload.requirement_cleared?(:passkey)
-  end
-
-  test "the passcode checkpoint shows a generated recovery passcode" do
-    advance_to_passcode_checkpoint!("+819022220002", "com_checkpoint_2")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-  end
-
-  # The page serializes the plaintext recovery passcode into the Inertia page object, so the
-  # response must never be reusable from a cache. The checkpoint concern sets `no-store` only on
-  # its age-restricted branch, which does not cover this reveal.
-  test "the passcode checkpoint forbids caching the page that reveals the passcode" do
-    advance_to_passcode_checkpoint!("+819022220004", "com_checkpoint_4")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-    assert_includes response.headers["Cache-Control"], "no-store"
-  end
-
-  test "the passcode checkpoint clears its requirement and advances to the birthdate step" do
-    cycle = advance_to_passcode_checkpoint!("+819022220003", "com_checkpoint_3")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version },
-          headers: default_headers
-
-    assert_response :redirect
-    assert cycle.reload.requirement_cleared?(:passcode)
-  end
-
-  test "the passcode checkpoint refuses a stale checkpoint version" do
-    cycle = advance_to_passcode_checkpoint!("+819022220004", "com_checkpoint_4")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version.to_i - 1 },
-          headers: default_headers
-
-    assert_not cycle.reload.requirement_cleared?(:passcode)
-  end
-
-  test "destroying the passcode checkpoint cancels the sign-up flow" do
-    advance_to_passcode_checkpoint!("+819022220005", "com_checkpoint_5")
-
-    delete auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :redirect
+    assert_not_includes cycle.completed_requirements.keys, "passcode"
   end
 
   private
@@ -189,13 +130,8 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     end
 
     assert_response :created
-  end
-
-  def advance_to_passcode_checkpoint!(raw_number, webauthn_suffix)
-    verify_telephone_via_otp!(raw_number)
-    cycle = current_sign_up_flow
-    register_passkey!(cycle, webauthn_suffix)
-    cycle
+    assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp"),
+                 response.parsed_body.fetch("redirect_url")
   end
 
   def current_sign_up_flow

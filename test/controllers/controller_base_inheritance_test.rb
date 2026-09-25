@@ -36,9 +36,9 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     News::Com::BareController,
     News::Org::BareController,
     Palm::App::BareController,
-    Side::App::BareController,
-    Side::Com::BareController,
-    Side::Org::BareController,
+    Warp::App::BareController,
+    Warp::Com::BareController,
+    Warp::Org::BareController,
   ].freeze
 
   APPLICATION_CONTROLLERS = [
@@ -54,9 +54,9 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Core::App::ApplicationController,
     Core::Com::ApplicationController,
     Core::Org::ApplicationController,
-    Side::App::ApplicationController,
-    Side::Com::ApplicationController,
-    Side::Org::ApplicationController,
+    Warp::App::ApplicationController,
+    Warp::Com::ApplicationController,
+    Warp::Org::ApplicationController,
   ].freeze
 
   test "bare controllers inherit directly from ActionController base" do
@@ -115,9 +115,9 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
       Auth::App,
       Auth::Com,
       Auth::Org,
-      Side::App,
-      Side::Com,
-      Side::Org,
+      Warp::App,
+      Warp::Com,
+      Warp::Org,
     ].each do |namespace|
       assert_not namespace.const_defined?(:OpenController, false), namespace.name
     end

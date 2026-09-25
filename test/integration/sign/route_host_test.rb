@@ -118,9 +118,9 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
 
   def sign_route_product_hosts
     {
-      side_service: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "wide.app.localhost")),
-      side_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "wide.com.localhost")),
-      side_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "wide.org.localhost")),
+      warp_service: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "warp.app.localhost")),
+      warp_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "warp.com.localhost")),
+      warp_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "warp.org.localhost")),
       core_service: OpenStruct.new(host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")),
       core_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")),
       core_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost")),
@@ -128,8 +128,6 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
       base_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")),
       base_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")),
       palm_service: OpenStruct.new(host: ENV.fetch("PUBLIC_PALM_SERVICE_URL", "palm.app.localhost")),
-      palm_corporate: OpenStruct.new(host: Rails.configuration.x.boot_config.fetch(:hosts).palm_corporate.host),
-      palm_staff: OpenStruct.new(host: Rails.configuration.x.boot_config.fetch(:hosts).palm_staff.host),
       help_service: OpenStruct.new(host: ENV.fetch("PRIVATE_HELP_SERVICE_URL", "help.app.localhost")),
       help_corporate: OpenStruct.new(host: ENV.fetch("PRIVATE_HELP_CORPORATE_URL", "help.com.localhost")),
       help_staff: OpenStruct.new(host: ENV.fetch("PRIVATE_HELP_STAFF_URL", "help.org.localhost")),
@@ -137,6 +135,12 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
       info_corporate: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_CORPORATE_URL", "info.com.localhost")),
       info_staff: OpenStruct.new(host: ENV.fetch("PRIVATE_INFO_STAFF_URL", "info.org.localhost")),
       edit_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_EDIT_STAFF_URL", "edit.org.localhost")),
+      docs_service: OpenStruct.new(host: "docs.app.localhost"),
+      docs_corporate: OpenStruct.new(host: "docs.com.localhost"),
+      docs_staff: OpenStruct.new(host: "docs.org.localhost"),
+      news_service: OpenStruct.new(host: "news.app.localhost"),
+      news_corporate: OpenStruct.new(host: "news.com.localhost"),
+      news_staff: OpenStruct.new(host: "news.org.localhost"),
     }
   end
 end

@@ -41,5 +41,5 @@ class OperatorDeviceSession < OrgTicketRecord
   # fail validation, so sign-out could not revoke such sessions.
   belongs_to :current_refresh_token, class_name: "OperatorToken", optional: true
   has_many :staff_tokens, class_name: "OperatorToken", foreign_key: :device_session_id,
-                          dependent: :nullify, inverse_of: :device_session
+                          dependent: :restrict_with_exception, inverse_of: :device_session
 end

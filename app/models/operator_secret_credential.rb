@@ -62,8 +62,7 @@ class OperatorSecretCredential < OrgPrincipalRecord
   include OperatorSecretCredentialKinds
 
   MAX_SECRETS_PER_STAFF = 20
-  SIGN_IN_ALLOWED_STATUS_IDS = [OperatorSecretCredentialStatus::ACTIVE].freeze
-  SIGN_IN_ALLOWED_KIND_IDS = OperatorSecretCredentialKind::ALLOWED_FOR_SECRET_SIGN_IN
+  ACTIVE_STATUS_IDS = [OperatorSecretCredentialStatus::ACTIVE].freeze
   attr_accessor :raw_secret_credential
 
   attribute :staff_identity_secret_status_id, default: OperatorSecretCredentialStatus::ACTIVE
@@ -88,13 +87,6 @@ class OperatorSecretCredential < OrgPrincipalRecord
                  record_name: "secret_credentials",
                  owner_name: "staff"
 
-  scope :allowed_for_secret_credential_sign_in, lambda {
-    where(
-      staff_identity_secret_status_id: SIGN_IN_ALLOWED_STATUS_IDS,
-      staff_secret_kind_id: SIGN_IN_ALLOWED_KIND_IDS,
-    )
-  }
-
   def self.identity_secret_credential_status_class
     OperatorSecretCredentialStatus
   end
@@ -111,49 +103,4 @@ class OperatorSecretCredential < OrgPrincipalRecord
     public_id
   end
 
-  def usable_for_secret_credential_sign_in?(now: Time.current)
-    return false unless sign_in_status_allowed?
-    return false unless sign_in_kind_allowed?
-    return false if expired_for_secret_credential_sign_in?(now)
-
-    true
-  end
-
-  def verify_for_secret_credential_sign_in!(raw_secret_credential, now: Time.current)
-    with_lock do
-      reload
-
-      auth_result = authenticate(raw_secret_credential)
-      return false unless sign_in_status_allowed?
-      return false unless sign_in_kind_allowed?
-      return false if expired_for_secret_credential_sign_in?(now)
-      return false unless auth_result
-
-      self.last_used_at = now
-      save!
-    end
-
-    true
-  end
-
-  private
-
-  def sign_in_status_allowed?
-    SIGN_IN_ALLOWED_STATUS_IDS.include?(staff_secret_status_id)
-  end
-
-  def sign_in_kind_allowed?
-    SIGN_IN_ALLOWED_KIND_IDS.include?(staff_secret_kind_id)
-  end
-
-  def expired_for_secret_credential_sign_in?(now)
-    if respond_to?(:expires_at) && expires_at.present?
-      return now > expires_at
-    end
-
-    return false if discard_at.nil?
-    return false if discard_at.respond_to?(:infinite?) && discard_at.infinite?
-
-    now > discard_at
-  end
 end

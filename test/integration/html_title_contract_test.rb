@@ -15,7 +15,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
   BRAND = ENV.fetch("BRAND_NAME").upcase
 
   # Routing and deployment vocabulary that must never reach a title.
-  FORBIDDEN_WORDS = %w(Auth Base Core Side Palm Jump Global Rails Inertia API Home).freeze
+  FORBIDDEN_WORDS = %w(Auth Base Core Warp Palm Jump Global Rails Inertia API Home).freeze
 
   ROOT_SURFACES = [
     { host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), tld: "APP" },
@@ -27,9 +27,9 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
     { host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"), tld: "APP" },
     { host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"), tld: "COM" },
     { host: ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"), tld: "ORG" },
-    { host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"), tld: "APP" },
-    { host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"), tld: "COM" },
-    { host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"), tld: "ORG" },
+    { host: ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"), tld: "APP" },
+    { host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"), tld: "COM" },
+    { host: ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"), tld: "ORG" },
     { host: ENV.fetch("PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"), tld: "APP" },
     { host: "core.dev.localhost", tld: "DEV" },
   ].freeze

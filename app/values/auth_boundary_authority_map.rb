@@ -42,12 +42,12 @@ module AuthBoundaryAuthorityMap
     "core-com-us" => { surface: "core", face: "com", region: "us", actor: "visitor" },
     "core-org-jp" => { surface: "core", face: "org", region: "jp", actor: "operator" },
     "core-org-us" => { surface: "core", face: "org", region: "us", actor: "operator" },
-    "side-app-jp" => { surface: "side", face: "app", region: "jp", actor: "client" },
-    "side-app-us" => { surface: "side", face: "app", region: "us", actor: "client" },
-    "side-com-jp" => { surface: "side", face: "com", region: "jp", actor: "visitor" },
-    "side-com-us" => { surface: "side", face: "com", region: "us", actor: "visitor" },
-    "side-org-jp" => { surface: "side", face: "org", region: "jp", actor: "operator" },
-    "side-org-us" => { surface: "side", face: "org", region: "us", actor: "operator" },
+    "side-app-jp" => { surface: "warp", face: "app", region: "jp", actor: "client" },
+    "side-app-us" => { surface: "warp", face: "app", region: "us", actor: "client" },
+    "side-com-jp" => { surface: "warp", face: "com", region: "jp", actor: "visitor" },
+    "side-com-us" => { surface: "warp", face: "com", region: "us", actor: "visitor" },
+    "side-org-jp" => { surface: "warp", face: "org", region: "jp", actor: "operator" },
+    "side-org-us" => { surface: "warp", face: "org", region: "us", actor: "operator" },
     "edit-org" => { surface: "edit", face: "org", region: nil, actor: "operator" },
   }.freeze
 
@@ -59,20 +59,21 @@ module AuthBoundaryAuthorityMap
   ).freeze
 
   RETIRED_BROWSER_PATHS = %w(
-    /dashboard
     /lobby
     /sign/out/complete
     /sign/in
     /sign/in/callback
   ).freeze
 
+  RETIRED_AUTH_BROWSER_PATHS = %w(/dashboard).freeze
+
   RP_FACES = {
     "core-app" => { surface: "core", face: "app", actor: "client" },
     "core-com" => { surface: "core", face: "com", actor: "visitor" },
     "core-org" => { surface: "core", face: "org", actor: "operator" },
-    "side-app" => { surface: "side", face: "app", actor: "client" },
-    "side-com" => { surface: "side", face: "com", actor: "visitor" },
-    "side-org" => { surface: "side", face: "org", actor: "operator" },
+    "side-app" => { surface: "warp", face: "app", actor: "client" },
+    "side-com" => { surface: "warp", face: "com", actor: "visitor" },
+    "side-org" => { surface: "warp", face: "org", actor: "operator" },
     "edit-org" => { surface: "edit", face: "org", actor: "operator" },
   }.freeze
 
@@ -101,6 +102,10 @@ module AuthBoundaryAuthorityMap
 
   def retired_browser_paths
     RETIRED_BROWSER_PATHS
+  end
+
+  def retired_auth_browser_paths
+    RETIRED_AUTH_BROWSER_PATHS
   end
 
   def rp_faces

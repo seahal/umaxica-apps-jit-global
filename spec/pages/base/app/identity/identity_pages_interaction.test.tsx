@@ -30,9 +30,6 @@ const { default: PrivacyErasureNew } =
 const { default: RecoveryShow } = await import("@/pages/base/app/identity/recoveries/show");
 const { default: RecoverySessionNew } =
   await import("@/pages/base/app/identity/recovery/sessions/new");
-const { default: SecretsIndex } = await import("@/pages/base/app/identity/secrets/index");
-const { default: SecretNew } = await import("@/pages/base/app/identity/secrets/new");
-const { default: SecretEdit } = await import("@/pages/base/app/identity/secrets/edit");
 const { default: SessionsIndex } = await import("@/pages/base/app/identity/sessions/index");
 const { default: TelephoneNew } = await import("@/pages/base/app/identity/telephones/new");
 const { default: TelephoneEdit } = await import("@/pages/base/app/identity/telephones/edit");
@@ -501,124 +498,6 @@ describe("recovery interaction", () => {
     expect(post).toHaveBeenCalledWith("/identity/recovery/session", {
       data: { pass_code: "123456" },
     });
-  });
-});
-
-describe("secret interaction", () => {
-  it("deletes a secret only after confirmation", () => {
-    mount(
-      <SecretsIndex
-        title="Secrets"
-        back_link={backLink}
-        new_link={{ label: "New secret", href: "/identity/secrets/new" }}
-        table_headings={{
-          name: "Name",
-          created_at: "Created",
-          last_used_at: "Last used",
-          actions: "Actions",
-        }}
-        edit_label="Edit"
-        destroy_label="Delete"
-        destroy_confirm="Sure?"
-        secret_credentials={[
-          {
-            public_id: "sec_1",
-            name: "deploy",
-            created_at: "1 Jan",
-            last_used_at: "-",
-            edit_url: "/identity/secrets/sec_1/edit",
-            destroy_url: "/identity/secrets/sec_1",
-          },
-        ]}
-      />,
-    );
-
-    clickButton("Delete");
-    answerConfirmation(false);
-    expect(destroy).not.toHaveBeenCalled();
-
-    clickButton("Delete");
-    answerConfirmation(true);
-    expect(destroy).toHaveBeenCalledWith("/identity/secrets/sec_1");
-  });
-
-  it("posts a new secret", () => {
-    mount(
-      <SecretNew
-        title="New secret"
-        description="Save it now."
-        back_link={backLink}
-        cancel_link={{ label: "Cancel", href: "/identity/secrets" }}
-        form={{
-          action: "/identity/secrets",
-          name_label: "Name",
-          name: "abcd",
-          enabled_label: "I saved it",
-          submit_label: "Save",
-        }}
-        raw_secret_credential="abcd-efgh"
-        raw_secret_label="Secret"
-        one_time_notice="Shown once only."
-        errors={[]}
-      />,
-    );
-
-    setInput("#user_secret_credential_name", "deploy");
-    submitForm();
-    expect(post).toHaveBeenCalledWith(
-      "/identity/secrets",
-      { user_secret_credential: { name: "deploy", enabled: "0" } },
-      expect.anything(),
-    );
-    post.mockClear();
-    toggleCheckbox("#user_secret_credential_enabled");
-    submitForm();
-
-    expect(post).toHaveBeenCalledWith(
-      "/identity/secrets",
-      { user_secret_credential: { name: "deploy", enabled: "1" } },
-      expect.anything(),
-    );
-
-    fireVisitCallbacks(post);
-  });
-
-  it("patches an existing secret", () => {
-    mount(
-      <SecretEdit
-        title="Edit secret"
-        description="Rename it."
-        back_link={backLink}
-        cancel_link={{ label: "Cancel", href: "/identity/secrets" }}
-        form={{
-          action: "/identity/secrets/sec_1",
-          name_label: "Name",
-          name: "deploy",
-          enabled_label: "Enabled",
-          enabled: true,
-          submit_label: "Update",
-        }}
-        errors={[]}
-      />,
-    );
-
-    submitForm();
-    expect(patch).toHaveBeenCalledWith(
-      "/identity/secrets/sec_1",
-      { user_secret_credential: { name: "deploy", enabled: "1" } },
-      expect.anything(),
-    );
-    patch.mockClear();
-    toggleCheckbox("#user_secret_credential_enabled");
-    submitForm();
-
-    expect(patch).toHaveBeenCalledWith(
-      "/identity/secrets/sec_1",
-      { user_secret_credential: { name: "deploy", enabled: "0" } },
-      expect.anything(),
-    );
-
-    fireVisitCallbacks(patch);
   });
 });
 

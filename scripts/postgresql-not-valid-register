@@ -1,0 +1,63 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Render an approval register from live read-only constraint definitions.
+require "pg"
+require "json"
+require "digest"
+
+catalog = JSON.parse(File.read(ARGV.fetch(0)))
+output = ARGV.fetch(1)
+abort "output must be a memo" unless output.match?(%r{\Amemos/[a-z0-9-]+\.md\z})
+host = ENV.fetch("POSTGRESQL_AUDIT_HOST")
+port = Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10)
+user = ENV.fetch("POSTGRESQL_AUDIT_USER")
+password = ENV.fetch("POSTGRESQL_AUDIT_PASSWORD")
+logical_names = catalog.fetch("tables").select do |table|
+  table.fetch("constraints").any? { |constraint| constraint.fetch("validated") == "f" }
+end.map { |table| table.fetch("logical_database") }.uniq.sort
+records = []
+logical_names.each do |logical|
+  database = "development_#{logical}_db"
+  connection = PG.connect(host:, port:, user:, password:, dbname: database, connect_timeout: 3)
+  connection.exec("BEGIN READ ONLY")
+  connection.exec("SET LOCAL statement_timeout = '5s'")
+  connection.exec("SET LOCAL lock_timeout = '1s'")
+  connection.exec(<<~SQL).each do |row|
+    SELECT n.nspname AS schema, cls.relname AS table_name, con.conname AS name,
+           con.contype AS type, pg_get_constraintdef(con.oid, true) AS definition,
+           con.convalidated AS validated
+      FROM pg_constraint con JOIN pg_class cls ON cls.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = cls.relnamespace
+     WHERE n.nspname = 'public' AND NOT con.convalidated AND con.contype IN ('c', 'f')
+     ORDER BY cls.relname, con.conname
+  SQL
+    records << row.merge("logical_database" => logical)
+  end
+  connection.exec("ROLLBACK")
+  connection.close
+end
+keys =
+  records.map do |row|
+    [row.fetch("schema"), row.fetch("table_name"), row.fetch("type"), row.fetch("definition")]
+  end
+raise RuntimeError, "catalog and register counts diverge" unless records.length == catalog.fetch("tables").sum do |table|
+  table.fetch("constraints").count { |constraint| constraint.fetch("validated") == "f" }
+end
+
+lines = [
+  "# Existing NOT VALID Constraint Approval Register",
+  "",
+  "Source: read-only live development catalog captured at #{catalog.fetch("captured_at")} against commit `#{catalog.fetch("head")}` with uncommitted changes. #{records.length} physical constraints in #{logical_names.length} development databases; #{keys.uniq.length} exact logical definitions after grouping by schema, table, type, and definition. No `VALIDATE CONSTRAINT` was run. All affected tables were empty in the current development databases; the precheck therefore provides no evidence about populated environments.",
+  "",
+  "Each row is an independent shape-approval item. The recommended action, if approved after confirming the same definition and data state in the target environment, is to run `VALIDATE CONSTRAINT` in a short, separately bounded migration transaction. Stop on any mismatch, timeout, or violation. Existing rows are not rewritten. A failed validation leaves the original `NOT VALID` definition in place; retry only after investigation. A successful validation is not automatically reversed because reverting would discard a proven integrity guarantee. No shared database is in this task's application scope.",
+  "",
+  "| Logical DB | Schema.table | Constraint | Type | Live definition | Current state | Decision |",
+  "| --- | --- | --- | --- | --- | --- | --- |",
+]
+records.each do |row|
+  definition = row.fetch("definition").gsub("|", "\\|").tr("\n", " ")
+  lines << "| #{row.fetch("logical_database")} | `#{row.fetch("schema")}.#{row.fetch("table_name")}` | `#{row.fetch("name")}` | #{(row.fetch("type") == "f") ? "FK" : "CHECK"} | `#{definition}` | NOT VALID; development table empty | Approval pending |"
+end
+File.write(output, lines.join("\n") + "\n")
+puts "wrote #{output}: physical=#{records.length} exact_logical=#{keys.uniq.length} sha256=#{Digest::SHA256.file(output).hexdigest}"

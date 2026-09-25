@@ -8,6 +8,16 @@ module Base
 
       AUTHENTICATION_MODE = :open
 
+      protected
+
+      def track_authenticated_session_activity?
+        return false if (request.get? || request.head?) && action_name == "show"
+
+        super
+      end
+
+      public
+
       def show
         # `inertia: true` resolves the component through the configured component_path_resolver,
         # which is controller_path + action_name: "base/com/preferences/show".

@@ -3,10 +3,8 @@
 
 require "test_helper"
 
-# Credential-management endpoints on the identity surfaces: issuing a new
-# secret credential on the app surface, removing one on the corporate and staff
-# surfaces (including the guard that keeps the last usable credential), and the
-# app MFA level page.
+# Credential-management endpoints on the corporate and staff identity surfaces,
+# plus the app MFA level page. The app's generic secret management route is retired.
 class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_email_statuses,
            :client_secret_credential_kinds, :client_secret_credential_statuses,
@@ -29,54 +27,6 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "app secret credential form issues a one-time secret and create persists it" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    host! host
-    client = clients(:one)
-    ClientEmail.create!(
-      user: client, address: "app_secret_credential_contact@example.com", confirm_policy: "1",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
-    token = ClientToken.create!(
-      user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
-    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
-    _verification, raw_verification = ClientVerification.issue_for_token!(token: token)
-    cookies[ClientVerification.cookie_name] = raw_verification
-    token.update!(
-      last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
-      last_step_up_aal: "aal2", last_step_up_method: "passkey",
-      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app",
-    )
-    access_token = AuthenticationToken.encode(
-      client, host: host, session_public_id: token.public_id,
-              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    cookies["csrf_token"] = "test-csrf-token"
-    headers = {
-      "Authorization" => "Bearer #{access_token}",
-      "Client-Agent" => "Mozilla/5.0",
-      "Host" => host,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-      "X-CSRF-Token" => "test-csrf-token",
-    }
-
-    get new_base_app_identity_secret_url(ri: "jp", host: host), headers: headers
-
-    assert_response :success
-
-    assert_difference("ClientSecretCredential.count", 1) do
-      post base_app_identity_secrets_url(ri: "jp", host: host),
-           params: { user_secret_credential: { name: "laptop" } }, headers: headers
-    end
-
-    assert_response :see_other
-  end
-
   test "com secret credential removal discards the credential when another remains" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
@@ -85,6 +35,9 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       visitor: visitor, address: "com_secret_removal_contact@example.com", confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::ACTIVE)
+    VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::DELETED)
+    VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::LOGIN)
     removable, = VisitorSecretCredential.issue!(
       name: "removable", visitor_id: visitor.id,
       visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN, uses: 10, status: :active,
@@ -126,6 +79,9 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
     operator = operators(:one)
+    OperatorSecretCredentialStatus.find_or_create_by!(id: OperatorSecretCredentialStatus::ACTIVE)
+    OperatorSecretCredentialStatus.find_or_create_by!(id: OperatorSecretCredentialStatus::DELETED)
+    OperatorSecretCredentialKind.find_or_create_by!(id: OperatorSecretCredentialKind::LOGIN)
     removable, = OperatorSecretCredential.issue!(
       name: "removable", staff_id: operator.id,
       staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN, uses: 10, status: :active,

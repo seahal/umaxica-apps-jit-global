@@ -8,7 +8,6 @@
 #  image_data                   :jsonb
 #  lifecycle_state_id           :bigint           not null
 #  lock_version                 :integer          default(0), not null
-#  moniker                      :string           not null
 #  purge_eligible_at                    :datetime         default(Infinity), not null
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
@@ -38,7 +37,6 @@
 #  fk_rails_...  (lifecycle_state_id => avatar_lifecycle_states.id)
 #
 one:
-  moniker: "Moniker One"
   public_id: "avatar_pk_123"
   active_handle: one
   capability_id: 1

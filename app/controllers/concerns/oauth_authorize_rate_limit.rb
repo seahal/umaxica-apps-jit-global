@@ -17,31 +17,83 @@ module OauthAuthorizeRateLimit
   def enforce_oauth_authorize_rate_limits!
     profile_set = RateLimitProfiles.oauth_authorize
 
-    return if oauth_authorize_rate_limit_request!(
+    return unless oauth_authorize_rate_limit_request!(
       bucket: "ip_surface",
       profile: profile_set.ip_surface,
       key: oauth_authorize_rate_limit_ip_surface_key,
     )
-    return if oauth_authorize_rate_limit_request!(
+
+    return unless oauth_authorize_rate_limit_request!(
       bucket: "browser_client",
       profile: profile_set.browser_client,
       key: oauth_authorize_rate_limit_browser_client_key,
     )
-    return if oauth_authorize_rate_limit_request!(
+
+    oauth_authorize_rate_limit_request!(
       bucket: "client_redirect_host",
       profile: profile_set.client_redirect_host,
       key: oauth_authorize_rate_limit_client_redirect_host_key,
     )
-
-    nil
   end
 
   def oauth_authorize_rate_limit_request!(bucket:, profile:, key:)
-    count = Rails.configuration.x.rate_limit.fetch(:store).increment(key, 1, expires_in: profile.within)
-    return true if count.blank? || count <= profile.to
+    failure_reason = nil
+    error_class = nil
+    count = nil
+
+    begin
+      count = Rails.configuration.x.rate_limit.fetch(:store).increment(key, 1, expires_in: profile.within)
+    rescue Umaxica::Valkey::Unavailable => e
+      failure_reason = "backend_unavailable"
+      error_class = e.class.name
+    rescue Umaxica::Valkey::OperationError => e
+      failure_reason = "backend_operation_error"
+      error_class = e.class.name
+    end
+
+    if failure_reason
+      oauth_authorize_rate_limit_backend_failure!(bucket:, reason: failure_reason, error_class:)
+      return false
+    end
+
+    unless count.is_a?(Integer) && count.positive?
+      reason = count.nil? ? "missing_counter_result" : "invalid_counter_result"
+      oauth_authorize_rate_limit_backend_failure!(bucket:, reason:)
+      return false
+    end
+
+    return true if count <= profile.to
 
     oauth_authorize_rate_limit_exceeded!(bucket:, profile:, count:)
     false
+  end
+
+  def oauth_authorize_rate_limit_backend_failure!(bucket:, reason:, error_class: nil)
+    Rails.logger.error(
+      JitLogEvent.format(
+        "oidc.authorize.rate_limit.backend_failure",
+        mode: "request_window",
+        bucket: bucket,
+        surface: oauth_authorize_rate_limit_surface,
+        reason: reason,
+        error_class: error_class,
+        request_id: request.request_id,
+      ),
+    )
+
+    payload = {
+      error: "temporarily_unavailable",
+      error_description: I18n.t("errors.rate_limit.backend_unavailable"),
+    }
+
+    respond_to do |format|
+      format.json { render json: payload, status: :service_unavailable }
+      format.html do
+        render plain: payload.fetch(:error_description),
+               content_type: "text/plain",
+               status: :service_unavailable
+      end
+    end
   end
 
   def oauth_authorize_rate_limit_exceeded!(bucket:, profile:, count:)

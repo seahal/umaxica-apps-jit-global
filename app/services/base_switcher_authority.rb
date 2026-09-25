@@ -68,6 +68,10 @@ class BaseSwitcherAuthority
   def available_avatars
     result = selectable_candidates.filter_map { |candidate| candidate.fetch(:avatar) }
     result.uniq!(&:id)
+    ActiveRecord::Associations::Preloader.new(
+      records: result,
+      associations: :current_avatar_moniker,
+    ).call if result.any?
     result
   end
 

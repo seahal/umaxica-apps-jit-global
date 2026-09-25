@@ -59,7 +59,7 @@ scope module: :core, as: :core do
           # Token lifecycle endpoints.
           namespace :token do
             # Token refresh endpoint.
-            resource :renewal, only: :create, path: "refresh", controller: :refreshes, as: :refresh
+            resource :refresh, only: :create
           end
         end
       end
@@ -251,7 +251,7 @@ scope module: :core, as: :core do
   end
 
   # Network utility host.
-  constraints host: [ENV["PRIVATE_CORE_NETWORK_URL"] || ENV["CORE_NETWORK_URL"], "core.net.localhost"].compact do
+  constraints host: [ENV["PRIVATE_CORE_NETWORK_URL"], "core.net.localhost"].compact do
     scope module: :net, as: :network do
       # Thin landing endpoint.
       root to: "roots#index"
@@ -283,7 +283,7 @@ scope module: :core, as: :core do
   end
 
   # Developer utility host.
-  constraints host: [ENV["PUBLIC_CORE_DEVELOPER_URL"], ENV["PRIVATE_CORE_DEVELOPER_URL"] || ENV["CORE_DEVELOPER_URL"],
+  constraints host: [ENV["PUBLIC_CORE_DEVELOPER_URL"], ENV["PRIVATE_CORE_DEVELOPER_URL"],
                      "core.dev.localhost",].compact do
     scope module: :dev, as: :developer do
       # Thin landing endpoint.

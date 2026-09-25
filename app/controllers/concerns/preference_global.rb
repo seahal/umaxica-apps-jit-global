@@ -241,7 +241,9 @@ module PreferenceGlobal
     locale = normalized_locale(requested_context[:lx])
     locale ||= Actor.preferences.locale if defined?(Actor)
     I18n.locale = locale if locale.present?
-    write_preference_cookie(PreferenceBase::LANGUAGE_COOKIE_KEY, I18n.locale.to_s.downcase)
+    if preference_state_write_request?
+      write_preference_cookie(PreferenceBase::LANGUAGE_COOKIE_KEY, I18n.locale.to_s.downcase)
+    end
   end
 
   # The only request-time writer of Time.zone. It always resolves to a concrete
@@ -253,8 +255,10 @@ module PreferenceGlobal
     timezone = Actor.preferences.timezone if timezone.blank? && defined?(Actor)
     timezone_value = TimezoneIdentifier.resolve(timezone)
     Time.zone = timezone_value
-    session[:timezone] = timezone_value
-    write_preference_cookie(PreferenceBase::TIMEZONE_COOKIE_KEY, timezone_value)
+    if preference_state_write_request?
+      session[:timezone] = timezone_value
+      write_preference_cookie(PreferenceBase::TIMEZONE_COOKIE_KEY, timezone_value)
+    end
   end
 
   private :preference_context_from_hash, :normalized_preference_value

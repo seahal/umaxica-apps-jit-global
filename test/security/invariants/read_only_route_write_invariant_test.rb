@@ -6,8 +6,7 @@ require "test_helper"
 module Security
   module Invariants
     class ReadOnlyRouteWriteInvariantTest < ActionDispatch::IntegrationTest
-      test "GET preference bootstrap writes are observable and allowlisted lifecycle exceptions" do
-        host! "base.app.localhost"
+      test "ordinary Base GET navigation does not write authentication or preference state" do
         observed_writes = []
 
         callback =
@@ -20,22 +19,45 @@ module Security
             observed_writes << sql
           end
 
-        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
-          get "/preference?ri=jp"
-        end
+        surfaces = [
+          ["app", "base.app.localhost"],
+          ["com", "base.com.localhost"],
+          ["org", "base.org.localhost"],
+        ]
+        paths = [
+          ["/", :success],
+          ["/dashboard", :see_other],
+          ["/preference", :success],
+          ["/preference/region/edit", :success],
+          ["/preference/theme/edit", :success],
+          ["/sign/out/edit", :success],
+        ]
+        methods = [
+          "GET",
+          "HEAD",
+        ]
 
-        assert_response :success
-        assert_predicate observed_writes, :any?,
-                         "cookie-less preference GET should currently bootstrap preference state"
+        surfaces.each do |surface, host|
+          methods.each do |method_name|
+            paths.each do |path, expected_status|
+              reset!
+              host! host
+              observed_writes.clear
 
-        unallowlisted =
-          observed_writes.reject do |sql|
-            sql.match?(/\bapp_preferences\b/i) ||
-              sql.match?(/\bapp_preference_/i) ||
-              sql.match?(/\bsolid_queue_/i)
+              ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+                if method_name == "GET"
+                  get "#{path}?ri=jp"
+                else
+                  head "#{path}?ri=jp"
+                end
+              end
+
+              assert_response expected_status, "#{surface} #{method_name} #{path} response"
+              assert_empty observed_writes,
+                           "#{surface} #{method_name} #{path} must not persist preference or auth state"
+            end
           end
-
-        assert_empty unallowlisted, "GET/HEAD writes must be added to docs/security/db-write-allowlist.md"
+        end
       end
     end
   end

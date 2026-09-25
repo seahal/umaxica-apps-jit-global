@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 module Retention
@@ -13,7 +14,7 @@ module Retention
 
       capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
       handle = Handle.create!(handle: "cdp_h-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-      avatar = Avatar.create!(capability: capability, active_handle: handle, moniker: "Cdp")
+      avatar = AvatarTestFactory.create!(moniker: "Cdp", capability: capability, active_handle: handle)
       assignment = avatar.avatar_assignments.create!(user: user, role: "owner")
 
       chronicle = ClientChronicle.create!(

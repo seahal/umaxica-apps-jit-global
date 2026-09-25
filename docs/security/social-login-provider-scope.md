@@ -12,26 +12,35 @@ Social login availability is surface-specific.
 
 ## Production Target
 
-| Surface | Google   | Apple    | Microsoft Entra ID                    | Other external social providers     |
-| ------- | -------- | -------- | ------------------------------------- | ----------------------------------- |
-| `app`   | Allowed  | Allowed  | Rejected                              | Rejected unless accepted separately |
-| `org`   | Rejected | Rejected | Allowed (federated SSO, not OmniAuth) | Rejected                            |
-| `com`   | Rejected | Rejected | Rejected                              | Rejected                            |
+| Surface | Google   | Apple    | Microsoft Entra ID                          | Other external social providers     |
+| ------- | -------- | -------- | ------------------------------------------- | ----------------------------------- |
+| `app`   | Allowed  | Allowed  | Rejected                                    | Rejected unless accepted separately |
+| `org`   | Rejected | Rejected | Allowed (org-only Umaxica OmniAuth strategy) | Rejected                            |
+| `com`   | Rejected | Rejected | Rejected                                    | Rejected                            |
 
 ## Rules
 
 - `app` may offer Google and Apple social login for end users.
-- `org` must not offer OmniAuth-based social login. `OmniAuthNonAppSocialGuard` blocks all
-  `/social/*` requests on org and com hosts unconditionally, and this document does not change that.
-- `org` may offer Microsoft Entra ID sign-in as an accepted exception, per
-  `adr/org-entra-id-sign-in-boundary.md` (Accepted 2026-06-30). This is not OmniAuth social login:
-  it is a separate, hand-rolled OIDC relying-party ceremony (PKCE + state + nonce), sign-in only
-  with no JIT provisioning, keyed on pre-provisioned `tid + oid` pairs. It does not open
-  `OmniAuthNonAppSocialGuard` and does not use `/social` paths. Production org sign-in otherwise
-  uses implemented local verifiers only: passkey and passcode/secret credential in the current route
-  set. Org TOTP is not current until explicit routes, controllers, views, and tests exist.
-- `com` must not offer or accept any social login provider, including Entra ID.
-- Direct OmniAuth requests must follow the same surface rules as the UI.
+- `org` may offer only Microsoft Entra ID as its external identity provider. It uses the accepted
+  Umaxica-specific OmniAuth strategy and the org-only `/social/entra` request, callback, and failure
+  paths. `OmniAuthSocialProviderHostMatrix` permits that provider on org while keeping Google and
+  Apple app-only and all external providers unavailable on com. The retired
+  `OmniAuthNonAppSocialGuard` is not the current policy.
+- Org Entra sign-in is a first stage, not a completed session: the callback resolves a
+  pre-provisioned `(tid, oid)` identity and starts the actor-bound local completion stage. It does
+  not perform JIT provisioning or establish a session. Passkey is the normal completion method;
+  the existing Secret/SecretKey path supports a lost-passkey case. Org does not use TOTP. See
+  `adr/org-entra-omniauth-strategy-migration.md`, `adr/org-entra-id-sign-in-boundary.md`, and
+  `docs/security/org-emergency-access.md` for the strategy and ceremony boundaries.
+- The org Entra entry page is `GET /social/entra/session/new`; its CSRF-protected form submits to
+  `POST /social/entra/session`, which applies the surface policy and hands the same POST to the
+  OmniAuth request phase at `POST /social/entra` with a 307. The callback is
+  `GET /social/entra/callback`, and `GET /social/entra/failure` is the org-specific failure path.
+  The Entra app registration must contain the configured staff-host callback URI before live Entra
+  sign-ins can complete; that provider registration is external to local repository changes.
+- `com` must not offer or accept any external provider, including Entra ID.
+- Direct OmniAuth requests follow the same provider/surface matrix as the UI; a hidden button does
+  not authorize a request path.
 - On `app`, an unknown Google or Apple identity is a sign-up entry, not a completed login. It must
   go through the sign-up sequence and required checkpoint setup before it can enter the login
   sequence.
@@ -42,8 +51,9 @@ Social login availability is surface-specific.
 - On `app`, linking Google or Apple from account configuration requires recent token-bound Step-Up
   scope `social_link`. This is separate from `social_unlink`, so a Step-Up completed for one social
   credential operation does not authorize the other.
-- Do not add Google, Apple, or any other external social/federated provider to `org` or `com`
-  without a new accepted ADR. Microsoft Entra ID on `org` is the one accepted exception, governed by
+- Do not add Google, Apple, or another external provider to `org` or `com` without a new accepted
+  ADR. Org Entra is the sole current org exception, governed by
+  `adr/org-entra-omniauth-strategy-migration.md` and the non-superseded decisions in
   `adr/org-entra-id-sign-in-boundary.md`.
 
 ## Withdrawn Temporary Gateway

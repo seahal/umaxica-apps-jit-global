@@ -5,8 +5,8 @@ class Base::Com::Edge::V0::Token::RefreshesController < Base::Com::ApplicationCo
   include SignEdgeV0JsonApi
   include ::PreferenceWebCookieEndpoint
 
-  AUTHENTICATION_MODE = :open
-  declare_authentication_mode! :open
+  AUTHENTICATION_MODE = :deny_all
+  declare_authentication_mode! :open, only: :create
 
   before_action :ensure_json_request
 

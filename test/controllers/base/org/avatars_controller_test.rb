@@ -24,30 +24,68 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_match(%r{/selector}, response.location)
   end
 
-  test "full login can show, edit, update and destroy own org avatar" do
-    bootstrap_and_select!(@operator, @token)
+  test "org remains usable with no default Avatar selected or provisioned" do
+    bootstrap = bootstrap_and_select!(@operator, @token)
+
+    assert_nil bootstrap.avatar
+    assert_nil @token.reload.selected_avatar_public_id
 
     get base_org_avatar_url(ri: "jp", host: @host),
         headers: as_staff_headers(@operator, host: @host)
 
     assert_response :success
     assert_equal "base/org/avatars/show", inertia_component
+    assert_nil inertia_props.fetch("avatar")
+    assert_equal base_org_switcher_path(ri: "jp"), inertia_props.dig("switcher_link", "href")
+    assert_nil @token.reload.selected_avatar_public_id
+  end
+
+  test "selected org-owned Avatar can be shown and its moniker updated" do
+    bootstrap = bootstrap_and_select!(@operator, @token)
+    avatar = create_org_avatar!(bootstrap)
+    select_avatar!(bootstrap, avatar)
+
+    get base_org_avatar_url(ri: "jp", host: @host),
+        headers: as_staff_headers(@operator, host: @host)
+
+    assert_response :success
+    assert_equal "base/org/avatars/show", inertia_component
+    assert_equal "Bureau Avatar", inertia_props.dig("avatar", "moniker")
     assert_equal edit_base_org_avatar_path(ri: "jp"), inertia_props.dig("action_link", "href")
 
     get edit_base_org_avatar_url(ri: "jp", host: @host),
         headers: as_staff_headers(@operator, host: @host)
 
     assert_response :success
+    assert_equal "base/org/avatars/edit", inertia_component
+    assert_equal "Bureau Avatar", inertia_props.dig("moniker", "value")
 
     patch base_org_avatar_url(ri: "jp", host: @host),
+          params: { id: "untrusted-id", avatar: { moniker: "Updated Bureau" } },
           headers: as_staff_headers(@operator, host: @host)
 
-    assert_response :redirect
+    assert_response :see_other
+    assert_equal "Updated Bureau", avatar.reload.moniker
+    assert_equal avatar.public_id, @token.reload.selected_avatar_public_id
+  end
 
-    delete base_org_avatar_url(ri: "jp", host: @host),
-           headers: as_staff_headers(@operator, host: @host)
+  test "request parameters cannot replace the selected org Avatar" do
+    bootstrap = bootstrap_and_select!(@operator, @token)
+    selected_avatar = create_org_avatar!(bootstrap, moniker: "Selected Avatar")
+    select_avatar!(bootstrap, selected_avatar)
 
-    assert_response :redirect
+    other_operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
+    other_avatar = create_org_avatar!(other_bootstrap, moniker: "Foreign Avatar", actor: other_operator)
+
+    patch base_org_avatar_url(ri: "jp", host: @host),
+          params: { id: other_avatar.public_id, avatar: { moniker: "Tampered" } },
+          headers: as_staff_headers(@operator, host: @host)
+
+    assert_response :see_other
+    assert_equal "Tampered", selected_avatar.reload.moniker
+    assert_equal "Foreign Avatar", other_avatar.reload.moniker
+    assert_equal selected_avatar.public_id, @token.reload.selected_avatar_public_id
   end
 
   private
@@ -56,6 +94,34 @@ class Base::Org::AvatarsControllerTest < ActionDispatch::IntegrationTest
     result = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
     result
+  end
+
+  def create_org_avatar!(bootstrap, moniker: "Bureau Avatar", actor: @operator)
+    result = AvatarProvisioning::Create.call(
+      actor: actor,
+      subject_type: :agent,
+      subject: bootstrap.account,
+      avatar_params: { moniker: moniker },
+      handle_params: { handle: "bureau-#{SecureRandom.hex(4)}" },
+      owner_surface: "org",
+      owner_collective_public_id: bootstrap.collective.public_id,
+    )
+    assert_predicate result, :success?, result.errors.inspect
+    result.avatar
+  end
+
+  def select_avatar!(bootstrap, avatar)
+    BaseSwitcherAuthority.switch(
+      surface: :org,
+      principal: @operator,
+      session: @token,
+      params: {
+        account_public_id: bootstrap.account.public_id,
+        organization_public_id: bootstrap.collective.public_id,
+        organization_unit_public_id: bootstrap.unit.public_id,
+        avatar_public_id: avatar.public_id,
+      },
+    )
   end
   private
 

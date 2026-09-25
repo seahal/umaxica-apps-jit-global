@@ -45,13 +45,14 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_equal "jp", metadata.fetch("core-app-jp").fetch(:region)
     assert_equal "us", metadata.fetch("core-app-us").fetch(:region)
     assert_equal "core", metadata.fetch("core-app-jp").fetch(:surface)
-    assert_equal "side", metadata.fetch("side-app-us").fetch(:surface)
+    assert_equal "warp", metadata.fetch("side-app-us").fetch(:surface)
     assert_equal "operator", metadata.fetch("edit-org").fetch(:actor)
   end
 
   test "every RP face maps to surface face and actor" do
     AuthBoundaryAuthorityMap.rp_faces.each do |client_id, meta|
-      assert_equal client_id.split("-").first, meta.fetch(:surface)
+      expected_surface = client_id.start_with?("side-") ? "warp" : client_id.split("-").first
+      assert_equal expected_surface, meta.fetch(:surface)
       assert_equal client_id.split("-").last, meta.fetch(:face)
       assert_includes %w(client visitor operator), meta.fetch(:actor)
       assert_equal "/sign/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
@@ -62,11 +63,11 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "retired browser paths are listed for inventory enforcement" do
     paths = AuthBoundaryAuthorityMap.retired_browser_paths
 
-    assert_includes paths, "/dashboard"
     assert_includes paths, "/lobby"
     assert_includes paths, "/sign/out/complete"
     assert_includes paths, "/sign/in"
     assert_includes paths, "/sign/in/callback"
+    assert_includes AuthBoundaryAuthorityMap.retired_auth_browser_paths, "/dashboard"
   end
 
   test "Base is the authority surface and Auth is the ceremony surface" do

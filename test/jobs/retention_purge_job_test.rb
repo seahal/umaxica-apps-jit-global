@@ -2,10 +2,41 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class RetentionPurgeJobTest < ActiveJob::TestCase
   teardown { Flipper.disable(RetentionPurgeJob::FEATURE_NAME) }
+
+  test "set-based Avatar purge cascades through encrypted moniker history" do
+    handle = Handle.create!(
+      handle: "purge-avatar-#{SecureRandom.hex(4)}",
+      cooldown_until: Time.current,
+      is_system: false,
+    )
+    avatar = AvatarTestFactory.create!(
+      moniker: "Purge",
+      capability: AvatarCapability.find_by!(id: AvatarCapability::NORMAL),
+      active_handle: handle,
+    )
+    former_moniker = avatar.avatar_monikers.create!(
+      moniker: "Former",
+      valid_from: Time.utc(2024, 1, 1),
+      valid_to: Time.utc(2025, 1, 1),
+    )
+    current_moniker = avatar.current_avatar_moniker
+    avatar.update_columns(purge_eligible_at: 1.hour.ago)
+
+    assert_difference -> { Avatar.count }, -1 do
+      assert_difference -> { AvatarMoniker.count }, -2 do
+        RetentionPurgeJob.perform_now
+      end
+    end
+
+    assert_not Avatar.exists?(avatar.id)
+    assert_not AvatarMoniker.exists?(former_moniker.id)
+    assert_not AvatarMoniker.exists?(current_moniker.id)
+  end
 
   test "rejects a retention batch size outside the bounded execution range" do
     error =

@@ -18,9 +18,8 @@ module AcmeSelectableContext
   InvalidSelection = Class.new(StandardError)
 
   # Every (account, collective, unit, avatar) combination the principal may act as. For
-  # surfaces that do not require an avatar, the avatar slot is nil. Membership must be active
-  # and, when an avatar is required, the avatar must be assigned to the principal and owned by
-  # the membership's collective -- this is the authoritative ownership/membership gate.
+  # optional and unsupported Avatar modes the nil slot is explicit. Avatar candidates require
+  # current ownership by the membership's collective and surface-specific avatar.view permission.
   def selectable_candidates
     accounts.flat_map do |account|
       account.current_memberships.flat_map do |membership|
@@ -28,7 +27,7 @@ module AcmeSelectableContext
 
         collective = membership.collective
         unit = membership.collective_unit
-        avatars_for(collective).map do |avatar|
+        avatars_for(account: account, collective: collective).map do |avatar|
           candidate(account: account, collective: collective, unit: unit, avatar: avatar)
         end
       end
@@ -71,8 +70,11 @@ module AcmeSelectableContext
           selected_collective_unit_public_id: public_ids[:organization_unit_public_id],
           selected_at: Time.current,
         }
-        attributes[:selected_avatar_public_id] =
-          public_ids[:avatar_public_id] if session.respond_to?(:selected_avatar_public_id=)
+        if session.respond_to?(:selected_avatar_public_id=)
+          attributes[:selected_avatar_public_id] = public_ids[:avatar_public_id]
+        elsif config.avatar_mode != :none
+          raise InvalidSelection, "avatar_selection_storage_required"
+        end
 
         session.update!(attributes)
       end
@@ -104,15 +106,40 @@ module AcmeSelectableContext
       .order(:created_at, :id)
   end
 
-  def avatars_for(collective)
-    return [nil] unless config.requires_avatar
+  def avatars_for(account:, collective:)
+    return [nil] if config.avatar_mode == :none
+    unless %i(required optional).include?(config.avatar_mode)
+      raise ArgumentError, "unsupported Avatar mode: #{config.avatar_mode.inspect}"
+    end
 
-    Avatar
-      .joins(:avatar_assignments)
-      .where(avatar_assignments: { user_id: principal.id })
-      .where(owner_organization_id: collective.public_id)
-      .distinct
-      .order(:created_at, :id)
+    authorized = AvatarPermissionResolver.call(
+      actor: principal,
+      surface: config.surface,
+      subject_public_id: account.public_id,
+      owner_collective_public_id: collective.public_id,
+      permission: "avatar.view",
+    )
+    avatars = if authorized
+      Avatar
+        .joins(:current_ownership_period, :lifecycle_state)
+        .where(
+          avatar_ownership_periods: {
+            owner_surface: config.surface.to_s,
+            owner_collective_public_id: collective.public_id,
+          },
+          avatar_lifecycle_states: { key: "active" },
+        )
+        .where("avatars.discard_at > ?", Time.current)
+        .distinct
+        .order(:created_at, :id)
+    else
+      Avatar.none
+    end
+
+    case config.avatar_mode
+    when :required then avatars.to_a
+    when :optional then [nil, *avatars.to_a]
+    end
   end
 
   def candidate(account:, collective:, unit:, avatar:)
@@ -147,15 +174,33 @@ module AcmeSelectableContext
         end
     end
     return false unless membership
-    return true unless config.requires_avatar
+    return true if config.avatar_mode == :none
+    return true if config.avatar_mode == :optional && public_ids[:avatar_public_id].blank?
+    return false if config.avatar_mode == :required && public_ids[:avatar_public_id].blank?
+
+    authorized = AvatarPermissionResolver.call(
+      actor: principal,
+      surface: config.surface,
+      subject_public_id: public_ids[:account_public_id],
+      owner_collective_public_id: public_ids[:organization_public_id],
+      permission: "avatar.view",
+    )
+    return false unless authorized
 
     connection_owner(Avatar).connected_to(role: :writing) do
       Avatar
-        .joins(:avatar_assignments)
+        .joins(:current_ownership_period, :lifecycle_state)
         .lock
         .where(public_id: public_ids[:avatar_public_id])
-        .where(owner_organization_id: public_ids[:organization_public_id])
-        .exists?(avatar_assignments: { user_id: principal.id })
+        .where(
+          avatar_ownership_periods: {
+            owner_surface: config.surface.to_s,
+            owner_collective_public_id: public_ids[:organization_public_id],
+          },
+          avatar_lifecycle_states: { key: "active" },
+        )
+        .where("avatars.discard_at > ?", Time.current)
+        .exists?
     end
   end
 

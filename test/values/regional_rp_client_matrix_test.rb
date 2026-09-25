@@ -48,7 +48,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
     assert_equal :regional_root_url_registry,
                  contract.find { |entry| entry.fetch(:client_id) == "core-app-us" }
                    .fetch(:canonical_host_source)
-    assert_equal "PUBLIC_SIDE_APP_US_URL",
+    assert_equal "PUBLIC_WARP_APP_US_URL",
                  contract.find { |entry| entry.fetch(:client_id) == "side-app-us" }
                    .fetch(:canonical_host_source)
     assert_equal :public_edit_staff_url,
@@ -75,11 +75,11 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
       client_id: "core-app-jp", surface: "core", face: "app", region: "us",
     )
     assert_not RegionalRpClientMatrix.accepts_exact_cell?(
-      client_id: "core-app-jp", surface: "side", face: "app", region: "jp",
+      client_id: "core-app-jp", surface: "warp", face: "app", region: "jp",
     )
   end
 
-  test "does not invent a Side regional host when the repository has no canonical source" do
+  test "does not invent a Warp regional host when the repository has no canonical source" do
     error =
       assert_raises(RegionalRpClientMatrix::MissingCanonicalHost) do
         RegionalRpClientMatrix.uri_binding_for("side-app-us")
@@ -88,7 +88,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
     assert_match(/side-app-us/, error.message)
   end
 
-  test "derives the Side JP binding from the existing canonical host family" do
+  test "derives the Warp JP binding from the existing canonical host family" do
     binding = RegionalRpClientMatrix.uri_binding_for("side-app-jp")
 
     assert_equal "side-app-jp", binding.fetch(:client_id)

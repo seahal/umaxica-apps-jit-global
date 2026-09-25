@@ -26,21 +26,56 @@ class Base::Com::SwitcherControllerTest < ActionDispatch::IntegrationTest
     ), as: :json
 
     assert_response :success
-    assert_equal "stub", response.parsed_body.fetch("status")
+    assert_equal "ok", response.parsed_body.fetch("status")
     assert_predicate @token.reload, :selected_actor_context?
   end
 
   test "authenticated visitor can access switcher update" do
     select_token!
+    candidate = BaseSwitcherAuthority.current(
+      surface: :com,
+      principal: @visitor,
+      session: @token,
+    ).fetch(:candidates).first
     patch base_com_switcher_url(host: @host), headers: as_visitor_headers(
       @visitor,
       host: @host,
       session_public_id: @token.public_id,
-    ), as: :json
+    ), params: {
+      account_public_id: candidate.fetch(:public_id),
+      organization_public_id: candidate.dig(:organization, :public_id),
+      organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+    }, as: :json
 
     assert_response :success
-    assert_equal "stub", response.parsed_body.fetch("status")
+    assert_equal "switched", response.parsed_body.fetch("status")
     assert_predicate @token.reload, :selected_actor_context?
+  end
+
+  test "com switcher rejects an Avatar selection" do
+    select_token!
+    candidate = BaseSwitcherAuthority.current(
+      surface: :com,
+      principal: @visitor,
+      session: @token,
+    ).fetch(:candidates).first
+    current = @token.reload.slice("selected_account_public_id", "selected_collective_public_id",
+                                  "selected_collective_unit_public_id")
+
+    patch base_com_switcher_url(host: @host), headers: as_visitor_headers(
+      @visitor,
+      host: @host,
+      session_public_id: @token.public_id,
+    ), params: {
+      account_public_id: candidate.fetch(:public_id),
+      organization_public_id: candidate.dig(:organization, :public_id),
+      organization_unit_public_id: candidate.dig(:organization, :unit_public_id),
+      avatar_public_id: "unavailable-avatar",
+    }, as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "invalid_switch", response.parsed_body.fetch("status")
+    assert_equal current, @token.reload.slice(*current.keys)
   end
 
   private

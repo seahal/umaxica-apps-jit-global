@@ -133,7 +133,6 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
 
     assert_predicate policy, :clear_requirement?
     assert_predicate policy, :register_passkey?
-    assert_not_predicate policy, :confirm_passcode?
   end
 
   test "requirement policy rejects stale already-cleared requirement" do

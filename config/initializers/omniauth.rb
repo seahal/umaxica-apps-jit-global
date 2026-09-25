@@ -183,7 +183,7 @@ class OmniAuthSocialProviderHostMatrix
   # every provider and every /social/* path.
   #
   # The previous `:app` fallback made this middleware allow-by-default: any host
-  # Rails Host Authorization admits but that owns no auth surface (side, base,
+  # Rails Host Authorization admits but that owns no auth surface (warp, base,
   # core, help, info, palm, ...) was treated as the app auth host and could start
   # a Google/Apple ceremony, or reach the non-provider /social/* endpoints, on an
   # origin those callbacks were never registered for. Host Authorization running

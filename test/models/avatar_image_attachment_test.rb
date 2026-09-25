@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarImageAttachmentTest < ActiveSupport::TestCase
   PNG_HEX =
@@ -14,10 +15,10 @@ class AvatarImageAttachmentTest < ActiveSupport::TestCase
       handle: "img-#{SecureRandom.hex(4)}",
       cooldown_until: Time.current,
     )
-    @avatar = Avatar.create!(
+    @avatar = AvatarTestFactory.create!(
+      moniker: "Image Owner",
       capability: @capability,
       active_handle: @handle,
-      moniker: "Image Owner",
     )
   end
 

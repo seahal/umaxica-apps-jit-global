@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/avatar_test_factory"
 
 class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
   setup do
@@ -10,11 +11,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "active to suspended succeeds and creates an event" do
     handle = Handle.create!(handle: "lifecycle-suspend-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:active),
-      moniker: "Lifecycle Suspend",
+      moniker: "Suspend",
     )
 
     assert_difference "AvatarLifecycleEvent.count", 1 do
@@ -36,11 +37,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "suspended to active succeeds" do
     handle = Handle.create!(handle: "lifecycle-unsuspend-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:suspended),
-      moniker: "Lifecycle Unsuspend",
+      moniker: "Unsuspend",
     )
 
     AvatarLifecycle::Transition.call(
@@ -56,11 +57,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "active to archived succeeds" do
     handle = Handle.create!(handle: "lifecycle-archive-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:active),
-      moniker: "Lifecycle Archive",
+      moniker: "Archive",
     )
 
     AvatarLifecycle::Transition.call(
@@ -76,11 +77,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "archived to active succeeds" do
     handle = Handle.create!(handle: "lifecycle-restore-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:archived),
-      moniker: "Lifecycle Restore",
+      moniker: "Restore",
     )
 
     AvatarLifecycle::Transition.call(
@@ -96,11 +97,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "active to banned succeeds" do
     handle = Handle.create!(handle: "lifecycle-ban-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:active),
-      moniker: "Lifecycle Ban",
+      moniker: "Ban",
     )
 
     AvatarLifecycle::Transition.call(
@@ -116,11 +117,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "banned to deleted succeeds" do
     handle = Handle.create!(handle: "lifecycle-delete-ban-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:banned),
-      moniker: "Lifecycle Delete Ban",
+      moniker: "Delete Ban",
     )
 
     AvatarLifecycle::Transition.call(
@@ -136,11 +137,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "deleted to active fails without creating an event" do
     handle = Handle.create!(handle: "lifecycle-deleted-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:deleted),
-      moniker: "Lifecycle Deleted",
+      moniker: "Deleted",
     )
 
     assert_no_difference "AvatarLifecycleEvent.count" do
@@ -158,11 +159,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "owner cannot restore banned to active and no event is created" do
     handle = Handle.create!(handle: "lifecycle-owner-ban-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:banned),
-      moniker: "Lifecycle Owner Ban",
+      moniker: "Owner Ban",
     )
 
     assert_no_difference "AvatarLifecycleEvent.count" do
@@ -180,11 +181,11 @@ class AvatarLifecycleTransitionTest < ActiveSupport::TestCase
 
   test "active to suspended by owner fails without creating an event" do
     handle = Handle.create!(handle: "lifecycle-bad-actor-#{SecureRandom.hex(4)}", cooldown_until: Time.current)
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       capability: @capability,
       active_handle: handle,
       lifecycle_state: avatar_lifecycle_states(:active),
-      moniker: "Lifecycle Bad Actor",
+      moniker: "Bad Actor",
     )
 
     assert_no_difference "AvatarLifecycleEvent.count" do

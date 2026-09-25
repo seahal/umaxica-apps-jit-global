@@ -1,5 +1,9 @@
 # API Route Vocabulary Consolidation Toward `/api/v0`
 
+Current naming note (2026-09-25): references to the Rails `Side` surface in this historical route
+vocabulary decision describe the current `Warp` internal namespace. Public routes and protocol
+identifiers retain their established values.
+
 **Status:** Accepted; Core preference API migration amended (2026-09-15)
 
 > The original decision recorded a route-naming direction only. Its implementation amendment below

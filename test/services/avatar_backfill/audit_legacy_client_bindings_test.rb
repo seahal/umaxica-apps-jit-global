@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/avatar_test_factory"
 
 module AvatarBackfill
   class AuditLegacyClientBindingsTest < ActiveSupport::TestCase
@@ -212,7 +213,7 @@ module AvatarBackfill
         cooldown_until: Time.current,
         is_system: false,
       )
-      Avatar.create!(
+      AvatarTestFactory.create!(
         moniker: "Legacy Avatar",
         active_handle: handle,
         capability_id: AvatarCapability::NORMAL,

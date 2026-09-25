@@ -120,7 +120,6 @@ scope(module: :auth, as: :auth) do
             namespace(:telephone) do
               resource(:otp, only: %i(show create update destroy))
               resource(:passkey, only: %i(show create update destroy))
-              resource(:passcode, only: %i(show update destroy))
               resource(:birthdate, only: %i(show update destroy))
             end
           end
@@ -136,7 +135,6 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :secret, only: %i(new create)
           resource :session, only: %i(show update destroy)
 
           resource :guard, only: :show
@@ -324,7 +322,6 @@ scope(module: :auth, as: :auth) do
             namespace(:telephone) do
               resource(:otp, only: %i(show create update destroy))
               resource(:passkey, only: %i(show create update destroy))
-              resource(:passcode, only: %i(show update destroy))
               resource(:birthdate, only: %i(show update destroy))
             end
           end
@@ -340,7 +337,6 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :secret, only: %i(new create)
           resource :session, only: %i(show update destroy)
 
           resource :guard, only: :show
@@ -496,7 +492,6 @@ scope(module: :auth, as: :auth) do
             end
           end
 
-          resource :secret, only: %i(new create)
           resource :session, only: %i(show update destroy)
 
           resource :guard, only: :show

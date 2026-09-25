@@ -44,7 +44,9 @@ class JumpRtIssuer
 
     kid = JumpRtKeyring.active_kid(namespace)
     private_key = JumpRtKeyring.private_key(namespace)
-    return nil if kid.blank? || private_key.blank?
+    if kid.blank? || private_key.blank?
+      raise JumpRtConfigurationError, "Jump RT signing key configuration is incomplete for #{namespace}"
+    end
 
     SecurityJwtJumpRtTokenCodec.encode(payload(normalized_url), private_key: private_key, kid: kid)
   end
@@ -84,7 +86,10 @@ class JumpRtIssuer
     uri.path = "/" if uri.path.blank?
     uri.query = strip_dangerous_query(uri.query)
     uri.to_s
-  rescue URI::InvalidURIError
+  rescue URI::InvalidURIError,
+         Rack::Utils::ParameterTypeError,
+         Rack::Utils::InvalidParameterError,
+         Rack::Utils::ParamsTooDeepError
     nil
   end
 

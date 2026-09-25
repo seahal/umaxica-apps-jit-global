@@ -26,13 +26,11 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://www.umaxica.com", values.base_corporate.to_s
     assert_equal "https://www.umaxica.org", values.base_staff.to_s
 
-    assert_equal "https://www-jp.umaxica.app", values.side_service.to_s
-    assert_equal "https://www-jp.umaxica.com", values.side_corporate.to_s
-    assert_equal "https://www-jp.umaxica.org", values.side_staff.to_s
+    assert_equal "https://www-jp.umaxica.app", values.warp_service.to_s
+    assert_equal "https://www-jp.umaxica.com", values.warp_corporate.to_s
+    assert_equal "https://www-jp.umaxica.org", values.warp_staff.to_s
 
     assert_equal "https://palm-jp.umaxica.app", values.palm_service.to_s
-    assert_equal "https://palm-jp.umaxica.com", values.palm_corporate.to_s
-    assert_equal "https://palm-jp.umaxica.org", values.palm_staff.to_s
 
     assert_equal "https://help.app.localhost", values.help_service.to_s
     assert_equal "https://help.com.localhost", values.help_corporate.to_s
@@ -59,11 +57,8 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal 3, values.base_origins.size
     assert_equal [values.base_service, values.base_corporate, values.base_staff], values.base_origins
 
-    assert_equal 3, values.side_origins.size
-    assert_equal [values.side_service, values.side_corporate, values.side_staff], values.side_origins
-
-    assert_equal 3, values.palm_origins.size
-    assert_equal [values.palm_service, values.palm_corporate, values.palm_staff], values.palm_origins
+    assert_equal 3, values.warp_origins.size
+    assert_equal [values.warp_service, values.warp_corporate, values.warp_staff], values.warp_origins
 
     assert_equal 3, values.info_origins.size
     assert_equal [values.info_service, values.info_corporate, values.info_staff], values.info_origins
@@ -85,18 +80,22 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
-      "SIDE_SERVICE_URL" => "side.example.test",
-      "SIDE_CORPORATE_URL" => "side-com.example.test",
-      "SIDE_STAFF_URL" => "side-org.example.test",
+      "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
+      "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
+      "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",
       "PALM_SERVICE_URL" => "palm.example.test",
-      "PALM_CORPORATE_URL" => "palm-com.example.test",
-      "PALM_STAFF_URL" => "palm-org.example.test",
       "HELP_SERVICE_URL" => "help.example.test",
       "HELP_CORPORATE_URL" => "help-com.example.test",
       "HELP_STAFF_URL" => "help-org.example.test",
       "INFO_SERVICE_URL" => "info.example.test",
       "INFO_CORPORATE_URL" => "info-com.example.test",
       "INFO_STAFF_URL" => "info-org.example.test",
+      "PRIVATE_DOCS_SERVICE_URL" => "docs.example.test",
+      "PRIVATE_DOCS_CORPORATE_URL" => "docs-com.example.test",
+      "PRIVATE_DOCS_STAFF_URL" => "docs-org.example.test",
+      "PRIVATE_NEWS_SERVICE_URL" => "news.example.test",
+      "PRIVATE_NEWS_CORPORATE_URL" => "news-com.example.test",
+      "PRIVATE_NEWS_STAFF_URL" => "news-org.example.test",
       "GUID_SERVICE_URL" => "guid.example.test",
       "EDIT_STAFF_URL" => "edit-org.example.test",
     }
@@ -104,8 +103,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
 
     assert_equal "https://base.example.test", values.acme_service.to_s
     assert_equal "https://sign-org.example.test", values.sign_staff.to_s
-    assert_equal "https://side.example.test", values.side_service.to_s
-    assert_equal "https://palm-com.example.test", values.palm_corporate.to_s
+    assert_equal "https://warp.example.test", values.warp_service.to_s
     assert_equal "https://info-org.example.test", values.info_staff.to_s
     assert_equal "https://guid.example.test", values.guid_service.to_s
     assert_equal "https://edit-org.example.test", values.edit_staff.to_s
@@ -118,7 +116,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     end
   end
 
-  test "base origins fall back to PUBLIC_BASE_*_URL when SIDE_* and BASE_* are absent" do
+  test "base origins fall back to PUBLIC_BASE_*_URL when BASE_*_URL is absent" do
     env = {
       "PUBLIC_BASE_SERVICE_URL" => "www.umaxica.app",
       "PUBLIC_BASE_CORPORATE_URL" => "www.umaxica.com",
@@ -131,11 +129,11 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "www.umaxica.org", values.base_staff.host
   end
 
-  test "SIDE_*_URL configures side origins separately from base origins" do
+  test "PUBLIC_WARP_*_URL configures Warp origins separately from Base origins" do
     env = {
-      "SIDE_SERVICE_URL" => "side.umaxica.app",
-      "SIDE_CORPORATE_URL" => "side.umaxica.com",
-      "SIDE_STAFF_URL" => "side.umaxica.org",
+      "PUBLIC_WARP_SERVICE_URL" => "warp.umaxica.app",
+      "PUBLIC_WARP_CORPORATE_URL" => "warp.umaxica.com",
+      "PUBLIC_WARP_STAFF_URL" => "warp.umaxica.org",
       "PUBLIC_BASE_SERVICE_URL" => "www.umaxica.app",
       "PUBLIC_BASE_CORPORATE_URL" => "www.umaxica.com",
       "PUBLIC_BASE_STAFF_URL" => "www.umaxica.org",
@@ -145,9 +143,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "www.umaxica.app", values.base_service.host
     assert_equal "www.umaxica.com", values.base_corporate.host
     assert_equal "www.umaxica.org", values.base_staff.host
-    assert_equal "side.umaxica.app", values.side_service.host
-    assert_equal "side.umaxica.com", values.side_corporate.host
-    assert_equal "side.umaxica.org", values.side_staff.host
+    assert_equal "warp.umaxica.app", values.warp_service.host
+    assert_equal "warp.umaxica.com", values.warp_corporate.host
+    assert_equal "warp.umaxica.org", values.warp_staff.host
   end
 
   test "BASE_*_URL takes precedence over PUBLIC_BASE_*_URL for base origins" do
@@ -179,7 +177,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "auth.umaxica.org", values.sign_staff.host
   end
 
-  # Only the base, side, auth and core families read a PUBLIC_* key. Widening the
+  # Only the Base, Warp, Auth, and Core families read a PUBLIC_* key. Widening the
   # fallback to every family moves the OIDC issuer and authorize hosts off their
   # development defaults, which breaks the SSO redirect contract.
   test "other families keep their localhost defaults when only PUBLIC_* keys exist" do
@@ -217,7 +215,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "core.example.test", values.core_service.host
   end
 
-  # Reverse of the base/side/auth precedence, and deliberately so: config/routes/core.rb
+  # Reverse of the Base/Warp/Auth precedence, and deliberately so: config/routes/core.rb
   # constrains the surface on `PUBLIC_CORE_*_URL || CORE_*_URL`, so boot config must resolve
   # the same host the route constraint accepts.
   test "PUBLIC_CORE_*_URL takes precedence over CORE_*_URL for core origins" do
@@ -251,18 +249,22 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
-      "SIDE_SERVICE_URL" => "side.example.test",
-      "SIDE_CORPORATE_URL" => "side-com.example.test",
-      "SIDE_STAFF_URL" => "side-org.example.test",
+      "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
+      "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
+      "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",
       "PALM_SERVICE_URL" => "palm.example.test",
-      "PALM_CORPORATE_URL" => "palm-com.example.test",
-      "PALM_STAFF_URL" => "palm-org.example.test",
       "HELP_SERVICE_URL" => "help.example.test",
       "HELP_CORPORATE_URL" => "help-com.example.test",
       "HELP_STAFF_URL" => "help-org.example.test",
       "INFO_SERVICE_URL" => "info.example.test",
       "INFO_CORPORATE_URL" => "info-com.example.test",
       "INFO_STAFF_URL" => "info-org.example.test",
+      "PRIVATE_DOCS_SERVICE_URL" => "docs.example.test",
+      "PRIVATE_DOCS_CORPORATE_URL" => "docs-com.example.test",
+      "PRIVATE_DOCS_STAFF_URL" => "docs-org.example.test",
+      "PRIVATE_NEWS_SERVICE_URL" => "news.example.test",
+      "PRIVATE_NEWS_CORPORATE_URL" => "news-com.example.test",
+      "PRIVATE_NEWS_STAFF_URL" => "news-org.example.test",
       "GUID_SERVICE_URL" => "guid.example.test",
       "EDIT_STAFF_URL" => "edit-org.example.test",
     }

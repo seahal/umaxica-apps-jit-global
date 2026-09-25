@@ -7,6 +7,8 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
+      rescue_from AvatarOwnerMembershipLockService::AuthorizationDenied, with: :forbid_owner_mutation
+
       before_action :authenticate_client!
       before_action :set_group
       before_action :set_membership, only: %i(update destroy)
@@ -19,7 +21,10 @@ module Base
         membership = GroupAvatarMemberships::Attach.call(
           group: @group,
           avatar: avatar,
-          role: membership_params[:role].presence || "member",
+          actor: current_client,
+          surface: "app",
+          subject_public_id: Actor.selection.account_public_id,
+          account_public_id: Actor.selection.account_public_id,
           position: membership_params[:position],
         )
         render json: { membership: serialize_membership(membership) }, status: :created
@@ -30,28 +35,44 @@ module Base
         membership = GroupAvatarMemberships::Reorder.call(
           membership: @membership,
           position: membership_params.fetch(:position),
+          actor: current_client,
+          surface: "app",
+          subject_public_id: Actor.selection.account_public_id,
+          account_public_id: Actor.selection.account_public_id,
         )
         render json: { membership: serialize_membership(membership) }
       end
 
       def destroy
         authorize!(@membership, to: :destroy?)
-        GroupAvatarMemberships::Detach.call(membership: @membership)
+        GroupAvatarMemberships::Detach.call(
+          membership: @membership,
+          actor: current_client,
+          surface: "app",
+          subject_public_id: Actor.selection.account_public_id,
+          account_public_id: Actor.selection.account_public_id,
+        )
         head :no_content
       end
 
       private
 
+      def forbid_owner_mutation
+        head :forbidden
+      end
+
       def set_group
-        @group = AvatarGroup.find_by!(public_id: params.expect(:group_id))
+        @group = AvatarGroup.includes(:current_ownership_period).find_by!(public_id: params.expect(:group_id))
       end
 
       def set_membership
-        @membership = @group.group_avatar_memberships.find_by!(public_id: params.expect(:id))
+        @membership = @group.group_avatar_memberships
+          .includes(avatar: %i(current_ownership_period lifecycle_state))
+          .find_by!(public_id: params.expect(:id))
       end
 
       def membership_params
-        params.expect(membership: %i(avatar_public_id role position))
+        params.expect(membership: %i(avatar_public_id position))
       end
 
       def serialize_membership(membership)

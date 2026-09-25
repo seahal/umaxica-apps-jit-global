@@ -195,7 +195,7 @@ module OidcClientRegistry
       %i(
         sign_service sign_staff sign_corporate
         base_service base_staff base_corporate
-        side_service side_staff side_corporate
+        warp_service warp_staff warp_corporate
         core_service core_staff core_corporate
       ).map { |name| [name, hosts.public_send(name).to_s] }
     env_signature =
@@ -203,7 +203,7 @@ module OidcClientRegistry
         PUBLIC_AUTH_SERVICE_URL PUBLIC_AUTH_STAFF_URL PUBLIC_AUTH_CORPORATE_URL
         PRIVATE_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL PRIVATE_AUTH_CORPORATE_URL
         BASE_SERVICE_URL BASE_STAFF_URL BASE_CORPORATE_URL
-        SIDE_SERVICE_URL SIDE_STAFF_URL SIDE_CORPORATE_URL
+        PUBLIC_WARP_SERVICE_URL PUBLIC_WARP_STAFF_URL PUBLIC_WARP_CORPORATE_URL
         PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL PUBLIC_CORE_CORPORATE_URL
         CORE_SERVICE_URL CORE_STAFF_URL CORE_CORPORATE_URL
       ).map { |name| [name, ENV.fetch(name, nil)] }

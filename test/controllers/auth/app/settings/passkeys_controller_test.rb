@@ -7,8 +7,7 @@ require "minitest/mock"
 require "base64"
 
 class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_statuses, :client_secret_credential_kinds,
-           :client_secret_credential_statuses, :client_email_statuses,
+  fixtures :clients, :client_statuses, :client_email_statuses,
            :client_chronicle_events, :client_chronicle_levels
 
   setup do
@@ -21,9 +20,6 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @user = create_verified_user_with_email(email_address: "passkey_config_test_user@example.com")
     @other_user = create_verified_user_with_email(email_address: "other_passkey_config_test_user@example.com")
-    @user.client_secret_credentials.destroy_all
-    create_client_recovery_passcode!(@user, name: "recovery 1")
-    create_client_recovery_passcode!(@user, name: "recovery 2")
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(@token, scope: "settings_passkey")
     @headers = as_user_headers(@user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")).merge(
@@ -258,11 +254,8 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
   end
 
-  test "verification tops recovery passcodes up after bootstrap passkey registration" do
-    email = "bootstrap-passkey-#{SecureRandom.hex(4)}@example.com"
-    unverified_user = create_verified_user_with_email(email_address: email)
-    create_client_recovery_passcode!(unverified_user, name: "bootstrap 1", validate: false)
-    create_client_recovery_passcode!(unverified_user, name: "bootstrap 2", validate: false)
+  test "verification does not issue recovery passcodes after bootstrap passkey registration" do
+    unverified_user = create_verified_user_with_email(email_address: "bootstrap-passkey-#{SecureRandom.hex(4)}@example.com")
     token = ClientToken.create!(user: unverified_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(token, scope: "settings_passkey")
     headers = as_user_headers(
@@ -271,23 +264,18 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
       session_public_id: token.public_id,
     )
 
-    post auth_app_settings_passkeys_options_path(
-      ri: "jp",
-    ), headers: headers
-    challenge_id = response.parsed_body["challenge_id"]
+    post auth_app_settings_passkeys_options_path(ri: "jp"), headers: headers
+    challenge_id = response.parsed_body.fetch("challenge_id")
 
+    registration_context = Struct.new(
+      :webauthn_id, :sign_count, :aaguid, :transports,
+      :backup_eligible, :backup_state, :authenticator_attachment,
+    ).new("bootstrap_webauthn_id", 1)
     mock_credential = Object.new
     mock_credential.define_singleton_method(:id) { "bootstrap_webauthn_id" }
     mock_credential.define_singleton_method(:public_key) { "bootstrap_public_key" }
     mock_credential.define_singleton_method(:sign_count) { 1 }
     mock_credential.define_singleton_method(:verify) { |*_args| true }
-
-    registration_context = Struct.new(
-      :webauthn_id, :sign_count, :aaguid, :transports,
-      :backup_eligible, :backup_state, :authenticator_attachment,
-    ).new(
-      "bootstrap_webauthn_id", 1,
-    )
     Webauthn::RegistrationVerifier.stub(:verify!, registration_context) do
       WebAuthn::Credential.stub(:from_create, mock_credential) do
         params = {
@@ -300,11 +288,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
         }
 
         assert_difference("ClientPasskey.count", 1) do
-          assert_difference(
-            -> {
-              unverified_user.client_secret_credentials.where(user_secret_kind_id: ClientSecretCredentialKind::RECOVERY).count
-            }, 8,
-          ) do
+          assert_no_difference("ClientSecretCredential.count") do
             post auth_app_settings_passkeys_verification_path(ri: "jp"),
                  params: params,
                  headers: headers
@@ -314,8 +298,9 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     end
 
     assert_response :created
-    assert_equal "ok", response.parsed_body["status"]
-    assert_includes response.parsed_body["redirect_url"], "/identity/secrets"
+    assert_equal "ok", response.parsed_body.fetch("status")
+    assert_equal auth_app_settings_passkeys_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")),
+                 response.parsed_body.fetch("redirect_url")
   end
 
   test "verification rejects duplicate webauthn_id" do
@@ -434,55 +419,6 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     )
   end
 
-  test "new denies with zero unused usable recovery passcodes" do
-    @user.client_secret_credentials.destroy_all
-
-    get new_auth_app_settings_passkey_path(ri: "jp"),
-        headers: @headers
-
-    assert_response :forbidden
-    assert_equal "text/html", response.media_type
-    assert_includes response.body, "/identity/secrets?ri=jp"
-    assert_empty flash.to_hash
-  end
-
-  test "options denies with one unused usable recovery passcode and does not return json" do
-    @user.client_secret_credentials.destroy_all
-    create_client_recovery_passcode!(@user, name: "only recovery")
-
-    post auth_app_settings_passkeys_options_path(ri: "jp"),
-         headers: @headers,
-         as: :json
-
-    assert_response :forbidden
-    assert_equal "text/html", response.media_type
-    assert_includes response.body, I18n.t("sign.recovery_passcodes.required.setup_link")
-    assert_empty flash.to_hash
-  end
-
-  test "verification ignores used deleted expired and wrong actor recovery passcodes" do
-    @user.client_secret_credentials.destroy_all
-    create_client_recovery_passcode!(@user, name: "used", last_used_at: Time.current)
-    create_client_recovery_passcode!(
-      @user,
-      name: "deleted",
-      status_id: ClientSecretCredentialStatus::DELETED,
-    )
-    create_client_recovery_passcode!(@user, name: "expired", discard_at: 1.minute.ago)
-    create_client_recovery_passcode!(@other_user, name: "other 1")
-    create_client_recovery_passcode!(@other_user, name: "other 2")
-
-    assert_no_difference("ClientPasskey.count") do
-      post auth_app_settings_passkeys_verification_path(ri: "jp"),
-           params: { challenge_id: "unknown", credential: { id: "cred-id" } },
-           headers: @headers,
-           as: :json
-    end
-
-    assert_response :forbidden
-    assert_equal "text/html", response.media_type
-  end
-
   test "show renders never when passkey has not been used" do
     @passkey.update!(last_used_at: nil)
 
@@ -510,7 +446,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     )
   end
 
-  test "new allows bootstrap passkey registration with two recovery passcodes" do
+  test "new allows bootstrap passkey registration without recovery passcodes" do
     unverified_user = create_verified_user_with_email(email_address: "bootstrap-new-#{SecureRandom.hex(4)}@example.com")
     token = ClientToken.create!(user: unverified_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(token, scope: "settings_passkey")
@@ -536,7 +472,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_response :ok
   end
 
-  test "create allows bootstrap passkey registration with two recovery passcodes" do
+  test "create allows bootstrap passkey registration without recovery passcodes" do
     email = "bootstrap-create-#{SecureRandom.hex(4)}@example.com"
     unverified_user = create_verified_user_with_email(email_address: email)
     token = ClientToken.create!(user: unverified_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -724,25 +660,6 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     )
   end
 
-  def create_client_recovery_passcode!(
-    user,
-    name:,
-    status_id: ClientSecretCredentialStatus::ACTIVE,
-    last_used_at: nil,
-    discard_at: nil,
-    validate: true
-  )
-    credential = user.client_secret_credentials.new(
-      name: name,
-      user_secret_kind_id: ClientSecretCredentialKind::RECOVERY,
-      user_identity_secret_status_id: status_id,
-      last_used_at: last_used_at,
-    )
-    credential.discard_at = discard_at if discard_at
-    credential.password = ClientSecretCredential.generate_raw_secret_credential
-    credential.save!(validate: validate)
-    credential
-  end
   private
 
   def bearer_headers(token, host: nil, headers: {})

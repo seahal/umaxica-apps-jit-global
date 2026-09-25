@@ -25,7 +25,7 @@ module PreferenceAccessTokenTransport
     @preference_payload.is_a?(Hash)
   end
 
-  def load_access_token_preference_record!
+  def load_access_token_preference_record!(clear_invalid_cookie: true)
     return @preferences if @preferences.present?
     return unless @preference_payload.is_a?(Hash) || load_access_token_payload
 
@@ -51,19 +51,33 @@ module PreferenceAccessTokenTransport
         end
       end
     @preferences = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
-    return unless keep_loaded_access_token_payload?(@preference_payload)
+    return unless keep_loaded_access_token_payload?(
+      @preference_payload,
+      clear_invalid_cookie: clear_invalid_cookie,
+    )
 
     @preferences
   end
 
-  def keep_loaded_access_token_payload?(payload)
+  def keep_loaded_access_token_payload?(payload, clear_invalid_cookie: true)
     if @preferences.blank?
+      unless clear_invalid_cookie
+        @preference_payload = nil
+        return false
+      end
+
       cookies.delete(access_token_cookie_name, **preference_cookie_deletion_options)
       @preference_payload = nil
       return false
     end
 
     return true if preference_access_token_current?(@preferences, payload)
+
+    unless clear_invalid_cookie
+      @preferences = nil
+      @preference_payload = nil
+      return false
+    end
 
     cookies.delete(access_token_cookie_name, **preference_cookie_deletion_options)
     @preferences = nil

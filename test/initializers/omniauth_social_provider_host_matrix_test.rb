@@ -7,7 +7,7 @@ require "test_helper"
 #
 # The matrix is deny-by-default: a host that owns no auth surface classifies as
 # :unknown and gets no provider at all. Rails Host Authorization admits many more
-# hosts than the three auth origins (side, base, core, help, info, palm, guid...),
+# hosts than the three auth origins (warp, base, core, help, info, palm, guid...),
 # and none of them may start or complete an external sign-in ceremony.
 class OmniauthSocialProviderHostMatrixTest < ActiveSupport::TestCase
   self.fixture_table_names = []
@@ -96,7 +96,7 @@ class OmniauthSocialProviderHostMatrixTest < ActiveSupport::TestCase
   # auth surface, drawn from the same boot host families the app really has.
   def non_auth_hosts
     [
-      @hosts.side_service, @hosts.side_staff,
+      @hosts.warp_service, @hosts.warp_staff,
       @hosts.base_staff,
       @hosts.core_service, @hosts.core_staff,
       @hosts.help_service, @hosts.info_service,

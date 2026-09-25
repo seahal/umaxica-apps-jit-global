@@ -1,0 +1,36 @@
+# frozen_string_literal: true
+
+# Run through the verified isolated Rails runner; emits association metadata only.
+require "json"
+
+Rails.application.eager_load!
+rows =
+  ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |model|
+    next if model.name.nil?
+
+    model.reflect_on_all_associations(:belongs_to).map do |reflection|
+      row = {
+        "model" => model.name,
+        "table" => model.table_name,
+        "connection" => model.connection_db_config.name,
+        "association" => reflection.name.to_s,
+        "foreign_key" => reflection.foreign_key,
+        "polymorphic" => reflection.polymorphic?,
+        "optional" => reflection.options[:optional],
+      }
+      unless reflection.polymorphic?
+        parent = reflection.klass
+        row["parent_model"] = parent.name
+        row["parent_table"] = parent.table_name
+        row["parent_connection"] = parent.connection_db_config.name
+        row["primary_key"] = reflection.association_primary_key
+      end
+      row
+    rescue StandardError => e
+      { "model" => model.name,
+        "association" => reflection.name.to_s,
+        "error" => "#{e.class}: #{e.message.lines.first}", }
+    end
+  end.flatten.sort_by { |row| [row.fetch("model"), row.fetch("association")] }
+File.write("tmp/postgresql-association-map.json", JSON.pretty_generate(rows))
+puts "belongs_to=#{rows.length} unresolved=#{rows.count { |row| row.key?("error") }}"

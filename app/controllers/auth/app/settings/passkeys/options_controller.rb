@@ -4,7 +4,6 @@
 class Auth::App::Settings::Passkeys::OptionsController < ::Auth::App::ApplicationController
   include ::VerificationClient
   include SignSettingsPasskeyRegistration
-  include ::SignRequiresRecoveryPasscodes
   include ::CloudflareTurnstile
   include ::PasskeyRegistrationFlow
 
@@ -13,7 +12,6 @@ class Auth::App::Settings::Passkeys::OptionsController < ::Auth::App::Applicatio
 
   before_action :authenticate_client!
   step_up only: :create, bootstrap: true
-  before_action :require_recovery_passcodes_for_mfa_registration!, only: :create
   before_action :verify_settings_passkey_turnstile!, only: :create
 
   def create = (authorize!(ClientPasskey, to: :create?); render_passkey_registration_options)
@@ -42,33 +40,4 @@ class Auth::App::Settings::Passkeys::OptionsController < ::Auth::App::Applicatio
 
   def passkey_registration_log_prefix = "sign.webauthn.registration"
 
-  def recovery_passcode_requirement_active_strong_credential_count
-    current_client.client_passkeys.active.count +
-      current_client.client_totp_credentials.where(
-        user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-      ).count
-  end
-
-  def recovery_passcode_requirement_actor = current_client
-
-  def recovery_passcode_requirement_credential_class = ClientSecretCredential
-
-  def recovery_passcode_setup_url
-    base_app_identity_secrets_url(
-      ri: params[:ri],
-      host: base_authority_host,
-    )
-  end
-
-  def recovery_passcode_top_up_actor = current_client
-
-  def recovery_passcode_top_up_credential_class = ClientSecretCredential
-
-  def recovery_passcode_reveal_redirect_url(token)
-    base_app_identity_secrets_url(
-      ri: params[:ri],
-      token: token,
-      host: base_authority_host,
-    )
-  end
 end

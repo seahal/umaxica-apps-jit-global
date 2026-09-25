@@ -32,10 +32,14 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   test "dashboard_renders_when_signed_in" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
+    selected_persona(token).update!(moniker: "Selected App Persona")
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
 
     get base_app_root_url(ri: "jp"), headers: session_headers(token)
 
     assert_response :success
+    assert_equal last_used_at, token.reload.last_used_at
     assert_equal "base/app/dashboards/show", inertia_component
     assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
     assert_not inertia_props.key?("description")
@@ -50,6 +54,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  sections.map { |section| section.fetch("heading") }
 
     menu_links = sections.first.fetch("items")
+    assert_equal({ "display_name" => "Selected App Persona" }, sections.first.fetch("current_identity"))
     primary_links = sections.second.fetch("items")
     links = sections.flat_map { |section| section.fetch("items") }
     hrefs = links.map { |link| link.fetch("href") }
@@ -57,8 +62,8 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     primary_hrefs = primary_links.map { |link| link.fetch("href") }
 
     assert_equal [
-      base_app_switcher_path(ri: "jp"),
       base_app_preference_path(ri: "jp"),
+      base_app_switcher_path(ri: "jp"),
       new_base_app_sign_out_path(ri: "jp"),
     ], menu_links.map { |link| link.fetch("href") }
     menu_links.each { |link| assert_not_includes primary_hrefs, link.fetch("href") }
@@ -87,6 +92,74 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_not labelled.key?(dashboard_label(:userinfo))
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
     assert_no_match(/サインイン済み|Signed in/i, response.body)
+  end
+
+  test "dashboard_identity_uses_the_selected_app_persona_not_request_parameters" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+    selected_persona(token).update!(moniker: "Authenticated App Persona")
+    selected_account_public_id = token.selected_account_public_id
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
+
+    get base_app_dashboard_url(
+      ri: "jp", account_public_id: "attacker-account", avatar_public_id: "attacker-avatar",
+      moniker: "Attacker Persona",
+    ), headers: session_headers(token)
+
+    assert_response :success
+    identity = inertia_props.fetch("sections").first.fetch("current_identity")
+    assert_equal "Authenticated App Persona", identity.fetch("display_name")
+    assert_equal ["display_name"], identity.keys
+    assert_equal selected_account_public_id, token.reload.selected_account_public_id
+    assert_equal last_used_at, token.reload.last_used_at
+  end
+
+  test "dashboard_fails_explicitly_when_the_selected_app_persona_has_no_display_name" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+    selected_persona(token).update!(moniker: " ")
+
+    error = assert_raises(RuntimeError) do
+      get base_app_dashboard_url(ri: "jp"), headers: session_headers(token)
+    end
+
+    assert_match "selected app Persona has no display name", error.message
+  end
+
+  test "named_dashboard_renders_for_the_authenticated_app_session" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+
+    get base_app_dashboard_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/app/dashboards/show", inertia_component
+    labels = inertia_props.fetch("sections").first.fetch("items").map { |link| link.fetch("label") }
+
+    assert_equal %i(preference switcher logout).map { |key| dashboard_label(key) }, labels
+  end
+
+  test "named_dashboard_returns_anonymous_app_visitors_to_the_homepage" do
+    get base_app_dashboard_url(ri: "jp"), headers: host_headers(@host)
+
+    assert_response :see_other
+    assert_redirected_to base_app_root_path(ri: "jp")
+  end
+
+  test "authenticated_preference_navigation_returns_to_the_named_app_dashboard" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
+
+    %w(jp us).each do |region|
+      get base_app_preference_url(ri: region), headers: session_headers(token)
+
+      assert_response :success
+      assert_equal base_app_dashboard_path(ri: region), inertia_props.dig("up_link", "href")
+      assert_equal last_used_at, token.reload.last_used_at
+    end
   end
 
   test "shared dashboard does not expose a raw Auth selector" do
@@ -152,8 +225,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  labelled.fetch(I18n.t("base.shared.identity.links.telephones", locale: :ja))
     assert_equal base_app_identity_birthdate_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.birthdate", locale: :ja))
-    assert_equal base_app_identity_secrets_path(ri: "jp"),
-                 labelled.fetch(I18n.t("base.shared.identity.links.secrets", locale: :ja))
+    assert_not_includes labelled.values, "/identity/secrets"
     assert_equal base_app_sessions_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.sessions", locale: :ja))
     assert_equal base_app_identity_activities_path(ri: "jp"),
@@ -171,7 +243,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal base_app_identity_mfa_challenge_path(ri: "jp"),
                  labelled.fetch(I18n.t("sign.app.settings.show.mfa", locale: :ja))
     assert_equal base_app_identity_mfa_reset_path(ri: "jp"),
-                 labelled.fetch(I18n.t("sign.app.settings.show.mfa_reset", locale: :ja))
+                 labelled.fetch(I18n.t("sign.app.settings.mfa.show.reset_title", locale: :ja))
     assert_equal new_base_app_identity_withdrawal_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.withdrawal", locale: :ja))
     assert_not_includes labelled.values, new_base_app_sign_out_path(ri: "jp")
@@ -193,6 +265,10 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   def select_token!(surface:, principal:, token:)
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)
     BaseSelectorAuthority.prepare(surface: surface, principal: principal, session: token)
+  end
+
+  def selected_persona(token)
+    ClientPersona.find_by!(public_id: token.selected_account_public_id)
   end
 
   def session_headers(token)

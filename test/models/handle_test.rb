@@ -29,6 +29,7 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class HandleTest < ActiveSupport::TestCase
   setup do
@@ -94,8 +95,8 @@ class HandleTest < ActiveSupport::TestCase
   test "association deletion: restriction by active_avatars" do
     @handle.save!
     capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
-    Avatar.create!(
-      moniker: "Avatar with Handle",
+    AvatarTestFactory.create!(
+      moniker: "Handle Avatar",
       active_handle: @handle,
       capability: capability,
     )

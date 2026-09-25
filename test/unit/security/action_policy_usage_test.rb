@@ -17,9 +17,9 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     Core::App::ApplicationController => { actor: :current_actor, user: :current_policy_user },
     Core::Com::ApplicationController => { actor: :current_actor, user: :current_policy_user },
     Core::Org::ApplicationController => { actor: :current_actor, user: :current_policy_user },
-    Side::App::ApplicationController => { actor: :current_actor, user: :current_policy_user },
-    Side::Com::ApplicationController => { actor: :current_actor, user: :current_policy_user },
-    Side::Org::ApplicationController => { actor: :current_actor, user: :current_policy_user },
+    Warp::App::ApplicationController => { actor: :current_actor, user: :current_policy_user },
+    Warp::Com::ApplicationController => { actor: :current_actor, user: :current_policy_user },
+    Warp::Org::ApplicationController => { actor: :current_actor, user: :current_policy_user },
   }.freeze
 
   MUTATION_ACTIONS = %w(create update destroy).freeze
@@ -80,8 +80,6 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/base/app/identity/emails/registrations_controller.rb#create",
     "app/controllers/base/app/identity/emails/registrations_controller.rb#update",
     "app/controllers/base/app/identity/mfa/challenges_controller.rb#update",
-    "app/controllers/base/app/identity/secrets/removals_controller.rb#create",
-    "app/controllers/base/app/identity/secrets/rotations_controller.rb#create",
     "app/controllers/base/app/identity/telephones/registrations_controller.rb#create",
     "app/controllers/base/app/identity/telephones/registrations_controller.rb#update",
     "app/controllers/base/app/identity/telephones_controller.rb#create",

@@ -16,12 +16,10 @@ class OperatorSecretCredentialKind < OrgPrincipalRecord
   NOTHING = 1
   LOGIN = 2
   DEFAULTS = [NOTHING, LOGIN].freeze
-  PERMANENT = LOGIN
   ONE_TIME = NOTHING
 
   # Kind constants
   ALL = [LOGIN].freeze
-  ALLOWED_FOR_SECRET_SIGN_IN = [PERMANENT].freeze
 
   has_many :staff_secret_credentials, class_name: "OperatorSecretCredential", inverse_of: :staff_secret_credential_kind,
                                       dependent: :restrict_with_exception

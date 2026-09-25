@@ -18,7 +18,7 @@ class AuthenticationCurrentResourceResolver
 
   def initialize(access_token:, request_host:, resource_type:, resource_class:, token_class:,
                  authorization_scheme: nil, dpop_proof: nil, request_method: nil, request_uri: nil,
-                 jwt_issuer_id: nil)
+                 jwt_issuer_id: nil, track_session_activity: true)
     @access_token = access_token
     @request_host = request_host
     @resource_type = resource_type
@@ -29,6 +29,7 @@ class AuthenticationCurrentResourceResolver
     @request_method = request_method
     @request_uri = request_uri
     @jwt_issuer_id = jwt_issuer_id
+    @track_session_activity = track_session_activity
   end
 
   def call
@@ -62,6 +63,7 @@ class AuthenticationCurrentResourceResolver
 
     token_record = token_record_for_session_identifier(sid)
     return failure(:token_session_not_found, payload: payload) unless token_record
+    return failure(:token_session_not_found, payload: payload) if bound_device_session_unusable?(token_record)
     return failure(:dpop_binding_mismatch, payload: payload) unless token_dpop_binding_current?(token_record, payload)
     return failure(:token_jti_mismatch, payload: payload) unless token_jti_current?(token_record, payload)
 
@@ -86,6 +88,7 @@ class AuthenticationCurrentResourceResolver
   # write to the session row on every hit. update_columns keeps this off the
   # validation/callback path; the write uses the primary (writing) connection.
   def touch_session_activity!(token_record)
+    return unless @track_session_activity
     return unless token_record.respond_to?(:has_attribute?) && token_record.has_attribute?(:last_used_at)
 
     now = Time.current
@@ -183,6 +186,13 @@ class AuthenticationCurrentResourceResolver
     token_record.public_send(attribute)
   end
 
+  def bound_device_session_unusable?(token_record)
+    return false if token_record_attribute(token_record, :device_session_id).blank?
+
+    session = token_record.try(:device_session)
+    session.blank? || session.status_id != DeviceSessionable::STATUS_ACTIVE || session.revoked_at.present?
+  end
+
   def token_column?(column_name)
     return false unless @token_class.respond_to?(:column_names)
 
@@ -225,6 +235,7 @@ class AuthenticationCurrentResourceResolver
 
     resource = find_resource_from_payload(payload)
     return resource_failure(:resource_not_found, payload, token_record, sid) if resource.blank?
+    return failure(:actor_mismatch, payload: payload) unless token_actor_matches?(token_record, resource)
     if withdrawal_required?(resource)
       return resource_failure(:withdrawal_required, payload, token_record, sid)
     end
@@ -254,6 +265,15 @@ class AuthenticationCurrentResourceResolver
 
       @resource_class.find_by(id: Integer(subject, 10))
     end
+  end
+
+  def token_actor_matches?(token_record, resource)
+    actor_column = { "client" => :user_id,
+                     "visitor" => :visitor_id,
+                     "operator" => :staff_id, }.fetch(@resource_type.to_s)
+    token_record_attribute(token_record, actor_column) == resource.id &&
+      (token_record_attribute(token_record, :device_session_id).blank? ||
+        token_record.device_session.public_send(actor_column) == resource.id)
   end
 
   def resource_failure(reason, payload, token_record, sid, include_token: true)

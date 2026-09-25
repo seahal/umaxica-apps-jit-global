@@ -120,6 +120,12 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
       render plain: "ok" unless performed?
     end
+
+    private
+
+    def jump_rt_issuer_namespace
+      "BASE_COM"
+    end
   end
 
   setup do

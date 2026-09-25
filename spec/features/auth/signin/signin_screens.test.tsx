@@ -18,7 +18,6 @@ vi.mock("@inertiajs/react", () => ({
 const { default: SignInMethodChoice } = await import("@/features/auth/signin/SignInMethodChoice");
 const { default: EmailSignInForm } = await import("@/features/auth/signin/EmailSignInForm");
 const { default: EmailPassCodeForm } = await import("@/features/auth/signin/EmailPassCodeForm");
-const { default: SecretSignInForm } = await import("@/features/auth/signin/SecretSignInForm");
 const { default: TotpChallengeForm } = await import("@/features/auth/signin/TotpChallengeForm");
 const { default: PasskeySignInScreen } = await import("@/features/auth/signin/PasskeySignInScreen");
 const { default: StepUpPasskeyScreen } = await import("@/features/auth/signin/StepUpPasskeyScreen");
@@ -238,78 +237,6 @@ describe("email pass code form", () => {
     );
 
     expect(markup).toContain("認証コードが違います");
-  });
-});
-
-describe("secret credential sign-in form", () => {
-  const props = {
-    title: "パスワードでログイン",
-    form: {
-      action: "/sign/in/secret",
-      method: "post",
-      pt: null,
-      ri: "jp",
-      identifier_field: {
-        scope: "secret_credential_login_form",
-        field: "identifier",
-        name: "secret_credential_login_form[identifier]",
-        label: "メールアドレス",
-        placeholder: "name@example.com",
-      },
-      secret_field: {
-        scope: "secret_credential_login_form",
-        field: "secret_credential_value",
-        name: "secret_credential_login_form[secret_credential_value]",
-        label: "パスワード",
-        placeholder: "••••••••••••••••",
-      },
-      submit_label: "送信する",
-    },
-    hints: null,
-    error_heading: "入力を確認してください",
-    form_errors: [],
-    turnstile,
-    back_link: backLink,
-  };
-
-  it("renders both fields of the first-factor form", () => {
-    const markup = renderToStaticMarkup(<SecretSignInForm {...props} />);
-
-    expect(markup).toContain('name="secret_credential_login_form[identifier]"');
-    expect(markup).toContain('autoComplete="current-password"');
-  });
-
-  it("omits the identifier field on the second-factor form", () => {
-    const markup = renderToStaticMarkup(
-      <SecretSignInForm
-        {...props}
-        form={{
-          ...props.form,
-          identifier_field: null,
-          secret_field: {
-            ...props.form.secret_field,
-            scope: "mfa_secret_credential_form",
-            name: "mfa_secret_credential_form[secret_credential_value]",
-          },
-        }}
-        hints={{ label: "有効な資格情報", value: "recovery, permanent" }}
-      />,
-    );
-
-    expect(markup).not.toContain("[identifier]");
-    expect(markup).toContain("recovery, permanent");
-  });
-
-  it("shows the single indistinguishable failure message", () => {
-    const markup = renderToStaticMarkup(
-      <SecretSignInForm
-        {...props}
-        form_errors={["認証に失敗しました"]}
-      />,
-    );
-
-    expect(markup).toContain("入力を確認してください");
-    expect(markup).toContain("認証に失敗しました");
   });
 });
 

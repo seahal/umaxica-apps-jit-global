@@ -40,7 +40,6 @@ class SignUpStepGate
       "telephone" => {
         otp: :auth_app_sign_up_check_telephone_otp_path,
         passkey: :auth_app_sign_up_check_telephone_passkey_path,
-        passcode: :auth_app_sign_up_check_telephone_passcode_path,
         birthdate: :auth_app_sign_up_check_telephone_birthdate_path,
       },
     },
@@ -52,7 +51,6 @@ class SignUpStepGate
       "telephone" => {
         otp: :auth_com_sign_up_check_telephone_otp_path,
         passkey: :auth_com_sign_up_check_telephone_passkey_path,
-        passcode: :auth_com_sign_up_check_telephone_passcode_path,
         birthdate: :auth_com_sign_up_check_telephone_birthdate_path,
       },
     },

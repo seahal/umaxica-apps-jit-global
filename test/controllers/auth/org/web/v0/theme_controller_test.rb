@@ -25,7 +25,7 @@ class Auth::Org::Web::V0::ThemeControllerTest < ActionDispatch::IntegrationTest
     assert_equal "sy", response.parsed_body["theme"]
   end
 
-  test "GET show returns theme from preference jwt" do
+  test "GET show returns theme from preference jwt without writing a theme cookie" do
     token = encode_preference_jwt(
       preferences: { "ct" => "li" },
       host: @host,
@@ -42,10 +42,7 @@ class Auth::Org::Web::V0::ThemeControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "li", response.parsed_body["theme"]
-    set_cookie = response.headers["Set-Cookie"].to_s
-
-    assert_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=li"
-    assert_not_includes set_cookie, "#{PreferenceIoKeys::Cookies::THEME}=sy"
+    assert_nil response.headers["Set-Cookie"]
   end
 
   test "PATCH update sets theme cookie and returns updated theme" do

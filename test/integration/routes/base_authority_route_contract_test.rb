@@ -27,6 +27,19 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "base dashboard routes stay within each public face" do
+    {
+      "www.umaxica.app" => "base/app/roots",
+      "www.umaxica.com" => "base/com/roots",
+      "www.umaxica.org" => "base/org/roots",
+    }.each do |host, controller|
+      assert_recognizes(
+        { controller: controller, action: "show" },
+        { path: "http://#{host}/dashboard", method: :get },
+      )
+    end
+  end
+
   test "base authority app static and health routes" do
     assert_recognizes(
       { controller: "base/app/roots", action: "index" },
@@ -85,9 +98,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_APP_HOST}/welcome", method: :get },
     )
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/dashboard", method: :get)
-    end
+    assert_recognizes(
+      { controller: "base/app/roots", action: "show" },
+      { path: "http://#{BASE_APP_HOST}/dashboard", method: :get },
+    )
 
     assert_recognizes(
       { controller: "base/app/verification/cancellations", action: "create" },
@@ -464,9 +478,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_COM_HOST}/welcome", method: :get },
     )
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/dashboard", method: :get)
-    end
+    assert_recognizes(
+      { controller: "base/com/roots", action: "show" },
+      { path: "http://#{BASE_COM_HOST}/dashboard", method: :get },
+    )
 
     assert_recognizes(
       { controller: "base/com/verification/cancellations", action: "create" },
@@ -639,7 +654,7 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     # NOTE: /settings is omitted -- recognize_path does not enforce host constraints;
-    # side/com/settings bleeds through. Integration tests cover the actual host boundary.
+    # warp/com/settings bleeds through. Integration tests cover the actual host boundary.
   end
   # rubocop:enable Minitest/MultipleAssertions
 
@@ -694,9 +709,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_ORG_HOST}/welcome", method: :get },
     )
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/dashboard", method: :get)
-    end
+    assert_recognizes(
+      { controller: "base/org/roots", action: "show" },
+      { path: "http://#{BASE_ORG_HOST}/dashboard", method: :get },
+    )
 
     assert_recognizes(
       { controller: "base/org/verification/cancellations", action: "create" },
@@ -939,7 +955,7 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     # NOTE: /settings is omitted -- recognize_path does not enforce host constraints;
-    # side/org/settings bleeds through. Integration tests cover the actual host boundary.
+    # warp/org/settings bleeds through. Integration tests cover the actual host boundary.
   end
 
   test "base authority settings routes are retired" do
@@ -950,7 +966,7 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     }.each_key do |host|
       [
         # NOTE: /settings (bare) is intentionally excluded -- recognize_path does not enforce host
-        # constraints, so side/*/settings routes bleed through. The actual host constraint is
+        # constraints, so warp/*/settings routes bleed through. The actual host constraint is
         # verified by integration tests that make real HTTP requests.
         { path: "/settings/secrets", method: :get },
         { path: "/settings/secrets/enrollment", method: :post },
@@ -961,6 +977,25 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("http://#{host}#{route.fetch(:path)}", method: route.fetch(:method))
         end
+      end
+    end
+  end
+
+  test "base app generic identity secret management routes are retired" do
+    [
+      ["/identity/secrets", :get],
+      ["/identity/secrets/new", :get],
+      ["/identity/secrets/example", :get],
+      ["/identity/secrets/example/edit", :get],
+      ["/identity/secrets", :post],
+      ["/identity/secrets/example", :patch],
+      ["/identity/secrets/example", :put],
+      ["/identity/secrets/example", :delete],
+      ["/identity/secrets/example/rotation", :post],
+      ["/identity/secrets/example/removal", :post],
+    ].each do |path, method|
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}#{path}", method: method)
       end
     end
   end

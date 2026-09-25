@@ -7,7 +7,6 @@ module VisitorSecretCredentialKinds
   LOGIN = VisitorSecretCredentialKind::LOGIN
   RECOVERY = VisitorSecretCredentialKind::RECOVERY
   API = VisitorSecretCredentialKind::API
-  PERMANENT = VisitorSecretCredentialKind::PERMANENT
   ONE_TIME = VisitorSecretCredentialKind::ONE_TIME
 
   ALL = [LOGIN, RECOVERY, API].freeze
@@ -22,10 +21,6 @@ module VisitorSecretCredentialKinds
 
   def api_secret_credential?
     visitor_secret_credential_kind_id == API
-  end
-
-  def permanent_secret_credential?
-    visitor_secret_credential_kind_id == PERMANENT
   end
 
   def one_time_secret_credential?

@@ -58,13 +58,15 @@ class IdentityOneTimeReveal
     payload = verifier.verified(token.to_s, purpose: TOKEN_PURPOSE)
     return nil unless valid_claims?(payload, actor: actor, session_nonce: session_nonce, purpose: purpose)
 
-    encrypted = SecurityOneTimeReveal.consume(
-      jti_digest: digest(payload.fetch("jti")),
-      actor_type: actor.class.name,
-      actor_id: actor.id,
-      session_nonce_digest: digest(session_nonce),
-      purpose: purpose,
-    )
+    encrypted = AppTicketRecord.connected_to(role: :writing) do
+      SecurityOneTimeReveal.consume(
+        jti_digest: digest(payload.fetch("jti")),
+        actor_type: actor.class.name,
+        actor_id: actor.id,
+        session_nonce_digest: digest(session_nonce),
+        purpose: purpose,
+      )
+    end
     return nil if encrypted.blank?
 
     decrypted = decrypt_payload(encrypted)

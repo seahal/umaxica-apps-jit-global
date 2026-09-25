@@ -50,7 +50,7 @@ class OtpAdapterTest < ActiveSupport::TestCase
   end
 
   test "for raises ArgumentError for unknown combination" do
-    assert_raises(ArgumentError) { OtpAdapter.for(surface: :side, channel: :email) }
+    assert_raises(ArgumentError) { OtpAdapter.for(surface: :warp, channel: :email) }
   end
 
   test "base deliver raises NotImplementedError" do

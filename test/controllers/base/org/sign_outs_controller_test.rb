@@ -17,6 +17,8 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
   test "edit sign out renders confirmation without mutation" do
     token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
 
     get edit_base_org_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
 
@@ -24,7 +26,26 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/org/sign_outs/edit", inertia_component
     assert_equal I18n.t("sign.shared.sign_out.confirm_description"), inertia_props.fetch("description")
     assert_includes inertia_props.fetch("form").fetch("action"), base_org_sign_out_path
+    assert_equal I18n.t("actions.up"), inertia_props.dig("back_link", "label")
+    assert_equal base_org_dashboard_path(ri: "jp"), inertia_props.dig("back_link", "href")
+    assert_nil inertia_props["home_link"]
+    assert_not_includes response.body, I18n.t("sign.shared.sign_out.home_link")
     assert_predicate token.reload, :currently_usable?
+    assert_equal last_used_at, token.reload.last_used_at
+  end
+
+  test "edit does not rotate a refresh token when the access cookie is absent" do
+    token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    refresh_plain = token.rotate_refresh_token!
+    refresh_digest = token.refresh_token_digest
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = refresh_plain
+
+    get edit_base_org_sign_out_url(host: @host, ri: "jp")
+
+    assert_response :success
+    assert_equal refresh_digest, token.reload.refresh_token_digest
+    assert_equal refresh_plain, cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
   test "post sign out revokes the current session and completes on /sign/out" do
@@ -41,6 +62,8 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/org/sign_outs/edit", inertia_component
     assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("notice").fetch("title")
+    assert_not inertia_props.fetch("active")
+    assert_nil inertia_props["form"]
 
     get base_org_sign_out_url(host: @host, ri: "jp")
 

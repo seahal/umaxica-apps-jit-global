@@ -78,6 +78,7 @@ require_relative "support/inertia_page_object"
 require_relative "support/org_entra_first_stage_helper"
 require_relative "support/oidc_authorization_response_helper"
 require_relative "support/auth_ceremony_entry_helper"
+require_relative "support/auth_email_mfa_helper"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.

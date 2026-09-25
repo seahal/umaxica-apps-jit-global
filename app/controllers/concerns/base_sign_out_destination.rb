@@ -52,4 +52,19 @@ module BaseSignOutDestination
   def render_oidc_logout_completion
     render_oidc_end_session_confirmation
   end
+
+  def sign_out_dashboard_path
+    public_send(
+      "#{sign_out_route_helper_prefix}_dashboard_path",
+      **sign_out_route_params.slice(:ri).compact,
+    )
+  end
+
+  def sign_out_return_link_props(back_to_dashboard:)
+    if back_to_dashboard
+      { back_link: { label: t("actions.up"), href: sign_out_dashboard_path } }
+    else
+      { home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path } }
+    end
+  end
 end

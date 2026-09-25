@@ -8,19 +8,28 @@ module Security
     class PrimaryAuthenticationAccountRateLimitInvariantTest < ActiveSupport::TestCase
       self.fixture_table_names = []
 
-      CONTROLLERS = {
-        "app/controllers/auth/app/sign/in/secrets_controller.rb" => ["app", "secret_credential_create_identifier"],
-        "app/controllers/auth/com/sign/in/secrets_controller.rb" => ["com", "secret_credential_create_identifier"],
-        "app/controllers/auth/org/sign/in/secrets_controller.rb" => ["org", "secret_credential_create_actor"],
-      }.freeze
+      RETIRED_CONTROLLERS = %w(
+        app/controllers/auth/app/sign/in/secrets_controller.rb
+        app/controllers/auth/com/sign/in/secrets_controller.rb
+        app/controllers/auth/org/sign/in/secrets_controller.rb
+      ).freeze
 
-      test "every secret credential entry point limits attempts by a private identifier digest" do
-        CONTROLLERS.each do |relative_path, (surface, rule_name)|
-          source = Rails.root.join(relative_path).read
+      test "legacy secret sign-in controllers are removed" do
+        offenders = RETIRED_CONTROLLERS.select { |path| Rails.root.join(path).exist? }
 
-          assert_includes source, "name: \"#{rule_name}\""
-          assert_includes source, "AuthenticationRateLimitKey.for("
-          assert_includes source, "surface: :#{surface}"
+        assert_empty offenders
+      end
+
+      test "legacy secret sign-in path is absent from every Auth surface" do
+        hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+        sign_hosts = [hosts.sign_service.host, hosts.sign_corporate.host, hosts.sign_staff.host]
+
+        sign_hosts.each do |host|
+          %i(get post).each do |method|
+            assert_raises(ActionController::RoutingError) do
+              Rails.application.routes.recognize_path("http://#{host}/sign/in/secret", method: method)
+            end
+          end
         end
       end
     end

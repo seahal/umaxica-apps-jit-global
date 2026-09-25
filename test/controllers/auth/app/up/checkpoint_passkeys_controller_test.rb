@@ -3,7 +3,6 @@
 
 require "test_helper"
 # require "helpers/global_test_support"
-require "base64"
 
 module Auth::App::Up
   class CheckpointPasskeysControllerTest < ActionDispatch::IntegrationTest
@@ -38,9 +37,7 @@ module Auth::App::Up
       finish_path = auth_app_sign_up_check_telephone_passkey_path(ri: "jp")
 
       assert_equal finish_path, props.fetch("finish_url")
-      passcode_path = auth_app_sign_up_check_telephone_passcode_path(ri: "jp")
-
-      assert_equal passcode_path, props.fetch("success_redirect_url")
+      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"), props.fetch("success_redirect_url")
       assert_equal cycle.checkpoint_version, props.fetch("checkpoint_version")
     end
 
@@ -147,12 +144,12 @@ module Auth::App::Up
 
       assert_response :created
       assert_equal "ok", response.parsed_body["status"]
-      assert_equal auth_app_sign_up_check_telephone_passcode_path(ri: "jp"), response.parsed_body["redirect_url"]
+      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"), response.parsed_body["redirect_url"]
       assert_predicate session[:user_telephone_registration], :present?
       assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
       assert cycle.reload.requirement_cleared?(:passkey)
       assert_not cycle.requirement_cleared?(:birthdate)
-      assert_not cycle.requirement_cleared?(:passcode)
+      assert_not_includes cycle.completed_requirements.keys, "passcode"
     end
 
     test "POST create requires challenge id" do
@@ -254,7 +251,7 @@ module Auth::App::Up
       end
 
       assert_response :created
-      assert_equal auth_app_sign_up_check_telephone_passcode_path(ri: "jp"),
+      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
                    response.parsed_body["redirect_url"]
     end
 
@@ -320,7 +317,7 @@ module Auth::App::Up
       assert_predicate response.parsed_body["error"], :present?
     end
 
-    test "telephone sign up finalizes and establishes login after otp passkey passcode and birthdate" do
+    test "telephone sign up finalizes and establishes login after otp passkey and birthdate" do
       telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("finalize")
 
       patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp"), params: {
@@ -336,6 +333,7 @@ module Auth::App::Up
       assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
       assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
       assert ClientToken.exists?(user_id: user.id)
+      assert_empty user.client_secret_credentials.where(user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
     end
 
     test "telephone sign up rejects one day before the sixteenth birthday with sixteen birthday copy" do
@@ -407,12 +405,6 @@ module Auth::App::Up
       end
 
       assert_response :created
-
-      patch auth_app_sign_up_check_telephone_passcode_url(ri: "jp"), params: {
-        checkpoint_version: cycle.reload.checkpoint_version,
-      }
-
-      assert cycle.reload.requirement_cleared?(:passcode)
 
       # Simulate sign-in boundary failure by marking the actor as RESERVED before finalization.
       # SignAppUpTelephoneRegistrationFinalizer skips the VERIFIED_WITH_SIGN_UP status upgrade
@@ -558,18 +550,9 @@ module Auth::App::Up
       end
 
       assert_response :created
-      assert_equal auth_app_sign_up_check_telephone_passcode_path(ri: "jp"),
+      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
                    response.parsed_body["redirect_url"]
       assert cycle.reload.requirement_cleared?(:passkey)
-
-      patch(
-        auth_app_sign_up_check_telephone_passcode_url(ri: "jp"), params: {
-          checkpoint_version: cycle.reload.checkpoint_version,
-        },
-      )
-
-      assert_redirected_to auth_app_sign_up_check_telephone_birthdate_url(ri: "jp")
-      assert cycle.reload.requirement_cleared?(:passcode)
 
       get(auth_app_sign_up_check_telephone_birthdate_url(ri: "jp"))
 

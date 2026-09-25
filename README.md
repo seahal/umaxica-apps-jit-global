@@ -175,7 +175,7 @@ continue to use Compose DNS names. See `docs/operations/development-host-port-ex
 | Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                        |
 | Auth                       | `http://auth.{app,com,org}.localhost:3000`                                    |
 | Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                            |
-| Side / Palm                | `http://wide.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` |
+| Warp / Palm                | `http://warp.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` |
 | Info / Help / Docs / News  | `http://{info,help,docs,news}.{app,com,org}.localhost:3000`                   |
 
 The application contract supplies PUBLIC and PRIVATE URL values in both supported modes; Compose

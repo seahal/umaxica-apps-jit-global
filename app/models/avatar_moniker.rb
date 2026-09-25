@@ -13,28 +13,52 @@
 #  created_at               :datetime         not null
 #  updated_at               :datetime         not null
 #  avatar_id                :bigint           not null
-#  avatar_moniker_status_id :bigint
-#  set_by_actor_id          :bigint
 #
 # Indexes
 #
 #  index_avatar_monikers_on_avatar_id                 (avatar_id) UNIQUE WHERE (valid_to = 'infinity'::timestamp with time zone)
 #  index_avatar_monikers_on_avatar_id_and_valid_from  (avatar_id,valid_from DESC)
-#  index_avatar_monikers_on_avatar_moniker_status_id  (avatar_moniker_status_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (avatar_id => avatars.id)
-#  fk_rails_...  (avatar_moniker_status_id => avatar_moniker_statuses.id)
-#
 
 class AvatarMoniker < AvatarRecord
-  belongs_to :avatar
-  belongs_to :avatar_moniker_status
+  belongs_to :avatar, inverse_of: :avatar_monikers
+
+  def self.validate_column_size(attribute_name)
+    # Rails' generated ciphertext-length validator calls String#blank? on malformed UTF-8 before
+    # AvatarMonikerValidator can reject it. The domain validator checks plaintext bytes, and the
+    # persisted-ciphertext test verifies the physical varchar bound for the maximum valid input.
+    return if attribute_name.to_s == "moniker"
+
+    super
+  end
+  private_class_method :validate_column_size
+
+  encrypts :moniker
+
+  before_validation :normalize_moniker_to_nfc
+
+  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 
   validates :avatar_id,
-            uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } }
-  validates :moniker, presence: true
+            uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } },
+            if: :current_temporal_row?
+  validates :moniker, avatar_moniker: true
   validates :valid_from, presence: true
-  validates :id, length: { maximum: 255 }
+
+  private
+
+  def current_temporal_row?
+    valid_to.nil? || valid_to == Float::INFINITY
+  end
+
+  def normalize_moniker_to_nfc
+    return unless moniker.is_a?(String) && moniker.valid_encoding?
+
+    self.moniker = moniker.encode(Encoding::UTF_8).unicode_normalize(:nfc)
+  rescue EncodingError
+    # Keep malformed input intact so AvatarMonikerValidator can report it on the field.
+  end
 end

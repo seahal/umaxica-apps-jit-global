@@ -33,10 +33,14 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   test "dashboard_renders_when_signed_in" do
     token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
+    selected_persona(token).update!(moniker: "Selected Com Individual")
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
 
     get base_com_root_url(ri: "jp"), headers: session_headers(token)
 
     assert_response :success
+    assert_equal last_used_at, token.reload.last_used_at
     assert_equal "base/com/dashboards/show", inertia_component
     assert_equal I18n.t("base.shared.dashboard.title", locale: :ja), inertia_props.fetch("title")
     assert_no_match(/id\.umaxica/, response.body)
@@ -51,6 +55,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  sections.map { |section| section.fetch("heading") }
 
     menu_links = sections.first.fetch("items")
+    assert_equal({ "display_name" => "Selected Com Individual" }, sections.first.fetch("current_identity"))
     primary_links = sections.second.fetch("items")
     links = sections.flat_map { |section| section.fetch("items") }
     hrefs = links.map { |link| link.fetch("href") }
@@ -58,8 +63,8 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     primary_hrefs = primary_links.map { |link| link.fetch("href") }
 
     assert_equal [
-      base_com_selector_path(ri: "jp"),
       base_com_preference_path(ri: "jp"),
+      base_com_switcher_path(ri: "jp"),
       new_base_com_sign_out_path(ri: "jp"),
     ], menu_links.map { |link| link.fetch("href") }
     menu_links.each { |link| assert_not_includes primary_hrefs, link.fetch("href") }
@@ -67,7 +72,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_includes hrefs, base_com_root_path(ri: "jp")
     assert_equal base_com_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
     assert_equal base_com_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
-    assert_includes hrefs, base_com_selector_path(ri: "jp")
+    assert_includes hrefs, base_com_switcher_path(ri: "jp")
     assert_equal base_com_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
     assert_equal base_com_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
     assert_not hrefs.any? { |href| href.match?(%r{/preference/(calendar|clock|currency)}) }
@@ -78,6 +83,74 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_not labelled.key?(dashboard_label(:jwks))
     assert_not labelled.key?(dashboard_label(:userinfo))
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
+  end
+
+  test "dashboard_identity_uses_the_selected_com_persona_not_request_parameters" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+    selected_persona(token).update!(moniker: "Authenticated Com Individual")
+    selected_account_public_id = token.selected_account_public_id
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
+
+    get base_com_dashboard_url(
+      ri: "jp", account_public_id: "attacker-account", avatar_public_id: "attacker-avatar",
+      moniker: "Attacker Persona",
+    ), headers: session_headers(token)
+
+    assert_response :success
+    identity = inertia_props.fetch("sections").first.fetch("current_identity")
+    assert_equal "Authenticated Com Individual", identity.fetch("display_name")
+    assert_equal ["display_name"], identity.keys
+    assert_equal selected_account_public_id, token.reload.selected_account_public_id
+    assert_equal last_used_at, token.reload.last_used_at
+  end
+
+  test "dashboard_fails_explicitly_when_the_selected_com_persona_has_no_display_name" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+    selected_persona(token).update!(moniker: " ")
+
+    error = assert_raises(RuntimeError) do
+      get base_com_dashboard_url(ri: "jp"), headers: session_headers(token)
+    end
+
+    assert_match "selected com Persona has no display name", error.message
+  end
+
+  test "named_dashboard_renders_for_the_authenticated_com_session" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+
+    get base_com_dashboard_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/com/dashboards/show", inertia_component
+    labels = inertia_props.fetch("sections").first.fetch("items").map { |link| link.fetch("label") }
+
+    assert_equal %i(preference switcher logout).map { |key| dashboard_label(key) }, labels
+  end
+
+  test "named_dashboard_returns_anonymous_com_visitors_to_the_homepage" do
+    get base_com_dashboard_url(ri: "jp"), headers: host_headers(@host)
+
+    assert_response :see_other
+    assert_redirected_to base_com_root_path(ri: "jp")
+  end
+
+  test "authenticated_preference_navigation_returns_to_the_named_com_dashboard" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
+
+    %w(jp us).each do |region|
+      get base_com_preference_url(ri: region), headers: session_headers(token)
+
+      assert_response :success
+      assert_equal base_com_dashboard_path(ri: region), inertia_props.dig("up_link", "href")
+      assert_equal last_used_at, token.reload.last_used_at
+    end
   end
 
   test "identity_show_links_up_to_the_dashboard" do
@@ -161,6 +234,10 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   def select_token!(surface:, principal:, token:)
     BaseSelectorBootstrapAuthority.call(surface: surface, principal: principal)
     BaseSelectorAuthority.prepare(surface: surface, principal: principal, session: token)
+  end
+
+  def selected_persona(token)
+    Individual.find_by!(public_id: token.selected_account_public_id)
   end
 
   def session_headers(token)

@@ -87,7 +87,6 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
       completed_requirements: {
         "otp" => { "cleared" => true },
         "passkey" => { "cleared" => true },
-        "passcode" => { "cleared" => true },
       },
     )
 

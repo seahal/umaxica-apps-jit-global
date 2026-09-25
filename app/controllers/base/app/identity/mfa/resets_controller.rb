@@ -12,12 +12,19 @@ module Base
           declare_authentication_mode! :private
 
           before_action :authenticate_client!
-          step_up only: :create, scope: "settings_mfa"
+
+          protected
+
+          def track_authenticated_session_activity?
+            false
+          end
+
+          public
 
           def show
             authorize!(current_client, to: :show?)
             render inertia: true, props: {
-              title: t("sign.app.settings.show.mfa_reset"),
+              title: t("sign.app.settings.mfa.show.reset_title"),
               reset_unavailable: t("sign.app.settings.mfa.show.reset_unavailable"),
               back_link: {
                 label: t("sign.app.settings.show.back"),
@@ -26,24 +33,7 @@ module Base
             }
           end
 
-          def create
-            authorize!(current_client, to: :update?)
-            current_client.update!(
-              mfa_level_id: ClientMfaLevel::NOTHING,
-              mfa_level_enabled: false,
-            )
-            CredentialSecurityTransition.call(
-              actor: current_client,
-              current_session: current_session,
-              reason: :mfa_reset,
-              affected_surface: "app",
-              request: request,
-            )
-            redirect_to(
-              base_app_identity_mfa_reset_path(ri: params[:ri]),
-              status: :see_other,
-            )
-          end
+          private
         end
       end
     end

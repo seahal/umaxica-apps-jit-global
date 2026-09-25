@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Run with `scripts/postgresql-isolated-test-run runner scripts/postgresql-isolated-safety-probe`.
+require "json"
+require "tempfile"
+
+guard = Umaxica::TestEnvironment::DatabaseSafety
+configs = ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
+raise RuntimeError, "isolated acceptance failed" unless guard.verify!(configurations: configs)
+raise RuntimeError, "unexpected role count" unless configs.length == 38
+raise RuntimeError, "unexpected database count" unless configs.map(&:database).uniq.length == 20
+
+rejections = {
+  "shared database target" => [configs.map do |config|
+    (config.name == "primary") ? Struct.new(:name, :database, :configuration_hash).new(
+      "primary", "test_primary_db", config.configuration_hash,
+    ) : config
+  end, ENV.to_h,],
+  "missing manifest" => [configs, ENV.to_h.except("POSTGRESQL_ISOLATED_TEST_MANIFEST")],
+  "different host" => [configs, ENV.to_h.merge("POSTGRESQL_TEST_HOST" => "other-host")],
+  "missing host" => [configs, ENV.to_h.except("POSTGRESQL_TEST_HOST")],
+  "unapproved worker count" => [configs, ENV.to_h.merge("PARALLEL_WORKERS" => "2")],
+}
+Tempfile.create(["postgresql-isolated-safety-", ".json"], Rails.root.join("tmp")) do |file|
+  altered = JSON.parse(File.read(ENV.fetch("POSTGRESQL_ISOLATED_TEST_MANIFEST")))
+  altered.fetch("databases").first["oid"] = "0"
+  file.write(JSON.generate(altered))
+  file.flush
+  rejections["unknown database identity"] = [
+    configs,
+    ENV.to_h.merge("POSTGRESQL_ISOLATED_TEST_MANIFEST" => file.path),
+  ]
+  rejections.each do |label, (attempt, environment)|
+    begin
+      guard.verify!(configurations: attempt, environment:)
+    rescue Umaxica::TestEnvironment::ConfigurationError, KeyError
+      next
+    end
+    raise RuntimeError, "safety guard accepted #{label}"
+  end
+end
+puts "isolated safety accepted 38 verified roles and rejected six unsafe configurations"

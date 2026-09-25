@@ -4,6 +4,10 @@ Revision: 2026-09-17 (cycle close; CYCLE_PASS_WITH_KNOWN_COVERAGE_DEBT pending f
 cycle-close start: `cac794f88e473666832c78f043b87b15bb6bc38d` Historical planning-only NO_GO below
 is not a current stop reason.
 
+Current naming note (2026-09-25): Rails `Side`/`Wide` references in this historical execution
+snapshot describe the former internal surface name. The current Rails namespace is `Warp`; OIDC,
+JWT, MCP, persisted logout, and public-host identifiers remain unchanged.
+
 ## 2026-09-17 cycle-close checkpoint
 
 This cycle closes what current code, tests, and decisions can close. External devices, GUID

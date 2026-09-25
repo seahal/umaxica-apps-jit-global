@@ -7,7 +7,7 @@ restricted session handling, device/session display, token-family revocation, an
 
 `sign/id`, `core`, and `base` must not mutate authoritative acme logout or session state. They may
 host the surface-local browser ceremony (`/sign/out/new`, `/sign/out/edit`, `/sign/out`, and on
-Auth/Core/Side/Palm `/sign/out/complete`; Base completes on `/lobby`) and, when they are RPs, launch
+Auth/Core/Warp/Palm `/sign/out/complete`; Base completes on `/lobby`) and, when they are RPs, launch
 logout toward Acme.
 
 ## Redirect-Only Sign Route

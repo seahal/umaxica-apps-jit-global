@@ -21,6 +21,9 @@ export type DashboardGroup = {
 
 export type DashboardSection = {
   heading: string;
+  current_identity?: {
+    display_name: string;
+  };
   items?: DashboardItem[];
   groups?: DashboardGroup[];
 };
@@ -80,6 +83,11 @@ export default function SurfaceDashboard({
           key={section.heading}
           heading={section.heading}
         >
+          {section.current_identity ? (
+            <p className="mb-2 text-sm font-medium text-fg">
+              {section.current_identity.display_name}
+            </p>
+          ) : null}
           {section.groups?.map((group) => (
             <div
               key={group.heading}

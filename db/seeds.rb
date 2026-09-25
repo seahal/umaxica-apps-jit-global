@@ -70,7 +70,7 @@ user_email.confirm_policy = true
 user_email.save!
 
 user_secret = user.client_secret_credentials.find_or_initialize_by(name: "sample-user-secret")
-user_secret.user_secret_kind_id = ClientSecretCredentialKind::PERMANENT
+user_secret.user_secret_kind_id = ClientSecretCredentialKind::LOGIN
 user_secret.user_identity_secret_status_id = ClientSecretCredentialStatus::ACTIVE
 user_secret.uses_remaining = 10
 user_secret.password = sample_user_secret
@@ -90,7 +90,7 @@ staff_email.staff_email_status_id = OperatorEmailStatus::VERIFIED
 staff_email.save!
 
 staff_secret = staff.operator_secret_credentials.find_or_initialize_by(name: "sample-staff-secret")
-staff_secret.staff_secret_kind_id = OperatorSecretCredentialKind::PERMANENT
+staff_secret.staff_secret_kind_id = OperatorSecretCredentialKind::LOGIN
 staff_secret.staff_identity_secret_status_id = OperatorSecretCredentialStatus::ACTIVE
 staff_secret.password = sample_staff_secret
 staff_secret.save!

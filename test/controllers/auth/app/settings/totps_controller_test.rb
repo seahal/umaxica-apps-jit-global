@@ -22,9 +22,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     @user = clients(:one)
     # Clear existing TOTPs to avoid limit error
     @user.client_totp_credentials.destroy_all
-    @user.client_secret_credentials.destroy_all
-    create_client_recovery_passcode!(@user, name: "recovery 1")
-    create_client_recovery_passcode!(@user, name: "recovery 2")
     ClientEmail.create!(
       user: @user,
       address: "totp-config-test@example.com",
@@ -260,39 +257,26 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     ), response.body
   end
 
-  test "new allows bootstrap with zero unused usable recovery passcodes" do
+  test "new is available without recovery passcodes" do
     @user.client_totp_credentials.destroy_all
-    @user.client_secret_credentials.destroy_all
-
     get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
 
     assert_response :success
     assert_equal "text/html", response.media_type
-    assert_not_includes response.body, base_app_identity_secrets_url(
-      ri: "jp",
-      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
-    )
   end
 
-  test "create tops recovery passcodes up after bootstrap with one existing recovery passcode" do
+  test "create does not issue recovery passcodes after TOTP registration" do
     @user.client_totp_credentials.destroy_all
-    @user.client_secret_credentials.destroy_all
-    create_client_recovery_passcode!(@user, name: "only recovery")
 
     with_mocked_totp do |secret_credential|
       get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-      # TOTP codes are only valid for a 30-second window, so generation and the
-      # verifying request are pinned to the same instant -- otherwise a slow run can
-      # straddle a window boundary and turn a valid code invalid before it arrives.
       freeze_time do
         token = ROTP::TOTP.new(secret_credential).now
 
         assert_difference("ClientTotpCredential.count", 1) do
-          assert_difference(-> { @user.reload.client_secret_credentials.count }, 9) do
+          assert_no_difference("ClientSecretCredential.count") do
             post auth_app_settings_totps_url(ri: "jp"),
-                 params: {
-                   user_totp_credential: { first_token: token },
-                 },
+                 params: { user_totp_credential: { first_token: token } },
                  headers: @headers
           end
         end
@@ -300,21 +284,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :see_other
-    assert_includes response.location, "/identity/secrets"
-  end
-
-  test "used and revoked recovery passcodes are not counted" do
-    @user.client_secret_credentials.destroy_all
-    create_client_recovery_passcode!(@user, name: "used", last_used_at: Time.current)
-    create_client_recovery_passcode!(
-      @user,
-      name: "revoked",
-      status_id: ClientSecretCredentialStatus::REVOKED,
-    )
-
-    get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-
-    assert_response :forbidden
+    assert_redirected_to auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
   end
 
   test "should get edit with public_id" do
@@ -389,7 +359,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "should create totp with valid token" do
     # Clear TOTP created in setup to allow creation of a new one (limit is 2)
     @user.client_totp_credentials.destroy_all
-    @user.client_secret_credentials.destroy_all
 
     with_mocked_totp do |secret_credential|
       with_prosopite_paused do
@@ -408,7 +377,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         token = ROTP::TOTP.new(secret_credential).now
 
         assert_difference("ClientTotpCredential.count", 1) do
-          assert_difference(-> { @user.reload.client_secret_credentials.count }, 10) do
+          assert_no_difference(-> { @user.reload.client_secret_credentials.count }) do
             with_prosopite_paused do
               post auth_app_settings_totps_url(ri: "jp"),
                    params: { user_totp_credential: { first_token: token } },
@@ -419,40 +388,9 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :see_other
-      assert_includes response.location, "/identity/secrets"
+      assert_equal auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")), response.location
       assert_operator @token.reload.last_step_up_at, :<, step_up_before
       assert_equal "settings_totp", @token.last_step_up_scope
-    end
-  end
-
-  test "create tops up only the shortfall when some recovery passcodes already exist" do
-    @user.client_totp_credentials.destroy_all
-    @user.client_secret_credentials.destroy_all
-    5.times do |index|
-      create_client_recovery_passcode!(@user, name: "existing #{index + 1}")
-    end
-
-    with_mocked_totp do |secret_credential|
-      with_prosopite_paused do
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-      end
-
-      freeze_time do
-        token = ROTP::TOTP.new(secret_credential).now
-
-        assert_difference("ClientTotpCredential.count", 1) do
-          assert_difference(-> { @user.reload.client_secret_credentials.count }, 5) do
-            with_prosopite_paused do
-              post auth_app_settings_totps_url(ri: "jp"),
-                   params: { user_totp_credential: { first_token: token } },
-                   headers: @headers
-            end
-          end
-        end
-      end
-
-      assert_response :see_other
-      assert_includes response.location, "/identity/secrets"
     end
   end
 
@@ -510,7 +448,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :see_other
-    assert_includes response.location, "/identity/secrets"
+    assert_equal auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")), response.location
   end
 
   test "should not create totp with invalid token" do
@@ -613,8 +551,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   test "initial setup user can create first totp without step-up" do
     user = create_verified_user_with_email(email_address: "initial_totp_create@example.com")
-    create_client_recovery_passcode!(user, name: "initial 1")
-    create_client_recovery_passcode!(user, name: "initial 2")
     token = ClientToken.create!(user_id: user.id)
     token.rotate_refresh_token!
     token.update!(last_step_up_at: 5.minutes.ago, last_step_up_scope: "settings_totp")
@@ -656,7 +592,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :see_other
-    assert_includes response.location, "/identity/secrets"
+    assert_equal auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")), response.location
   end
 
   private
@@ -670,22 +606,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  def create_client_recovery_passcode!(
-    user,
-    name:,
-    status_id: ClientSecretCredentialStatus::ACTIVE,
-    last_used_at: nil
-  )
-    credential = user.client_secret_credentials.new(
-      name: name,
-      user_secret_kind_id: ClientSecretCredentialKind::RECOVERY,
-      user_identity_secret_status_id: status_id,
-      last_used_at: last_used_at,
-    )
-    credential.password = ClientSecretCredential.generate_raw_secret_credential
-    credential.save!(validate: false)
-    credential
-  end
 end
 
 # DAMP local helper copy for former shared test support.

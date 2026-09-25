@@ -43,7 +43,6 @@ const { default: PasskeyDeleteButton } =
   await import("@/features/auth/settings/PasskeyDeleteButton");
 const { default: OtpResendButton } = await import("@/features/auth/otp/OtpResendButton");
 const { default: SignInEmailNew } = await import("@/features/auth/SignInEmailNew");
-const { default: SignInSecretNew } = await import("@/features/auth/SignInSecretNew");
 const { default: PasskeyEdit } = await import("@/features/auth/settings/PasskeyEdit");
 
 let container: HTMLDivElement;
@@ -258,34 +257,6 @@ describe("credential forms", () => {
 
     expect(setData).toHaveBeenCalledWith("user_email", { address: "name@example.com" });
     expect(postRequest).toHaveBeenCalledWith("/sign/in/email");
-  });
-
-  it("SignInSecretNew keeps both fields inside the permitted parameter scope", () => {
-    mount(
-      <SignInSecretNew
-        title="パスワードでログイン"
-        action="/sign/in/secret"
-        pt={null}
-        ri="jp"
-        validation_failed_title="入力を確認してください"
-        identifier_label="ID"
-        identifier_placeholder="name@example.com"
-        secret_label="パスワード"
-        submit_label="送信"
-        back_link={{ label: "もどる", href: "/sign/in" }}
-        turnstile={{ ...turnstile, mode: "render" }}
-      />,
-    );
-
-    type(container.querySelector<HTMLInputElement>("input[type='text']")!, "op-1");
-    type(container.querySelector<HTMLInputElement>("input[type='password']")!, "secret");
-    submit();
-
-    expect(setData).toHaveBeenCalledWith("secret_credential_login_form", {
-      identifier: "",
-      secret_credential_value: "secret",
-    });
-    expect(postRequest).toHaveBeenCalledWith("/sign/in/secret");
   });
 
   it("PasskeyEdit patches the rename to the same route the form named", () => {

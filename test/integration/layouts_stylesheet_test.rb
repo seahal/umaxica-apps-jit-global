@@ -19,7 +19,7 @@ class StylesheetTagsTest < ActiveSupport::TestCase
   INERTIA_LAYOUTS = %w(
     base/app base/com base/org
     auth/app auth/com auth/org
-    side/app side/com side/org
+    warp/app warp/com warp/org
     core/app core/com core/org
     palm/app
   ).to_h do |surface|
@@ -27,13 +27,13 @@ class StylesheetTagsTest < ActiveSupport::TestCase
     ["app/views/layouts/#{surface}/inertia.html.erb", "entrypoints/inertia/#{family}_#{boundary}.tsx"]
   end.freeze
 
-  # The chrome-free application layouts (side, core, jump, palm). They carry no shared header or
+  # The chrome-free application layouts (Warp, core, jump, palm). They carry no shared header or
   # footer, but they load the Propshaft baseline stylesheet exactly like the chrome-bearing ones,
   # so a missing app/assets/stylesheets/application.css 500s them the same way.
   MINIMAL_APPLICATION_LAYOUTS = %w(
-    app/views/layouts/side/app/application.html.erb
-    app/views/layouts/side/com/application.html.erb
-    app/views/layouts/side/org/application.html.erb
+    app/views/layouts/warp/app/application.html.erb
+    app/views/layouts/warp/com/application.html.erb
+    app/views/layouts/warp/org/application.html.erb
     app/views/layouts/core/app/application.html.erb
     app/views/layouts/core/com/application.html.erb
     app/views/layouts/core/org/application.html.erb
@@ -125,7 +125,7 @@ class StylesheetTagsTest < ActiveSupport::TestCase
 
     # app/assets/stylesheets/application.css has been deleted and re-added several times during the
     # frontend-stack churn. Every layout above raises Propshaft::MissingAssetError without it -- that
-    # is the reported failure on Side::App::Sign::Outs#edit. Pin the file and its resolution.
+    # is the reported failure on Warp::App::Sign::Outs#edit. Pin the file and its resolution.
     assert_predicate Rails.root.join("app/assets/stylesheets/application.css"), :file?,
                      "the Propshaft baseline stylesheet every importmap layout links must exist"
     assert Rails.application.assets.load_path.find("application.css"),

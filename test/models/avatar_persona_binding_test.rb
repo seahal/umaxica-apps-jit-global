@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarPersonaBindingTest < ActiveSupport::TestCase
   test "defaults public id and assigned timestamp" do
@@ -176,7 +177,7 @@ class AvatarPersonaBindingTest < ActiveSupport::TestCase
       is_system: false,
     )
 
-    Avatar.create!(
+    AvatarTestFactory.create!(
       moniker: "Default Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,

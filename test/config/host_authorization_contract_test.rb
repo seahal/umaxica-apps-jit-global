@@ -19,12 +19,12 @@ class HostAuthorizationContractTest < Minitest::Test
     base.org.localhost:3000
     base.net.localhost:3000
     base.dev.localhost:3000
-    wide.app.localhost:3000
-    wide.app.localhost:3001
-    wide.com.localhost:3000
-    wide.com.localhost:3001
-    wide.org.localhost:3000
-    wide.org.localhost:3001
+    warp.app.localhost:3000
+    warp.app.localhost:3001
+    warp.com.localhost:3000
+    warp.com.localhost:3001
+    warp.org.localhost:3000
+    warp.org.localhost:3001
   ).freeze
 
   # PUBLIC_*_URL names the site a browser or app sees; PRIVATE_*_URL names the network-side
@@ -232,7 +232,7 @@ class HostAuthorizationContractTest < Minitest::Test
       "PUBLIC_CORE_SERVICE_URL" => "https://jp.umaxica.app",
       "PUBLIC_CORE_STAFF_URL" => "https://jp.umaxica.org",
       "PUBLIC_CORE_CORPORATE_URL" => "https://jp.umaxica.com",
-      "PUBLIC_SIDE_SERVICE_URL" => "https://www-jp.umaxica.app",
+      "PUBLIC_WARP_SERVICE_URL" => "https://www-jp.umaxica.app",
       "PUBLIC_INFO_SERVICE_URL" => "https://info.umaxica.app",
       "PUBLIC_PALM_SERVICE_URL" => "https://palm-jp.umaxica.app",
       "PUBLIC_GUID_SERVICE_URL" => "https://guid.umaxica.net",

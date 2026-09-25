@@ -222,67 +222,6 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_includes [302, 303, 401, 403, 422], response.status
   end
 
-  test "MFA reset through controller retains current session and revokes other sessions and step-up grants" do
-    @user.update!(mfa_level_id: ClientMfaLevel::FULL, mfa_level_enabled: true)
-    satisfy_user_verification(@token, scope: "settings_mfa")
-    mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_mfa")
-    other_token = ClientToken.create!(
-      user: @user,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discard_at: 1.day.from_now,
-    )
-    mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_email")
-    ClientStepUpSession.create!(
-      user_token: other_token,
-      scope: "settings_email",
-      return_to: base_app_identity_emails_path(ri: "jp"),
-      status: "VERIFIED",
-      method: "passkey",
-      verified_at: 1.minute.ago,
-      discard_at: 1.day.from_now,
-    )
-
-    post base_app_identity_mfa_reset_url(ri: "jp", host: @base_host), headers: @headers
-
-    assert_response :see_other
-    assert_predicate @token.reload, :currently_usable?
-    assert_predicate other_token.reload, :revoked?
-    assert_nil @token.last_step_up_at
-    assert_nil other_token.last_step_up_at
-    assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
-    assert_equal ClientMfaLevel::NOTHING, @user.reload.mfa_level_id
-    assert_not @user.mfa_level_enabled?
-  end
-
-  test "secret credential removal route revokes other sessions and step-up grants" do
-    mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_secret_credential")
-    other_token = ClientToken.create!(
-      user: @user,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discard_at: 1.day.from_now,
-    )
-    mark_step_up_satisfied!(other_token, at: 1.minute.ago, scope: "settings_email")
-
-    post base_app_identity_secret_removal_url(secret_id: "credential-under-test", ri: "jp", host: @base_host),
-         headers: @headers
-
-    assert_response :see_other
-    assert_predicate @token.reload, :currently_usable?
-    assert_predicate other_token.reload, :revoked?
-    assert_nil @token.last_step_up_at
-    assert_nil other_token.last_step_up_at
-  end
-
-  test "secret credential removal route requires a fresh step-up" do
-    post base_app_identity_secret_removal_url(secret_id: "credential-under-test", ri: "jp", host: @base_host),
-         headers: @headers
-
-    assert_response :unauthorized
-    assert_predicate @token.reload, :currently_usable?
-  end
-
   test "email verification completion retains current session and revokes other sessions and step-up grants" do
     satisfy_user_verification(@token, scope: "settings_email")
     mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_email")
@@ -297,7 +236,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     ClientStepUpSession.create!(
       user_token: other_token,
       scope: "settings_secret",
-      return_to: base_app_identity_secrets_path(ri: "jp"),
+      return_to: base_app_identity_path(ri: "jp"),
       status: "VERIFIED",
       method: "passkey",
       verified_at: 1.minute.ago,
@@ -340,25 +279,10 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     assert_nil other_token.last_step_up_at
     assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
 
-    get base_app_identity_secrets_url(ri: "jp", host: @base_host), headers: other_session_headers(other_token)
+    get base_app_identity_url(ri: "jp", host: @base_host), headers: other_session_headers(other_token)
 
     assert_includes [302, 303, 401, 403, 422], response.status
     assert_not_equal :success, response.status
-  end
-
-  test "password rotation route is explicitly disabled for this release" do
-    mark_step_up_satisfied!(@token, at: 1.minute.ago, scope: "settings_secret")
-
-    assert_no_difference -> {
-      ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
-    } do
-      post base_app_identity_secret_rotation_url(secret_id: "credential-under-test", ri: "jp", host: @base_host),
-           params: { password: "must-not-be-logged-or-applied" },
-           headers: @headers
-    end
-
-    assert_response :forbidden
-    assert_predicate @token.reload, :currently_usable?
   end
 
   private

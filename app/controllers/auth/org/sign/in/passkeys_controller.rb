@@ -65,10 +65,6 @@ module Auth
                 field: nil,
                 submit_label: t("sign.org.authentication.passkey.new.submit"),
               },
-              secret_link: {
-                label: t("sign.org.authentication.passkey.new.secret_credential"),
-                href: new_auth_org_sign_in_secret_path(pt: pt, ri: region),
-              },
               back_link: {
                 label: t("sign.org.authentication.new.back"),
                 href: auth_org_sign_in_path(pt: pt, ri: region),

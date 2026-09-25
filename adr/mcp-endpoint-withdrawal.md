@@ -2,6 +2,10 @@
 
 Accepted: 2026-09-19
 
+Current naming note (2026-09-25): Rails controller and route references to `Side` in this historical
+decision refer to the current internal `Warp` namespace. The MCP realm and other protocol identifiers
+retain their established values.
+
 ## Context
 
 `POST /mcp` was served unauthenticated on six hosts: Base and Side, each for the app, com, and org

@@ -4,56 +4,57 @@
 require "test_helper"
 
 class Base::App::Identity::Mfa::ResetsControllerTest < ActionDispatch::IntegrationTest
+  fixtures :clients
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
     @client = clients(:one)
-    @client.update_columns(mfa_level_id: ClientMfaLevel::FULL, mfa_level_enabled: true)
+    @client.update!(mfa_level_id: ClientMfaLevel::FULL, mfa_level_enabled: true)
+    @headers = as_user_headers(@client, host: @host)
+    @token = ClientToken.find_by!(public_id: @headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
   end
 
-  test "reset with fresh step-up clears the MFA level" do
-    post base_app_identity_mfa_reset_url(ri: "jp", host: @host), headers: client_headers(step_up_scope: "settings_mfa")
+  test "show is a GET-only unavailable placeholder that leaves security state unchanged" do
+    before = security_state
 
-    assert_response :see_other
-    assert_equal ClientMfaLevel::NOTHING, @client.reload.mfa_level_id
+    get base_app_identity_mfa_reset_url(ri: "jp", host: @host), headers: @headers
+
+    assert_response :success
+    assert_predicate inertia_props.fetch("reset_unavailable"), :present?
+    assert_equal before, security_state
   end
 
-  test "reset without fresh step-up is refused and keeps MFA enabled" do
-    post base_app_identity_mfa_reset_url(ri: "jp", host: @host), headers: client_headers(step_up_scope: nil)
+  test "mutation verbs are not routes and change no security state" do
+    before = security_state
+    path = base_app_identity_mfa_reset_url(ri: "jp", host: @host)
 
-    assert_response :unauthorized
-    assert_equal ClientMfaLevel::FULL, @client.reload.mfa_level_id
-    assert @client.mfa_level_enabled
+    %i(post patch put delete).each do |method|
+      process(method, path, headers: @headers)
+
+      assert_response :not_found, method.to_s
+    end
+
+    assert_equal before, security_state
   end
 
   private
 
-  def client_headers(step_up_scope:)
-    token = ClientToken.create!(
-      user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-    )
-    BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
-    BaseSelectorAuthority.prepare(surface: :app, principal: @client, session: token)
-    if step_up_scope
-      token.update!(
-        last_step_up_at: Time.current, last_step_up_scope: step_up_scope,
-        last_step_up_aal: "aal2", last_step_up_method: "passkey",
-        last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-        last_step_up_audience: "step_up:app",
-      )
-    end
-    access_token = AuthenticationToken.encode(
-      @client, host: @host, session_public_id: token.public_id,
-               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
+  def security_state
     {
-      "Authorization" => "Bearer #{access_token}",
-      "Client-Agent" => "Mozilla/5.0",
-      "Host" => @host,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+      client: @client.reload.attributes,
+      session: @token.reload.attributes,
+      credentials: [
+        @client.client_secret_credentials.count,
+        @client.client_totp_credentials.count,
+        @client.client_passkeys.count,
+      ],
+      chronicles: [
+        Chronicle.where(actor_type: "Client", actor_id: @client.id).count,
+        Chronicle.where(subject_type: "Client", subject_id: @client.id).count,
+        ClientChronicle.where(actor_type: "Client", actor_id: @client.id).count,
+        ClientChronicle.where(subject_type: "Client", subject_id: @client.id.to_s).count,
+      ],
     }
   end
 end

@@ -1,0 +1,83 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Compare the migrated and reloaded task databases at the SQL catalog boundary.
+require "pg"
+require "json"
+require "digest"
+
+host = ENV.fetch("POSTGRESQL_AUDIT_HOST")
+port = Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10)
+user = ENV.fetch("POSTGRESQL_AUDIT_USER")
+password = ENV.fetch("POSTGRESQL_AUDIT_PASSWORD")
+comment = "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"
+queries = {
+  tables: <<~SQL,
+    SELECT n.nspname, c.relname, c.relkind, c.relpersistence
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') ORDER BY 1, 2
+  SQL
+  columns: <<~SQL,
+    SELECT n.nspname, c.relname, a.attname, format_type(a.atttypid, a.atttypmod) AS data_type,
+           a.attnotnull, a.attidentity, a.attgenerated, pg_get_expr(d.adbin, d.adrelid) AS default_expr
+      FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+     WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+       AND a.attnum > 0 AND NOT a.attisdropped ORDER BY 1, 2, a.attnum
+  SQL
+  constraints: <<~SQL,
+    SELECT n.nspname, c.relname, con.conname, con.contype, con.convalidated,
+           con.confmatchtype, con.confupdtype, con.confdeltype, con.condeferrable,
+           con.condeferred, pg_get_constraintdef(con.oid, true) AS definition
+      FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' ORDER BY 1, 2, 3
+  SQL
+  indexes: <<~SQL,
+    SELECT n.nspname, c.relname AS table_name, ci.relname AS index_name,
+           i.indisvalid, i.indisready, i.indisunique, i.indisprimary,
+           pg_get_indexdef(ci.oid) AS definition
+      FROM pg_index i JOIN pg_class ci ON ci.oid = i.indexrelid
+      JOIN pg_class c ON c.oid = i.indrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' ORDER BY 1, 2, 3
+  SQL
+  versions: "SELECT version FROM schema_migrations ORDER BY version",
+  extensions: "SELECT extname, extversion FROM pg_extension ORDER BY extname",
+}
+
+def capture(database, host:, port:, user:, password:, comment:, queries:)
+  db = PG.connect(host:, port:, user:, password:, dbname: database, connect_timeout: 3)
+  actual = db.exec_params(
+    "SELECT shobj_description(oid, 'pg_database') AS comment FROM pg_database WHERE datname=$1",
+    [database],
+  ).first
+  raise RuntimeError, "unrecognized task database" unless actual&.fetch("comment") == comment
+
+  db.exec("BEGIN READ ONLY")
+  db.exec("SET LOCAL statement_timeout = '5s'")
+  db.exec("SET LOCAL lock_timeout = '1s'")
+  result = queries.transform_values { |sql| db.exec(sql).map(&:to_h) }
+  db.exec("ROLLBACK")
+  db.close
+  result
+end
+
+%w(app com org).each do |surface|
+  before = capture(
+    "codex_integrity_20260924_#{surface}_ticket",
+    host:, port:, user:, password:, comment:, queries:,
+  )
+  reloaded = capture(
+    "codex_integrity_20260924_#{surface}_ticket_dumpcheck",
+    host:, port:, user:, password:, comment:, queries:,
+  )
+  queries.each_key do |part|
+    raise RuntimeError, "#{surface} #{part} changed after dump reload" unless before.fetch(part) == reloaded.fetch(part)
+  end
+  digest = Digest::SHA256.hexdigest(JSON.generate(before))
+  puts "#{surface}: schema parity passed tables=#{before.fetch(:tables).length} " \
+       "columns=#{before.fetch(:columns).length} constraints=#{before.fetch(:constraints).length} " \
+       "indexes=#{before.fetch(:indexes).length} versions=#{before.fetch(:versions).length} sha256=#{digest}"
+end

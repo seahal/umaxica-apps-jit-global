@@ -20,46 +20,18 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
     Rails.configuration.x.rate_limit.fetch(:store).clear
   end
 
-  test "app secret credential sign-in hits explicit rails rate limit" do
+  test "retired secret sign-in routes do not reach rate limiting or authentication" do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+    assert_response :not_found
 
-    5.times do
-      post auth_app_sign_in_secret_url(ri: "jp"),
-           params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
-    end
-
-    post auth_app_sign_in_secret_url(ri: "jp"),
-         params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
-
-    assert_sign_rate_limited
-  end
-
-  test "com secret credential sign-in hits explicit rails rate limit" do
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+    assert_response :not_found
 
-    5.times do
-      post auth_com_sign_in_secret_url(ri: "jp"),
-           params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
-    end
-
-    post auth_com_sign_in_secret_url(ri: "jp"),
-         params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
-
-    assert_sign_rate_limited
-  end
-
-  test "org secret credential sign-in hits explicit rails rate limit" do
     host! ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
-
-    5.times do
-      post auth_org_sign_in_secret_url(ri: "jp"),
-           params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
-    end
-
-    post auth_org_sign_in_secret_url(ri: "jp"),
-         params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
-
-    assert_sign_rate_limited
+    post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+    assert_response :not_found
   end
 
   test "app passkey options sign-in hits explicit rails rate limit" do

@@ -39,6 +39,39 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
+  test "avatar list loads current monikers in one association query" do
+    bootstrap = bootstrap_and_select!(@user, @token)
+    bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
+    second_avatar = AvatarProvisioning::Create.call(
+      actor: @user,
+      subject_type: :persona,
+      subject: bootstrap.account,
+      avatar_params: { moniker: "Second Avatar" },
+      handle_params: { handle: "second-#{SecureRandom.hex(4)}" },
+      owner_surface: "app",
+      owner_collective_public_id: bootstrap.collective.public_id,
+    )
+
+    assert_predicate second_avatar, :success?
+
+    moniker_queries = []
+    query_subscription =
+      lambda do |_name, _started, _finished, _unique_id, payload|
+        sql = payload[:sql]
+        moniker_queries << sql if sql.match?(/\bFROM\s+"?avatar_monikers"?\b/i) && !payload[:cached]
+      end
+
+    ActiveSupport::Notifications.subscribed(query_subscription, "sql.active_record") do
+      get base_app_avatars_url(ri: "jp", host: @host), headers: as_user_headers(@user, host: @host)
+    end
+
+    assert_response :success
+    assert_equal 1, moniker_queries.length
+    assert_equal ["Default Avatar", "Second Avatar"], inertia_props.fetch("entries").map { |entry|
+      entry.fetch("label")
+    }
+  end
+
   test "full login can show, edit and update own avatar" do
     result = bootstrap_and_select!(@user, @token)
 
@@ -64,6 +97,22 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Updated Avatar", result.avatar.reload.moniker
   end
 
+  test "invalid moniker update preserves the current row and value" do
+    result = bootstrap_and_select!(@user, @token)
+    current_moniker = result.avatar.current_avatar_moniker
+
+    patch base_app_avatar_url(result.avatar.public_id, ri: "jp", host: @host),
+          params: { avatar: { moniker: " " } },
+          headers: as_user_headers(@user, host: @host)
+
+    assert_response :unprocessable_content
+    assert_equal "base/app/avatars/edit", inertia_component
+    assert_equal current_moniker.id, result.avatar.reload.current_avatar_moniker.id
+    assert_equal current_moniker.id, result.avatar.current_avatar_moniker.id
+    assert_equal "Default Avatar", result.avatar.moniker
+    assert_not_empty inertia_props.dig("errors", "avatar.moniker")
+  end
+
   test "new avatar form renders" do
     bootstrap_and_select!(@user, @token)
 
@@ -79,7 +128,15 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     result = bootstrap_and_select!(@user, @token)
     result.avatar.current_avatar_persona_binding.revoke!(force: true)
 
-    assert_difference ["Avatar.count", "Handle.count", "AvatarPersonaBinding.count", "AvatarAssignment.count"], 1 do
+    assert_difference(
+      [
+        "Avatar.count",
+        "Handle.count",
+        "AvatarPersonaBinding.count",
+        "AvatarOwnershipPeriod.current.count",
+      ],
+      1,
+    ) do
       post base_app_avatars_url(ri: "jp", host: @host),
            params: { avatar: { moniker: "Second Avatar", handle: "second" } },
            headers: as_user_headers(@user, host: @host)
@@ -89,17 +146,55 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     avatar = Avatar.order(:created_at).last
 
     assert_equal "Second Avatar", avatar.moniker
-    assert_equal @user.id, avatar.owner.id
+    assert_equal "app", avatar.current_ownership_period.owner_surface
+    assert_equal result.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
+    assert_nil avatar.owner_organization_id
     assert_equal result.account, avatar.current_persona
     assert_equal "active", avatar.lifecycle_state.key
     assert_redirected_to base_app_avatar_url(avatar.public_id, ri: "jp", host: @host)
+  end
+
+  test "create rejects a membership downgrade between policy authorization and the locked write" do
+    bootstrap = bootstrap_and_select!(@user, @token)
+    bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
+    membership = bootstrap.account.persona_memberships.find_by!(enterprise: bootstrap.collective)
+    membership_downgraded = false
+    locked_recheck_observed = false
+    sql_subscription =
+      lambda do |_name, _started, _finished, _unique_id, payload|
+        sql = payload[:sql]
+        next unless sql
+
+        if !membership_downgraded && sql.match?(/SELECT .*FROM "persona_memberships".*INNER JOIN "enterprises"/im) &&
+            !sql.match?(/FOR UPDATE/i)
+          membership_downgraded = true
+          membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+        end
+        locked_recheck_observed ||= sql.match?(
+          /FROM "persona_memberships".*FOR UPDATE OF "persona_memberships"/im,
+        )
+      end
+    avatar_graph_count = -> { Avatar.count + Handle.count + AvatarOwnershipPeriod.count + AvatarPersonaBinding.count }
+
+    assert_no_difference(avatar_graph_count) do
+      ActiveSupport::Notifications.subscribed(sql_subscription, "sql.active_record") do
+        post base_app_avatars_url(ri: "jp", host: @host),
+             params: { avatar: { moniker: "Revoked during create", handle: "revoked-during-create" } },
+             headers: as_user_headers(@user, host: @host)
+      end
+    end
+
+    assert membership_downgraded, "the policy authorization query must precede the downgrade"
+    assert locked_recheck_observed, "the write service must lock and recheck owner membership"
+    assert_response :forbidden
   end
 
   test "create avatar rejects blank moniker" do
     result = bootstrap_and_select!(@user, @token)
     result.avatar.current_avatar_persona_binding.revoke!(force: true)
 
-    assert_no_difference ["Avatar.count", "Handle.count", "AvatarPersonaBinding.count", "AvatarAssignment.count"] do
+    assert_no_difference ["Avatar.count", "Handle.count", "AvatarPersonaBinding.count",
+                          "AvatarOwnershipPeriod.current.count",] do
       post base_app_avatars_url(ri: "jp", host: @host),
            params: { avatar: { moniker: "" } },
            headers: as_user_headers(@user, host: @host)
@@ -107,6 +202,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_equal "base/app/avatars/new", inertia_component
+    assert_not_empty inertia_props.dig("errors", "avatar.moniker")
   end
 
   test "cannot show another client's avatar" do

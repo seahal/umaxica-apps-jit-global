@@ -3,18 +3,93 @@
 
 module Base
   module Org
+    # Switches the authenticated Operator's server-validated Agent, Bureau, unit, and optional
+    # Avatar context. Candidate resolution and persistence are shared with selector/bootstrap.
     class SwitchersController < Base::Org::FullAccessController
+      include ::SurfaceInertiaPage
+
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
       def show
         authorize!(current_operator, to: :show?)
-        render json: { status: "stub" }
+        context = current_context
+
+        respond_to do |format|
+          format.json { render json: context }
+          format.html { render inertia: true, props: switcher_page_props(context) }
+        end
       end
 
       def update
         authorize!(current_operator, to: :update?)
-        render json: { status: "stub" }
+        BaseSwitcherAuthority.switch(
+          surface: :org,
+          principal: current_operator,
+          session: current_session,
+          params: switcher_params,
+        )
+
+        respond_to do |format|
+          format.json { render json: { status: "switched", next: base_org_root_path(ri: params[:ri]) } }
+          format.html { redirect_to(base_org_root_path(ri: params[:ri]), status: :see_other) }
+        end
+      rescue BaseSwitcherAuthority::InvalidSwitch => e
+        context = current_context
+
+        respond_to do |format|
+          format.json do
+            render json: { status: "invalid_switch", error: e.message }, status: :unprocessable_content
+          end
+          format.html do
+            render inertia: "base/org/switchers/show",
+                   props: switcher_page_props(context, error: e.message),
+                   status: :unprocessable_content
+          end
+        end
+      end
+
+      private
+
+      def switcher_page_props(context, error: nil)
+        current = context[:current]
+
+        {
+          title: "Switcher",
+          up_link: { label: t("base.shared.dashboard.links.dashboard"), href: base_org_dashboard_path(ri: params[:ri]) },
+          current: current && {
+            account_public_id: current[:account_public_id],
+            organization_public_id: current[:organization_public_id],
+            organization_unit_public_id: current[:organization_unit_public_id],
+            avatar_public_id: current[:avatar_public_id],
+          },
+          candidates: Array(context[:candidates]).map { |candidate| serialize_candidate(candidate) },
+          error: error,
+        }
+      end
+
+      def serialize_candidate(candidate)
+        {
+          account_public_id: candidate[:public_id],
+          organization_public_id: candidate.dig(:organization, :public_id),
+          avatar_public_id: candidate.dig(:avatar, :public_id),
+        }
+      end
+
+      def current_context
+        BaseSwitcherAuthority.current(
+          surface: :org,
+          principal: current_operator,
+          session: current_session,
+        )
+      end
+
+      def switcher_params
+        keys = %i(
+          account_public_id organization_public_id organization_unit_public_id
+          collective_public_id collective_unit_public_id avatar_public_id
+        )
+        params.slice(*keys).permit(*keys).to_h.symbolize_keys
       end
     end
   end

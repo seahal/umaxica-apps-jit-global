@@ -156,6 +156,12 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
     def current_resource=(res)
       @current_resource = res
     end
+
+    private
+
+    def jump_rt_issuer_namespace
+      "BASE_APP"
+    end
   end
 
   setup do

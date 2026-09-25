@@ -39,18 +39,4 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
     end
   end
 
-  # The avatar scope is narrower still: it is not merely "has an actor" but
-  # "is a Client", because the other surfaces reach avatars through a different
-  # assignment table entirely.
-  test "the avatar scope lists nothing for an actor that is not a client" do
-    assert_empty scoped(AvatarPolicy, Avatar.all, user: nil).to_a
-    assert_empty scoped(AvatarPolicy, Avatar.all, user: operators(:one)).to_a
-  end
-
-  test "the avatar scope reaches a client's avatars through their own assignments" do
-    sql = scoped(AvatarPolicy, Avatar.all, user: clients(:one)).to_sql
-
-    assert_includes sql, "avatar_assignments"
-    assert_includes sql, clients(:one).id.to_s
-  end
 end

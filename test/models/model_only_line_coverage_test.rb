@@ -237,31 +237,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal "next-digest", updates.last[:refresh_token_digest]
   end
 
-  test "secret credential one time verification consumes its final use" do
-    credential = ClientSecretCredential.new(uses_remaining: 1)
-
-    credential.stub(:with_lock, ->(&block) { block.call }) do
-      credential.stub(:reload, credential) do
-        credential.stub(:authenticate, true) do
-          credential.stub(:sign_in_status_allowed?, true) do
-            credential.stub(:sign_in_kind_allowed?, true) do
-              credential.stub(:expired_for_secret_credential_sign_in?, false) do
-                credential.stub(:one_time_secret_credential?, true) do
-                  credential.stub(:save!, true) do
-                    assert credential.verify_for_secret_credential_sign_in!("secret")
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-
-    assert_equal 0, credential.uses_remaining
-    assert_equal ClientSecretCredential.status_id_for(:used), credential.user_secret_status_id
-  end
-
   test "avatar group and memberships expose state and timestamp validation" do
     group = AvatarGroup.new(state: "active", archived_at: Time.current)
 
@@ -460,19 +435,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     )
 
     assert_predicate ceremony, :expired?
-  end
-
-  test "secret credential usability accepts a positive one-time counter" do
-    credential = ClientSecretCredential.new(uses_remaining: 1)
-    credential.stub(:sign_in_status_allowed?, true) do
-      credential.stub(:sign_in_kind_allowed?, true) do
-        credential.stub(:expired_for_secret_credential_sign_in?, false) do
-          credential.stub(:permanent_secret_credential?, false) do
-            assert_predicate credential, :usable_for_secret_credential_sign_in?
-          end
-        end
-      end
-    end
   end
 
   test "step up result collision is translated to the ceremony contract error" do

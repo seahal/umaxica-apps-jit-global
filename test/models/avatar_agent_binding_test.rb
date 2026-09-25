@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarAgentBindingTest < ActiveSupport::TestCase
   setup do
@@ -30,7 +31,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       moniker: "Default Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
@@ -74,12 +75,12 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    first_avatar = Avatar.create!(
+    first_avatar = AvatarTestFactory.create!(
       moniker: "Agent Avatar One",
       active_handle: first_handle,
       capability_id: AvatarCapability::NORMAL,
     )
-    second_avatar = Avatar.create!(
+    second_avatar = AvatarTestFactory.create!(
       moniker: "Agent Avatar Two",
       active_handle: second_handle,
       capability_id: AvatarCapability::NORMAL,
@@ -113,7 +114,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       moniker: "Ordering Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
@@ -161,12 +162,12 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    first_avatar = Avatar.create!(
+    first_avatar = AvatarTestFactory.create!(
       moniker: "DB Avatar One",
       active_handle: first_handle,
       capability_id: AvatarCapability::NORMAL,
     )
-    second_avatar = Avatar.create!(
+    second_avatar = AvatarTestFactory.create!(
       moniker: "DB Avatar Two",
       active_handle: second_handle,
       capability_id: AvatarCapability::NORMAL,

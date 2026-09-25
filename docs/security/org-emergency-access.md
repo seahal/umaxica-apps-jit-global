@@ -20,7 +20,6 @@ Entra alone completes nothing.
 
 ```text
 Entra ID  ->  Passkey
-Entra ID  ->  Secret/SecretKey        (existing fallback, for a lost passkey)
 ```
 
 Emergency Access is one stage and uses no Entra:
@@ -33,16 +32,16 @@ Emergency Access uses the Operator's **existing registered passkeys**. There is 
 emergency passkey registration, and no separate emergency credential of any kind. Secret/SecretKey
 is **not** available in Emergency Access: Emergency Access is passkey-only.
 
-|                   | Normal                                              | Emergency                            |
-| ----------------- | --------------------------------------------------- | ------------------------------------ |
-| Entry             | `GET /sign/in` -> Entra                             | `GET /sign/in/emergency/passkey/new` |
-| First stage       | Entra ID                                            | none                                 |
-| Credential        | Passkey, or Secret/SecretKey if the passkey is lost | Passkey only                         |
-| Actor selected by | the pending Entra transaction                       | the submitted identifier             |
-| Challenge purpose | `authentication`                                    | `emergency_sign_in`                  |
-| Session context   | `normal`                                            | `emergency`                          |
-| Step-Up           | available                                           | **unavailable**                      |
-| Sign-out          | `/sign/out`                                         | `/sign/out` (the same ceremony)      |
+|                   | Normal                                  | Emergency                            |
+| ----------------- | --------------------------------------- | ------------------------------------ |
+| Entry             | `GET /sign/in` -> Entra                 | `GET /sign/in/emergency/passkey/new` |
+| First stage       | Entra ID                                | none                                 |
+| Credential        | Passkey                                 | Passkey only                         |
+| Actor selected by | the pending Entra transaction           | the submitted identifier             |
+| Challenge purpose | `authentication`                        | `emergency_sign_in`                  |
+| Session context   | `normal`                                | `emergency`                          |
+| Step-Up           | available                               | **unavailable**                      |
+| Sign-out          | `/sign/out`                             | `/sign/out` (the same ceremony)      |
 
 ## Routes
 
@@ -128,13 +127,13 @@ minutes), and it is one-shot: it is consumed before the session-establishing cal
 second stage has nothing to continue.
 
 The second stage reads the Operator **only** from this transaction. The identifier parameter is not
-consulted at all, and the passkey and secret pages no longer render a field for one. An attacker who
+consulted at all, and the passkey page does not render a field for one. An attacker who
 completes Entra as Operator A therefore cannot authenticate as Operator B: the challenge is issued
 against A, the challenge store returns A at consumption, and credential ownership is checked against
 A a second time.
 
-Without a valid transaction, `/sign/in/passkey/*` and `/sign/in/secret/*` refuse to run. The generic
-failure responses of both ceremonies are unchanged, so enumeration resistance is preserved.
+Without a valid transaction, `/sign/in/passkey/*` refuses to run. Permanent-secret sign-in routes
+were retired; there is no secret fallback for the normal or emergency org ceremony.
 
 ## Authentication context and token claims
 

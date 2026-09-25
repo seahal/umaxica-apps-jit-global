@@ -9,8 +9,7 @@ require "test_helper"
 # handed back to the relying party, instead of landing on the ordinary
 # post-sign-in destination.
 class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_statuses, :client_secret_credential_kinds,
-           :client_secret_credential_statuses, :client_email_statuses,
+  fixtures :clients, :client_statuses, :client_email_statuses,
            :client_telephone_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses
 
@@ -20,16 +19,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     ClientIdentityState.ensure_defaults!
     @user = clients(:one)
     @address = "oidc_signin_#{SecureRandom.hex(4)}@example.com"
-    @user.client_emails.create!(address: @address, user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email_record = @user.client_emails.create!(address: @address, user_email_status_id: ClientEmailStatus::VERIFIED)
     @user.client_telephones.create!(number: "+819012345901")
     ClientToken.where(user_id: @user.id).delete_all
-    _credential, @raw_secret_credential = ClientSecretCredential.issue!(
-      name: "OIDC login",
-      user_id: @user.id,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-      uses: 10,
-      status: :active,
-    )
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
@@ -55,7 +47,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     admit_sign_in!
 
     token_count = ClientToken.where(user_id: @user.id).count
-    submit_secret_credential!
+    submit_email_otp!
 
     assert_response :redirect
     assert_equal auth_app_sign_in_check_path(ri: "jp"), URI.parse(response.location).request_uri
@@ -63,13 +55,13 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     ceremony = ClientAuthCeremonySession.order(created_at: :desc).first
 
-    assert_equal "secret", ceremony.authentication_method
+    assert_equal "email", ceremony.authentication_method
     assert_predicate ceremony.authentication_event_at, :present?
   end
 
   test "the local handoff POST binds the signed-in actor to the authorization transaction" do
     admit_sign_in!
-    submit_secret_credential!
+    submit_email_otp!
 
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
@@ -84,7 +76,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "the local handoff POST hands the browser to the Base authorization endpoint" do
     admit_sign_in!
-    submit_secret_credential!
+    submit_email_otp!
 
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
@@ -103,7 +95,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "the checkpoint clears the login challenge from the session" do
     admit_sign_in!
-    submit_secret_credential!
+    submit_email_otp!
 
     follow_redirect!
 
@@ -115,9 +107,11 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       surface: "app", intent: "sign_in", params: oidc_authorize_params(realm: "client"),
     ).transaction
 
-    submit_secret_credential!
+    post "/sign/in/secret", params: {
+      secret_credential_login_form: { identifier: @address, secret_credential_value: "unused" },
+    }
 
-    assert_response :redirect
+    assert_response :not_found
     transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: @transaction.login_challenge)
 
     assert_nil transaction.actor_ref
@@ -126,15 +120,23 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   private
 
-  def submit_secret_credential!
+  def submit_email_otp!
     post(
-      auth_app_sign_in_secret_url(ri: "jp"), params: {
-        secret_credential_login_form: {
-          identifier: @address,
-          secret_credential_value: @raw_secret_credential,
-        },
-        "cf-turnstile-response": "test_token",
-      }, headers: { "Host" => @host },
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: { user_email: { address: @address }, "cf-turnstile-response": "test_token" },
+      headers: { "Host" => @host },
+    )
+    assert_response :found
+
+    otp_private_key = ROTP::Base32.random_base32
+    otp_counter = 55_555
+    pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
+    @email_record.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+
+    patch(
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: { user_email: { pass_code: pass_code } },
+      headers: { "Host" => @host },
     )
   end
 

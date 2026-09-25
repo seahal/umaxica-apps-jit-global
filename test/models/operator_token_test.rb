@@ -100,6 +100,97 @@ class OperatorTokenTest < ActiveSupport::TestCase
     assert_equal @staff.id, @token.staff_id
   end
 
+  test "device session rejects a current token owned by another session" do
+    other_token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    session = @token.device_session
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorDeviceSession.transaction(requires_new: true) do
+          session.update_column(:current_refresh_token_id, other_token.id)
+          OperatorDeviceSession.lease_connection.execute(
+            "SET CONSTRAINTS fk_operator_device_sessions_on_current_refresh_token_owner IMMEDIATE",
+          )
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_operator_device_sessions_on_current_refresh_token_owner",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "token device session reference must exist while remaining nullable" do
+    missing_session_id = OperatorDeviceSession.lease_connection.select_value(
+      "SELECT nextval(pg_get_serial_sequence('operator_device_sessions', 'id'))",
+    )
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, missing_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_operator_tokens_on_device_session_id fk_operator_tokens_on_staff_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    @token.update_column(:device_session_id, nil)
+
+    assert_nil @token.reload.device_session_id
+  end
+
+  test "token device session must belong to the same staff" do
+    other_staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    other_token = OperatorToken.create!(staff: other_staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_operator_tokens_on_staff_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "deleting the current token clears only its session pointer" do
+    session = @token.device_session
+    session.update!(current_refresh_token: @token)
+
+    @token.delete
+
+    assert_nil session.reload.current_refresh_token_id
+    assert_predicate session, :persisted?
+  end
+
+  test "device session cannot be destroyed while token history references it" do
+    session = @token.device_session
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorDeviceSession.transaction(requires_new: true) do
+          OperatorDeviceSession.where(id: session.id).delete_all
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_operator_tokens_on_device_session_id fk_operator_tokens_on_staff_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert OperatorDeviceSession.exists?(session.id)
+    assert OperatorToken.exists?(@token.id)
+  end
+
+  test "destroying the operator removes tokens before its device sessions" do
+    session_id = @token.device_session.id
+
+    @staff.destroy!
+
+    assert_not OperatorToken.exists?(@token.id)
+    assert_not OperatorDeviceSession.exists?(session_id)
+  end
+
   test "does not expose legacy session_id column" do
     assert_not_includes OperatorToken.column_names, "session_id"
   end

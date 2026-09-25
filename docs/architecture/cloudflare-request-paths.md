@@ -87,8 +87,8 @@ added there, not in Rails config:
    resolves.
 2. `development.rb` reads both `PRIVATE_*_URL` and `PUBLIC_*_URL` values into `env_host_keys`.
 3. `boot_config` is passed through unfiltered. `ConfigValues::HostFamilyValues` resolves several
-   families to browser-facing names in development (`#auth_key`, `#base_key`, `#side_key` fall back
-   to `PUBLIC_AUTH_*`/`PUBLIC_BASE_*`/`PUBLIC_SIDE_*_URL`), which is what the other consumers need
+   families to browser-facing names in development (`#auth_key`, `#base_key`, `#warp_key` fall back
+   to `PUBLIC_AUTH_*`/`PUBLIC_BASE_*`/`PUBLIC_WARP_*_URL`), which is what the other consumers need
    anyway: route constraints, the CSP form-action allowlist, and the OIDC authority all read
    `PUBLIC_*`.
 

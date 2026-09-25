@@ -32,8 +32,6 @@ const { default: ComSignUpTelephoneEdit } =
 const { default: ComCheckpointShow } = await import("@/pages/auth/com/sign/up/checkpoints/show");
 const { default: ComCheckpointAgeRestricted } =
   await import("@/pages/auth/com/sign/up/checkpoints/age_restricted");
-const { default: ComCheckpointPasscodeNew } =
-  await import("@/pages/auth/com/sign/up/checkpoint/passcodes/new");
 const { default: ComCheckpointPasskeyNew } =
   await import("@/pages/auth/com/sign/up/checkpoint/passkeys/new");
 const { default: ComVerificationEmailNew } =
@@ -239,7 +237,6 @@ describe("auth/com sign-up checkpoint screens", () => {
           label: "登録する",
           href: "/sign/up/check/telephone/passkey?ri=jp",
         }}
-        passcode={null}
         complete_message={null}
         cancellation={{ label: "キャンセル", action: "/sign/up/check/telephone?ri=jp" }}
       />,
@@ -288,12 +285,6 @@ describe("auth/com sign-up checkpoint screens", () => {
           },
         }}
         passkey={null}
-        passcode={{
-          title: "パスコード",
-          description: "パスコードを登録します",
-          label: "登録する",
-          href: "/sign/up/check/email/passcode",
-        }}
         complete_message="残りの手続きはありません"
         cancellation={null}
       />,
@@ -301,7 +292,7 @@ describe("auth/com sign-up checkpoint screens", () => {
 
     expect(markup).toContain('name="birthdate_year"');
     expect(markup).toContain("/");
-    expect(markup).toContain('href="/sign/up/check/email/passcode"');
+    expect(markup).not.toContain("passcode");
     expect(markup).toContain("残りの手続きはありません");
     expect(markup).not.toContain('name="_method" value="delete"');
   });
@@ -320,60 +311,13 @@ describe("auth/com sign-up checkpoint screens", () => {
     expect(markup).toContain('action="/sign/up?ri=jp" method="get"');
   });
 
-  it("shows the generated passcode exactly once with its save and cancel controls", () => {
-    const markup = renderToStaticMarkup(
-      <ComCheckpointPasscodeNew
-        title="パスコード"
-        description="パスコードを保存してください"
-        action="/sign/up/check/telephone/passcode?ri=jp"
-        scope="visitor_secret_credential"
-        checkpoint_version={3}
-        errors={[]}
-        name_label="名前"
-        secret_heading="Secret"
-        secret="one-time-secret"
-        one_time_notice="一度だけ表示されます"
-        save_label="保存"
-        cancel_label="キャンセル"
-      />,
-    );
-
-    expect(markup).toContain("one-time-secret");
-    expect(markup).not.toContain('role="alert"');
-  });
-
-  it("lists passcode setup errors when the previous attempt failed", () => {
-    const markup = renderToStaticMarkup(
-      <ComCheckpointPasscodeNew
-        title="パスコード"
-        description="パスコードを保存してください"
-        action="/sign/up/check/telephone/passcode?ri=jp"
-        scope="visitor_secret_credential"
-        checkpoint_version={3}
-        errors={["名前を入力してください"]}
-        name_label="名前"
-        secret_heading="Secret"
-        secret="one-time-secret"
-        one_time_notice="一度だけ表示されます"
-        save_label="保存"
-        cancel_label="キャンセル"
-      />,
-    );
-
-    expect(markup).toContain("名前を入力してください");
-    expect(markup).toContain("名前を入力してください");
-    expect(markup).toContain('name="checkpoint_version" value="3"');
-    expect(markup).toContain('name="visitor_secret_credential[name]"');
-    expect(markup).toContain('name="_method" value="delete"');
-  });
-
   it("hands the passkey ceremony the endpoints the server generated", () => {
     const markup = renderToStaticMarkup(
       <ComCheckpointPasskeyNew
         title="パスキー登録"
         begin_url="/sign/up/check/telephone/passkey?ri=jp"
         finish_url="/sign/up/check/telephone/passkey?ri=jp"
-        success_redirect_url="/sign/up/check/telephone/passcode?ri=jp"
+        success_redirect_url="/sign/up/check/telephone/birthdate?ri=jp"
         checkpoint_version={2}
         description_label="名前"
         description_placeholder="MacBook"

@@ -31,6 +31,10 @@ module Security
       HEADER_ONLY_EXCEPTIONS = {
         "app/controllers/base/app/oidc/logouts_controller.rb" =>
           "RP-initiated logout POST, guarded by an explicit trusted_origins allowlist",
+        "app/controllers/base/com/oidc/logouts_controller.rb" =>
+          "Corporate RP-initiated logout POST, guarded by its surface-local trusted_origins allowlist",
+        "app/controllers/base/org/oidc/logouts_controller.rb" =>
+          "Staff RP-initiated logout POST, guarded by its surface-local trusted_origins allowlist",
       }.freeze
 
       test "every protect_from_forgery declaration states its verification strategy" do

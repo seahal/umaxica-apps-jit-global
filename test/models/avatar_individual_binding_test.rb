@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarIndividualBindingTest < ActiveSupport::TestCase
   setup do
@@ -30,7 +31,7 @@ class AvatarIndividualBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       moniker: "Default Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
@@ -77,13 +78,13 @@ class AvatarIndividualBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    first_avatar = Avatar.create!(
-      moniker: "Individual Avatar One",
+    first_avatar = AvatarTestFactory.create!(
+      moniker: "Avatar One",
       active_handle: first_handle,
       capability_id: AvatarCapability::NORMAL,
     )
-    second_avatar = Avatar.create!(
-      moniker: "Individual Avatar Two",
+    second_avatar = AvatarTestFactory.create!(
+      moniker: "Avatar Two",
       active_handle: second_handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -120,7 +121,7 @@ class AvatarIndividualBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       moniker: "Ordering Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
@@ -174,12 +175,12 @@ class AvatarIndividualBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    first_avatar = Avatar.create!(
+    first_avatar = AvatarTestFactory.create!(
       moniker: "DB Avatar One",
       active_handle: first_handle,
       capability_id: AvatarCapability::NORMAL,
     )
-    second_avatar = Avatar.create!(
+    second_avatar = AvatarTestFactory.create!(
       moniker: "DB Avatar Two",
       active_handle: second_handle,
       capability_id: AvatarCapability::NORMAL,

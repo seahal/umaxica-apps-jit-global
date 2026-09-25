@@ -23,7 +23,6 @@ class Auth::App::SignInBoundaryTest < ActiveSupport::TestCase
       "app/controllers/auth/app/sign/in/passkeys_controller.rb",
       "app/controllers/auth/app/sign/in/passkey/options_controller.rb",
       "app/controllers/auth/app/sign/in/passkey/verifications_controller.rb",
-      "app/controllers/auth/app/sign/in/secrets_controller.rb",
       "app/controllers/auth/app/sign/in/challenges_controller.rb",
       "app/controllers/auth/app/sign/in/challenge/totps_controller.rb",
       "app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb",

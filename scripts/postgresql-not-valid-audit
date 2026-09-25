@@ -1,0 +1,133 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Counts historical CHECK/FK violations without changing a connected database.
+# The optional synthetic probe runs inside a transaction on a comment-marked task DB.
+require "pg"
+require "json"
+
+host = ENV.fetch("POSTGRESQL_AUDIT_HOST")
+port = Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10)
+user = ENV.fetch("POSTGRESQL_AUDIT_USER")
+password = ENV.fetch("POSTGRESQL_AUDIT_PASSWORD")
+database = ARGV.fetch(0)
+probe = ARGV.include?("--probe")
+abort "unsupported database" unless database.match?(/\A(?:development_[a-z_]+_db|codex_integrity_20260924_[a-z_]+)\z/)
+connection = PG.connect(host:, port:, user:, password:, dbname: database, connect_timeout: 3)
+if probe
+  abort "probe requires a task-owned database" unless database.start_with?("codex_integrity_20260924_")
+  ownership = connection.exec_params(<<~SQL, [database]).first
+    SELECT shobj_description(oid, 'pg_database') AS comment
+      FROM pg_database WHERE datname = $1
+  SQL
+  abort "task database ownership is unconfirmed" unless ownership&.fetch("comment") ==
+    "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"
+end
+connection.exec(probe ? "BEGIN" : "BEGIN READ ONLY")
+connection.exec("SET LOCAL statement_timeout = '5s'")
+connection.exec("SET LOCAL lock_timeout = '1s'")
+
+if probe
+  connection.exec(<<~SQL)
+    CREATE TEMP TABLE codex_probe_parent (a integer, b integer, PRIMARY KEY (a, b));
+    CREATE TEMP TABLE codex_probe_child (a integer, b integer, c integer, d integer, value integer);
+    INSERT INTO codex_probe_parent VALUES (1, 1);
+    INSERT INTO codex_probe_child VALUES (1, 1, 1, 1, 1),
+      (2, 2, 2, 2, -1), (NULL, 1, NULL, 1, NULL);
+    ALTER TABLE codex_probe_child ADD CONSTRAINT codex_probe_check CHECK (value > 0) NOT VALID;
+    ALTER TABLE codex_probe_child ADD CONSTRAINT codex_probe_simple
+      FOREIGN KEY (a, b) REFERENCES codex_probe_parent(a, b) MATCH SIMPLE NOT VALID;
+    ALTER TABLE codex_probe_child ADD CONSTRAINT codex_probe_full
+      FOREIGN KEY (c, d) REFERENCES codex_probe_parent(a, b) MATCH FULL NOT VALID;
+  SQL
+end
+
+rows = connection.exec(<<~SQL)
+  SELECT con.conname, con.contype, con.confmatchtype,
+         format('%I.%I', n.nspname, child.relname) AS child_table,
+         CASE WHEN con.contype = 'f' THEN format('%I.%I', pn.nspname, parent.relname) END AS parent_table,
+         pg_get_expr(con.conbin, con.conrelid) AS check_expr,
+         array_to_json(ARRAY(SELECT a.attname FROM unnest(con.conkey) WITH ORDINALITY k(num, ord)
+           JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.num ORDER BY k.ord)) AS child_columns,
+         array_to_json(ARRAY(SELECT a.attname FROM unnest(con.confkey) WITH ORDINALITY k(num, ord)
+           JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.num ORDER BY k.ord)) AS parent_columns,
+         child.relrowsecurity, has_table_privilege(child.oid, 'SELECT') AS can_select,
+         pg_table_size(child.oid) AS table_bytes
+    FROM pg_constraint con
+    JOIN pg_class child ON child.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = child.relnamespace
+    LEFT JOIN pg_class parent ON parent.oid = con.confrelid
+    LEFT JOIN pg_namespace pn ON pn.oid = parent.relnamespace
+   WHERE NOT con.convalidated AND con.contype IN ('c', 'f')
+     AND (n.nspname = 'public' OR (n.nspname LIKE 'pg_temp_%' AND con.conname LIKE 'codex_probe_%'))
+   ORDER BY n.nspname, child.relname, con.conname
+SQL
+counts = { "constraints" => 0, "empty" => 0, "checked" => 0, "violations" => 0, "skipped" => 0 }
+details = []
+rows.each do |row|
+  next if probe && !row.fetch("conname").start_with?("codex_probe_")
+
+  counts["constraints"] += 1
+  name = row.fetch("conname")
+  table = row.fetch("child_table")
+  if row.fetch("relrowsecurity") == "t" || row.fetch("can_select") != "t"
+    counts["skipped"] += 1
+    details << { "constraint" => name, "status" => "rls_or_privilege_unverified" }
+    next
+  end
+  if row.fetch("table_bytes").to_i > 32 * 1024 * 1024
+    counts["skipped"] += 1
+    details << { "constraint" => name, "status" => "size_limit_unverified" }
+    next
+  end
+  unless connection.exec("SELECT EXISTS(SELECT 1 FROM #{table}) AS present").first.fetch("present") == "t"
+    counts["empty"] += 1
+    details << { "constraint" => name, "status" => "empty" }
+    next
+  end
+  if row.fetch("contype") == "c"
+    unless probe
+      counts["skipped"] += 1
+      details << { "constraint" => name, "status" => "check_function_review_required" }
+      next
+    end
+    # PostgreSQL CHECK accepts TRUE and NULL; only FALSE is a violation.
+    query = "SELECT count(*) FROM #{table} WHERE (#{row.fetch("check_expr")}) IS FALSE"
+  else
+    child = JSON.parse(row.fetch("child_columns"))
+    parent = JSON.parse(row.fetch("parent_columns"))
+    raise RuntimeError, "FK column count mismatch: #{name}" unless child.length == parent.length && !child.empty?
+
+    quoted = child.map { |column| PG::Connection.quote_ident(column) }
+    nonnull = quoted.map { |column| "c.#{column} IS NOT NULL" }.join(" AND ")
+    allnull = quoted.map { |column| "c.#{column} IS NULL" }.join(" AND ")
+    matching = child.zip(parent).map do |left, right|
+      "c.#{PG::Connection.quote_ident(left)} = p.#{PG::Connection.quote_ident(right)}"
+    end.join(" AND ")
+    missing = "NOT EXISTS(SELECT 1 FROM #{row.fetch("parent_table")} p WHERE #{matching})"
+    rule =
+      case row.fetch("confmatchtype")
+      when "s" then "(#{nonnull}) AND #{missing}"
+      when "f" then "NOT (#{allnull}) AND (NOT (#{nonnull}) OR #{missing})"
+      else raise RuntimeError, "unsupported FK match type: #{name}"
+      end
+    query = "SELECT count(*) FROM #{table} c WHERE #{rule}"
+  end
+  count = connection.exec(query).first.fetch("count").to_i
+  counts["checked"] += 1
+  counts["violations"] += count
+  details << { "constraint" => name, "status" => "checked", "violations" => count }
+end
+if probe
+  expected = { "codex_probe_check" => 1, "codex_probe_simple" => 1, "codex_probe_full" => 2 }
+  observed = details.to_h { |entry| [entry.fetch("constraint"), entry["violations"]] }
+  raise RuntimeError, "synthetic violation detection failed" unless observed == expected
+end
+connection.exec("ROLLBACK")
+connection.close
+puts JSON.generate(
+  { "database" => database,
+    "mode" => probe ? "synthetic_probe" : "read_only",
+    "counts" => counts,
+    "details" => details, },
+)

@@ -127,7 +127,6 @@ class AuthenticationCredentialInventory
     methods.concat(client_social_login_methods)
     methods << :email_otp if aal1_email_count.positive?
     methods << :passkey if active_passkey_count.positive?
-    methods << :secret_credential if sign_in_secret_credential_count.positive?
     methods
   end
 
@@ -288,31 +287,6 @@ class AuthenticationCredentialInventory
       ),
       "ClientTotpCredential",
     )
-  end
-
-  def sign_in_secret_credential_count
-    if actor.respond_to?(:client_secret_credentials)
-      return count_scope(
-        actor.client_secret_credentials.allowed_for_secret_credential_sign_in,
-        "ClientSecretCredential",
-      )
-    end
-
-    if actor.respond_to?(:visitor_secret_credentials)
-      return count_scope(
-        actor.visitor_secret_credentials.allowed_for_secret_credential_sign_in,
-        "VisitorSecretCredential",
-      )
-    end
-
-    if actor.respond_to?(:staff_secret_credentials)
-      return count_scope(
-        actor.staff_secret_credentials.allowed_for_secret_credential_sign_in,
-        "OperatorSecretCredential",
-      )
-    end
-
-    0
   end
 
   def count_scope(scope, class_name)

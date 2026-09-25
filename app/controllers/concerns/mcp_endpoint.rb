@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Shared MCP transport adapter for the Base and Side surfaces.
+# Shared MCP transport adapter for the Base and Warp surfaces.
 #
 # The six MCP endpoints share one protocol adapter and one tool set; what differs between them is
 # the `McpSurfaceIdentity` each concrete controller declares. Surface separation is preserved by

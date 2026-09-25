@@ -19,9 +19,9 @@ module Security
         Core::App::ApplicationController,
         Core::Com::ApplicationController,
         Core::Org::ApplicationController,
-        Side::App::ApplicationController,
-        Side::Com::ApplicationController,
-        Side::Org::ApplicationController,
+        Warp::App::ApplicationController,
+        Warp::Com::ApplicationController,
+        Warp::Org::ApplicationController,
       ].freeze
 
       REQUIRED_ORDER = %i(

@@ -10,6 +10,8 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
+      rescue_from AvatarOwnerMembershipLockService::AuthorizationDenied, with: :forbid_owner_mutation
+
       before_action :authenticate_client!
       before_action :set_group, only: %i(show update destroy)
       # Collection visibility comes from AvatarGroupPolicy's relation scope; fail if index stops using it.
@@ -34,6 +36,10 @@ module Base
         group = GroupManagement::Create.call(
           account_surface: "app",
           account_public_id: Actor.selection.account_public_id,
+          owner_surface: "app",
+          owner_collective_public_id: Actor.selection.collective_public_id,
+          actor: current_client,
+          subject_public_id: Actor.selection.account_public_id,
           name: group_params.fetch(:name),
           description: group_params[:description],
         )
@@ -42,20 +48,37 @@ module Base
 
       def update
         authorize!(@group, to: :update?)
-        group = GroupManagement::Update.call(group: @group, attributes: group_params)
+        group = GroupManagement::Update.call(
+          group: @group,
+          attributes: group_params,
+          actor: current_client,
+          surface: "app",
+          subject_public_id: Actor.selection.account_public_id,
+          account_public_id: Actor.selection.account_public_id,
+        )
         render json: { group: serialize_group(group) }
       end
 
       def destroy
         authorize!(@group, to: :destroy?)
-        GroupManagement::Archive.call(group: @group)
+        GroupManagement::Archive.call(
+          group: @group,
+          actor: current_client,
+          surface: "app",
+          subject_public_id: Actor.selection.account_public_id,
+          account_public_id: Actor.selection.account_public_id,
+        )
         head :no_content
       end
 
       private
 
+      def forbid_owner_mutation
+        head :forbidden
+      end
+
       def set_group
-        @group = AvatarGroup.find_by!(public_id: params.expect(:id))
+        @group = AvatarGroup.includes(:current_ownership_period).find_by!(public_id: params.expect(:id))
       end
 
       def group_params

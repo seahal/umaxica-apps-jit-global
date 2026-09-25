@@ -60,8 +60,7 @@ class VisitorSecretCredential < ComPrincipalRecord
   include VisitorSecretCredentialKinds
 
   MAX_SECRETS_PER_VISITOR = 20
-  SIGN_IN_ALLOWED_STATUS_IDS = [VisitorSecretCredentialStatus::ACTIVE].freeze
-  SIGN_IN_ALLOWED_KIND_IDS = VisitorSecretCredentialKind::ALLOWED_FOR_SECRET_SIGN_IN
+  ACTIVE_STATUS_IDS = [VisitorSecretCredentialStatus::ACTIVE].freeze
 
   attr_accessor :raw_secret_credential
 
@@ -89,13 +88,6 @@ class VisitorSecretCredential < ComPrincipalRecord
                  owner: :visitor,
                  message: Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
 
-  scope :allowed_for_secret_credential_sign_in, lambda {
-    where(
-      visitor_secret_credential_status_id: SIGN_IN_ALLOWED_STATUS_IDS,
-      visitor_secret_credential_kind_id: SIGN_IN_ALLOWED_KIND_IDS,
-    )
-  }
-
   def self.identity_secret_credential_status_class
     VisitorSecretCredentialStatus
   end
@@ -116,58 +108,8 @@ class VisitorSecretCredential < ComPrincipalRecord
     password
   end
 
-  def usable_for_secret_credential_sign_in?(now: Time.current)
-    return false unless sign_in_status_allowed?
-    return false unless sign_in_kind_allowed?
-    return false if expired_for_secret_credential_sign_in?(now)
-    return true if permanent_secret_credential?
-
-    Integer(uses_remaining.to_s, 10).positive?
-  end
-
-  def verify_for_secret_credential_sign_in!(raw_secret_credential, now: Time.current)
-    with_lock do
-      reload
-
-      auth_result = authenticate(raw_secret_credential)
-      return false unless sign_in_status_allowed?
-      return false unless sign_in_kind_allowed?
-      return false if expired_for_secret_credential_sign_in?(now)
-      return false unless auth_result
-
-      self.last_used_at = now
-      if one_time_secret_credential?
-        return false unless Integer(uses_remaining.to_s, 10).positive?
-
-        self.uses_remaining -= 1
-        self[self.class.identity_secret_credential_status_id_column] =
-          self.class.status_id_for(:used) if uses_remaining.zero?
-      end
-
-      save!
-    end
-
-    true
-  end
-
   def to_param
     public_id
   end
 
-  private
-
-  def sign_in_status_allowed?
-    SIGN_IN_ALLOWED_STATUS_IDS.include?(visitor_secret_credential_status_id)
-  end
-
-  def sign_in_kind_allowed?
-    SIGN_IN_ALLOWED_KIND_IDS.include?(visitor_secret_credential_kind_id)
-  end
-
-  def expired_for_secret_credential_sign_in?(now)
-    return false if discard_at.nil?
-    return false if discard_at.respond_to?(:infinite?) && discard_at.infinite?
-
-    now > discard_at
-  end
 end

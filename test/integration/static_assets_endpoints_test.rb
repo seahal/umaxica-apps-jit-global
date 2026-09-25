@@ -52,16 +52,16 @@ class StaticAssetsEndpointsTest < ActionDispatch::IntegrationTest
       controller: "palm/app/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"),
-      controller: "side/app/sitemaps",
+      host: ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
+      controller: "warp/app/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"),
-      controller: "side/com/sitemaps",
+      host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
+      controller: "warp/com/sitemaps",
     },
     {
-      host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"),
-      controller: "side/org/sitemaps",
+      host: ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),
+      controller: "warp/org/sitemaps",
     },
   ].freeze
 

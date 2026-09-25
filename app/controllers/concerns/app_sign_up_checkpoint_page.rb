@@ -34,7 +34,6 @@ module AppSignUpCheckpointPage
       title: t("sign.app.registration.checkpoint.show.page_title"),
       birthdate: missing.include?(:birthdate) ? sign_up_checkpoint_birthdate_props : nil,
       passkey: missing.include?(:passkey) ? sign_up_checkpoint_passkey_props : nil,
-      passcode: missing.include?(:passcode) ? sign_up_checkpoint_passcode_props : nil,
       complete_message: missing.empty? ? t("sign.app.registration.checkpoint.show.complete") : nil,
       cancellation: sign_up_checkpoint_cancellation_props(missing.first),
     }
@@ -70,21 +69,6 @@ module AppSignUpCheckpointPage
       description: page_t("#{scope}.description"),
       label: page_t("#{scope}.action"),
       href: auth_app_sign_up_check_telephone_passkey_path(
-        ri: params[:ri],
-        pt: signed_pt_param,
-        checkpoint_version: @sign_up_ticket.checkpoint_version,
-      ),
-    }
-  end
-
-  def sign_up_checkpoint_passcode_props
-    scope = "sign.app.registration.checkpoint.show.passcode"
-
-    {
-      title: page_t("#{scope}.title"),
-      description: page_t("#{scope}.description"),
-      label: page_t("#{scope}.action"),
-      href: auth_app_sign_up_check_telephone_passcode_path(
         ri: params[:ri],
         pt: signed_pt_param,
         checkpoint_version: @sign_up_ticket.checkpoint_version,

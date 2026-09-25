@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Compare checked-in structure snapshots with read-only live table/version identities."""
+
+import json
+import re
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+catalog = json.loads(Path(sys.argv[1]).read_text())
+output = Path(sys.argv[2])
+assert output.as_posix().startswith("memos/") and output.suffix == ".md"
+live = defaultdict(set)
+for table in catalog["tables"]:
+    live[table["logical_database"]].add((table["schema"], table["table_name"]))
+summary = {row["logical_database"]: row for row in catalog["databases"]}
+lines = [
+    "# Global PostgreSQL Snapshot Drift Review",
+    "",
+    f"Read-only live development catalog captured at {catalog['captured_at']} against commit `{catalog['head']}` with uncommitted changes. This compares table and Rails migration-version identities; it does not assert equivalence of columns, constraints, indexes, or data.",
+    "",
+    "| Logical DB | Live tables | Dump tables | Live-only tables | Dump-only tables | Live versions | Dump versions | Version differences |",
+    "| --- | ---: | ---: | --- | --- | ---: | ---: | --- |",
+]
+for logical in sorted(summary):
+    path = Path("db/structure.sql" if logical == "primary" else f"db/{logical}_structure.sql")
+    text = path.read_text()
+    dump_tables = set(re.findall(r"CREATE (?:UNLOGGED )?TABLE ([a-z_]+)\.([a-zA-Z0-9_]+)", text))
+    live_only = live[logical] - dump_tables
+    dump_only = dump_tables - live[logical]
+    marker = 'INSERT INTO "schema_migrations" (version) VALUES'
+    dump_versions = set(re.findall(r"\('([0-9]+)'\)", text.split(marker, 1)[1])) if marker in text else set()
+    live_versions = set(summary[logical]["schema_migration_versions"])
+    versions_only_live = live_versions - dump_versions
+    versions_only_dump = dump_versions - live_versions
+    diffs = []
+    if versions_only_live:
+        diffs.append("live-only: " + ", ".join(sorted(versions_only_live)))
+    if versions_only_dump:
+        diffs.append("dump-only: " + ", ".join(sorted(versions_only_dump)))
+    lines.append(
+        f"| {logical} | {len(live[logical])} | {len(dump_tables)} | "
+        f"{', '.join('`'+s+'.'+t+'`' for s,t in sorted(live_only)) or 'none'} | "
+        f"{', '.join('`'+s+'.'+t+'`' for s,t in sorted(dump_only)) or 'none'} | "
+        f"{len(live_versions)} | {len(dump_versions)} | {'; '.join(diffs) or 'none'} |"
+    )
+output.write_text("\n".join(lines) + "\n")
+models = json.loads(Path("tmp/postgresql-model-map.json").read_text())
+model_only = [model for model in models if (model["connection"], model["table"]) not in
+              {(table["logical_database"], table["table_name"]) for table in catalog["tables"]}]
+app_model_only = [model for model in model_only if model["source"] and
+                  model["source"].startswith(str(Path.cwd() / "app/models") + "/")]
+with output.open("a") as report:
+    report.write("\n## Runtime model mappings absent from shared development\n\n")
+    report.write(
+        f"A verified isolated Rails boot mapped {len(models)} concrete models. "
+        f"{len(app_model_only)} application models target tables absent from the shared "
+        "development catalog and current dumps; they are supplied by pending local migrations. "
+        "Framework models whose optional tables are absent are excluded from this list. "
+        "No shared database was migrated.\n\n"
+    )
+    for model in app_model_only:
+        report.write(f"- `{model['model']}`: `{model['connection']}.public.{model['table']}` "
+                     f"({model['source'].removeprefix(str(Path.cwd()) + '/')})\n")
+print(f"wrote {output}: {len(summary)} logical databases")

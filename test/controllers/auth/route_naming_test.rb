@@ -78,6 +78,13 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     assert_unrecognized(:app, "/preference/language/edit", :get)
   end
 
+  test "secret credential sign-in routes are absent from every Auth surface" do
+    SURFACES.each_key do |surface|
+      assert_unrecognized(surface, "/sign/in/secret", :get)
+      assert_unrecognized(surface, "/sign/in/secret", :post)
+    end
+  end
+
   test "auth app settings keeps only credential ceremony settings" do
     helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
 

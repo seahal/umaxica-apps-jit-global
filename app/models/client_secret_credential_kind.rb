@@ -16,9 +16,7 @@ class ClientSecretCredentialKind < AppPrincipalRecord
   RECOVERY = 3
   API = 4
   DEFAULTS = [LOGIN, TOTP, RECOVERY, API].freeze
-  PERMANENT = LOGIN
   ONE_TIME = RECOVERY
-  ALLOWED_FOR_SECRET_SIGN_IN = [PERMANENT, ONE_TIME].freeze
   ALL = [LOGIN, TOTP, RECOVERY, API].freeze
 
   validates :id, numericality: { only_integer: true, greater_than_or_equal_to: 0 }

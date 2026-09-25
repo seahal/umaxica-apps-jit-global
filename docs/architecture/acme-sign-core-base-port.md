@@ -103,8 +103,8 @@ Do not split the auth ceremony into Core-only cookie concerns or names unless a 
 that drift.
 
 Do not use `Domain=.example.com` for Core browser credentials. Cloudflare strips the entire `Cookie`
-header before forwarding requests to the Next.js origin or `side.jp.umaxica.app`, and strips
-`Set-Cookie` from Next.js and Side responses before they reach the browser.
+header before forwarding requests to the Next.js origin or the preserved `side.jp.umaxica.app`
+hostname, and strips `Set-Cookie` from Next.js and Warp responses before they reach the browser.
 
 ## Session And Cookie Boundary
 

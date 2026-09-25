@@ -51,19 +51,19 @@ Rails. None of those exist as Rails paths:
   `constraints host:`. It is not a path prefix on the Core host.
 - `/sso/*` has no route on any surface. `test/integration/routes/core_route_contract_test.rb`
   asserts `/sso/authorize` and `/sso/logout` are unroutable on Core.
-- `/settings` and `/settings/*` are defined on the Auth and Side surfaces (`config/routes/auth.rb`,
-  `config/routes/side.rb`), not Base. Base owns `/identity/*`, `/accounts`, and `/preference/*`.
+- `/settings` and `/settings/*` are defined on the Auth and Warp surfaces (`config/routes/auth.rb`,
+  `config/routes/warp.rb`), not Base. Base owns `/identity/*`, `/accounts`, and `/preference/*`.
 
 The rows were removed rather than left as edge routes pointing at origins that would 404, which also
 silently placed the real cookie-bearing Core paths in the Cookie-stripped fallback row.
 
-For `side.jp.umaxica.app`:
+For the preserved `side.jp.umaxica.app` hostname:
 
 | Path        | Origin     | Cookie forwarding             |
 | ----------- | ---------- | ----------------------------- |
-| `/api/v0/*` | Rails Side | remove entire `Cookie` header |
+| `/api/v0/*` | Rails Warp | remove entire `Cookie` header |
 
-Selective auth-cookie stripping is not sufficient. The Next.js and Side origins must receive no
+Selective auth-cookie stripping is not sufficient. The Next.js and Warp origins must receive no
 `Cookie` header at all.
 
 ## Response Header Rules
@@ -72,7 +72,7 @@ Selective auth-cookie stripping is not sufficient. The Next.js and Side origins 
 | --------------- | ----------------------------------------------------------------- |
 | Rails Core/Base | allow `Set-Cookie` only on intended auth/session/preference paths |
 | Next.js Core    | remove every `Set-Cookie` header                                  |
-| Side            | remove every `Set-Cookie` header                                  |
+| Warp            | remove every `Set-Cookie` header                                  |
 
 Next.js toast, flash, and other UI state must use non-cookie state such as client memory, browser
 storage, a URL nonce, hydration-time Rails API result, or non-sensitive public state.
@@ -91,8 +91,9 @@ Before setting `CORE_BROWSER_JWT_COOKIE_ENABLED=1` in production, record evidenc
    header intact.
 5. Requests to `https://jp.umaxica.app/oidc/callback`, `/sign/out`, `/sign/out/complete`, and
    `/api/v0/preferences/...` reach Rails Core with required cookies intact.
-6. A request to `https://side.jp.umaxica.app/api/v0/...` with a synthetic `Cookie` header reaches
-   Side without a `Cookie` header, and Side rejects any bypassed request that still contains one.
+6. A request to the preserved `https://side.jp.umaxica.app/api/v0/...` hostname with a synthetic
+   `Cookie` header reaches Warp without a `Cookie` header, and Warp rejects any bypassed request
+   that still contains one.
 7. Public requests to `/health` and `/health/*` are blocked at the edge or return only the approved
    no-leak public behavior from `adr/internal-health-endpoint-edge-isolation.md`.
 

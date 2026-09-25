@@ -11,19 +11,19 @@ class Auth::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
     host! @host
   end
 
-  test "sign settings shell redirects to base identity authority" do
-    get auth_com_settings_url(ri: "jp"), headers: as_visitor_headers(visitors(:reserved_visitor), host: @host)
+  test "verified visitor without a telephone can enter settings and reach Base identity" do
+    visitor = create_verified_visitor_with_email(email_address: "com-settings-no-telephone@example.com")
+
+    assert_not visitor.verified_telephone?
+
+    get auth_com_settings_url(ri: "jp"), headers: as_visitor_headers(visitor, host: @host)
 
     assert_response :redirect
     assert_equal "jump.umaxica.net", URI.parse(response.location).host
     payload, = JWT.decode(Rack::Utils.parse_query(URI.parse(response.location).query).fetch("rt"), nil, false)
 
     assert_equal(
-      new_base_com_identity_telephones_registration_url(
-        ri: "jp",
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-        protocol: "https",
-      ),
+      base_com_identity_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https"),
       payload.fetch("url"),
     )
   end

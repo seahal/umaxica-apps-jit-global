@@ -17,8 +17,8 @@ Rails.application.routes.draw do
   # Core owns the regional BFF surface.
   draw :core
 
-  # Side owns the Rails foundation/control-plane surface.
-  draw :side
+  # Warp owns the Rails foundation/control-plane surface.
+  draw :warp
 
   # Palm owns the native RP and bearer-token API surface.
   draw :palm

@@ -270,10 +270,6 @@ class Client < AppPrincipalRecord
   # RetentionCrossDatabaseChildPurge, not by an implicit cross-DB cascade.
   has_many :avatar_assignments, foreign_key: :user_id, inverse_of: :user # rubocop:disable Rails/HasManyOrHasOneDependent
   has_many :assigned_avatars, through: :avatar_assignments, source: :avatar
-  has_many :owned_avatars,
-           -> { joins(:avatar_assignments).where(avatar_assignments: { role: "owner" }) },
-           through: :avatar_assignments,
-           source: :avatar
   validates :public_id, uniqueness: true, length: { maximum: 21 }
   include Retainable
 

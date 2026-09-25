@@ -18,7 +18,7 @@ class AppRailsEdgeOwnershipContractTest < ActiveSupport::TestCase
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign/out", "core/app/sign/outs", "show"],
     [ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), :get, "/sign/in", "auth/app/sign/ins", "show"],
     [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), :get, "/", "base/app/roots", "index"],
-    [ENV.fetch("PUBLIC_SIDE_SERVICE_URL"), :get, "/dashboard", "side/app/dashboards", "show"],
+    [ENV.fetch("PUBLIC_WARP_SERVICE_URL"), :get, "/dashboard", "warp/app/dashboards", "show"],
   ].freeze
 
   test "app route ownership keeps Rails authentication, sign-out, API, and retained UI endpoints" do

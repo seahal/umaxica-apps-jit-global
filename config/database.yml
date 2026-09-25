@@ -10,6 +10,17 @@
   test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : ENV["POSTGRESQL_TEST_HOST"]
   # Rendered in every environment; require the test port only when test boots.
   test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : ENV["POSTGRESQL_PORT"]
+  # The explicit isolated audit run maps every test role to a comment-marked task DB.
+  # DatabaseSafety verifies every effective target against a catalog identity manifest before boot.
+  isolated_test_run_id = Rails.env.test? ? ENV["POSTGRESQL_ISOLATED_TEST_RUN_ID"] : nil
+  test_database = lambda do |logical_name, normal_name|
+    if isolated_test_run_id.present?
+      raise ArgumentError, "invalid isolated test run id" unless isolated_test_run_id.match?(/\A[0-9]{8}[a-z0-9]{0,12}\z/)
+      "codex_integrity_#{isolated_test_run_id}_#{logical_name}"
+    else
+      normal_name
+    end
+  end
 
   # Every `development:` host is required configuration: a missing name used to
   # fall back to a shared default, which silently pointed a database at the
@@ -316,20 +327,20 @@ development:
 test:
   publishing:
     !!merge <<: *test_default
-    database: test_publishing_db
+    database: <%= test_database.call("publishing", "test_publishing_db") %>
     host: <%= test_host %>
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
   publishing_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_publishing_replica_db
+    database: <%= test_database.call("publishing", "test_publishing_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
   com_zenith:
     !!merge <<: *test_default
-    database: test_com_zenith_db
+    database: <%= test_database.call("com_zenith", "test_com_zenith_db") %>
     host: <%= test_host %>
     migrations_paths:
       - db/com_principals_migrate
@@ -338,7 +349,7 @@ test:
   com_zenith_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_com_zenith_replica_db
+    database: <%= test_database.call("com_zenith", "test_com_zenith_replica_db") %>
     host: <%= test_host %>
     migrations_paths:
       - db/com_principals_migrate
@@ -346,7 +357,7 @@ test:
     schema_dump: com_zenith_structure.sql
   app_zenith:
     !!merge <<: *test_default
-    database: test_app_zenith_db
+    database: <%= test_database.call("app_zenith", "test_app_zenith_db") %>
     host: <%= test_host %>
     migrations_paths:
       - db/app_principals_migrate
@@ -355,7 +366,7 @@ test:
   app_zenith_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_app_zenith_replica_db
+    database: <%= test_database.call("app_zenith", "test_app_zenith_replica_db") %>
     host: <%= test_host %>
     migrations_paths:
       - db/app_principals_migrate
@@ -363,7 +374,7 @@ test:
     schema_dump: app_zenith_structure.sql
   org_zenith:
     !!merge <<: *test_default
-    database: test_org_zenith_db
+    database: <%= test_database.call("org_zenith", "test_org_zenith_db") %>
     host: <%= test_host %>
     migrations_paths:
       - db/org_principals_migrate
@@ -372,7 +383,7 @@ test:
   org_zenith_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_org_zenith_replica_db
+    database: <%= test_database.call("org_zenith", "test_org_zenith_replica_db") %>
     host: <%= test_host %>
     migrations_paths:
       - db/org_principals_migrate
@@ -380,124 +391,124 @@ test:
     schema_dump: org_zenith_structure.sql
   app_setting:
     !!merge <<: *test_default
-    database: test_app_setting_db
+    database: <%= test_database.call("app_setting", "test_app_setting_db") %>
     host: <%= test_host %>
     migrations_paths: db/app_settings_migrate
     schema_dump: app_setting_structure.sql
   app_setting_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_app_setting_replica_db
+    database: <%= test_database.call("app_setting", "test_app_setting_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/app_settings_migrate
     schema_dump: app_setting_structure.sql
   org_setting:
     !!merge <<: *test_default
-    database: test_org_setting_db
+    database: <%= test_database.call("org_setting", "test_org_setting_db") %>
     host: <%= test_host %>
     migrations_paths: db/org_settings_migrate
     schema_dump: org_setting_structure.sql
   org_setting_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_org_setting_replica_db
+    database: <%= test_database.call("org_setting", "test_org_setting_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/org_settings_migrate
     schema_dump: org_setting_structure.sql
   com_setting:
     !!merge <<: *test_default
-    database: test_com_setting_db
+    database: <%= test_database.call("com_setting", "test_com_setting_db") %>
     host: <%= test_host %>
     migrations_paths: db/com_settings_migrate
     schema_dump: com_setting_structure.sql
   com_setting_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_com_setting_replica_db
+    database: <%= test_database.call("com_setting", "test_com_setting_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/com_settings_migrate
     schema_dump: com_setting_structure.sql
   search:
     !!merge <<: *test_default
-    database: test_search_db
+    database: <%= test_database.call("search", "test_search_db") %>
     host: <%= test_host %>
     migrations_paths: db/searches_migrate
   search_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_search_replica_db
+    database: <%= test_database.call("search", "test_search_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/searches_migrate
     schema_dump: search_structure.sql
   org_ticket:
     !!merge <<: *test_default
-    database: test_org_ticket_db
+    database: <%= test_database.call("org_ticket", "test_org_ticket_db") %>
     host: <%= test_host %>
     migrations_paths: db/org_tickets_migrate
   org_ticket_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_org_ticket_replica_db
+    database: <%= test_database.call("org_ticket", "test_org_ticket_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/org_tickets_migrate
     schema_dump: org_ticket_structure.sql
   com_ticket:
     !!merge <<: *test_default
-    database: test_com_ticket_db
+    database: <%= test_database.call("com_ticket", "test_com_ticket_db") %>
     host: <%= test_host %>
     migrations_paths: db/com_tickets_migrate
   com_ticket_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_com_ticket_replica_db
+    database: <%= test_database.call("com_ticket", "test_com_ticket_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/com_tickets_migrate
     schema_dump: com_ticket_structure.sql
   app_ticket:
     !!merge <<: *test_default
-    database: test_app_ticket_db
+    database: <%= test_database.call("app_ticket", "test_app_ticket_db") %>
     host: <%= test_host %>
     migrations_paths: db/app_tickets_migrate
   app_ticket_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_app_ticket_replica_db
+    database: <%= test_database.call("app_ticket", "test_app_ticket_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/app_tickets_migrate
     schema_dump: app_ticket_structure.sql
   app_signal:
     !!merge <<: *test_default
-    database: test_app_signal_db
+    database: <%= test_database.call("app_signal", "test_app_signal_db") %>
     host: <%= test_host %>
     migrations_paths: db/app_signals_migrate
   app_signal_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_app_signal_replica_db
+    database: <%= test_database.call("app_signal", "test_app_signal_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/app_signals_migrate
     schema_dump: app_signal_structure.sql
   org_signal:
     !!merge <<: *test_default
-    database: test_org_signal_db
+    database: <%= test_database.call("org_signal", "test_org_signal_db") %>
     host: <%= test_host %>
     migrations_paths: db/org_signals_migrate
   org_signal_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_org_signal_replica_db
+    database: <%= test_database.call("org_signal", "test_org_signal_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/org_signals_migrate
     schema_dump: org_signal_structure.sql
   com_signal:
     !!merge <<: *test_default
-    database: test_com_signal_db
+    database: <%= test_database.call("com_signal", "test_com_signal_db") %>
     host: <%= test_host %>
     migrations_paths: db/com_signals_migrate
   com_signal_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_com_signal_replica_db
+    database: <%= test_database.call("com_signal", "test_com_signal_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/com_signals_migrate
     schema_dump: com_signal_structure.sql
@@ -506,61 +517,61 @@ test:
     # A manually started isolated Solid Queue worker needs one execution
     # connection plus its polling and heartbeat connections.
     pool: 5
-    database: test_queue_db
+    database: <%= test_database.call("queue", "test_queue_db") %>
     host: <%= test_host %>
     migrations_paths: db/queues_migrate
   storage:
     !!merge <<: *test_default
-    database: test_storage_db
+    database: <%= test_database.call("storage", "test_storage_db") %>
     host: <%= test_host %>
     migrations_paths: db/storages_migrate
   storage_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_storage_replica_db
+    database: <%= test_database.call("storage", "test_storage_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/storages_migrate
     schema_dump: storage_structure.sql
   occurrence:
     !!merge <<: *test_default
-    database: test_occurrence_db
+    database: <%= test_database.call("occurrence", "test_occurrence_db") %>
     host: <%= test_host %>
     migrations_paths: db/occurrences_migrate
   occurrence_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_occurrence_replica_db
+    database: <%= test_database.call("occurrence", "test_occurrence_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/occurrences_migrate
     schema_dump: occurrence_structure.sql
   chronicle:
     !!merge <<: *test_default
-    database: test_chronicle_db
+    database: <%= test_database.call("chronicle", "test_chronicle_db") %>
     host: <%= test_host %>
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
   chronicle_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_chronicle_replica_db
+    database: <%= test_database.call("chronicle", "test_chronicle_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
   avatar:
     !!merge <<: *test_default
-    database: test_avatar_db
+    database: <%= test_database.call("avatar", "test_avatar_db") %>
     host: <%= test_host %>
     migrations_paths: db/avatars_migrate
   avatar_replica:
     !!merge <<: *test_default
     replica: true
-    database: test_avatar_replica_db
+    database: <%= test_database.call("avatar", "test_avatar_replica_db") %>
     host: <%= test_host %>
     migrations_paths: db/avatars_migrate
     schema_dump: avatar_structure.sql
   primary:
     !!merge <<: *test_default
-    database: test_primary_db
+    database: <%= test_database.call("primary", "test_primary_db") %>
     host: <%= test_host %>
     migrations_paths: db/migrate
 production:

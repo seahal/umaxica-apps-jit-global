@@ -37,8 +37,8 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
       # surface layout, so its presence is carried by the shared chrome prop rather than by markup.
       assert_select "script[data-page='app'][type='application/json']", count: 1
       assert_not inertia_props.dig("chrome", "theme_controls", "hidden")
-      assert_predicate cookies[PreferenceCookieName.access(surface: surface)], :present?
-      assert_predicate cookies[PreferenceCookieName.refresh(surface: surface)], :present?
+      assert_nil cookies[PreferenceCookieName.access(surface: surface)]
+      assert_nil cookies[PreferenceCookieName.refresh(surface: surface)]
     end
   end
 
@@ -179,6 +179,12 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     SURFACES.each do |surface, config|
       host = ENV.fetch(config.fetch(:host_env), config.fetch(:host_default))
       host! host
+      region_option_class = PreferenceClassRegistry.option_class(surface.to_s.camelize, :region)
+
+      patch public_send("base_#{surface}_preference_region_path", ri: "us"),
+            params: { preference_region: { option_id: region_option_class::US } }
+
+      assert_response :redirect
 
       get public_send("edit_base_#{surface}_preference_region_url", ri: "us", host: host)
 

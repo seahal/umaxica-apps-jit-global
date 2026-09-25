@@ -33,7 +33,7 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
 
   # Surfaces with their own description. `net` and `dev` are internal-only and have none.
   SURFACES = OpenapiContract::SURFACES
-  APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm side).freeze
+  APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm warp).freeze
 
   test "every described surface has a bundled description that parses" do
     SURFACES.each do |surface|

@@ -27,10 +27,13 @@ AcmeSelectorSurfaceConfig = Data.define(
   :membership_unit_association,
   :authority_lock_class,
   :authority_lock_principal_foreign_key,
-  :requires_avatar,
+  :avatar_mode,
+  :provision_default_avatar,
   :account_title,
   :collective_title,
 )
+
+AcmeSelectorSurfaceConfig::AVATAR_MODES = %i(required optional none).freeze
 
 AcmeSelectorSurfaceConfig::CONFIGS = {
   app: AcmeSelectorSurfaceConfig.new(
@@ -59,7 +62,8 @@ AcmeSelectorSurfaceConfig::CONFIGS = {
     membership_unit_association: :enterprise_unit,
     authority_lock_class: ::ClientAuthorityLock,
     authority_lock_principal_foreign_key: :client_id,
-    requires_avatar: true,
+    avatar_mode: :required,
+    provision_default_avatar: true,
     account_title: "Persona01",
     collective_title: "Org01",
   ),
@@ -89,7 +93,8 @@ AcmeSelectorSurfaceConfig::CONFIGS = {
     membership_unit_association: :company_unit,
     authority_lock_class: ::VisitorAuthorityLock,
     authority_lock_principal_foreign_key: :visitor_id,
-    requires_avatar: false,
+    avatar_mode: :none,
+    provision_default_avatar: false,
     account_title: "Indiv01",
     collective_title: "Org01",
   ),
@@ -119,7 +124,8 @@ AcmeSelectorSurfaceConfig::CONFIGS = {
     membership_unit_association: :bureau_unit,
     authority_lock_class: ::OperatorAuthorityLock,
     authority_lock_principal_foreign_key: :operator_id,
-    requires_avatar: false,
+    avatar_mode: :optional,
+    provision_default_avatar: false,
     account_title: "Agent01",
     collective_title: "Org01",
   ),

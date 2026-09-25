@@ -57,7 +57,6 @@ module Base
                              with: :exception,
                              only: :create,
                              if: -> { params[:logout_challenge].present? }
-        skip_before_action :transparent_refresh_access_token, raise: false
         # Second, independent half of the CSRF boundary for the coordinated-logout POST; see the
         # `protect_from_forgery` comment above. Keep this `before_action` paired with it.
         before_action only: :create do

@@ -10,6 +10,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   def self.issue!(origin_surface:, initiating_client_id:, completion_url:, actor_ref: nil, session_ref: nil,
                   callback_state: nil, now: Time.current, expires_in: 10.minutes, surface: "app",
                   ri: RequestContextContract.default_region)
+    persisted_origin_surface = persisted_origin_surface_for(origin_surface)
     region = RequestContextContract.normalize_region(ri)
     unless allowed_completion_url?(
       origin_surface: origin_surface,
@@ -28,13 +29,13 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     transaction =
       AppTicketRecord.connected_to(role: :writing) do
         AcmeLogoutTransaction.create!(
-          origin_surface: origin_surface.to_s,
+          origin_surface: persisted_origin_surface,
           initiating_client_id: initiating_client_id.to_s,
           completion_url: completion_url.to_s,
           actor_ref: actor_ref.to_s.presence,
           session_ref: session_ref.to_s.presence,
           callback_state: callback_state.to_s.presence,
-          expected_step: AcmeLogoutTransaction.step_sequence_for(origin_surface).first,
+          expected_step: AcmeLogoutTransaction.step_sequence_for(persisted_origin_surface).first,
           status: AcmeLogoutTransaction::STATUS_INITIATED,
           expires_at: now + expires_in,
           completed_steps: [],
@@ -85,12 +86,13 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   end
 
   def self.completion_url_for(origin_surface:, ri: RequestContextContract.default_region, surface: "app")
-    host = completion_host_for(origin_surface: origin_surface, surface: surface)
+    route_origin_surface = route_origin_surface_for(origin_surface)
+    host = completion_host_for(origin_surface: route_origin_surface, surface: surface)
     region = RequestContextContract.normalize_region(ri)
 
     helper = Rails.application.routes.url_helpers
     surface_name = surface.to_s
-    case origin_surface.to_s
+    case route_origin_surface
     when "sign"
       helper.public_send(
         complete_auth_out_helper_name(surface_name),
@@ -105,9 +107,9 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
         host: host,
         protocol: http_or_https(host),
       )
-    when "side"
+    when "warp"
       helper.public_send(
-        complete_side_out_helper_name(surface_name),
+        complete_warp_out_helper_name(surface_name),
         ri: region,
         host: host,
         protocol: http_or_https(host),
@@ -138,8 +140,9 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   def self.completion_host_for(origin_surface:, surface:)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     surface_name = surface.to_s
+    route_origin_surface = route_origin_surface_for(origin_surface)
 
-    case origin_surface.to_s
+    case route_origin_surface
     when "sign"
       case surface_name
       when "org" then hosts.sign_staff.host
@@ -158,11 +161,11 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
       when "com" then hosts.core_corporate.host
       else hosts.core_service.host
       end
-    when "side"
+    when "warp"
       case surface_name
-      when "org" then hosts.side_staff.host
-      when "com" then hosts.side_corporate.host
-      else hosts.side_service.host
+      when "org" then hosts.warp_staff.host
+      when "com" then hosts.warp_corporate.host
+      else hosts.warp_service.host
       end
     when "palm"
       hosts.palm_service.host
@@ -179,8 +182,19 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     "core_#{surface_name}_sign_out_url"
   end
 
-  def self.complete_side_out_helper_name(surface_name)
-    "side_#{surface_name}_sign_out_url"
+  def self.complete_warp_out_helper_name(surface_name)
+    "warp_#{surface_name}_sign_out_url"
+  end
+
+  # `side` is the established database enum on acme_logout_transactions. Translate it only at
+  # this persistence boundary; request/controller routing uses the Warp name.
+  def self.persisted_origin_surface_for(origin_surface)
+    origin_surface.to_s == "warp" ? "side" : origin_surface.to_s
+  end
+
+  # Existing logout rows retain the `side` enum value and can still be completed after deployment.
+  def self.route_origin_surface_for(origin_surface)
+    origin_surface.to_s == "side" ? "warp" : origin_surface.to_s
   end
 
   def self.base_completion_helper_name(surface_name)
@@ -188,5 +202,6 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   end
   private_class_method :find_by_logout_challenge!, :allowed_completion_url?,
                        :complete_auth_out_helper_name, :complete_core_out_helper_name,
-                       :complete_side_out_helper_name, :base_completion_helper_name
+                       :complete_warp_out_helper_name, :persisted_origin_surface_for,
+                       :route_origin_surface_for, :base_completion_helper_name
 end

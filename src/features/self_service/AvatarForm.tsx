@@ -1,6 +1,7 @@
 // The avatar create/update form. The server sends the action URL, the HTTP verb the route expects
 // and every label already translated, so the component only binds fields and reports errors.
 import { useForm } from "@inertiajs/react";
+import { useState } from "react";
 import type { SyntheticEvent } from "react";
 
 import Button from "@/components/ui/Button";
@@ -12,10 +13,72 @@ export type AvatarFormProps = {
   action: string;
   method: "post" | "patch";
   submit_label: string;
-  moniker: { label: string; value: string; maxlength: number };
+  moniker: {
+    label: string;
+    value: string;
+    max_bytes: number;
+    max_grapheme_clusters: number;
+    client_validation: {
+      blank: string;
+      invalid: string;
+      max_bytes: string;
+      max_graphemes: string;
+    };
+  };
   // Present only on creation: the handle is immutable once the avatar exists.
   handle: { label: string; value: string; maxlength: number } | null;
 };
+
+function monikerValidationError(value: string, moniker: AvatarFormProps["moniker"]): string | null {
+  const messages = moniker.client_validation;
+
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && codePoint >= 0xd800 && codePoint <= 0xdfff) {
+      return messages.invalid;
+    }
+  }
+
+  const normalized = value.normalize("NFC");
+  if (normalized.length === 0 || /^\p{White_Space}*$/u.test(normalized)) {
+    return messages.blank;
+  }
+  if (/^\p{White_Space}|\p{White_Space}$/u.test(normalized)) {
+    return messages.invalid;
+  }
+  if (new TextEncoder().encode(normalized).byteLength > moniker.max_bytes) {
+    return messages.max_bytes;
+  }
+
+  for (const character of normalized) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      (codePoint <= 0x1f ||
+        (codePoint >= 0x7f && codePoint <= 0x9f) ||
+        (codePoint >= 0x2028 && codePoint <= 0x2029) ||
+        codePoint === 0x200b ||
+        codePoint === 0xfeff ||
+        codePoint === 0x061c ||
+        (codePoint >= 0x200e && codePoint <= 0x200f) ||
+        (codePoint >= 0x202a && codePoint <= 0x202e) ||
+        (codePoint >= 0x2066 && codePoint <= 0x2069))
+    ) {
+      return messages.invalid;
+    }
+  }
+
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  let graphemeClusters = 0;
+  for (const _segment of segmenter.segment(normalized)) {
+    graphemeClusters += 1;
+    if (graphemeClusters > moniker.max_grapheme_clusters) {
+      return messages.max_graphemes;
+    }
+  }
+
+  return null;
+}
 
 export default function AvatarForm({
   title,
@@ -30,9 +93,18 @@ export default function AvatarForm({
     avatar: { moniker: moniker.value, handle: handle ? handle.value : "" },
   });
   const { data, setData, errors, processing } = form;
+  const [clientMonikerError, setClientMonikerError] = useState<string | null>(null);
+  const monikerError = clientMonikerError ?? errors["avatar.moniker"];
 
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const validationError = monikerValidationError(data.avatar.moniker, moniker);
+    if (validationError) {
+      setClientMonikerError(validationError);
+      return;
+    }
+    setClientMonikerError(null);
+
     if (method === "post") {
       form.post(action);
     } else {
@@ -56,12 +128,14 @@ export default function AvatarForm({
           label={moniker.label}
           name="avatar[moniker]"
           isRequired
-          maxLength={moniker.maxlength}
           value={data.avatar.moniker}
-          onChange={(value) => setData("avatar", { ...data.avatar, moniker: value })}
-          {...(errors["avatar.moniker"] === undefined
+          onChange={(value) => {
+            setClientMonikerError(null);
+            setData("avatar", { ...data.avatar, moniker: value });
+          }}
+          {...(monikerError === undefined
             ? {}
-            : { errorMessage: errors["avatar.moniker"] })}
+            : { errorMessage: monikerError })}
         />
 
         {handle ? (

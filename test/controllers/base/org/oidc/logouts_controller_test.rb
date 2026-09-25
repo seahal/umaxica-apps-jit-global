@@ -40,11 +40,33 @@ class Base::Org::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "get without params renders confirmation without mutation" do
+    auth_refresh_token = @token.rotate_refresh_token!
+    auth_refresh_digest = @token.reload.refresh_token_digest
+    auth_refresh_generation = @token.refresh_token_generation
+    cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
+
     get base_org_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: session_headers
 
     assert_response :ok
     assert_not_predicate @token.reload, :revoked?
+    assert_equal auth_refresh_digest, @token.refresh_token_digest
+    assert_equal auth_refresh_generation, @token.refresh_token_generation
     assert_nil response.location
+  end
+
+  test "post without params does not rotate the authentication refresh token" do
+    auth_refresh_token = @token.rotate_refresh_token!
+    auth_refresh_digest = @token.reload.refresh_token_digest
+    auth_refresh_generation = @token.refresh_token_generation
+    cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = auth_refresh_token
+
+    post base_org_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_response :ok
+    assert_equal auth_refresh_digest, @token.reload.refresh_token_digest
+    assert_equal auth_refresh_generation, @token.refresh_token_generation
   end
 
   test "validated logout request is staged through shared confirmation" do
@@ -128,7 +150,7 @@ class Base::Org::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
 
     post base_org_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
-         headers: session_headers
+         headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
 
     assert_response :success
     assert_equal "sign_cleared", transaction.reload.expected_step
@@ -137,6 +159,85 @@ class Base::Org::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal sign_host, handoff_uri.host
     assert_equal "/sign/out", handoff_uri.path
+  end
+
+  test "cross-site coordinated logout is rejected without cleanup or transaction advancement" do
+    transaction = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "core",
+      initiating_client_id: "core-org",
+      completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+        origin_surface: "core", ri: "jp", surface: "org",
+      ),
+      surface: "org",
+      ri: "jp",
+    ).transaction
+    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+    expected_step_before = transaction.reload.expected_step
+    observed = { info: [], warn: [] }
+    logger = Rails.logger
+
+    logger.stub(:warn, ->(*args, &block) { observed[:warn] << (args.first || block&.call).to_s }) do
+      logger.stub(:info, ->(*args, &block) { observed[:info] << (args.first || block&.call).to_s }) do
+        post base_org_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+             headers: session_headers.merge(
+               "Sec-Fetch-Site" => "cross-site",
+               "Origin" => "https://attacker.example",
+             )
+      end
+    end
+
+    assert_response :forbidden
+    assert_not_predicate @token.reload, :revoked?
+    assert_equal expected_step_before, transaction.reload.expected_step
+    events = (observed[:info] + observed[:warn]).join("\n")
+
+    assert_includes events, "auth.sign_out.fetch_metadata.rejected"
+    assert_not_includes events, "auth.sign_out.fetch_metadata.accepted"
+  end
+
+  test "missing fetch metadata is rejected without cleanup or transaction advancement" do
+    transaction = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "core",
+      initiating_client_id: "core-org",
+      completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+        origin_surface: "core", ri: "jp", surface: "org",
+      ),
+      surface: "org",
+      ri: "jp",
+    ).transaction
+    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+    expected_step_before = transaction.reload.expected_step
+
+    post base_org_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+         headers: session_headers.merge("Sec-Fetch-Site" => nil)
+
+    assert_response :forbidden
+    assert_not_predicate @token.reload, :revoked?
+    assert_equal expected_step_before, transaction.reload.expected_step
+  end
+
+  test "untrusted origin is rejected without cleanup or transaction advancement" do
+    transaction = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "core",
+      initiating_client_id: "core-org",
+      completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+        origin_surface: "core", ri: "jp", surface: "org",
+      ),
+      surface: "org",
+      ri: "jp",
+    ).transaction
+    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+    expected_step_before = transaction.reload.expected_step
+
+    post base_org_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+         headers: session_headers.merge(
+           "Sec-Fetch-Site" => "same-origin",
+           "Origin" => "https://attacker.example",
+         )
+
+    assert_response :forbidden
+    assert_not_predicate @token.reload, :revoked?
+    assert_equal expected_step_before, transaction.reload.expected_step
   end
 
   private

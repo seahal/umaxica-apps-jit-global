@@ -1,4 +1,4 @@
-// Replaces the `shared/recovery_passcodes/show` partial for the base/com surface.
+// One-time recovery passcode reveal page for the base/com surface.
 //
 // The passcodes are the one-time reveal the server just consumed for this owner; the page shows
 // them once and holds nothing else.

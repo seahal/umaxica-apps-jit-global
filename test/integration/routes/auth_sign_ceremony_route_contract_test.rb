@@ -18,6 +18,19 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal expected.fetch(:action), route.fetch(:action)
   end
 
+  test "telephone sign-up does not expose retired permanent Secret Credential steps" do
+    [
+      [SIGN_APP_HOST, "/sign/up/check/telephone/passcode"],
+      [SIGN_COM_HOST, "/sign/up/check/telephone/passcode"],
+    ].each do |host, path|
+      %i(get patch put delete).each do |method|
+        assert_raises(ActionController::RoutingError, "#{method.to_s.upcase} #{host}#{path} must be retired") do
+          Rails.application.routes.recognize_path("http://#{host}#{path}", method: method)
+        end
+      end
+    end
+  end
+
   # rubocop:disable Minitest/MultipleAssertions
   test "auth app route contract" do
     assert_recognizes(
@@ -163,11 +176,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "auth/app/sign/up/check/telephone/passcodes", action: "destroy" },
-      { path: "http://#{SIGN_APP_HOST}/sign/up/check/telephone/passcode", method: :delete },
-    )
-
-    assert_recognizes(
       { controller: "auth/app/sign/up/check/telephone/birthdates", action: "destroy" },
       { path: "http://#{SIGN_APP_HOST}/sign/up/check/telephone/birthdate", method: :delete },
     )
@@ -259,16 +267,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "auth/app/sign/in/passkey/verifications", action: "create" },
       { path: "http://#{SIGN_APP_HOST}/sign/in/passkey/verification", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/app/sign/in/secrets", action: "new" },
-      { path: "http://#{SIGN_APP_HOST}/sign/in/secret/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/app/sign/in/secrets", action: "create" },
-      { path: "http://#{SIGN_APP_HOST}/sign/in/secret", method: :post },
     )
 
     [
@@ -567,11 +565,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "auth/com/sign/up/check/telephone/passcodes", action: "destroy" },
-      { path: "http://#{SIGN_COM_HOST}/sign/up/check/telephone/passcode", method: :delete },
-    )
-
-    assert_recognizes(
       { controller: "auth/com/sign/up/check/telephone/birthdates", action: "destroy" },
       { path: "http://#{SIGN_COM_HOST}/sign/up/check/telephone/birthdate", method: :delete },
     )
@@ -654,16 +647,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "auth/com/sign/in/passkey/verifications", action: "create" },
       { path: "http://#{SIGN_COM_HOST}/sign/in/passkey/verification", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/secrets", action: "new" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/secret/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/com/sign/in/secrets", action: "create" },
-      { path: "http://#{SIGN_COM_HOST}/sign/in/secret", method: :post },
     )
 
     [
@@ -851,16 +834,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "auth/org/sign/in/passkey/verifications", action: "create" },
       { path: "http://#{SIGN_ORG_HOST}/sign/in/passkey/verification", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/sign/in/secrets", action: "new" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/in/secret/new", method: :get },
-    )
-
-    assert_recognizes(
-      { controller: "auth/org/sign/in/secrets", action: "create" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/in/secret", method: :post },
     )
 
     # Entra sign-in ceremony start. Sign-in only: the org surface has no social
@@ -1076,21 +1049,18 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       )
     end
 
-    # The secret credential sign-in path is `/sign/in/secret`; the former
-    # `/sign/in/secret_credential` spelling is retired with no compatibility redirect.
+    # Permanent secret sign-in has no route under either historical spelling.
     [SIGN_APP_HOST, SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path(
-          "http://#{host}/sign/in/secret_credential/new",
-          method: :get,
-        )
+      ["/sign/in/secret/new", "/sign/in/secret_credential/new"].each do |path|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)
+        end
       end
 
-      assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path(
-          "http://#{host}/sign/in/secret_credential",
-          method: :post,
-        )
+      ["/sign/in/secret", "/sign/in/secret_credential"].each do |path|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{host}#{path}", method: :post)
+        end
       end
     end
   end

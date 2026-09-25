@@ -1,0 +1,165 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Read-only, catalog-only inventory. Values from pg_stats and application rows are never read.
+require "pg"
+require "json"
+require "digest"
+require "time"
+
+host = ENV.fetch("POSTGRESQL_AUDIT_HOST")
+port = Integer(ENV.fetch("POSTGRESQL_AUDIT_PORT"), 10)
+user = ENV.fetch("POSTGRESQL_AUDIT_USER")
+password = ENV.fetch("POSTGRESQL_AUDIT_PASSWORD")
+output = ARGV.fetch(0)
+abort "output must be a JSON file under tmp/" unless output.match?(%r{\Atmp/[a-z0-9_-]+\.json\z})
+
+base = { host:, port:, user:, password:, connect_timeout: 3 }
+admin = PG.connect(**base, dbname: "postgres")
+admin.exec("BEGIN READ ONLY")
+admin.exec("SET LOCAL statement_timeout = '5s'")
+admin.exec("SET LOCAL lock_timeout = '1s'")
+databases =
+  admin.exec("SELECT datname FROM pg_database WHERE datname LIKE 'development\\_%' ORDER BY datname")
+    .map { |row| row.fetch("datname") }
+admin.exec("ROLLBACK")
+admin.close
+
+required = Dir.glob("db/*structure.sql").map do |path|
+  name = File.basename(path)
+  (name == "structure.sql") ? "primary" : name.delete_suffix("_structure.sql")
+end.sort
+raise RuntimeError, "expected logical databases missing" unless (required - databases.map { |name|
+  name.delete_prefix("development_").delete_suffix("_db")
+}).empty?
+
+catalog = []
+database_summaries = []
+databases.each do |database|
+  logical = database.delete_prefix("development_").delete_suffix("_db")
+  next unless required.include?(logical)
+
+  connection = PG.connect(**base, dbname: database)
+  connection.exec("BEGIN READ ONLY")
+  connection.exec("SET LOCAL statement_timeout = '5s'")
+  connection.exec("SET LOCAL lock_timeout = '1s'")
+  identity = connection.exec(<<~SQL).first
+    SELECT current_database() AS database, current_setting('server_version') AS server_version,
+           current_user AS username, inet_server_addr()::text AS server_address,
+           inet_server_port() AS server_port
+  SQL
+  tables = connection.exec(<<~SQL)
+    SELECT n.nspname AS schema, c.relname AS table_name, c.oid AS table_oid,
+           c.relkind, c.reltuples::bigint AS estimated_rows, c.relrowsecurity,
+           c.relforcerowsecurity, pg_table_size(c.oid) AS table_bytes,
+           pg_indexes_size(c.oid) AS index_bytes,
+           pg_total_relation_size(c.oid) AS total_bytes,
+           pg_has_role(c.relowner, 'USAGE') AS owner_role_access,
+           pg_has_role(c.relowner, 'MEMBER') AS owner_role_membership,
+           has_table_privilege(c.oid, 'SELECT') AS select_privilege
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND n.nspname NOT LIKE 'pg_toast%'
+       AND c.relkind IN ('r', 'p')
+     ORDER BY n.nspname, c.relname
+  SQL
+  columns = connection.exec(<<~SQL).group_by { |row| row.fetch("table_oid") }
+    SELECT a.attrelid AS table_oid, a.attname AS column_name,
+           format_type(a.atttypid, a.atttypmod) AS data_type,
+           a.attnotnull, a.attidentity, a.attgenerated,
+           (d.oid IS NOT NULL) AS has_default,
+           s.seqtypid::regtype::text AS sequence_type,
+           s.seqmax AS sequence_max,
+           sn.relname AS sequence_name,
+           dep.deptype AS sequence_dependency
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+      LEFT JOIN pg_depend dep ON dep.refobjid = c.oid AND dep.refobjsubid = a.attnum
+          AND dep.classid = 'pg_class'::regclass AND dep.deptype IN ('a', 'i')
+          AND dep.objid IN (SELECT oid FROM pg_class WHERE relkind = 'S')
+      LEFT JOIN pg_class sn ON sn.oid = dep.objid AND sn.relkind = 'S'
+      LEFT JOIN pg_sequence s ON s.seqrelid = sn.oid
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND n.nspname NOT LIKE 'pg_toast%'
+       AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
+     ORDER BY a.attrelid, a.attnum
+  SQL
+  constraints = connection.exec(<<~SQL).group_by { |row| row.fetch("table_oid") }
+    SELECT con.conrelid AS table_oid, con.conname AS name, con.contype AS type,
+           con.convalidated AS validated, con.confmatchtype AS match_type,
+           con.confupdtype AS update_action, con.confdeltype AS delete_action,
+           con.condeferrable AS deferrable, con.condeferred AS initially_deferred,
+           con.confrelid::regclass::text AS parent_table,
+           array_to_json(ARRAY(SELECT att.attname FROM unnest(con.conkey) WITH ORDINALITY k(num, ord)
+             JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = k.num ORDER BY k.ord)) AS child_columns,
+           array_to_json(ARRAY(SELECT att.attname FROM unnest(con.confkey) WITH ORDINALITY k(num, ord)
+             JOIN pg_attribute att ON att.attrelid = con.confrelid AND att.attnum = k.num ORDER BY k.ord)) AS parent_columns,
+           CASE WHEN con.contype = 'c' THEN md5(pg_get_expr(con.conbin, con.conrelid)) END AS check_hash
+      FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND n.nspname NOT LIKE 'pg_toast%'
+       AND c.relkind IN ('r', 'p')
+     ORDER BY con.conrelid, con.conname
+  SQL
+  indexes = connection.exec(<<~SQL).group_by { |row| row.fetch("table_oid") }
+    SELECT i.indrelid AS table_oid, ci.relname AS name, i.indisvalid AS valid,
+           i.indisready AS ready, i.indisunique AS unique_index, i.indisprimary AS primary_index,
+           i.indnkeyatts AS key_count, i.indnatts AS all_column_count,
+           (i.indpred IS NOT NULL) AS partial, (i.indexprs IS NOT NULL) AS expression,
+           pg_relation_size(ci.oid) AS bytes,
+           array_to_json(ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALITY k(num, ord)
+             LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.num
+             WHERE k.ord <= i.indnkeyatts ORDER BY k.ord)) AS key_columns,
+           md5(pg_get_indexdef(ci.oid)) AS definition_hash
+      FROM pg_index i JOIN pg_class ci ON ci.oid = i.indexrelid
+      JOIN pg_class ct ON ct.oid = i.indrelid
+      JOIN pg_namespace n ON n.oid = ct.relnamespace
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND n.nspname NOT LIKE 'pg_toast%'
+       AND ct.relkind IN ('r', 'p')
+     ORDER BY i.indrelid, ci.relname
+  SQL
+  versions =
+    connection.exec("SELECT version FROM schema_migrations ORDER BY version").map { |row|
+      row.fetch("version")
+    }
+  tables.each do |table|
+    oid = table.fetch("table_oid")
+    table["has_rows"] =
+      if table.fetch("relrowsecurity") == "t" || table.fetch("select_privilege") != "t"
+        "unverified_access"
+      elsif table.fetch("table_bytes").to_i > 32 * 1024 * 1024
+        "unverified_size"
+      else
+        qualified = "#{PG::Connection.quote_ident(table.fetch("schema"))}.#{PG::Connection.quote_ident(table.fetch("table_name"))}"
+        (connection.exec("SELECT EXISTS(SELECT 1 FROM #{qualified}) AS present").first.fetch("present") == "t") ? "yes" : "no"
+      end
+    table["columns"] = columns.fetch(oid, [])
+    table["constraints"] = constraints.fetch(oid, [])
+    table["indexes"] = indexes.fetch(oid, [])
+    table["logical_database"] = logical
+    table["environment"] = "development"
+    table.delete("table_oid")
+    catalog << table
+  end
+  database_summaries << identity.merge(
+    "logical_database" => logical, "table_count" => tables.ntuples,
+    "schema_migration_count" => versions.length,
+    "schema_migration_versions" => versions,
+  )
+  connection.exec("ROLLBACK")
+  connection.close
+end
+
+File.write(
+  output, JSON.pretty_generate(
+    { "captured_at" => Time.now.utc.iso8601,
+      "head" => `git rev-parse HEAD`.strip,
+      "databases" => database_summaries,
+      "tables" => catalog, },
+  ),
+)
+puts "#{database_summaries.length} databases; #{catalog.length} tables; output=#{output}; sha256=#{Digest::SHA256.file(output).hexdigest}"

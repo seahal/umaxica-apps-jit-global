@@ -21,23 +21,23 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
 
     edit = OidcClientRegistry.find!("edit-org")
     core_org = OidcClientRegistry.find!("core-org")
-    side_org = OidcClientRegistry.find!("side-org")
+    warp_org = OidcClientRegistry.find!("side-org")
 
     assert_equal "operator", edit.resource_type
     assert_not_equal core_org.redirect_uris, edit.redirect_uris
-    assert_not_equal side_org.redirect_uris, edit.redirect_uris
+    assert_not_equal warp_org.redirect_uris, edit.redirect_uris
     assert_not_equal core_org.jwt_namespace, edit.jwt_namespace
   end
 
   test "a first-party RP redirect is rejected for a different registered client" do
-    side = OidcClientRegistry.find!("side-app")
+    warp = OidcClientRegistry.find!("side-app")
 
     assert_raises(OidcClientRegistry::InvalidRedirectUri) do
       OidcAuthorizeRequestResolver.call(
         params: {
           response_type: "code",
           client_id: "core-app",
-          redirect_uri: side.redirect_uris.first,
+          redirect_uri: warp.redirect_uris.first,
           code_challenge: "challenge",
           code_challenge_method: "S256",
           state: "state",

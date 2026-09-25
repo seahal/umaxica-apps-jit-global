@@ -7,6 +7,15 @@ module PreferenceTransport
   private
 
   def set_preferences_cookie
+    if request.get? || request.head?
+      load_access_token_preference_record!(clear_invalid_cookie: false)
+      if @preferences.blank? && refresh_token_value.present?
+        load_read_only_preference_record_from_refresh_token!
+        return render_preference_refresh_error! if preference_refresh_failed?
+      end
+      return
+    end
+
     clear_preference_refresh_failure!
     return if load_access_token_payload
 

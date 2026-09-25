@@ -51,7 +51,6 @@ const { default: MfaChallengeChoice } = await import("@/features/auth/MfaChallen
 const { default: VerificationSetup } = await import("@/features/auth/VerificationSetup");
 const { default: SignInEmailNew } = await import("@/features/auth/SignInEmailNew");
 const { default: SignInEmailEdit } = await import("@/features/auth/SignInEmailEdit");
-const { default: SignInSecretNew } = await import("@/features/auth/SignInSecretNew");
 const { default: SignInPasskeyNew } = await import("@/features/auth/SignInPasskeyNew");
 const { default: PasskeyIndex } = await import("@/features/auth/settings/PasskeyIndex");
 const { default: PasskeyShow } = await import("@/features/auth/settings/PasskeyShow");
@@ -64,7 +63,6 @@ const { default: ComChallengesShow } = await import("@/pages/auth/com/sign/in/ch
 const { default: ComSetupsNew } = await import("@/pages/auth/com/verification/setups/new");
 const { default: ComEmailsNew } = await import("@/pages/auth/com/sign/in/emails/new");
 const { default: ComEmailsEdit } = await import("@/pages/auth/com/sign/in/emails/edit");
-const { default: ComSecretsNew } = await import("@/pages/auth/com/sign/in/secrets/new");
 const { default: ComPasskeysNew } = await import("@/pages/auth/com/sign/in/passkeys/new");
 const { default: ComSettingsIndex } = await import("@/pages/auth/com/settings/passkeys/index");
 const { default: ComSettingsShow } = await import("@/pages/auth/com/settings/passkeys/show");
@@ -270,28 +268,6 @@ describe("sign-in credential screens", () => {
     expect(markup).toContain("コードが正しくありません");
   });
 
-  it("SignInSecretNew reports the rejection message the server sent", () => {
-    const markup = renderToStaticMarkup(
-      <SignInSecretNew
-        title="パスワードでログイン"
-        action="/sign/in/secret"
-        pt={null}
-        ri="jp"
-        validation_failed_title="入力を確認してください"
-        identifier_label="ID"
-        identifier_placeholder="name@example.com"
-        secret_label="パスワード"
-        submit_label="送信"
-        back_link={{ label: "もどる", href: "/sign/in" }}
-        turnstile={turnstile}
-      />,
-    );
-
-    expect(markup).toContain("入力を確認してください");
-    expect(markup).toContain("資格情報が正しくありません");
-    expect(markup).toContain('type="password"');
-  });
-
   it("SignInPasskeyNew frames the shared ceremony panel", () => {
     const markup = renderToStaticMarkup(
       <SignInPasskeyNew
@@ -439,7 +415,6 @@ describe("auth/com page modules", () => {
     expect(ComSetupsNew).toBe(VerificationSetup);
     expect(ComEmailsNew).toBe(SignInEmailNew);
     expect(ComEmailsEdit).toBe(SignInEmailEdit);
-    expect(ComSecretsNew).toBe(SignInSecretNew);
     expect(ComPasskeysNew).toBe(SignInPasskeyNew);
     expect(ComSettingsIndex).toBe(PasskeyIndex);
     expect(ComSettingsShow).toBe(PasskeyShow);

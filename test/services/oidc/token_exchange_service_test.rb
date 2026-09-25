@@ -251,7 +251,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         client_id: "side-app",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "different-client-assertion",
-        token_endpoint_uri: "https://wide.app.localhost/oauth/token",
+        token_endpoint_uri: "https://warp.app.localhost/oauth/token",
         expected_resource_type: "client",
       )
 
@@ -1528,8 +1528,8 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     @user_session_token.reload
     root_family_id = @user_session_token.refresh_token_family_id
     root_discard_at = @user_session_token.discard_at
-    side_client = OidcClientRegistry.find("side-app")
-    side_redirect_uri = side_client.redirect_uris.first
+    warp_client = OidcClientRegistry.find("side-app")
+    warp_redirect_uri = warp_client.redirect_uris.first
 
     replay_result =
       OidcClientRegistry.stub(
@@ -1539,11 +1539,11 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
-          redirect_uri: side_redirect_uri,
+          redirect_uri: warp_redirect_uri,
           client_id: "side-app",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "side-app-client-assertion",
-          token_endpoint_uri: "https://wide.app.localhost/oauth/token",
+          token_endpoint_uri: "https://warp.app.localhost/oauth/token",
           code_verifier: @code_verifier,
           expected_resource_type: "client",
         )

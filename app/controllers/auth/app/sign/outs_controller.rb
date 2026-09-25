@@ -12,7 +12,6 @@ module Auth
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
-        skip_before_action :transparent_refresh_access_token, raise: false
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -31,7 +30,7 @@ module Auth
         end
 
         def create
-          # Coordinated logout continuation. Core, Side, and Palm origins run a three-step
+          # Coordinated logout continuation. Core, Warp, and Palm origins run a three-step
           # ceremony whose `sign_cleared` hop lands here after Base has cleared its own state,
           # and the one-shot logout challenge is the proof for that cross-host post. A
           # user-initiated sign-out on this surface ends only Auth ceremony state and then

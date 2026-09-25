@@ -14,6 +14,8 @@ class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     host! @host
+    VisitorSecretCredentialKind.ensure_defaults!
+    VisitorSecretCredentialStatus.ensure_defaults!
     cookies["csrf_token"] = csrf_token_value
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
@@ -33,6 +35,7 @@ class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     flow = VisitorSignUpFlow.order(:created_at).last
 
     assert_equal VisitorSignUpFlowStatus::CHECKPOINT_PENDING, flow.status_id
+    assert_predicate flow.principal_id, :present?
 
     patch auth_com_sign_up_check_email_birthdate_url(ri: "jp"),
           params: {

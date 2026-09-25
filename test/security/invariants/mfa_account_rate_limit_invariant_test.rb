@@ -9,8 +9,8 @@ module Security
   module Invariants
     # Second-factor verification must be bounded per account, not only per source IP.
     # An IP-keyed limit alone leaves a distributed attacker unbounded guesses against
-    # one account's 6-digit TOTP or its secret credential, once the primary factor is
-    # established. The email and SMS OTP channels already have a per-account lock
+    # one account's 6-digit TOTP once the primary factor is established. The email
+    # and SMS OTP channels already have a per-account lock
     # (app/models/concerns/otp_lockable.rb); these rules are its equivalent for the
     # factors that are verified in-process.
     #
@@ -21,7 +21,6 @@ module Security
 
       GUESSABLE_SECOND_FACTOR_CONTROLLERS = {
         "app/controllers/auth/app/sign/in/challenge/totps_controller.rb" => "mfa_totp_create_account",
-        "app/controllers/auth/app/sign/in/secrets_controller.rb" => "secret_credential_create_account",
       }.freeze
 
       test "every guessable second factor declares a per-account rate limit" do

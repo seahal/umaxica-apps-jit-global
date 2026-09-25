@@ -61,11 +61,6 @@ module Auth
               label: t("sign.com.authentication.new.links.passkey"),
               href: new_auth_com_sign_in_passkey_path(ri: params[:ri], pt: pt),
             },
-            {
-              key: "secret_credential",
-              label: t("sign.com.authentication.new.links.secret_credential"),
-              href: new_auth_com_sign_in_secret_path(ri: params[:ri], pt: pt),
-            },
           ]
         end
       end

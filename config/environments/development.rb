@@ -151,7 +151,9 @@ Rails.application.configure do
     boot_hosts.sign_origins,
     boot_hosts.core_origins,
     boot_hosts.base_origins,
-    boot_hosts.palm_origins,
+    boot_hosts.palm_service,
+    boot_hosts.docs_origins,
+    boot_hosts.news_origins,
     [boot_hosts.help_service, boot_hosts.help_corporate, boot_hosts.help_staff],
     boot_hosts.info_origins,
     boot_hosts.guid_service,
@@ -195,12 +197,12 @@ Rails.application.configure do
     news.com.localhost:3000
     news.org.localhost:3000
     news.app.localhost:3000
-    wide.com.localhost:3000
-    wide.com.localhost:3001
-    wide.org.localhost:3000
-    wide.org.localhost:3001
-    wide.app.localhost:3000
-    wide.app.localhost:3001
+    warp.com.localhost:3000
+    warp.com.localhost:3001
+    warp.org.localhost:3000
+    warp.org.localhost:3001
+    warp.app.localhost:3000
+    warp.app.localhost:3001
     palm.app.localhost:3000
     guid.net.localhost:3000
     edit.org.localhost:3000
@@ -273,9 +275,9 @@ Rails.application.configure do
     PUBLIC_CORE_CORPORATE_URL
     PUBLIC_CORE_STAFF_URL
     PUBLIC_CORE_DEVELOPER_URL
-    PUBLIC_SIDE_SERVICE_URL
-    PUBLIC_SIDE_CORPORATE_URL
-    PUBLIC_SIDE_STAFF_URL
+    PUBLIC_WARP_SERVICE_URL
+    PUBLIC_WARP_CORPORATE_URL
+    PUBLIC_WARP_STAFF_URL
     PUBLIC_PALM_SERVICE_URL
     PUBLIC_INFO_SERVICE_URL
     PUBLIC_INFO_CORPORATE_URL

@@ -7,13 +7,12 @@ require "base64"
 require "ostruct"
 
 class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::IntegrationTest
+  include AuthEmailMfaHelper
+
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     host! @host
     @origin_headers = { "HTTP_ORIGIN" => "http://#{@host}", "Origin" => "http://#{@host}" }.freeze
-    ensure_visitor_reference_records!
-    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
-    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
@@ -34,11 +33,6 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
 
-    @secret_credential = @visitor.visitor_secret_credentials.create!(
-      name: "Passkey MFA secret_credential",
-      password: "a" * 32,
-    )
-    @raw_secret_credential = "a" * 32
   end
 
   teardown do
@@ -210,17 +204,13 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
   private
 
   def establish_pending_mfa!
-    post(
-      auth_com_sign_in_secret_path(ri: "jp"), params: {
-        secret_credential_login_form: {
-          identifier: @visitor.visitor_emails.first.address,
-          secret_credential_value: @raw_secret_credential,
-        },
-        "cf-turnstile-response": "test_token",
-      },
+    email_record = @visitor.visitor_emails.first
+    sign_in_with_email_to_mfa!(
+      surface: :com,
+      email_record: email_record,
+      email: email_record.address,
+      headers: @origin_headers,
     )
-
-    assert_response :redirect
   end
 end
 

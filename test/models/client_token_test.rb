@@ -135,6 +135,97 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_equal @user.id, @token.user_id
   end
 
+  test "device session rejects a current token owned by another session" do
+    other_token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    session = @token.device_session
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientDeviceSession.transaction(requires_new: true) do
+          session.update_column(:current_refresh_token_id, other_token.id)
+          ClientDeviceSession.lease_connection.execute(
+            "SET CONSTRAINTS fk_client_device_sessions_on_current_refresh_token_owner IMMEDIATE",
+          )
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_client_device_sessions_on_current_refresh_token_owner",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "token device session reference must exist while remaining nullable" do
+    missing_session_id = ClientDeviceSession.lease_connection.select_value(
+      "SELECT nextval(pg_get_serial_sequence('client_device_sessions', 'id'))",
+    )
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, missing_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_client_tokens_on_device_session_id fk_client_tokens_on_user_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    @token.update_column(:device_session_id, nil)
+
+    assert_nil @token.reload.device_session_id
+  end
+
+  test "token device session must belong to the same user" do
+    other_user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    other_token = ClientToken.create!(user: other_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_client_tokens_on_user_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "deleting the current token clears only its session pointer" do
+    session = @token.device_session
+    session.update!(current_refresh_token: @token)
+
+    @token.delete
+
+    assert_nil session.reload.current_refresh_token_id
+    assert_predicate session, :persisted?
+  end
+
+  test "device session cannot be destroyed while token history references it" do
+    session = @token.device_session
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientDeviceSession.transaction(requires_new: true) do
+          ClientDeviceSession.where(id: session.id).delete_all
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_client_tokens_on_device_session_id fk_client_tokens_on_user_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert ClientDeviceSession.exists?(session.id)
+    assert ClientToken.exists?(@token.id)
+  end
+
+  test "destroying the actor removes tokens before its device sessions" do
+    session_id = @token.device_session.id
+
+    @user.destroy!
+
+    assert_not ClientToken.exists?(@token.id)
+    assert_not ClientDeviceSession.exists?(session_id)
+  end
+
   test "assigns numeric id automatically" do
     assert_not_nil @token.id
     assert_kind_of Integer, @token.id

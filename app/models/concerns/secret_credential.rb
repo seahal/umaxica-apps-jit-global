@@ -107,39 +107,6 @@ module SecretCredential
     end
   end
 
-  def verify_and_consume!(raw_secret_credential, now: Time.current)
-    with_lock do
-      reload
-
-      # Perform authentication first to maintain constant-time comparison
-      auth_result = authenticate(raw_secret_credential)
-
-      # Then check other conditions
-      return false unless active?
-      return false if expire_if_needed!(now: now)
-
-      if uses_remaining_available?
-        return false unless Integer(uses_remaining.to_s, 10).positive?
-      end
-      return false unless auth_result
-
-      self.last_used_at = now
-      if uses_remaining_available?
-        self.uses_remaining -= 1
-        if uses_remaining.zero?
-          self[self.class.identity_secret_credential_status_id_column] = self.class.status_id_for(:used)
-        end
-      else
-        # Fallback for secret_credentials without uses_remaining persistence: mark as used after first success.
-        self[self.class.identity_secret_credential_status_id_column] = self.class.status_id_for(:used)
-      end
-
-      save!
-    end
-
-    true
-  end
-
   def expire_if_needed!(now: Time.current)
     return false unless active?
     return false unless expired_by_time?(now)

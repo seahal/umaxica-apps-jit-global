@@ -26,6 +26,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarAssignmentTest < ActiveSupport::TestCase
   setup do
@@ -217,8 +218,8 @@ class AvatarAssignmentTest < ActiveSupport::TestCase
       is_system: false,
     )
 
-    Avatar.create!(
-      moniker: "Assignment Test Avatar",
+    AvatarTestFactory.create!(
+      moniker: "Assign Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )

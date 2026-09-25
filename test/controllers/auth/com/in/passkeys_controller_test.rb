@@ -196,6 +196,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
   end
 
   test "verification rejects a disabled discoverable credential" do
+    VisitorPasskeyStatus.ensure_defaults!
     @passkey.update!(status_id: VisitorPasskeyStatus::DISABLED)
     post auth_com_sign_in_passkey_options_path(ri: "jp"),
          params: {},

@@ -36,7 +36,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     base/app base/com base/org
     core/app core/com core/org
     edit/org
-    side/app side/com side/org
+    warp/app warp/com warp/org
     palm/app
   ).freeze
 
@@ -86,9 +86,9 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
     app/controllers/edit/org/oidc/callbacks_controller.rb
-    app/controllers/side/app/oidc/callbacks_controller.rb
-    app/controllers/side/com/oidc/callbacks_controller.rb
-    app/controllers/side/org/oidc/callbacks_controller.rb
+    app/controllers/warp/app/oidc/callbacks_controller.rb
+    app/controllers/warp/com/oidc/callbacks_controller.rb
+    app/controllers/warp/org/oidc/callbacks_controller.rb
   ).freeze
 
   # Controllers that render HTML on a participating target and still run without region

@@ -11,6 +11,11 @@ module Base
         include SignOidcLogout
         include ::SurfaceInertiaPage
 
+        COORDINATED_LOGOUT_TRUSTED_ORIGINS = JitHostOriginEnv.trusted_origins(
+          ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
+          ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        ).freeze
         AUTHENTICATION_MODE = :open
         # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
         # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
@@ -18,6 +23,15 @@ module Base
         layout -> { @render_surface_erb_layout ? "base/com/application" : "base/com/inertia" }
 
         declare_authentication_mode! :open
+        protect_from_forgery using: :header_only,
+                             trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS,
+                             with: :exception,
+                             only: :create,
+                             if: -> { params[:logout_challenge].present? }
+
+        before_action only: :create do
+          verify_coordinated_sign_out_post!(trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS)
+        end
 
         def create
           show

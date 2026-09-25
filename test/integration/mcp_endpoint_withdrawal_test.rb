@@ -13,9 +13,9 @@ class McpEndpointWithdrawalTest < ActionDispatch::IntegrationTest
     ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
     ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
     ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-    ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"),
-    ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"),
-    ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"),
+    ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
+    ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
+    ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),
   ].freeze
 
   test "POST /mcp is not routed on any host that used to serve it" do

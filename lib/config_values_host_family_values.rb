@@ -15,12 +15,16 @@ module ConfigValues
       :base_service,
       :base_corporate,
       :base_staff,
-      :side_service,
-      :side_corporate,
-      :side_staff,
+      :warp_service,
+      :warp_corporate,
+      :warp_staff,
       :palm_service,
-      :palm_corporate,
-      :palm_staff,
+      :docs_service,
+      :docs_corporate,
+      :docs_staff,
+      :news_service,
+      :news_corporate,
+      :news_staff,
       :help_service,
       :help_corporate,
       :help_staff,
@@ -52,16 +56,20 @@ module ConfigValues
         [auth_service, auth_corporate, auth_staff]
       end
 
-      def side_origins
-        [side_service, side_corporate, side_staff]
+      def warp_origins
+        [warp_service, warp_corporate, warp_staff]
       end
 
       def base_origins
         [base_service, base_corporate, base_staff]
       end
 
-      def palm_origins
-        [palm_service, palm_corporate, palm_staff]
+      def docs_origins
+        [docs_service, docs_corporate, docs_staff]
+      end
+
+      def news_origins
+        [news_service, news_corporate, news_staff]
       end
 
       def info_origins
@@ -133,24 +141,17 @@ class << ConfigValues::HostFamilyValues
 
   def host_family_secondary_origins(env:, production:)
     {
-      side_service: origin(
-        env, side_key(env, "SERVICE"), development_host(production, "www-jp.umaxica.app"), production: production,
+      warp_service: origin(
+        env, warp_key(env, "SERVICE"), development_host(production, "www-jp.umaxica.app"), production: production,
       ),
-      side_corporate: origin(
-        env, side_key(env, "CORPORATE"), development_host(production, "www-jp.umaxica.com"), production: production,
+      warp_corporate: origin(
+        env, warp_key(env, "CORPORATE"), development_host(production, "www-jp.umaxica.com"), production: production,
       ),
-      side_staff: origin(
-        env, side_key(env, "STAFF"), development_host(production, "www-jp.umaxica.org"), production: production,
+      warp_staff: origin(
+        env, warp_key(env, "STAFF"), development_host(production, "www-jp.umaxica.org"), production: production,
       ),
       palm_service: origin(
         env, "PALM_SERVICE_URL", development_host(production, "palm-jp.umaxica.app"), production: production,
-      ),
-      palm_corporate: origin(
-        env, "PALM_CORPORATE_URL", development_host(production, "palm-jp.umaxica.com"), production: production,
-      ),
-      palm_staff: origin(
-        env, "PALM_STAFF_URL", development_host(production, "palm-jp.umaxica.org"),
-        production: production,
       ),
       help_service: origin(
         env, "HELP_SERVICE_URL", development_host(production, "help.app.localhost"), production: production,
@@ -172,7 +173,37 @@ class << ConfigValues::HostFamilyValues
         env, "INFO_STAFF_URL", development_host(production, "info.org.localhost"),
         production: production,
       ),
-    }.merge(host_family_utility_origins(env: env, production: production))
+    }.merge(host_family_content_origins(env: env, production: production))
+      .merge(host_family_utility_origins(env: env, production: production))
+  end
+
+  def host_family_content_origins(env:, production:)
+    {
+      docs_service: origin(
+        env, "PRIVATE_DOCS_SERVICE_URL", development_host(production, "docs.app.localhost"),
+        production: production,
+      ),
+      docs_corporate: origin(
+        env, "PRIVATE_DOCS_CORPORATE_URL", development_host(production, "docs.com.localhost"),
+        production: production,
+      ),
+      docs_staff: origin(
+        env, "PRIVATE_DOCS_STAFF_URL", development_host(production, "docs.org.localhost"),
+        production: production,
+      ),
+      news_service: origin(
+        env, "PRIVATE_NEWS_SERVICE_URL", development_host(production, "news.app.localhost"),
+        production: production,
+      ),
+      news_corporate: origin(
+        env, "PRIVATE_NEWS_CORPORATE_URL", development_host(production, "news.com.localhost"),
+        production: production,
+      ),
+      news_staff: origin(
+        env, "PRIVATE_NEWS_STAFF_URL", development_host(production, "news.org.localhost"),
+        production: production,
+      ),
+    }
   end
 
   def host_family_utility_origins(env:, production:)
@@ -195,13 +226,9 @@ class << ConfigValues::HostFamilyValues
     end
   end
 
-  # Resolves the ENV key for a side surface (service/corporate/staff).
-  def side_key(env, surface)
-    if env.key?("SIDE_#{surface}_URL")
-      "SIDE_#{surface}_URL"
-    else
-      "PUBLIC_SIDE_#{surface}_URL"
-    end
+  # Resolves the canonical PUBLIC_WARP input for a Warp surface.
+  def warp_key(env, surface)
+    "PUBLIC_WARP_#{surface}_URL"
   end
 
   # Resolves the ENV key for an auth surface (service/corporate/staff).
@@ -221,7 +248,7 @@ class << ConfigValues::HostFamilyValues
 
   # Resolves the ENV key for a core surface (service/corporate/staff).
   #
-  # PUBLIC_CORE_*_URL wins over CORE_*_URL, which is the reverse of base_key/side_key/auth_key.
+  # PUBLIC_CORE_*_URL wins over CORE_*_URL, which is the reverse of base_key/warp_key/auth_key.
   # config/routes/core.rb constrains the Core surfaces on
   # `ENV["PUBLIC_CORE_*_URL"] || ENV["CORE_*_URL"]`, so the host Rails answers on already
   # prefers the PUBLIC value. Boot config feeds production Host Authorization and the
@@ -254,5 +281,5 @@ class << ConfigValues::HostFamilyValues
   end
 
   private :host_family_origins, :host_family_primary_origins, :host_family_secondary_origins,
-          :host_family_utility_origins, :guid_key, :edit_key
+          :host_family_content_origins, :host_family_utility_origins, :guid_key, :edit_key
 end

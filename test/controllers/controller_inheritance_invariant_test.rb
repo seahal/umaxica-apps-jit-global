@@ -26,11 +26,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
 
     # Sign::Org::Sign::Up::* inheriting from Sign::Org::Sign::Up::* base controllers.
 
-    # Base identity compatibility shims reuse the existing secrets removal and
-    # rotation implementations until the identity/secrets split is flattened.
-    "app/controllers/base/app/identity/removals_controller.rb",
-    "app/controllers/base/app/identity/rotations_controller.rb",
-
     # Sign-out completion and emergency revocation controllers currently share
     # the reviewed protocol implementations until those flows are flattened.
     "app/controllers/base/org/support/visitors/sessions/emergency_revocations_controller.rb",
@@ -44,7 +39,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/in/emails_controller.rb
     app/controllers/auth/app/sign/in/guards_controller.rb
     app/controllers/auth/app/sign/in/passkeys_controller.rb
-    app/controllers/auth/app/sign/in/secrets_controller.rb
     app/controllers/auth/app/sign/in/sessions_controller.rb
     app/controllers/auth/app/settings/passkeys_controller.rb
     app/controllers/auth/app/sign/up/check/apple/birthdates_controller.rb
@@ -54,7 +48,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/up/check/google/birthdates_controller.rb
     app/controllers/auth/app/sign/up/check/telephone/birthdates_controller.rb
     app/controllers/auth/app/sign/up/check/telephone/otps_controller.rb
-    app/controllers/auth/app/sign/up/check/telephone/passcodes_controller.rb
     app/controllers/auth/app/sign/up/check/telephone/passkeys_controller.rb
     app/controllers/auth/app/sign/up/emails_controller.rb
     app/controllers/auth/app/sign/up/guard/apples_controller.rb
@@ -67,14 +60,12 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/com/sign/in/emails_controller.rb
     app/controllers/auth/com/sign/in/guards_controller.rb
     app/controllers/auth/com/sign/in/passkeys_controller.rb
-    app/controllers/auth/com/sign/in/secrets_controller.rb
     app/controllers/auth/com/sign/in/sessions_controller.rb
     app/controllers/auth/com/settings/passkeys_controller.rb
     app/controllers/auth/com/sign/up/check/email/birthdates_controller.rb
     app/controllers/auth/com/sign/up/check/email/otps_controller.rb
     app/controllers/auth/com/sign/up/check/telephone/birthdates_controller.rb
     app/controllers/auth/com/sign/up/check/telephone/otps_controller.rb
-    app/controllers/auth/com/sign/up/check/telephone/passcodes_controller.rb
     app/controllers/auth/com/sign/up/check/telephone/passkeys_controller.rb
     app/controllers/auth/com/sign/up/emails_controller.rb
     app/controllers/auth/com/sign/up/guard/emails_controller.rb
@@ -84,7 +75,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/org/sign/in/challenges_controller.rb
     app/controllers/auth/org/sign/in/guards_controller.rb
     app/controllers/auth/org/sign/in/passkeys_controller.rb
-    app/controllers/auth/org/sign/in/secrets_controller.rb
     app/controllers/auth/org/sign/in/sessions_controller.rb
     app/controllers/auth/org/settings/passkeys_controller.rb
     app/controllers/auth/org/sign/up/invitations_controller.rb

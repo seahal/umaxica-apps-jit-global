@@ -2,15 +2,14 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "base64"
 # require "helpers/global_test_support"
 
 class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
+  include AuthEmailMfaHelper
+
   setup do
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     ensure_visitor_reference_records!
-    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
-    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
@@ -18,18 +17,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       email_address: "com_challenge_#{SecureRandom.hex(4)}@example.com",
     )
     @visitor.update!(mfa_level_enabled: true)
-    @visitor.visitor_telephones.create!(
-      number: "+819011111111",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
-
-    _secret_credential, @raw_secret_credential = VisitorSecretCredential.issue!(
-      name: "Hub secret_credential",
-      visitor_id: @visitor.id,
-      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN,
-      uses: 10,
-      status: :active,
-    )
   end
 
   teardown do
@@ -52,7 +39,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   TEST_VERIFICATION_COOKIE_PREFIX = "test_verified:"
 
-  test "show offers the passkey ceremony to a visitor holding an active passkey" do
+  test "show offers the passkey ceremony after email authentication" do
     VisitorPasskey.create!(
       visitor: @visitor,
       webauthn_id: Base64.urlsafe_encode64("com_challenge_passkey_id", padding: false),
@@ -62,16 +49,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
 
-    post auth_com_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @visitor.visitor_emails.first.address,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_com_sign_in_challenge_path
-
+    establish_pending_mfa!
     follow_redirect!
     follow_redirect!
 
@@ -81,17 +59,8 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     assert_nil inertia_props.fetch("no_methods_notice")
   end
 
-  test "show tells a visitor with no usable factor that no method is available" do
-    post auth_com_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @visitor.visitor_emails.first.address,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_com_sign_in_challenge_path
-
+  test "show tells an email-authenticated visitor with no passkey that no method is available" do
+    establish_pending_mfa!
     follow_redirect!
     follow_redirect!
 
@@ -102,6 +71,15 @@ class Auth::Com::Sign::In::ChallengesControllerTest
   end
 
   private
+
+  def establish_pending_mfa!
+    email_record = @visitor.visitor_emails.first
+    sign_in_with_email_to_mfa!(
+      surface: :com,
+      email_record: email_record,
+      email: email_record.address,
+    )
+  end
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host

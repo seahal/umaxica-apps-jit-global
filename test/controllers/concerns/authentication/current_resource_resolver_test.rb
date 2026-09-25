@@ -21,9 +21,13 @@ module Authentication
 
     class FakeTokenScope
       FakeToken =
-        Struct.new(:public_id, :oidc_jti, :last_used_at, :created_at) do
+        Struct.new(
+          :public_id, :oidc_jti, :last_used_at, :created_at, :user_id,
+          :device_session_id, :device_session, :visitor_id, :staff_id,
+        ) do
           def has_attribute?(attribute)
-            %i(public_id oidc_jti last_used_at created_at).include?(attribute.to_sym)
+            %i(public_id oidc_jti last_used_at created_at user_id device_session_id visitor_id staff_id)
+              .include?(attribute.to_sym)
           end
 
           # Records the throttled activity write so tests can assert when a
@@ -36,7 +40,9 @@ module Authentication
         end
 
       class << self
-        attr_accessor :token_oidc_jti, :token_last_used_at, :token_created_at # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+        attr_accessor :token_oidc_jti, :token_last_used_at, :token_created_at,
+                      :token_user_id, :token_device_session_id, :token_device_session,
+                      :token_visitor_id, :token_staff_id # rubocop:disable ThreadSafety/ClassAndModuleAttributes
 
         def touches
           @touches ||= []
@@ -67,6 +73,9 @@ module Authentication
         FakeToken.new(
           "token_public_id", self.class.token_oidc_jti,
           self.class.token_last_used_at, self.class.token_created_at,
+          self.class.token_user_id || 123, self.class.token_device_session_id,
+          self.class.token_device_session, self.class.token_visitor_id || 123,
+          self.class.token_staff_id || 123,
         )
       end
     end
@@ -241,6 +250,152 @@ module Authentication
           assert_equal payload, result.payload
         end
       end
+    end
+
+    test "rejects an existing token whose actor differs from the access token subject" do
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
+      FakeTokenScope.token_oidc_jti = "current-jti"
+      FakeTokenScope.token_user_id = 999
+
+      AuthenticationToken.stub(:decode, payload) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
+          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+            result = resolve_client_resource
+
+            assert_equal :actor_mismatch, result.failure_reason
+            assert_nil result.resource
+          end
+        end
+      end
+    ensure
+      FakeTokenScope.token_oidc_jti = nil
+      FakeTokenScope.token_user_id = nil
+    end
+
+    test "rejects visitor and operator tokens whose actor differs from the access token subject" do
+      FakeTokenScope.token_oidc_jti = "current-jti"
+
+      { "visitor" => :token_visitor_id, "operator" => :token_staff_id }.each do |surface, actor_slot|
+        payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:#{surface}", "jti" => "current-jti" }
+        FakeTokenScope.public_send("#{actor_slot}=", 999)
+
+        AuthenticationToken.stub(:decode, payload) do
+          AuthenticationToken.stub(:resource_type_scope_matches?, true) do
+            OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+              result = AuthenticationCurrentResourceResolver.new(
+                access_token: "token",
+                request_host: "#{surface}.localhost",
+                resource_type: surface,
+                resource_class: FakeResourceClass,
+                token_class: FakeTokenClass,
+              ).call
+
+              assert_equal :actor_mismatch, result.failure_reason
+              assert_nil result.resource
+            end
+          end
+        end
+        FakeTokenScope.public_send("#{actor_slot}=", nil)
+      end
+    ensure
+      FakeTokenScope.token_oidc_jti = nil
+      FakeTokenScope.token_visitor_id = nil
+      FakeTokenScope.token_staff_id = nil
+    end
+
+    test "rejects a bound token when its device session is missing" do
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
+      FakeTokenScope.token_oidc_jti = "current-jti"
+      FakeTokenScope.token_device_session_id = 42
+
+      AuthenticationToken.stub(:decode, payload) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
+          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+            result = resolve_client_resource
+
+            assert_equal :token_session_not_found, result.failure_reason
+            assert_nil result.resource
+          end
+        end
+      end
+    ensure
+      FakeTokenScope.token_oidc_jti = nil
+      FakeTokenScope.token_device_session_id = nil
+    end
+
+    test "rejects a bound token when its device session belongs to another actor" do
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
+      FakeTokenScope.token_oidc_jti = "current-jti"
+      FakeTokenScope.token_device_session_id = 42
+      FakeTokenScope.token_device_session = Struct.new(:user_id, :public_id, :dpop_jkt, :status_id, :revoked_at)
+        .new(999, "session_1", nil, DeviceSessionable::STATUS_ACTIVE, nil)
+
+      AuthenticationToken.stub(:decode, payload) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
+          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+            result = resolve_client_resource
+
+            assert_equal :actor_mismatch, result.failure_reason
+            assert_nil result.resource
+          end
+        end
+      end
+    ensure
+      FakeTokenScope.token_oidc_jti = nil
+      FakeTokenScope.token_device_session_id = nil
+      FakeTokenScope.token_device_session = nil
+    end
+
+    test "accepts a bound token when its device session belongs to the same actor" do
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
+      FakeTokenScope.token_oidc_jti = "current-jti"
+      FakeTokenScope.token_device_session_id = 42
+      FakeTokenScope.token_device_session = Struct.new(:user_id, :public_id, :dpop_jkt, :status_id, :revoked_at)
+        .new(123, "session_1", nil, DeviceSessionable::STATUS_ACTIVE, nil)
+
+      AuthenticationToken.stub(:decode, payload) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
+          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+            result = resolve_client_resource
+
+            assert_nil result.failure_reason
+            assert_equal 123, result.resource.id
+            assert_equal "session_1", result.session_public_id
+          end
+        end
+      end
+    ensure
+      FakeTokenScope.token_oidc_jti = nil
+      FakeTokenScope.token_device_session_id = nil
+      FakeTokenScope.token_device_session = nil
+    end
+
+    test "rejects a bound token when its device session is revoked by time or status" do
+      payload = { "sub" => "123", "sid" => "sess_1", "scope" => "domain:client", "jti" => "current-jti" }
+      FakeTokenScope.token_oidc_jti = "current-jti"
+      FakeTokenScope.token_device_session_id = 42
+      session_class = Struct.new(:user_id, :public_id, :dpop_jkt, :status_id, :revoked_at)
+
+      AuthenticationToken.stub(:decode, payload) do
+        AuthenticationToken.stub(:resource_type_scope_matches?, true) do
+          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+            [
+              session_class.new(123, "session_1", nil, DeviceSessionable::STATUS_REVOKED, nil),
+              session_class.new(123, "session_1", nil, DeviceSessionable::STATUS_ACTIVE, Time.current),
+            ].each do |session|
+              FakeTokenScope.token_device_session = session
+              result = resolve_client_resource
+
+              assert_equal :token_session_not_found, result.failure_reason
+              assert_nil result.resource
+            end
+          end
+        end
+      end
+    ensure
+      FakeTokenScope.token_oidc_jti = nil
+      FakeTokenScope.token_device_session_id = nil
+      FakeTokenScope.token_device_session = nil
     end
 
     test "returns idle_timeout when the session has been inactive beyond the window" do

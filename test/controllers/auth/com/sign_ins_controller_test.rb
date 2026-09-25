@@ -49,7 +49,7 @@ module Auth
 
         assert_includes hrefs, new_auth_com_sign_in_email_path(ri: "jp")
         assert_includes hrefs, new_auth_com_sign_in_passkey_path(ri: "jp")
-        assert_includes hrefs, new_auth_com_sign_in_secret_path(ri: "jp")
+        assert_equal 2, hrefs.length
       end
 
       test "does not show social login buttons" do

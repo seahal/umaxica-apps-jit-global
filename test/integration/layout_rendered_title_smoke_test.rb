@@ -57,18 +57,18 @@ class LayoutRenderedTitleSmokeTest < ActionDispatch::IntegrationTest
         tld: "ORG",
       },
       {
-        host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "wide.app.localhost"),
-        path: -> { new_side_app_sign_out_path(ri: "jp") },
+        host: ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
+        path: -> { new_warp_app_sign_out_path(ri: "jp") },
         tld: "APP",
       },
       {
-        host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "wide.com.localhost"),
-        path: -> { new_side_com_sign_out_path(ri: "jp") },
+        host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
+        path: -> { new_warp_com_sign_out_path(ri: "jp") },
         tld: "COM",
       },
       {
-        host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "wide.org.localhost"),
-        path: -> { new_side_org_sign_out_path(ri: "jp") },
+        host: ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),
+        path: -> { new_warp_org_sign_out_path(ri: "jp") },
         tld: "ORG",
       },
       {

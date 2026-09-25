@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Render a conservative table matrix from a read-only PostgreSQL catalog capture."""
+
+import json
+import re
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+assert source.as_posix().startswith("tmp/") and source.suffix == ".json"
+assert target.as_posix().startswith("memos/") and target.suffix == ".md"
+catalog = json.loads(source.read_text())
+tables = catalog["tables"]
+inventory = Path("memos/postgresql-integrity-current-static-inventory.md").read_text()
+classifications = {}
+logical = None
+kind = None
+for line in inventory.splitlines():
+    match = re.fullmatch(r"## ([a-z_]+)_structure\.sql", line)
+    if match:
+        logical = match.group(1)
+        kind = None
+    elif line == "## structure.sql":
+        logical = "primary"
+        kind = None
+    elif line.startswith("### ACTIVE_APP"):
+        kind = "OWNED"
+    elif line.startswith("### LEGACY_CANDIDATE"):
+        kind = "OWNED"
+    elif line.startswith("### THIRD_PARTY"):
+        kind = "THIRD_PARTY"
+    elif line.startswith("### UNCERTAIN"):
+        kind = "UNCERTAIN"
+    elif line.startswith("## "):
+        kind = None
+    if logical and kind and line.startswith("- "):
+        for schema, name in re.findall(r"`([^.`]+)\.([^.`]+)`", line):
+            classifications[(logical, schema, name)] = kind
+
+# Model-free tables remain application-owned when the logical database's own
+# migrations created or renamed them. Current runtime use remains a separate question.
+migration_roots = {
+    "app_zenith": ("app_principals_migrate", "app_zenith_migrate"),
+    "com_zenith": ("com_principals_migrate", "com_zenith_migrate"),
+    "org_zenith": ("org_principals_migrate", "org_zenith_migrate"),
+    "avatar": ("avatars_migrate",),
+    "chronicle": ("chronicle_migrate",),
+}
+migration_sources = {
+    logical: [(path, path.read_text(errors="replace"))
+              for directory in directories for path in Path("db", directory).glob("*.rb")]
+    for logical, directories in migration_roots.items()
+}
+ownership_evidence = {}
+for key, kind in list(classifications.items()):
+    if kind != "UNCERTAIN":
+        continue
+    logical, _schema, name = key
+    creation = re.compile(r"(?:create_table\s*\(?\s*[:\"']|CREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:public\.)?)" +
+                          re.escape(name) + r"\b", re.IGNORECASE)
+    matches = [str(path) for path, text in migration_sources[logical] if creation.search(text)]
+    if not matches:
+        matches = [str(path) for path, text in migration_sources[logical]
+                   if re.search(r":(?:" + re.escape(name) + r")\b", text) and "rename" in text]
+    if matches:
+        classifications[key] = "OWNED"
+        ownership_evidence[key] = matches[0]
+
+model_paths = defaultdict(set)
+for model in json.loads(Path("tmp/postgresql-model-map.json").read_text()):
+    assert "error" not in model
+    source_path = model["source"] or "source unresolved"
+    source_path = source_path.removeprefix(str(Path.cwd()) + "/")
+    model_paths[(model["connection"], model["table"])].add(f"{model['model']} ({source_path})")
+
+runtime_hits = defaultdict(set)
+for root in (Path("app"), Path("lib")):
+    for file in root.rglob("*.rb"):
+        text = file.read_text(errors="replace")
+        for token in set(re.findall(r"\b[a-z][a-z0-9_]{3,}\b", text)):
+            runtime_hits[token].add(str(file))
+
+counts = Counter()
+findings = Counter()
+rows = []
+for table in tables:
+    logical = table["logical_database"]
+    schema = table["schema"]
+    name = table["table_name"]
+    kind = classifications.get((logical, schema, name), "UNCERTAIN")
+    counts[kind] += 1
+    constraints = table["constraints"]
+    columns = table["columns"]
+    indexes = table["indexes"]
+    pk = [c for c in constraints if c["type"] == "p"]
+    fks = [c for c in constraints if c["type"] == "f"]
+    checks = [c for c in constraints if c["type"] == "c"]
+    unvalidated = [c for c in constraints if c["validated"] == "f"]
+    invalid = [i for i in indexes if i["valid"] == "f" or i["ready"] == "f"]
+    pkcols = json.loads(pk[0]["child_columns"]) if len(pk) == 1 else []
+    pktypes = [c["data_type"] for c in columns if c["column_name"] in pkcols]
+    narrow_sequence = any(c["column_name"] in pkcols and c["sequence_type"] not in (None, "bigint") for c in columns)
+    nullable = sum(c["attnotnull"] == "f" for c in columns)
+    variable = sum(c["data_type"].startswith(("text", "character varying", "bytea", "json")) for c in columns)
+    missing_fk_index = 0
+    for fk in fks:
+        fkcols = json.loads(fk["child_columns"])
+        if not any(
+            i["valid"] == "t" and i["partial"] == "f" and i["expression"] == "f"
+            and json.loads(i["key_columns"])[: len(fkcols)] == fkcols
+            for i in indexes
+        ):
+            missing_fk_index += 1
+    paths = sorted(model_paths[(logical, name)])
+    hits = sorted(runtime_hits[name] - set(paths))
+    if kind != "THIRD_PARTY":
+        findings["evaluated"] += 1
+        findings["no_pk"] += not pk
+        findings["non_bigint_pk_component"] += any(data_type != "bigint" for data_type in pktypes)
+        findings["composite_pk"] += len(pkcols) > 1
+        findings["narrow_sequence"] += narrow_sequence
+        findings["unvalidated"] += len(unvalidated)
+        findings["invalid_index"] += len(invalid)
+        findings["fk_without_exact_leading_index"] += missing_fk_index
+        findings["no_model_or_runtime_name_hit"] += not paths and not hits
+    flags = []
+    if not pk:
+        flags.append("NO_PK")
+    if any(data_type != "bigint" for data_type in pktypes):
+        flags.append("PK_TYPE_REVIEW")
+    if narrow_sequence:
+        flags.append("NARROW_SEQ")
+    if unvalidated:
+        flags.append(f"NOT_VALID:{len(unvalidated)}")
+    if invalid:
+        flags.append(f"INVALID_INDEX:{len(invalid)}")
+    if missing_fk_index:
+        flags.append(f"FK_INDEX_REVIEW:{missing_fk_index}")
+    if table["relrowsecurity"] == "t":
+        flags.append("RLS_REVIEW")
+    if not paths and not hits and kind != "THIRD_PARTY":
+        flags.append("USE_UNCONFIRMED")
+    if not flags:
+        flags.append("NO_CATALOG_FLAG")
+    evidence = paths[:1] or hits[:1] or [ownership_evidence[(logical, schema, name)]] if (
+        paths or hits or (logical, schema, name) in ownership_evidence
+    ) else []
+    rows.append(
+        f"| {logical} | development | {schema} | `{name}` | {kind} | "
+        f"{'; '.join(evidence) if evidence else 'model/use unresolved'} | "
+        f"{','.join(pktypes) if pk else 'none'} | {len(fks)} | {nullable}/{len(columns)} | "
+        f"{variable} | {len(checks)} | {len(indexes)} | {missing_fk_index} | "
+        f"{table['has_rows']} | {table['estimated_rows']} | {table['total_bytes']} | {', '.join(flags)} |"
+    )
+
+assert len(rows) == len(tables)
+assert sum(counts.values()) == len(tables)
+header = f"""# Global PostgreSQL Integrity Audit Matrix
+
+Captured at {catalog['captured_at']} against commit `{catalog['head']}` with uncommitted changes present. Sources: `{source}` (local, redacted catalog only), a 741-model Rails runtime map through verified isolated databases, and the logical databases' migration histories. All {len(tables)} live tables in {len(catalog['databases'])} Global logical development databases were inspected through read-only catalog queries. Model-free tables are classified `OWNED` only when the same logical database's application migrations created or renamed them; their current use remains unproven. `THIRD_PARTY` covers recognized Rails/gem schemas.
+
+| Classification | Tables |
+| --- | ---: |
+| OWNED | {counts['OWNED']} |
+| THIRD_PARTY | {counts['THIRD_PARTY']} |
+| UNCERTAIN | {counts['UNCERTAIN']} |
+| Total | {len(tables)} |
+
+Catalog flags among {findings['evaluated']} assessed non-third-party tables: no PK {findings['no_pk']}; PKs with a non-bigint component {findings['non_bigint_pk_component']}; composite PKs {findings['composite_pk']}; narrow attached sequence {findings['narrow_sequence']}; unvalidated constraints {findings['unvalidated']}; invalid indexes {findings['invalid_index']}; FKs lacking an exact leading-column nonpartial index {findings['fk_without_exact_leading_index']}; no inferred model or exact runtime name hit {findings['no_model_or_runtime_name_hit']}. These are review flags, not defect or deletion verdicts. A nonexact index may still serve a query, and an exact index may still be unnecessary or inefficient.
+
+Every row records PK, FK, nullable-column, variable-length-column, CHECK, index, row-presence, estimated-growth and size evidence. The `Review` column is the result of catalog screening for all audit categories. Business null/length/state contracts, actual query workload, growth rates, and unused status require separate evidence; absence of a flag is not a pass for those contracts. `has_rows` is a bounded `EXISTS` result, not a count or use claim. `estimated_rows` is PostgreSQL's estimate, not a count. `total_bytes` is a point-in-time catalog value, not a performance prediction. A model, static name hit, or migration proves mapping or ownership only; it does not prove runtime execution or non-use.
+
+| Logical DB | Environment | Schema | Table | Owner class | Mapping/ownership evidence | PK type | FKs | Nullable cols | Variable cols | CHECKs | Indexes | FK index review | Has rows | Estimated rows | Total bytes | Review |
+| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |
+"""
+target.write_text(header + "\n".join(rows) + "\n")
+print(f"wrote {target}: {len(rows)} tables, {dict(counts)}, {dict(findings)}")

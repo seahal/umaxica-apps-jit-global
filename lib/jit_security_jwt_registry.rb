@@ -17,6 +17,7 @@ module JitSecurityJwtRegistry
     SIGN_APP SIGN_COM SIGN_ORG
     ACME_APP ACME_COM ACME_ORG
     CORE_APP CORE_COM CORE_ORG
+    WARP_APP WARP_COM WARP_ORG
     BASE_APP BASE_COM BASE_ORG
   ).freeze
   OIDC_CLIENT_NAMESPACES = %w(
@@ -37,9 +38,9 @@ module JitSecurityJwtRegistry
     "CORE_APP" => "https://jpx.umaxica.app",
     "CORE_COM" => "https://jpx.umaxica.com",
     "CORE_ORG" => "https://jpx.umaxica.org",
-    "SIDE_APP" => "https://www-jp.umaxica.app",
-    "SIDE_COM" => "https://www-jp.umaxica.com",
-    "SIDE_ORG" => "https://www-jp.umaxica.org",
+    "WARP_APP" => "https://www-jp.umaxica.app",
+    "WARP_COM" => "https://www-jp.umaxica.com",
+    "WARP_ORG" => "https://www-jp.umaxica.org",
     "EDIT_ORG" => "https://edit.umaxica.org",
     "BASE_APP" => "https://www.umaxica.app",
     "BASE_COM" => "https://www.umaxica.com",

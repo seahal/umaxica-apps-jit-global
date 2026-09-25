@@ -69,7 +69,6 @@ vi.mock("@/features/auth/turnstile/invisibleToken", () => ({
 const { default: SignInEmailEdit } = await import("@/features/auth/SignInEmailEdit");
 const { default: EmailSignInForm } = await import("@/features/auth/signin/EmailSignInForm");
 const { default: EmailPassCodeForm } = await import("@/features/auth/signin/EmailPassCodeForm");
-const { default: SecretSignInForm } = await import("@/features/auth/signin/SecretSignInForm");
 const { default: TotpChallengeForm } = await import("@/features/auth/signin/TotpChallengeForm");
 const { default: OtpResendButton } = await import("@/features/auth/signin/OtpResendButton");
 const { default: PasskeySignInPanel } = await import("@/features/auth/signin/PasskeySignInPanel");
@@ -843,55 +842,6 @@ describe("step-up passkey screen", () => {
     await flush();
 
     expect(container.querySelector("[role=alert]")?.textContent).toBe(PASSKEY_MESSAGES.cancelled);
-  });
-});
-
-describe("secret sign-in form interaction", () => {
-  const props = {
-    title: "パスワードでログイン",
-    form: {
-      action: "/sign/in/secret",
-      method: "post",
-      pt: null,
-      ri: "jp",
-      identifier_field: {
-        scope: "secret_credential_login_form",
-        field: "identifier",
-        name: "secret_credential_login_form[identifier]",
-        label: "メールアドレス",
-        placeholder: "name@example.com",
-      },
-      secret_field: {
-        scope: "secret_credential_login_form",
-        field: "secret_credential_value",
-        name: "secret_credential_login_form[secret_credential_value]",
-        label: "パスワード",
-        placeholder: "••••••••••••••••",
-      },
-      submit_label: "送信する",
-    },
-    hints: null,
-    error_heading: "入力を確認してください",
-    form_errors: [] as string[],
-    turnstile,
-    back_link: backLink,
-  };
-
-  it("posts the identifier and secret under the Rails wrapper", async () => {
-    mount(<SecretSignInForm {...props} />);
-    await flush();
-
-    type('input[name="secret_credential_login_form[identifier]"]', "someone@example.test");
-    type('input[name="secret_credential_login_form[secret_credential_value]"]', "s3cret");
-
-    act(() => {
-      container
-        .querySelector("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-
-    expect(setData).toHaveBeenCalled();
-    expect(post).toHaveBeenCalledWith("/sign/in/secret");
   });
 });
 

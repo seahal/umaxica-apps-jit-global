@@ -450,12 +450,6 @@ module SignUpSequenceControllerSupport
       return :failed
     end
 
-    @sign_up_recovery_passcode_reveal_url =
-      issue_sign_up_recovery_passcodes!(
-        surface: :app,
-        actor: actor,
-      )
-
     :accepted
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved,
          SignAppUpTelephoneRegistrationFinalizer::PasskeyMissingError
@@ -657,7 +651,7 @@ module SignUpSequenceControllerSupport
         credential_class: ClientSecretCredential,
         reveal_purpose: "client.recovery_secret_credential",
         reveal_url: ->(token) {
-          base_app_identity_secrets_url(
+          base_app_identity_recovery_secret_url(
             ri: params[:ri], token: token,
             host: base_authority_host,
           )
@@ -668,7 +662,7 @@ module SignUpSequenceControllerSupport
         credential_class: VisitorSecretCredential,
         reveal_purpose: "visitor.recovery_secret_credential",
         reveal_url: ->(token) {
-          base_com_identity_secrets_url(
+          base_com_identity_recovery_secret_url(
             ri: params[:ri], token: token,
             host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
           )

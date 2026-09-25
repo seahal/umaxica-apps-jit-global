@@ -49,8 +49,8 @@
     approved. Deviated deliberately and recorded here; the granularity the user chose (one switch
     per FQDN slot, not per surface family) is preserved -- only the slot list is corrected to match
     the router. 29 slots rather than 24.
-  - Follow-up needed: `palm_corporate` / `palm_staff` are configured hosts with no routes. Raised in
-    the audit as a finding awaiting a decision; not resolved here.
+  - Historical follow-up: `palm_corporate` / `palm_staff` were configured hosts with no routes.
+    Integrated F9 removed those values on 2026-09-24; Palm remains app-only.
 
 - Decision: six controllers call a new `ensure_fqdn_gate_first!` class method.
   - Why: `prepend_before_action` in a subclass lands _ahead_ of one declared in its parent, so

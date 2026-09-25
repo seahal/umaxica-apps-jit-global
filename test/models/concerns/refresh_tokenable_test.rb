@@ -26,6 +26,25 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     assert_equal 0, token.refresh_token_generation
     assert_predicate token.device_session_id, :present?
     assert_predicate token.device_session, :present?
+    assert_nil token.device_session.current_refresh_token_id
+  end
+
+  test "rotation makes the replacement token current for the same device session" do
+    token = ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      refresh_token: "rotation-current-pointer-verifier",
+    )
+    session = token.device_session
+    result = ClientToken.rotate_refresh!(
+      presented_refresh_digest: ClientToken.digest_refresh_token("rotation-current-pointer-verifier"),
+    )
+    replacement = result.fetch(:token)
+
+    assert_equal :rotated, result.fetch(:status)
+    assert_not_equal token.id, replacement.id
+    assert_equal session.id, replacement.device_session_id
+    assert_equal replacement.id, session.reload.current_refresh_token_id
   end
 
   test "refresh_token= stores a digest and clears it when blank" do

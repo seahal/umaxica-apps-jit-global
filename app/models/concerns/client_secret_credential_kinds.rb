@@ -9,7 +9,6 @@ module ClientSecretCredentialKinds
   TOTP = ClientSecretCredentialKind::TOTP
   RECOVERY = ClientSecretCredentialKind::RECOVERY
   API = ClientSecretCredentialKind::API
-  PERMANENT = ClientSecretCredentialKind::PERMANENT
   ONE_TIME = ClientSecretCredentialKind::ONE_TIME
 
   ALL = [LOGIN, TOTP, RECOVERY, API].freeze
@@ -29,10 +28,6 @@ module ClientSecretCredentialKinds
 
   def api_secret_credential?
     user_secret_kind_id == API
-  end
-
-  def permanent_secret_credential?
-    user_secret_kind_id == PERMANENT
   end
 
   def one_time_secret_credential?

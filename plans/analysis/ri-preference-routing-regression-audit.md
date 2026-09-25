@@ -4,6 +4,10 @@
 request-context mechanism across the `auth`, `base`, `side`, `core`, and `palm` surfaces (13 routing
 targets) **Type:** investigation only. No production code was changed by this audit.
 
+Current naming note (2026-09-25): this is an immutable historical routing audit. Its `side` paths,
+controllers, and surface references describe the former Rails namespace, now `Warp`; public host and
+protocol identifiers remain unchanged.
+
 ## Evidence classification
 
 Every claim in this report carries one of four labels. They are not interchangeable.

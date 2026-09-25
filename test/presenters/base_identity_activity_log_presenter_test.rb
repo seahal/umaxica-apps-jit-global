@@ -104,7 +104,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "rejects an unsupported surface" do
-    assert_raises(ArgumentError) { Base::Identity::ActivityLogPresenter.new(surface: :side) }
+    assert_raises(ArgumentError) { Base::Identity::ActivityLogPresenter.new(surface: :warp) }
   end
 
   test "labels an Apple provider sign-in and common device agents" do

@@ -187,8 +187,12 @@ Rails.application.configure do
     "jp.umaxica.com",
     "jp.umaxica.org",
     boot_hosts.palm_service.host,
-    boot_hosts.palm_corporate.host,
-    boot_hosts.palm_staff.host,
+    boot_hosts.docs_service.host,
+    boot_hosts.docs_corporate.host,
+    boot_hosts.docs_staff.host,
+    boot_hosts.news_service.host,
+    boot_hosts.news_corporate.host,
+    boot_hosts.news_staff.host,
     boot_hosts.help_service.host,
     boot_hosts.help_corporate.host,
     boot_hosts.help_staff.host,
@@ -198,14 +202,6 @@ Rails.application.configure do
     boot_hosts.guid_service.host,
     boot_hosts.edit_staff.host,
   ]
-  # The docs and news surfaces have no host entry. Their only entries here were
-  # `docs.*.localhost` and `news.*.localhost` -- private development ingress names, which
-  # no production request can carry: the edge routes no such name, and
-  # ConfigValues::HostFamilyValues defines no docs/news member to derive a real one from.
-  # They were removed rather than left as a development ingress name accepted in
-  # production. Add the real ingress hosts here (preferably via boot_config) before serving
-  # either surface publicly.
-
   # Skip DNS rebinding protection for the internal health probes, and only for them.
   #
   # This previously matched `"/health"` alone, while the probe set this application mounts is four

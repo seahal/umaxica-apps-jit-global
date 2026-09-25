@@ -66,6 +66,24 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     assert_equal 0, AuthMethodGuard.remaining_count(user)
   end
 
+  test "active legacy secret credentials do not count as AAL1 sign-in methods" do
+    ClientSecretCredentialStatus.find_or_create_by!(id: ClientSecretCredentialStatus::ACTIVE)
+    ClientSecretCredentialKind.find_or_create_by!(id: ClientSecretCredentialKind::LOGIN)
+    ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
+    ClientEmail.create!(
+      user: @user,
+      address: "legacy-secret-inventory-#{SecureRandom.hex(4)}@example.test",
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    ClientSecretCredential.issue!(
+      name: "Legacy login secret",
+      user: @user,
+      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
+    )
+
+    assert_equal [:email_otp], AuthenticationCredentialInventory.call(@user).aal1_methods
+  end
+
   test "remaining_count excludes verified telephones because telephone is not aal1" do
     user = @user
 

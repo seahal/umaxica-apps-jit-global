@@ -62,21 +62,6 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     assert_redirected_to auth_app_settings_passkeys_url(ri: "jp", host: @host)
   end
 
-  test "secret_credential removal preserves aal1 even when aal2 and contactability remain" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
-    create_verified_telephone(client, "+819011110005")
-    create_active_totp(client)
-    secret_credential = create_active_secret_credential(client)
-
-    assert_no_difference("ClientSecretCredential.count") do
-      delete base_app_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
-             headers: client_browser_headers(client, scope: "settings_secret_credential", host: @base_host)
-    end
-
-    assert_redirected_to base_app_identity_secrets_url(ri: "jp", host: @base_host)
-    assert_not_predicate secret_credential.reload, :revoked?
-  end
-
   test "totp removal preserves aal2 even when aal1 and contactability remain" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110003")
@@ -144,42 +129,6 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     end
 
     assert_redirected_to auth_app_settings_passkeys_url(ri: "jp", host: @host)
-  end
-
-  test "secret_credential removal is allowed when another aal1 method remains" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
-    create_verified_email(client, "app-removal-secret_credential-allowed@example.com")
-    secret_credential = create_active_secret_credential(client)
-
-    delete base_app_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
-           headers: client_browser_headers(client, scope: "settings_secret_credential", host: @base_host)
-
-    assert_redirected_to base_app_identity_secrets_url(ri: "jp", host: @base_host)
-    assert_not_predicate secret_credential.reload, :revoked?
-  end
-
-  # Regression guard: destroying a credential must revoke ALL existing sessions so that
-  # an attacker holding a stolen token loses access immediately on the next request.
-  test "destroying a secret credential revokes all existing client tokens" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
-    create_verified_email(client, "revoke-all-sessions-#{SecureRandom.hex(4)}@example.com")
-    secret_credential = create_active_secret_credential(client)
-
-    # Create the session token first so the session limit is not exceeded by the extra token.
-    headers = client_browser_headers(client, scope: "settings_secret_credential", host: @base_host)
-
-    # Represents an attacker's stolen session that should be cut off after credential change.
-    stolen_token = ClientToken.new(
-      user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-    )
-    stolen_token.save!
-
-    delete base_app_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
-           headers: headers
-
-    assert_redirected_to base_app_identity_secrets_url(ri: "jp", host: @base_host)
-    assert_predicate stolen_token.reload, :revoked?
   end
 
   private

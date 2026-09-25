@@ -26,7 +26,8 @@ class AcmeSelectorSurfaceConfigTest < ActiveSupport::TestCase
     assert_equal Enterprise, config.collective_class
     assert_equal EnterpriseUnit, config.unit_class
     assert_equal PersonaMembership, config.membership_class
-    assert config.requires_avatar
+    assert_equal :required, config.avatar_mode
+    assert config.provision_default_avatar
     assert_equal "Persona01", config.account_title
     assert_equal "Org01", config.collective_title
   end
@@ -48,7 +49,8 @@ class AcmeSelectorSurfaceConfigTest < ActiveSupport::TestCase
     assert_equal Company, config.collective_class
     assert_equal CompanyUnit, config.unit_class
     assert_equal IndividualMembership, config.membership_class
-    assert_not config.requires_avatar
+    assert_equal :none, config.avatar_mode
+    assert_not config.provision_default_avatar
     assert_equal "Indiv01", config.account_title
     assert_equal "Org01", config.collective_title
   end
@@ -70,7 +72,8 @@ class AcmeSelectorSurfaceConfigTest < ActiveSupport::TestCase
     assert_equal Bureau, config.collective_class
     assert_equal BureauUnit, config.unit_class
     assert_equal AgentMembership, config.membership_class
-    assert_not config.requires_avatar
+    assert_equal :optional, config.avatar_mode
+    assert_not config.provision_default_avatar
     assert_equal "Agent01", config.account_title
     assert_equal "Org01", config.collective_title
   end

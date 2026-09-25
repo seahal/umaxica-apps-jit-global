@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/avatar_test_factory"
 
 class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
   setup do
@@ -18,8 +19,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Role Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Role Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -40,8 +41,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Membership Period Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Period Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -66,8 +67,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Membership Unique Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Unique Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -98,8 +99,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Primary Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Primary Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -125,8 +126,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint ClientPersona Revoke Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Persona Revoke",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -151,8 +152,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Agent Revoke Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Agent Revoke",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -177,8 +178,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Individual Revoke Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Indiv Revoke",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -203,8 +204,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint ClientPersona Unique Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Persona Unique",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -234,8 +235,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Lifecycle Key Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Lifecycle Key",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -258,8 +259,8 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
-      moniker: "Constraint Lifecycle Same Avatar",
+    avatar = AvatarTestFactory.create!(
+      moniker: "Lifecycle Same",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )

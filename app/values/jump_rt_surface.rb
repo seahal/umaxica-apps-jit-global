@@ -14,6 +14,7 @@ module JumpRtSurface
       when /\A(?:Auth|Sign)::/ then "SIGN"
       when /\AAcme::/ then "ACME"
       when /\ACore::/ then "CORE"
+      when /\AWarp::/ then "WARP"
       when /\ABase::/ then "BASE"
       end
     surface =
@@ -22,7 +23,10 @@ module JumpRtSurface
       when /::Com::/ then "COM"
       when /::Org::/ then "ORG"
       end
-    return nil if service.blank? || surface.blank?
+    if service.blank? || surface.blank?
+      raise JumpRtConfigurationError,
+            "No Jump RT issuer namespace is configured for controller #{controller_class_name.inspect}"
+    end
 
     "#{service}_#{surface}"
   end
@@ -30,7 +34,7 @@ module JumpRtSurface
   def normalize_namespace(namespace)
     value = namespace.to_s.upcase
     unless JitSecurityJwtRegistry::SURFACE_NAMESPACES.include?(value)
-      raise ArgumentError, "unsupported Jump RT issuer surface: #{namespace.inspect}"
+      raise JumpRtConfigurationError, "unsupported Jump RT issuer surface: #{namespace.inspect}"
     end
 
     value

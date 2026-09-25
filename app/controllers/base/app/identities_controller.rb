@@ -51,8 +51,10 @@ module Base
             identity_auth_link(:passkey, :auth_app_settings_passkeys_url),
             identity_auth_link(:totp, :auth_app_settings_totps_url),
             { label: t("sign.app.settings.show.mfa"), href: base_app_identity_mfa_challenge_path(ri: params[:ri]) },
-            { label: t("sign.app.settings.show.mfa_reset"), href: base_app_identity_mfa_reset_path(ri: params[:ri]) },
-            identity_hub_link(:secrets, base_app_identity_secrets_path(ri: params[:ri])),
+            {
+              label: t("sign.app.settings.mfa.show.reset_title"),
+              href: base_app_identity_mfa_reset_path(ri: params[:ri]),
+            },
             identity_hub_link(:sessions, base_app_sessions_path(ri: params[:ri])),
             identity_hub_link(:activities, base_app_identity_activities_path(ri: params[:ri])),
             identity_hub_link(:standing, base_app_identity_standing_path(ri: params[:ri])),

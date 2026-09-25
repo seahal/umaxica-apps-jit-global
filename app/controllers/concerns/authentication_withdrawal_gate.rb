@@ -69,7 +69,7 @@ module AuthenticationWithdrawalGate
   end
 
   # Derives the app/com/org family from the surface/family/... controller_path shape shared by
-  # every surface (auth, base, core, side). A rescued default here would silently cross surfaces
+  # every surface (auth, base, core, warp). A rescued default here would silently cross surfaces
   # (e.g. redirect an org request to the app withdrawal page), so unknown families raise instead.
   def withdrawal_gate_surface_family
     controller_path.split("/")[1]

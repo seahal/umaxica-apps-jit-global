@@ -947,6 +947,12 @@ en:
     unauthorized: You are not authorized to access this page.
   base:
     app:
+      avatars:
+        moniker_validation:
+          blank: Name can't be blank.
+          invalid: Name contains unsupported characters or surrounding whitespace.
+          max_bytes: Name must use at most %{count} UTF-8 bytes.
+          max_graphemes: Name must contain at most %{count} visible characters.
       identity:
         credential_warning:
           body:
@@ -2113,6 +2119,7 @@ en:
       cookie:
         invalid_access_token: Preference access token is invalid or missing.
     rate_limit:
+      backend_unavailable: Authorization is temporarily unavailable. Please try again later.
       exceeded: Too many requests. Please try again later.
       retry_later: Please retry in a little while.
       too_many_requests: Too many requests right now. Please try again shortly.
@@ -3207,10 +3214,6 @@ en:
               title: Confirm your birthdate
             complete: Registration requirements are complete.
             page_title: Complete registration
-            passcode:
-              action: Save passcode
-              description: Confirm your sign-in passcode before completing registration.
-              title: Save your passcode
             passkey:
               action: Register passkey
               description: Add a passkey before completing registration.
@@ -3378,6 +3381,7 @@ en:
             passkeys: Passkeys
             passkeys_desc: "%{count} registered"
             reset_request: Request an MFA reset
+            reset_title: MFA reset
             reset_unavailable: MFA reset is currently unavailable.
             secret_credentials: Secrets
             secret_credentials_desc: "%{count} active"
@@ -3664,10 +3668,6 @@ en:
               title: Confirm your birthdate
             complete: Registration requirements are complete.
             page_title: Complete registration
-            passcode:
-              action: Save passcode
-              description: Confirm your sign-in passcode before completing registration.
-              title: Save your passcode
             passkey:
               action: Register passkey
               description: Add a passkey before completing registration.

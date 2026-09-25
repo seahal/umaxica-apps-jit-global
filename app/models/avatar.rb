@@ -11,7 +11,6 @@
 #  image_data                   :jsonb
 #  lifecycle_state_id           :bigint           not null
 #  lock_version                 :integer          default(0), not null
-#  moniker                      :string           not null
 #  purge_eligible_at                    :datetime         default(Infinity), not null
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
@@ -48,7 +47,6 @@ class Avatar < AvatarRecord
 
   self.belongs_to_required_by_default = false
 
-  belongs_to :member, foreign_key: :client_id, inverse_of: :avatars
   belongs_to :capability, class_name: "AvatarCapability"
   belongs_to :active_handle, class_name: "Handle"
   belongs_to :lifecycle_state, class_name: "AvatarLifecycleState"
@@ -60,11 +58,26 @@ class Avatar < AvatarRecord
            inverse_of: :assigned_by_actor,
            dependent: :restrict_with_error
   has_many :handles, through: :handle_assignments
-  has_many :avatar_monikers, dependent: :restrict_with_error
+  has_many :avatar_monikers, dependent: :destroy
+  has_one :current_avatar_moniker,
+          -> { where("valid_to = 'infinity'::timestamp with time zone") },
+          class_name: "AvatarMoniker",
+          inverse_of: :avatar
   has_many :avatar_memberships, dependent: :restrict_with_error
   has_many :avatar_ownership_periods, dependent: :restrict_with_error
+  has_many :ownership_transfers,
+           class_name: "AvatarOwnershipTransfer",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar
+  has_one :current_ownership_period,
+          -> {
+            where("valid_to = 'infinity'::timestamp with time zone")
+              .where(avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
+          },
+          class_name: "AvatarOwnershipPeriod",
+          inverse_of: :avatar
 
-  # Avatar assignments (role-based access control)
+  # Historical assignment rows are retained for data compatibility and cleanup only.
   has_many :avatar_assignments, dependent: :destroy
   has_one :avatar_persona_binding, dependent: :destroy, inverse_of: :avatar
   has_one :avatar_agent_binding, dependent: :destroy, inverse_of: :avatar
@@ -81,17 +94,7 @@ class Avatar < AvatarRecord
   has_many :group_avatar_memberships, dependent: :restrict_with_error, inverse_of: :avatar
   has_many :avatar_groups, through: :group_avatar_memberships
 
-  # Single-user roles (has_one through)
-  has_one :owner_assignment,
-          -> { where(role: "owner") },
-          class_name: "AvatarAssignment",
-          inverse_of: :avatar,
-          dependent: :destroy
-  has_one :owner,
-          through: :owner_assignment,
-          source: :user,
-          disable_joins: true
-
+  # Legacy AvatarAssignment role accessors remain for historical-row inspection only.
   has_one :affiliation_assignment,
           -> { where(role: "affiliation") },
           class_name: "AvatarAssignment",
@@ -209,12 +212,11 @@ class Avatar < AvatarRecord
 
   validates :public_id, presence: true, uniqueness: true
   validates :capability_id, numericality: { only_integer: true, greater_than: 0 }
-  validates :moniker, presence: true
 
   before_validation :default_lifecycle_state, on: :create
 
   # Deprecated compatibility wrapper. New avatar creation must call AvatarProvisioning::Create
-  # so the handle, binding, assignment, lifecycle state, and legacy client_id write stay together.
+  # so ownership period, binding, moniker, handle, and lifecycle state are written consistently.
   def self.create_with_owner(attributes, user)
     attributes = attributes.to_h.symbolize_keys
     subject = attributes.delete(:subject)
@@ -223,11 +225,8 @@ class Avatar < AvatarRecord
     handle_params = handle_params.to_h.symbolize_keys
     handle_params[:handle] ||= attributes.delete(:handle) if attributes.key?(:handle)
     handle_params[:handle] ||= attributes[:active_handle]&.handle if attributes[:active_handle].present?
-    assignment_role = attributes.delete(:assignment_role) || AvatarProvisioning::Create::DEFAULT_ASSIGNMENT_ROLE
-    organization_public_id =
-      attributes.delete(:organization_public_id) ||
-      attributes[:owner_organization_id] ||
-      attributes[:representing_organization_id]
+    owner_surface = attributes.delete(:owner_surface)
+    owner_collective_public_id = attributes.delete(:owner_collective_public_id)
 
     result = AvatarProvisioning::Create.call(
       actor: user,
@@ -235,8 +234,8 @@ class Avatar < AvatarRecord
       subject: subject,
       avatar_params: attributes.slice(:moniker),
       handle_params: handle_params,
-      assignment_role: assignment_role,
-      organization_public_id: organization_public_id,
+      owner_surface: owner_surface,
+      owner_collective_public_id: owner_collective_public_id,
     )
     raise result.errors.first if result.errors.any?
 
@@ -247,6 +246,11 @@ class Avatar < AvatarRecord
     return nil unless persisted?
 
     AvatarPersonaBinding.active.find_by(avatar_id: id)
+  end
+
+  def moniker
+    current_avatar_moniker&.moniker ||
+      raise(ActiveRecord::RecordNotFound, "Avatar #{public_id} has no current AvatarMoniker")
   end
 
   def current_persona

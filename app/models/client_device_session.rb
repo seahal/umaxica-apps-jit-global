@@ -41,5 +41,7 @@ class ClientDeviceSession < AppTicketRecord
   # `revoke!` (an `update!`) fail validation on such sessions, so sign-out could
   # not revoke them -- the session stayed usable. Revocation must always succeed.
   belongs_to :current_refresh_token, class_name: "ClientToken", optional: true
-  has_many :client_tokens, foreign_key: :device_session_id, dependent: :nullify, inverse_of: :device_session
+  has_many :client_tokens, foreign_key: :device_session_id,
+                           dependent: :restrict_with_exception,
+                           inverse_of: :device_session
 end

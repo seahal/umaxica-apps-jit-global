@@ -165,7 +165,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/app/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/app/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/app/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/app/sign/in/secrets_controller.rb: 8
   app/controllers/auth/app/sign/in/session/cancellations_controller.rb: 1
   app/controllers/auth/app/sign/in/sessions_controller.rb: 3
   app/controllers/auth/app/sign/ins_controller.rb: 1
@@ -175,7 +174,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/app/sign/up/check/email/otps_controller.rb: 4
   app/controllers/auth/app/sign/up/check/google/confirmations_controller.rb: 3
   app/controllers/auth/app/sign/up/check/telephone/otps_controller.rb: 4
-  app/controllers/auth/app/sign/up/check/telephone/passcodes_controller.rb: 3
   app/controllers/auth/app/sign/up/check/telephone/passkeys_controller.rb: 4
   app/controllers/auth/app/sign/up/emails_controller.rb: 2
   app/controllers/auth/app/sign/up/guard/base_controller.rb: 1
@@ -216,7 +214,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/com/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/com/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/com/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/com/sign/in/secrets_controller.rb: 3
   app/controllers/auth/com/sign/in/session/cancellations_controller.rb: 1
   app/controllers/auth/com/sign/in/sessions_controller.rb: 3
   app/controllers/auth/com/sign/ins_controller.rb: 1
@@ -224,7 +221,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/com/sign/up/check/email/birthdates_controller.rb: 3
   app/controllers/auth/com/sign/up/check/email/otps_controller.rb: 4
   app/controllers/auth/com/sign/up/check/telephone/otps_controller.rb: 4
-  app/controllers/auth/com/sign/up/check/telephone/passcodes_controller.rb: 3
   app/controllers/auth/com/sign/up/check/telephone/passkeys_controller.rb: 4
   app/controllers/auth/com/sign/up/emails_controller.rb: 2
   app/controllers/auth/com/sign/up/guard/base_controller.rb: 1
@@ -270,7 +266,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/org/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/org/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/org/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/org/sign/in/secrets_controller.rb: 3
   app/controllers/auth/org/sign/in/session/cancellations_controller.rb: 1
   app/controllers/auth/org/sign/in/sessions_controller.rb: 3
   app/controllers/auth/org/sign/ins_controller.rb: 1
@@ -307,17 +302,12 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/app/identity/emails/registrations_controller.rb: 5
   app/controllers/base/app/identity/emails_controller.rb: 4
   app/controllers/base/app/identity/mfa/challenges_controller.rb: 2
-  app/controllers/base/app/identity/mfa/resets_controller.rb: 2
   app/controllers/base/app/identity/privacy/erasure/statuses_controller.rb: 1
   app/controllers/base/app/identity/privacy/erasures_controller.rb: 2
   app/controllers/base/app/identity/recoveries_controller.rb: 1
   app/controllers/base/app/identity/recovery/appeals_controller.rb: 1
   app/controllers/base/app/identity/recovery/completions_controller.rb: 1
-  app/controllers/base/app/identity/recovery_secrets_controller.rb: 1
   app/controllers/base/app/identity/revocations/others_controller.rb: 1
-  app/controllers/base/app/identity/secrets/removals_controller.rb: 1
-  app/controllers/base/app/identity/secrets/rotations_controller.rb: 1
-  app/controllers/base/app/identity/secrets_controller.rb: 7
   app/controllers/base/app/identity/sessions_controller.rb: 3
   app/controllers/base/app/identity/standings_controller.rb: 1
   app/controllers/base/app/identity/telephones/registrations_controller.rb: 4
@@ -333,13 +323,10 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/app/organizations_controller.rb: 2
   app/controllers/base/app/preference/customizations_controller.rb: 2
   app/controllers/base/app/preference/emails_controller.rb: 1
-  app/controllers/base/app/preferences_controller.rb: 1
   app/controllers/base/app/revisions_controller.rb: 1
   app/controllers/base/app/robots_controller.rb: 1
-  app/controllers/base/app/roots_controller.rb: 1
   app/controllers/base/app/selectors_controller.rb: 2
   app/controllers/base/app/sign/in/limitations_controller.rb: 3
-  app/controllers/base/app/sign_outs_controller.rb: 3
   app/controllers/base/app/sitemaps_controller.rb: 1
   app/controllers/base/app/social/authentication/completions_controller.rb: 1
   app/controllers/base/app/social/authentication/continuations_controller.rb: 1
@@ -374,7 +361,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/com/identity/revocations/others_controller.rb: 1
   app/controllers/base/com/identity/rotations_controller.rb: 1
   app/controllers/base/com/identity/secret_credentials_controller.rb: 7
-  app/controllers/base/com/identity/secrets_controller.rb: 1
   app/controllers/base/com/identity/sessions_controller.rb: 3
   app/controllers/base/com/identity/standings_controller.rb: 1
   app/controllers/base/com/identity/telephones/registrations_controller.rb: 4
@@ -390,12 +376,9 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/com/organizations_controller.rb: 2
   app/controllers/base/com/preference/customizations_controller.rb: 2
   app/controllers/base/com/preference/emails_controller.rb: 1
-  app/controllers/base/com/preferences_controller.rb: 1
   app/controllers/base/com/revisions_controller.rb: 1
   app/controllers/base/com/robots_controller.rb: 1
-  app/controllers/base/com/roots_controller.rb: 1
   app/controllers/base/com/selectors_controller.rb: 2
-  app/controllers/base/com/sign_outs_controller.rb: 3
   app/controllers/base/com/sitemaps_controller.rb: 1
   app/controllers/base/com/switchers_controller.rb: 2
   app/controllers/base/com/verification/cancellations_controller.rb: 1
@@ -460,12 +443,9 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/org/organizations_controller.rb: 2
   app/controllers/base/org/preference/customizations_controller.rb: 2
   app/controllers/base/org/preference/emails_controller.rb: 1
-  app/controllers/base/org/preferences_controller.rb: 1
   app/controllers/base/org/revisions_controller.rb: 1
   app/controllers/base/org/robots_controller.rb: 1
-  app/controllers/base/org/roots_controller.rb: 1
   app/controllers/base/org/selectors_controller.rb: 2
-  app/controllers/base/org/sign_outs_controller.rb: 3
   app/controllers/base/org/sitemaps_controller.rb: 1
   app/controllers/base/org/support/enforcement_cases/appeal_reviews_controller.rb: 1
   app/controllers/base/org/support/enforcement_cases/approvals_controller.rb: 1
@@ -757,55 +737,55 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/palm/app/roots_controller.rb: 1
   app/controllers/palm/app/sign/outs_controller.rb: 2
   app/controllers/palm/app/sitemaps_controller.rb: 1
-  app/controllers/side/app/api/v0/healths_controller.rb: 1
-  app/controllers/side/app/api/v0/revisions_controller.rb: 1
-  app/controllers/side/app/application_controller.rb: 4
-  app/controllers/side/app/csp_violation_reports_controller.rb: 1
-  app/controllers/side/app/dashboards_controller.rb: 1
-  app/controllers/side/app/health/livenesses_controller.rb: 1
-  app/controllers/side/app/health/readinesses_controller.rb: 1
-  app/controllers/side/app/health/startups_controller.rb: 1
-  app/controllers/side/app/healths_controller.rb: 1
-  app/controllers/side/app/mcps_controller.rb: 1
-  app/controllers/side/app/revisions_controller.rb: 1
-  app/controllers/side/app/robots_controller.rb: 1
-  app/controllers/side/app/roots_controller.rb: 1
-  app/controllers/side/app/settings_controller.rb: 1
-  app/controllers/side/app/sign/outs_controller.rb: 4
-  app/controllers/side/app/sitemaps_controller.rb: 1
-  app/controllers/side/com/api/v0/healths_controller.rb: 1
-  app/controllers/side/com/api/v0/revisions_controller.rb: 1
-  app/controllers/side/com/application_controller.rb: 4
-  app/controllers/side/com/csp_violation_reports_controller.rb: 1
-  app/controllers/side/com/dashboards_controller.rb: 1
-  app/controllers/side/com/health/livenesses_controller.rb: 1
-  app/controllers/side/com/health/readinesses_controller.rb: 1
-  app/controllers/side/com/health/startups_controller.rb: 1
-  app/controllers/side/com/healths_controller.rb: 1
-  app/controllers/side/com/mcps_controller.rb: 1
-  app/controllers/side/com/revisions_controller.rb: 1
-  app/controllers/side/com/robots_controller.rb: 1
-  app/controllers/side/com/roots_controller.rb: 1
-  app/controllers/side/com/settings_controller.rb: 1
-  app/controllers/side/com/sign/outs_controller.rb: 4
-  app/controllers/side/com/sitemaps_controller.rb: 1
-  app/controllers/side/org/api/v0/healths_controller.rb: 1
-  app/controllers/side/org/api/v0/revisions_controller.rb: 1
-  app/controllers/side/org/application_controller.rb: 4
-  app/controllers/side/org/csp_violation_reports_controller.rb: 1
-  app/controllers/side/org/dashboards_controller.rb: 1
-  app/controllers/side/org/health/livenesses_controller.rb: 1
-  app/controllers/side/org/health/readinesses_controller.rb: 1
-  app/controllers/side/org/health/startups_controller.rb: 1
-  app/controllers/side/org/healths_controller.rb: 1
-  app/controllers/side/org/mcps_controller.rb: 1
-  app/controllers/side/org/revisions_controller.rb: 1
-  app/controllers/side/org/robots_controller.rb: 1
-  app/controllers/side/org/roots_controller.rb: 1
-  app/controllers/side/org/settings_controller.rb: 1
-  app/controllers/side/org/sign/outs_controller.rb: 4
-  app/controllers/side/org/sitemaps_controller.rb: 1
   app/controllers/unknown_hosts_controller.rb: 1
+  app/controllers/warp/app/api/v0/healths_controller.rb: 1
+  app/controllers/warp/app/api/v0/revisions_controller.rb: 1
+  app/controllers/warp/app/application_controller.rb: 4
+  app/controllers/warp/app/csp_violation_reports_controller.rb: 1
+  app/controllers/warp/app/dashboards_controller.rb: 1
+  app/controllers/warp/app/health/livenesses_controller.rb: 1
+  app/controllers/warp/app/health/readinesses_controller.rb: 1
+  app/controllers/warp/app/health/startups_controller.rb: 1
+  app/controllers/warp/app/healths_controller.rb: 1
+  app/controllers/warp/app/mcps_controller.rb: 1
+  app/controllers/warp/app/revisions_controller.rb: 1
+  app/controllers/warp/app/robots_controller.rb: 1
+  app/controllers/warp/app/roots_controller.rb: 1
+  app/controllers/warp/app/settings_controller.rb: 1
+  app/controllers/warp/app/sign/outs_controller.rb: 4
+  app/controllers/warp/app/sitemaps_controller.rb: 1
+  app/controllers/warp/com/api/v0/healths_controller.rb: 1
+  app/controllers/warp/com/api/v0/revisions_controller.rb: 1
+  app/controllers/warp/com/application_controller.rb: 4
+  app/controllers/warp/com/csp_violation_reports_controller.rb: 1
+  app/controllers/warp/com/dashboards_controller.rb: 1
+  app/controllers/warp/com/health/livenesses_controller.rb: 1
+  app/controllers/warp/com/health/readinesses_controller.rb: 1
+  app/controllers/warp/com/health/startups_controller.rb: 1
+  app/controllers/warp/com/healths_controller.rb: 1
+  app/controllers/warp/com/mcps_controller.rb: 1
+  app/controllers/warp/com/revisions_controller.rb: 1
+  app/controllers/warp/com/robots_controller.rb: 1
+  app/controllers/warp/com/roots_controller.rb: 1
+  app/controllers/warp/com/settings_controller.rb: 1
+  app/controllers/warp/com/sign/outs_controller.rb: 4
+  app/controllers/warp/com/sitemaps_controller.rb: 1
+  app/controllers/warp/org/api/v0/healths_controller.rb: 1
+  app/controllers/warp/org/api/v0/revisions_controller.rb: 1
+  app/controllers/warp/org/application_controller.rb: 4
+  app/controllers/warp/org/csp_violation_reports_controller.rb: 1
+  app/controllers/warp/org/dashboards_controller.rb: 1
+  app/controllers/warp/org/health/livenesses_controller.rb: 1
+  app/controllers/warp/org/health/readinesses_controller.rb: 1
+  app/controllers/warp/org/health/startups_controller.rb: 1
+  app/controllers/warp/org/healths_controller.rb: 1
+  app/controllers/warp/org/mcps_controller.rb: 1
+  app/controllers/warp/org/revisions_controller.rb: 1
+  app/controllers/warp/org/robots_controller.rb: 1
+  app/controllers/warp/org/roots_controller.rb: 1
+  app/controllers/warp/org/settings_controller.rb: 1
+  app/controllers/warp/org/sign/outs_controller.rb: 4
+  app/controllers/warp/org/sitemaps_controller.rb: 1
   app/errors/already_authenticated_error.rb: 1
   app/errors/blank_public_identifier_error.rb: 1
   app/errors/invalid_user_status_error.rb: 1
@@ -889,8 +869,10 @@ Umaxica/ExplicitMethodVisibility:
   app/models/app_preference_timezone_option.rb: 2
   app/models/application_record.rb: 2
   app/models/area_occurrence_status.rb: 1
-  app/models/avatar.rb: 3
+  app/models/avatar.rb: 4
   app/models/avatar_group.rb: 2
+  app/models/avatar_group_ownership_period.rb: 1
+  app/models/avatar_ownership_period.rb: 1
   app/models/bureau.rb: 1
   app/models/client.rb: 17
   app/models/client_apple_notification_event.rb: 3
@@ -919,7 +901,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/client_preference_theme_option.rb: 2
   app/models/client_preference_time_format_option.rb: 2
   app/models/client_preference_timezone_option.rb: 2
-  app/models/client_secret_credential.rb: 9
+  app/models/client_secret_credential.rb: 7
   app/models/client_session_limit_resolution_transaction.rb: 12
   app/models/client_sign_up_flow.rb: 1
   app/models/client_step_up_session.rb: 1
@@ -960,7 +942,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/authentication_credential_inventory_owner.rb: 3
   app/models/concerns/avatar_persona_binding_revocation.rb: 3
   app/models/concerns/banner_model.rb: 1
-  app/models/concerns/client_secret_credential_kinds.rb: 6
+  app/models/concerns/client_secret_credential_kinds.rb: 5
   app/models/concerns/collective_unit.rb: 5
   app/models/concerns/core_rp_bridge.rb: 3
   app/models/concerns/dbsc_bindable.rb: 10
@@ -980,7 +962,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/mfa_level_configurable.rb: 3
   app/models/concerns/mfa_status_trackable.rb: 3
   app/models/concerns/oidc_connection_record.rb: 9
-  app/models/concerns/operator_secret_credential_kinds.rb: 3
+  app/models/concerns/operator_secret_credential_kinds.rb: 2
   app/models/concerns/otp_lockable.rb: 10
   app/models/concerns/passkey_ceremony_transactionable.rb: 4
   app/models/concerns/preference_explicit_fields.rb: 5
@@ -1000,14 +982,14 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/refresh_tokenable.rb: 6
   app/models/concerns/retainable.rb: 6
   app/models/concerns/retention_hold_state.rb: 1
-  app/models/concerns/secret_credential.rb: 8
+  app/models/concerns/secret_credential.rb: 7
   app/models/concerns/secret_credential_ceremony_transactionable.rb: 4
   app/models/concerns/selected_actor_context.rb: 2
   app/models/concerns/sign_flow.rb: 9
   app/models/concerns/sign_out_flow.rb: 4
   app/models/concerns/sign_up_flow_ticket.rb: 8
   app/models/concerns/signed_session_reference.rb: 1
-  app/models/concerns/single_use_token.rb: 3
+  app/models/concerns/single_use_token.rb: 2
   app/models/concerns/social_ceremony_transactionable.rb: 4
   app/models/concerns/step_up_ceremony_transactionable.rb: 7
   app/models/concerns/telephone.rb: 1
@@ -1016,7 +998,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/token_json_sanitizable.rb: 1
   app/models/concerns/token_status_management.rb: 16
   app/models/concerns/totp_ceremony_transactionable.rb: 4
-  app/models/concerns/visitor_secret_credential_kinds.rb: 5
+  app/models/concerns/visitor_secret_credential_kinds.rb: 4
   app/models/concerns/withdrawable.rb: 14
   app/models/concerns/withdrawal_ceremony_recordable.rb: 8
   app/models/concerns/withdrawal_flow.rb: 5
@@ -1050,7 +1032,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/operator_preference_theme_option.rb: 2
   app/models/operator_preference_time_format_option.rb: 2
   app/models/operator_preference_timezone_option.rb: 2
-  app/models/operator_secret_credential.rb: 6
+  app/models/operator_secret_credential.rb: 4
   app/models/operator_step_up_session.rb: 1
   app/models/operator_token_binding_method.rb: 1
   app/models/operator_token_dbsc_status.rb: 1
@@ -1149,7 +1131,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/visitor_preference_theme_option.rb: 2
   app/models/visitor_preference_time_format_option.rb: 2
   app/models/visitor_preference_timezone_option.rb: 2
-  app/models/visitor_secret_credential.rb: 8
+  app/models/visitor_secret_credential.rb: 6
   app/models/visitor_sign_up_flow.rb: 1
   app/models/visitor_step_up_session.rb: 1
   app/models/visitor_telephone.rb: 1
@@ -1163,6 +1145,10 @@ Umaxica/ExplicitMethodVisibility:
   app/operations/authentication_other_sessions_revoker.rb: 2
   app/operations/authentication_selected_session_revoker.rb: 2
   app/operations/authentication_session_committer.rb: 2
+  app/operations/avatar_moniker_writer_operation.rb: 1
+  app/operations/avatar_ownership_transfers/accept_operation.rb: 1
+  app/operations/avatar_ownership_transfers/cancel_operation.rb: 1
+  app/operations/avatar_ownership_transfers/request_operation.rb: 1
   app/operations/chronicle_fallback_recorder.rb: 1
   app/operations/chronicle_intent_writer.rb: 1
   app/operations/chronicle_invalidator.rb: 1
@@ -1226,6 +1212,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/avatar_follow_policy.rb: 2
   app/policies/avatar_group_policy.rb: 5
   app/policies/avatar_mute_policy.rb: 2
+  app/policies/avatar_ownership_transfer_policy.rb: 3
   app/policies/avatar_policy.rb: 4
   app/policies/chronicle_record_policy.rb: 8
   app/policies/client_chronicle_policy.rb: 1
@@ -1268,7 +1255,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/sign_in_otp_resend_policy.rb: 1
   app/policies/sign_up/finalization_policy.rb: 2
   app/policies/sign_up/participant_policy.rb: 2
-  app/policies/sign_up/requirement_policy.rb: 5
+  app/policies/sign_up/requirement_policy.rb: 4
   app/policies/sign_up/social_callback_policy.rb: 2
   app/policies/sign_up/ticket_policy.rb: 11
   app/policies/sign_up_eligibility_policy.rb: 2
@@ -1289,6 +1276,7 @@ Umaxica/ExplicitMethodVisibility:
   app/queries/publishing_management_entries_query.rb: 5
   app/queries/publishing_published_entries_query.rb: 3
   app/resolvers/account_standing_resolver.rb: 1
+  app/resolvers/avatar_permission_resolver.rb: 2
   app/resolvers/external_sign_in/org_entra_resolver.rb: 1
   app/resolvers/host_context_resolver.rb: 1
   app/resolvers/oidc_authorize_request_resolver.rb: 1
@@ -1453,6 +1441,7 @@ Umaxica/ExplicitMethodVisibility:
   app/uploaders/avatar_image_uploader.rb: 1
   app/uploaders/publishing_media_uploader.rb: 1
   app/validators/associated_record_limit_validator.rb: 1
+  app/validators/avatar_moniker_validator.rb: 3
   app/validators/blind_index_uniqueness_validator.rb: 1
   app/validators/recovery_identity_required_validator.rb: 1
   app/values/account_standing.rb: 1

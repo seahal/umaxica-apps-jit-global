@@ -75,7 +75,7 @@ CREATE UNLOGGED TABLE public.operator_auth_ceremony_sessions (
     authentication_event_at timestamp(6) with time zone,
     CONSTRAINT operator_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT operator_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
+    CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
     CONSTRAINT operator_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1))
 );
 
@@ -1049,8 +1049,9 @@ CREATE UNLOGGED TABLE public.operator_tokens (
     last_step_up_phishing_resistant boolean DEFAULT false NOT NULL,
     authentication_context character varying,
     authentication_event_at timestamp(6) with time zone,
-    CONSTRAINT chk_operator_tokens_authentication_context CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
-    CONSTRAINT chk_operator_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'entra'::character varying])::text[])))),
+    selected_avatar_public_id character varying,
+    CONSTRAINT chk_operator_tokens_authentication_context CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY (ARRAY[('normal'::character varying)::text, ('emergency'::character varying)::text])))),
+    CONSTRAINT chk_operator_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('entra'::character varying)::text])))),
     CONSTRAINT chk_staff_tokens_kind_id_positive CHECK ((staff_token_kind_id >= 0)),
     CONSTRAINT chk_staff_tokens_status_id_positive CHECK ((staff_token_status_id >= 0))
 );
@@ -1826,6 +1827,13 @@ CREATE INDEX index_operator_device_sessions_on_staff_id ON public.operator_devic
 
 
 --
+-- Name: index_operator_device_sessions_on_staff_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_device_sessions_on_staff_id_and_id ON public.operator_device_sessions USING btree (staff_id, id);
+
+
+--
 -- Name: index_operator_dpop_proof_states_on_expires_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2246,10 +2254,10 @@ CREATE UNIQUE INDEX index_operator_tokens_on_dbsc_session_id ON public.operator_
 
 
 --
--- Name: index_operator_tokens_on_device_session_id; Type: INDEX; Schema: public; Owner: -
+-- Name: index_operator_tokens_on_device_session_id_and_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_operator_tokens_on_device_session_id ON public.operator_tokens USING btree (device_session_id);
+CREATE UNIQUE INDEX index_operator_tokens_on_device_session_id_and_id ON public.operator_tokens USING btree (device_session_id, id);
 
 
 --
@@ -2327,6 +2335,13 @@ CREATE INDEX index_operator_tokens_on_rotated_at ON public.operator_tokens USING
 --
 
 CREATE INDEX index_operator_tokens_on_selected_account_public_id ON public.operator_tokens USING btree (selected_account_public_id);
+
+
+--
+-- Name: index_operator_tokens_on_selected_avatar_public_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_operator_tokens_on_selected_avatar_public_id ON public.operator_tokens USING btree (selected_avatar_public_id);
 
 
 --
@@ -2418,6 +2433,30 @@ CREATE INDEX index_organization_invitations_on_invited_by_id ON public.organizat
 --
 
 CREATE INDEX index_organization_invitations_on_organization_id ON public.organization_invitations USING btree (organization_id);
+
+
+--
+-- Name: operator_device_sessions fk_operator_device_sessions_on_current_refresh_token_owner; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_device_sessions
+    ADD CONSTRAINT fk_operator_device_sessions_on_current_refresh_token_owner FOREIGN KEY (id, current_refresh_token_id) REFERENCES public.operator_tokens(device_session_id, id) ON DELETE SET NULL (current_refresh_token_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: operator_tokens fk_operator_tokens_on_device_session_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_tokens
+    ADD CONSTRAINT fk_operator_tokens_on_device_session_id FOREIGN KEY (device_session_id) REFERENCES public.operator_device_sessions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_tokens fk_operator_tokens_on_staff_id_and_device_session_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_tokens
+    ADD CONSTRAINT fk_operator_tokens_on_staff_id_and_device_session_id FOREIGN KEY (staff_id, device_session_id) REFERENCES public.operator_device_sessions(staff_id, id) ON DELETE RESTRICT;
 
 
 --
@@ -2539,6 +2578,14 @@ ALTER TABLE ONLY public.operator_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260924177000'),
+('20260924156000'),
+('20260924155000'),
+('20260924154000'),
+('20260924153000'),
+('20260924152000'),
+('20260924151000'),
+('20260924150000'),
 ('20260922120100'),
 ('20260922120000'),
 ('20260921140100'),

@@ -78,8 +78,30 @@ module IdentityGraphRepair
     return false unless account
     return false unless account.current_memberships.active.exists?
 
-    return true unless config.requires_avatar
+    return true unless config.avatar_mode == :required
 
-    AvatarAssignment.exists?(user_id: principal.id, role: "owner")
+    account.current_memberships.active.any? do |membership|
+      collective = membership.public_send(config.membership_collective_association)
+      authorized = AvatarPermissionResolver.call(
+        actor: principal,
+        surface: config.surface,
+        subject_public_id: account.public_id,
+        owner_collective_public_id: collective.public_id,
+        permission: "avatar.view",
+      )
+      next false unless authorized
+
+      Avatar
+        .joins(:current_ownership_period, :lifecycle_state)
+        .where(
+          avatar_ownership_periods: {
+            owner_surface: config.surface.to_s,
+            owner_collective_public_id: collective.public_id,
+          },
+          avatar_lifecycle_states: { key: "active" },
+        )
+        .where("avatars.discard_at > ?", Time.current)
+        .exists?
+    end
   end
 end

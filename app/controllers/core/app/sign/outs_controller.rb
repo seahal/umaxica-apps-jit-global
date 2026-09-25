@@ -12,7 +12,6 @@ module Core
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
-        skip_before_action :transparent_refresh_access_token, raise: false
 
         before_action :authenticate_oidc_rp_session!, only: :create
         helper_method :sign_out_completed_description

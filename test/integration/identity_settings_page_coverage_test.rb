@@ -218,6 +218,10 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       visitor_email_status_id: VisitorEmailStatus::UNVERIFIED,
       confirm_policy: true,
     )
+    VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::ACTIVE)
+    VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::DELETED)
+    VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::LOGIN)
+    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
     VisitorTelephone.create!(
       visitor: visitor,
       number: "+819055520001",
@@ -394,6 +398,10 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
     }
 
+    OperatorSecretCredentialStatus.find_or_create_by!(id: OperatorSecretCredentialStatus::ACTIVE)
+    OperatorSecretCredentialStatus.find_or_create_by!(id: OperatorSecretCredentialStatus::DELETED)
+    OperatorSecretCredentialKind.find_or_create_by!(id: OperatorSecretCredentialKind::LOGIN)
+    OperatorPasskeyStatus.find_or_create_by!(id: OperatorPasskeyStatus::ACTIVE)
     secret = OperatorSecretCredential.create!(
       staff: operator,
       name: "Org coverage secret",
@@ -592,7 +600,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     assert_includes [302, 303], response.status
   end
 
-  test "client browses identity secrets and telephones" do
+  test "client browses identity telephones" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     host! host
     user = clients(:one)
@@ -608,7 +616,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
     cookies[ClientVerification.cookie_name] = raw_verification
     token.update!(
       last_step_up_at: Time.current,
-      last_step_up_scope: "settings_secret_credential",
+      last_step_up_scope: "settings_telephone",
       last_step_up_aal: "aal2",
       last_step_up_method: "passkey",
       last_step_up_session_public_id: token.public_id,
@@ -637,21 +645,7 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: true,
     )
-    secret = ClientSecretCredential.create!(
-      user: user,
-      name: "App coverage secret",
-      password: "a" * 32,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-      user_secret_status_id: ClientSecretCredentialStatus::ACTIVE,
-      last_used_at: Time.current,
-    )
-    extra_secret = ClientSecretCredential.create!(
-      user: user,
-      name: "App extra secret",
-      password: "b" * 32,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-      user_secret_status_id: ClientSecretCredentialStatus::ACTIVE,
-    )
+    ClientPasskeyStatus.find_or_create_by!(id: ClientPasskeyStatus::ACTIVE)
     ClientPasskey.create!(
       user: user,
       webauthn_id: "app_coverage_passkey_#{SecureRandom.hex(8)}",
@@ -670,28 +664,6 @@ class IdentitySettingsPageCoverageTest < ActionDispatch::IntegrationTest
       number: "+819077710002",
       user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED,
     )
-
-    get base_app_identity_secrets_url(ri: "jp", host: host), headers: headers
-
-    assert_response :success
-
-    get base_app_identity_secret_url(secret.public_id, ri: "jp", host: host), headers: headers
-
-    assert_response :success
-
-    get edit_base_app_identity_secret_url(secret.public_id, ri: "jp", host: host), headers: headers
-
-    assert_response :success
-
-    patch base_app_identity_secret_url(secret.public_id, ri: "jp", host: host),
-          params: { user_secret_credential: { name: "Renamed app secret", enabled: "1" } },
-          headers: headers
-
-    assert_includes [302, 303, 422], response.status
-
-    delete base_app_identity_secret_url(extra_secret.public_id, ri: "jp", host: host), headers: headers
-
-    assert_includes [302, 303], response.status
 
     token.update!(last_step_up_scope: "settings_telephone")
     get base_app_identity_telephones_url(ri: "jp", host: host), headers: headers

@@ -8,15 +8,12 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
     Auth::App::Sign::In::PasskeysController,
     Auth::App::Sign::In::Passkey::OptionsController,
     Auth::App::Sign::In::Passkey::VerificationsController,
-    Auth::App::Sign::In::SecretsController,
     Auth::Com::Sign::In::PasskeysController,
     Auth::Com::Sign::In::Passkey::OptionsController,
     Auth::Com::Sign::In::Passkey::VerificationsController,
-    Auth::Com::Sign::In::SecretsController,
     Auth::Org::Sign::In::PasskeysController,
     Auth::Org::Sign::In::Passkey::OptionsController,
     Auth::Org::Sign::In::Passkey::VerificationsController,
-    Auth::Org::Sign::In::SecretsController,
   ].freeze
 
   DUMMY_WORK_CONTROLLERS = [
@@ -39,15 +36,12 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
       Auth::App::Sign::In::PasskeysController,
       Auth::App::Sign::In::Passkey::OptionsController,
       Auth::App::Sign::In::Passkey::VerificationsController,
-      Auth::App::Sign::In::SecretsController,
       Auth::Com::Sign::In::PasskeysController,
       Auth::Com::Sign::In::Passkey::OptionsController,
       Auth::Com::Sign::In::Passkey::VerificationsController,
-      Auth::Com::Sign::In::SecretsController,
       Auth::Org::Sign::In::PasskeysController,
       Auth::Org::Sign::In::Passkey::OptionsController,
       Auth::Org::Sign::In::Passkey::VerificationsController,
-      Auth::Org::Sign::In::SecretsController,
     ]
 
     assert_equal expected.map(&:name).sort, protected_controllers.map(&:name).sort

@@ -64,6 +64,16 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     end
   end
 
+  test "generic identity secret scope remains only on com and org" do
+    app_pattern = StepUpScopeCatalog::APP.fetch("settings_secret_credential")
+    com_pattern = StepUpScopeCatalog::COM.fetch("settings_secret_credential")
+    org_pattern = StepUpScopeCatalog::ORG.fetch("settings_secret_credential")
+
+    assert_no_match app_pattern, "/identity/secrets"
+    assert_match com_pattern, "/identity/secrets"
+    assert_match org_pattern, "/identity/secrets"
+  end
+
   test "org session revoke scope includes support session actions" do
     pattern = StepUpScopeCatalog::ORG.fetch("session_revoke_all")
 
@@ -72,5 +82,23 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     assert_match pattern, "/support/operators/123/sessions/purge"
     assert_no_match pattern, "/support/clients/abc/sessions/purge"
     assert_no_match StepUpScopeCatalog::APP.fetch("session_revoke_all"), "/support/clients/123/sessions/purge"
+  end
+
+  test "Avatar transfer Step-Up scopes are operation-specific and absent from com" do
+    request_path = "/avatar_ownership_transfers?ri=jp"
+    accept_path = "/avatar_ownership_transfers/transfer-123/accept?ri=jp"
+    cancel_path = "/avatar_ownership_transfers/transfer-123/cancel?ri=jp"
+
+    %w(avatar_transfer_request avatar_transfer_accept avatar_transfer_cancel).each do |scope|
+      assert StepUpScopeCatalog::APP.key?(scope)
+      assert StepUpScopeCatalog::ORG.key?(scope)
+      assert_not StepUpScopeCatalog::COM.key?(scope)
+    end
+    assert_match StepUpScopeCatalog::APP.fetch("avatar_transfer_request"), request_path
+    assert_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_accept"), accept_path
+    assert_match StepUpScopeCatalog::APP.fetch("avatar_transfer_cancel"), cancel_path
+    assert_no_match StepUpScopeCatalog::APP.fetch("avatar_transfer_accept"), cancel_path
+    assert_no_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_cancel"), accept_path
+    assert_no_match StepUpScopeCatalog::ORG.fetch("avatar_transfer_accept"), "/avatar_ownership_transfers/transfer-123/accept-extra"
   end
 end

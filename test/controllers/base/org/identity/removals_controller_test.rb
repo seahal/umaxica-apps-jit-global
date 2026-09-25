@@ -12,7 +12,17 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
 
   test "removes the secret credential when another sign-in method still remains" do
     target = create_active_secret_credential(@operator)
-    create_active_secret_credential(@operator)
+    OperatorPasskeyStatus.find_or_create_by!(id: OperatorPasskeyStatus::ACTIVE)
+    OperatorPasskey.create!(
+      staff: @operator,
+      webauthn_id: "org-removal-alternative-#{SecureRandom.hex(8)}",
+      external_id: SecureRandom.uuid,
+      public_key: "public_key_#{SecureRandom.hex(8)}",
+      description: "Alternative sign-in passkey",
+      status_id: OperatorPasskeyStatus::ACTIVE,
+    )
+    assert_equal [:passkey],
+                 AuthenticationCredentialInventory.call(@operator, excluding: target).aal1_methods
 
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
          headers: step_up_staff_headers(@operator, host: @host)
@@ -112,6 +122,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
 
   def ensure_operator_reference_records!
     OperatorStatus.find_or_create_by!(id: OperatorStatus::ACTIVE)
+    OperatorEmailStatus.ensure_defaults!
     [
       OperatorSecretCredentialStatus::ACTIVE,
       OperatorSecretCredentialStatus::DELETED,

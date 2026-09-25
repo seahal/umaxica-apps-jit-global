@@ -12,7 +12,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      MONIKER_MAXLENGTH = 120
       HANDLE_MAXLENGTH = 80
 
       before_action :authenticate_client!
@@ -46,7 +45,7 @@ module Base
       def new
         authorize!(Avatar, to: :create?)
 
-        render inertia: true, props: new_avatar_props(Avatar.new)
+        render inertia: true, props: new_avatar_props(moniker_value: avatar_params[:moniker])
       end
 
       def edit
@@ -65,29 +64,67 @@ module Base
           subject: current_persona,
           avatar_params: avatar_params.except(:handle),
           handle_params: avatar_params.slice(:handle),
-          organization_public_id: current_session&.selected_collective_public_id,
+          owner_surface: "app",
+          owner_collective_public_id: current_session&.selected_collective_public_id,
         )
-        avatar = result.avatar || Avatar.new(avatar_params.except(:handle))
+        avatar = result.avatar || Avatar.new
 
         if result.success?
           redirect_to(base_app_avatar_path(avatar.public_id, ri: params[:ri]), status: :see_other)
         else
           render inertia: "base/app/avatars/new",
-                 props: new_avatar_props(avatar).merge(errors: serialize_errors(avatar)),
+                 props: new_avatar_props(moniker_value: avatar_params[:moniker])
+                   .merge(errors: serialize_errors(result.errors.fetch(0).record.errors.to_hash.slice(:moniker))),
                  status: :unprocessable_content
         end
+      rescue AvatarProvisioning::Create::Unauthorized
+        head :forbidden
       end
 
       def update
         avatar = find_avatar!
         authorize!(avatar)
-        if avatar.update(avatar_params.except(:handle))
+        observed_owner = avatar.current_ownership_period ||
+          raise(ActiveRecord::RecordNotFound, "Avatar has no current active owner")
+        raise AvatarOwnerMembershipLockService::AuthorizationDenied, "app Avatar owner required" unless
+          observed_owner.owner_surface == "app"
+
+        result =
+          AvatarOwnerMembershipLockService.call(
+            actor: current_client,
+            surface: "app",
+            subject_public_id: Actor.selection.account_public_id,
+            owner_collective_public_id: observed_owner.owner_collective_public_id,
+            permission: "avatar.update",
+          ) do
+            Avatar.transaction do
+              current_owner = AvatarOwnershipPeriod.current
+                .where(avatar_id: avatar.id, avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
+                .lock
+                .first || raise(ActiveRecord::RecordNotFound, "Avatar has no current active owner")
+              unless [current_owner.owner_surface, current_owner.owner_collective_public_id] ==
+                  [observed_owner.owner_surface, observed_owner.owner_collective_public_id]
+                raise AvatarOwnerMembershipLockService::AuthorizationDenied,
+                      "Avatar owner changed while updating its moniker"
+              end
+
+              AvatarMonikerWriterOperation.call(
+                avatar: avatar,
+                moniker: avatar_params[:moniker],
+                expected_current: :present,
+              )
+            end
+          end
+        if result.success?
           redirect_to(base_app_avatar_path(avatar.public_id, ri: params[:ri]), status: :see_other)
         else
           render inertia: "base/app/avatars/edit",
-                 props: edit_avatar_props(avatar).merge(errors: serialize_errors(avatar)),
+                 props: edit_avatar_props(avatar, moniker_value: avatar_params[:moniker])
+                   .merge(errors: serialize_errors(result.errors)),
                  status: :unprocessable_content
         end
+      rescue AvatarOwnerMembershipLockService::AuthorizationDenied
+        head :forbidden
       end
 
       private
@@ -95,38 +132,59 @@ module Base
       def serialize_avatar_entry(avatar)
         {
           public_id: avatar.public_id,
-          label: avatar.moniker.presence || avatar.public_id,
+          label: avatar.moniker,
           href: base_app_avatar_path(avatar.public_id, ri: params[:ri]),
         }
       end
 
-      def new_avatar_props(avatar)
+      def new_avatar_props(moniker_value: nil)
         {
           title: "New Avatar",
           heading: "New Avatar",
           action: base_app_avatars_path(ri: params[:ri]),
           method: "post",
           submit_label: "Create Avatar",
-          moniker: { label: "Name", value: avatar.moniker.to_s, maxlength: MONIKER_MAXLENGTH },
+          moniker: moniker_field_props(moniker_value),
           handle: { label: "Handle", value: avatar_params[:handle].to_s, maxlength: HANDLE_MAXLENGTH },
         }
       end
 
-      def edit_avatar_props(avatar)
+      def edit_avatar_props(avatar, moniker_value: avatar.moniker)
         {
           title: "Avatar",
           heading: "Avatar",
           action: base_app_avatar_path(avatar.public_id, ri: params[:ri]),
           method: "patch",
           submit_label: "Update Avatar",
-          moniker: { label: "Name", value: avatar.moniker.to_s, maxlength: MONIKER_MAXLENGTH },
+          moniker: moniker_field_props(moniker_value),
           handle: nil,
         }
       end
 
+      def moniker_field_props(value)
+        max_bytes = AvatarMonikerValidator::MAX_BYTES
+        max_grapheme_clusters = AvatarMonikerValidator::MAX_GRAPHEME_CLUSTERS
+
+        {
+          label: "Name",
+          value: value.to_s,
+          max_bytes: max_bytes,
+          max_grapheme_clusters: max_grapheme_clusters,
+          client_validation: {
+            blank: t("base.app.avatars.moniker_validation.blank"),
+            invalid: t("base.app.avatars.moniker_validation.invalid"),
+            max_bytes: t("base.app.avatars.moniker_validation.max_bytes", count: max_bytes),
+            max_graphemes: t(
+              "base.app.avatars.moniker_validation.max_graphemes",
+              count: max_grapheme_clusters,
+            ),
+          },
+        }
+      end
+
       # Inertia reads validation errors from the `errors` page prop, keyed by the form field path.
-      def serialize_errors(avatar)
-        avatar.errors.to_hash.transform_keys { |attribute| "avatar.#{attribute}" }
+      def serialize_errors(errors)
+        errors.transform_keys { |attribute| "avatar.#{attribute}" }
           .transform_values { |messages| messages.first }
       end
 

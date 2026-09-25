@@ -36,17 +36,13 @@ module PreferenceCore
       @preference_language = load_or_refresh_preference_child_for_edit("Language")
     end
 
-    pin_locale_to_saved_language(@preference_language)
+    pin_locale_to_saved_language(@preference_language) if
+      @preferences.persisted? && @preferences.explicit_field?(:language)
   end
 
-  # Render the language settings screen in the user's *saved* language so the
-  # page text matches the option pre-selected in the form. The selector reflects
-  # the persisted DB/JWT value (@preference_language.option_id), but the page
-  # locale is otherwise resolved by ActorSupport#overlay_language, which lets a
-  # transient ?lx=/?ri= request param win over the saved value. Without this pin
-  # the page renders in the overlay locale while the selector shows the saved one
-  # (e.g. an English page with Japanese selected). On the settings screen the saved
-  # value is the source of truth, so align the display to it.
+  # An explicitly saved language wins over a regional request overlay, keeping
+  # the language screen aligned with the user's choice. Unmarked defaults remain
+  # eligible for region-derived locale without persisting a preference on GET.
   def pin_locale_to_saved_language(language_preference)
     option_id = language_preference&.option_id
     return if option_id.blank?
@@ -78,7 +74,6 @@ module PreferenceCore
 
   def set_timezone_preferences_edit
     with_preference_connection(:writing) do
-      ensure_model_defaults!(PreferenceClassRegistry.option_class(preference_prefix, :timezone))
       @preference_timezone = load_or_refresh_preference_child_for_edit("Timezone")
     end
 
@@ -149,7 +144,6 @@ module PreferenceCore
   def set_selectable_preference_edit(type)
     @preference_option_type = type.to_sym
     with_preference_connection(:writing) do
-      ensure_model_defaults!(PreferenceClassRegistry.option_class(preference_prefix, type))
       @preference_option = load_or_build_selectable_preference_child(type)
     end
   end
@@ -178,11 +172,9 @@ module PreferenceCore
     @preference_surface_key = preference_surface_key
     @preference_option_scope = :"preference_#{type}"
     @preference_option_update_url = preference_update_url(type)
+    option_class = PreferenceClassRegistry.option_class(preference_prefix, type)
     @preference_option_choices =
-      PreferenceClassRegistry.option_class(
-        preference_prefix,
-        type,
-      ).order(:id).filter_map do |option|
+      preference_ordered_options(option_class, type).filter_map do |option|
         next if option.name.blank?
 
         [preference_option_label(type, option.name), option.id]
@@ -198,7 +190,7 @@ module PreferenceCore
 
   def set_cookie_preferences_edit
     with_preference_connection(:writing) do
-      @preference_cookie = load_or_refresh_preference_child(
+      @preference_cookie = load_or_refresh_preference_child_for_edit(
         "Cookie",
         targetable: false, performant: false, functional: false, consented: false,
       )
@@ -257,7 +249,7 @@ module PreferenceCore
   # missing child row. Use this from *_preferences_edit actions; the
   # persisting loader above stays reserved for *_preferences_update (a
   # legitimate write point) since GET must not mutate state.
-  def load_or_refresh_preference_child_for_edit(child_type)
+  def load_or_refresh_preference_child_for_edit(child_type, default_attributes = {})
     association_name = :"#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
     @preferences ||= ensure_preferences_record
 
@@ -266,7 +258,7 @@ module PreferenceCore
       association.reload if association.loaded?
     end
 
-    load_or_build_preference_child(child_type)
+    load_or_build_preference_child(child_type, default_attributes)
   end
 
   def reload_preferences_and_reissue_token!

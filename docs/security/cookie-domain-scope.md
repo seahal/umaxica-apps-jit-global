@@ -72,7 +72,7 @@ transport binding:
 
 - Base is the only physical Authorization Server and token authority.
 - Auth is ceremony-only. It does not own issuer, token, Browser Session, or RP Session authority.
-- Core/Side/Edit RP callbacks store Base-issued credentials in the RP cookie slots above. The exact
+- Core/Warp/Edit RP callbacks store Base-issued credentials in the RP cookie slots above. The exact
   RP client ID, issuer, audience, and resource type are checked before the cookie is used.
 - `SignRefreshTokenService` is a legacy compatibility subclass; new refresh authority references
   should use `AcmeRefreshTokenService`.

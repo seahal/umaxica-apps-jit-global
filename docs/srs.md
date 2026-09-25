@@ -67,9 +67,11 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   HOTP/TOTP (ROTP), `Outbound::Sms`, and Cloudflare Turnstile for bot defense.
 - **Observability**: OpenTelemetry instrumentation exports to Tempo via OTLP; logs/metrics land in
   Loki/Grafana (docker/observability stack).
-- **Storage & CDN**: Shrine uses memory storage in test and filesystem storage otherwise. An opt-in
-  RustFS profile supports explicit S3-compatible integration checks; production object storage
-  remains deferred.
+- **Storage & CDN**: Shrine uses memory storage in test, configured S3-compatible storage in
+  development/staging, and AWS S3 through the platform credential provider in production. Objects
+  are private. The Avatar image-delivery URL/API and CDN namespace remain undefined; no user-facing
+  image route is currently provided. The opt-in RustFS profile supports explicit local storage
+  integration checks.
 - **Surface mapping** (driven by ENV such as `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, etc.): | Surface
   | Host examples | Namespace | Responsibilites |
   |---------|---------------|-----------|-----------------| | Top (marketing / preferences) |

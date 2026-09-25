@@ -40,5 +40,7 @@ class VisitorDeviceSession < ComTicketRecord
   # sessions and before the first refresh rotation; requiring it made `revoke!`
   # fail validation, so sign-out could not revoke such sessions.
   belongs_to :current_refresh_token, class_name: "VisitorToken", optional: true
-  has_many :visitor_tokens, foreign_key: :device_session_id, dependent: :nullify, inverse_of: :device_session
+  has_many :visitor_tokens, foreign_key: :device_session_id,
+                            dependent: :restrict_with_exception,
+                            inverse_of: :device_session
 end

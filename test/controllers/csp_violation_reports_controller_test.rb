@@ -193,9 +193,9 @@ class CspViolationReportsControllerTest < ActionDispatch::IntegrationTest
       [ENV["PRIVATE_NEWS_SERVICE_URL"] || "news.app.localhost", :news_app_csp_violation_report_path],
       [ENV["PRIVATE_NEWS_CORPORATE_URL"] || "news.com.localhost", :news_com_csp_violation_report_path],
       [ENV["PRIVATE_NEWS_STAFF_URL"] || "news.org.localhost", :news_org_csp_violation_report_path],
-      [configured_host(:side_service), :side_app_csp_violation_report_path],
-      [configured_host(:side_corporate), :side_com_csp_violation_report_path],
-      [configured_host(:side_staff), :side_org_csp_violation_report_path],
+      [configured_host(:warp_service), :warp_app_csp_violation_report_path],
+      [configured_host(:warp_corporate), :warp_com_csp_violation_report_path],
+      [configured_host(:warp_staff), :warp_org_csp_violation_report_path],
       [ENV["PRIVATE_INFO_SERVICE_URL"] || "info.app.localhost", :info_app_csp_violation_report_path],
       [ENV["PRIVATE_INFO_CORPORATE_URL"] || "info.com.localhost", :info_com_csp_violation_report_path],
       [ENV["PRIVATE_INFO_STAFF_URL"] || "info.org.localhost", :info_org_csp_violation_report_path],
@@ -552,9 +552,9 @@ class CspViolationReportsControllerTest
       core_corporate: "PUBLIC_CORE_CORPORATE_URL",
       core_staff: "PUBLIC_CORE_STAFF_URL",
       palm_service: "PUBLIC_PALM_SERVICE_URL",
-      side_service: "PUBLIC_SIDE_SERVICE_URL",
-      side_corporate: "PUBLIC_SIDE_CORPORATE_URL",
-      side_staff: "PUBLIC_SIDE_STAFF_URL",
+      warp_service: "PUBLIC_WARP_SERVICE_URL",
+      warp_corporate: "PUBLIC_WARP_CORPORATE_URL",
+      warp_staff: "PUBLIC_WARP_STAFF_URL",
     }.fetch(surface_name)
 
     ENV.fetch(public_env_key, Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host)

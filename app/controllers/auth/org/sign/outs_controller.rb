@@ -12,7 +12,6 @@ module Auth
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
-        skip_before_action :transparent_refresh_access_token, raise: false
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 

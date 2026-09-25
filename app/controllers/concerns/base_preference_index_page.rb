@@ -38,12 +38,7 @@ module BasePreferenceIndexPage
       description: t(preference_base_i18n_key(:preferences, :description)),
       up_link: {
         label: t(preference_base_i18n_key(:preferences, :up_link)),
-        # The overridden context here predates the Inertia migration and is carried over unchanged
-        # to keep this change behaviour preserving. See the implementation note for the follow-up.
-        href: public_send(
-          "#{preference_route_authority}_#{preference_surface_key}_root_path",
-          ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo",
-        ),
+        href: preference_index_return_path,
       },
       screens: PREFERENCE_INDEX_SCREENS.map do |screen, label_key|
         {
@@ -53,6 +48,11 @@ module BasePreferenceIndexPage
         }
       end,
     }
+  end
+
+  def preference_index_return_path
+    destination = logged_in? ? :dashboard : :root
+    public_send("#{preference_route_authority}_#{preference_surface_key}_#{destination}_path")
   end
 
   def preference_index_screen_helper_name(screen)

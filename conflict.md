@@ -3,6 +3,9 @@
 This file is the single conflict ledger for the integrated hardening work. It does not replace
 accepted ADRs, implementation plans, or evidence.
 
+Current naming note (2026-09-25): historical references to the Rails `Side`/`Wide` surface mean the
+current `Warp` internal namespace. Protocol and persisted identifiers retain their existing names.
+
 ## CF-001 — Pre-existing plan-file deletions
 
 - Status: OPEN_NON_BLOCKING

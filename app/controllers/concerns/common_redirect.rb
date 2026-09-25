@@ -35,19 +35,14 @@ module CommonRedirect
     fallback_internal: false,
     **
   )
-    token =
-      begin
-        preserve_query_keys |= safe_jump_preserved_query_keys(url)
-        JumpRtIssuer.call(
-          namespace: namespace,
-          url: url,
-          dst: dst,
-          replay_policy: replay_policy,
-          preserve_query_keys: preserve_query_keys,
-        )
-      rescue ArgumentError
-        nil
-      end
+    preserve_query_keys |= safe_jump_preserved_query_keys(url)
+    token = JumpRtIssuer.call(
+      namespace: namespace,
+      url: url,
+      dst: dst,
+      replay_policy: replay_policy,
+      preserve_query_keys: preserve_query_keys,
+    )
     if token.present?
       log_jump_rt_issued(token: token, namespace: namespace, dst: dst, replay_policy: replay_policy, url: url)
       result = RedirectsJumpGatewayUrl.call(token)
@@ -95,7 +90,10 @@ module CommonRedirect
     return [] unless OidcClientRegistry.valid_redirect_uri?(query["client_id"], query["redirect_uri"])
 
     ["redirect_uri"]
-  rescue URI::InvalidURIError
+  rescue URI::InvalidURIError,
+         Rack::Utils::ParameterTypeError,
+         Rack::Utils::InvalidParameterError,
+         Rack::Utils::ParamsTooDeepError
     []
   end
 

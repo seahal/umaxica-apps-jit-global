@@ -65,7 +65,7 @@ Current browser route contract keeps Acme as the only OP/AS authority. Browser R
 routes use `/oidc/authorization` and `/oidc/callback`; Palm is excluded from the browser RP launcher
 contract and retains only its inert native callback compatibility stub. Acme owns the protocol `/oauth/*` surface and
 `/oidc/logout`, while RP local sign-out remains `/sign/out/new`, `/sign/out/edit`, `/sign/out`, and
-`/sign/out/complete` on Auth, Core, Side, and Palm. Base local sign-out confirms on
+`/sign/out/complete` on Auth, Core, Warp, and Palm. Base local sign-out confirms on
 `/sign/out/edit`, mutates on `POST /sign/out`, and completes with `303` to `/lobby`. Social login
 entry points use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and
 `/social/:provider/callback`. `google` and `apple` are canonical provider names; `google_app` is

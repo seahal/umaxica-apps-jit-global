@@ -21,9 +21,9 @@ class LogoutCompletionHostAndRecoveryCredentialsTest < ActiveSupport::TestCase
       ["core", "app"] => hosts.core_service.host,
       ["core", "com"] => hosts.core_corporate.host,
       ["core", "org"] => hosts.core_staff.host,
-      ["side", "app"] => hosts.side_service.host,
-      ["side", "com"] => hosts.side_corporate.host,
-      ["side", "org"] => hosts.side_staff.host,
+      ["side", "app"] => hosts.warp_service.host,
+      ["side", "com"] => hosts.warp_corporate.host,
+      ["side", "org"] => hosts.warp_staff.host,
       ["palm", "app"] => hosts.palm_service.host,
     }.each do |(origin, surface), expected|
       assert_equal expected,

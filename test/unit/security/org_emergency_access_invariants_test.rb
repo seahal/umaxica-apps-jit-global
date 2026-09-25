@@ -58,13 +58,13 @@ class OrgEmergencyAccessInvariantsTest < ActiveSupport::TestCase
     assert_not recognizes?(org_host, "DELETE", "/sign/in/emergency/passkey/verification")
   end
 
-  test "the existing normal org sign-in URLs are unchanged" do
+  test "the normal org passkey flow is preserved and permanent secret sign-in is retired" do
     assert recognizes?(org_host, "GET", "/sign/in")
     assert recognizes?(org_host, "GET", "/sign/in/passkey/new")
     assert recognizes?(org_host, "POST", "/sign/in/passkey/options")
     assert recognizes?(org_host, "POST", "/sign/in/passkey/verification")
-    assert recognizes?(org_host, "GET", "/sign/in/secret/new")
-    assert recognizes?(org_host, "POST", "/sign/in/secret")
+    assert_not recognizes?(org_host, "GET", "/sign/in/secret/new")
+    assert_not recognizes?(org_host, "POST", "/sign/in/secret")
   end
 
   # Emergency Access is a policy, not a protocol: it must not acquire its own

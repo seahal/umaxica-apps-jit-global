@@ -38,7 +38,8 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal "Persona01", result.account.title
     assert_equal "Org01", result.collective.title
     assert_equal 1, AvatarPersonaBinding.where(persona_id: result.account.id).count
-    assert_equal 1, AvatarAssignment.where(user_id: user.id, role: "owner").count
+    assert_equal 0, AvatarAssignment.where(user_id: user.id, role: "owner").count
+    assert_equal 1, AvatarOwnershipPeriod.current.where(avatar_id: result.avatar.id).count
     assert_equal 1, result.account.current_memberships.count
     assert_equal user.id, result.account.reload.ownership.client_id
     assert_equal "active", result.account.lifecycle.state
@@ -46,7 +47,7 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal "active", result.collective.lifecycle.state
     assert_predicate result.avatar, :present?
     assert_equal "active", result.avatar.lifecycle_state.key
-    assert_equal user.id, result.avatar.client_id
+    assert_nil result.avatar.client_id
     assert_equal result.account, result.avatar.current_persona
     assert_equal result.avatar, result.account.current_avatar
   end
@@ -72,7 +73,8 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal user, observed_arguments.fetch(:actor)
     assert_equal :persona, observed_arguments.fetch(:subject_type)
     assert_equal "Default Avatar", observed_arguments.fetch(:avatar_params).fetch(:moniker)
-    assert_equal result.collective.public_id, observed_arguments.fetch(:organization_public_id)
+    assert_equal "app", observed_arguments.fetch(:owner_surface)
+    assert_equal result.collective.public_id, observed_arguments.fetch(:owner_collective_public_id)
   end
 
   test "app bootstrap leaves no partial avatar graph when provisioning fails" do

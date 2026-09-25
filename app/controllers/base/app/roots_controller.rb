@@ -7,6 +7,9 @@ module Base
       include ::SurfaceInertiaPage
 
       AUTHENTICATION_MODE = :open
+      skip_before_action :set_preferences_cookie, only: %i(index show)
+
+      public
 
       def index
         response.headers["Cache-Control"] = "private, no-store"
@@ -15,7 +18,12 @@ module Base
         render inertia: true, props: root_landing_props
       end
 
-      public
+      def show
+        response.headers["Cache-Control"] = "private, no-store"
+        return redirect_to(base_app_root_path(ri: params[:ri]), status: :see_other) unless logged_in?
+
+        render_authenticated_home
+      end
 
       def create
         return redirect_to(base_app_root_path(ri: params[:ri]), status: :see_other) if logged_in?
@@ -43,6 +51,14 @@ module Base
         render plain: "authentication service unavailable", status: :service_unavailable
       end
 
+      protected
+
+      def track_authenticated_session_activity?
+        return false if (request.get? || request.head?) && %w(index show).include?(action_name)
+
+        super
+      end
+
       private
 
       def render_authenticated_home
@@ -68,16 +84,36 @@ module Base
         {
           title: t("base.shared.dashboard.title"),
           sections: [
-            { heading: t("base.shared.dashboard.sections.menu_links"), items: menu_links },
+            {
+              heading: t("base.shared.dashboard.sections.menu_links"),
+              current_identity: dashboard_current_identity,
+              items: menu_links,
+            },
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
           ],
         }
       end
 
+      def dashboard_current_identity
+        persona = switcher.find_account(Actor.selection.account_public_id)
+        raise ActiveRecord::RecordNotFound, "selected app Persona is not available to this principal" if persona.blank?
+
+        display_name = persona.moniker
+        raise "selected app Persona has no display name" if display_name.blank?
+
+        { display_name: display_name }
+      end
+
+      def switcher
+        @switcher ||= BaseSwitcherAuthority.new(
+          surface: :app, principal: current_client, session: current_session,
+        )
+      end
+
       def menu_links
         [
-          { label: t("base.shared.dashboard.links.switcher"), href: base_app_switcher_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.preference"), href: base_app_preference_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.switcher"), href: base_app_switcher_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.logout"), href: new_base_app_sign_out_path(ri: params[:ri]) },
         ]
       end

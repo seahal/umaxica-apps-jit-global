@@ -12,7 +12,6 @@ module Auth
         include ::CloudflareTurnstile
         include ::SignAuthorityRedirect
         include ::SignSettingsTotpRegistration
-        include ::SignRequiresRecoveryPasscodes
 
         include ::VerificationClient
 
@@ -24,14 +23,11 @@ module Auth
           ClientTotpCredentialStatus::DELETED => "messages.totp_status.deleted",
           ClientTotpCredentialStatus::NOTHING => "messages.totp_status.nothing",
         }.freeze
-        # `SignRequiresRecoveryPasscodes` still answers with the shared ERB template, and the slim
-        # Inertia shell has no `yield` to render one into, so the layout follows the render kind.
         layout :settings_totps_layout
 
         before_action :authenticate_client!
         step_up only: %i(new create), bootstrap: true
         step_up only: :destroy
-        before_action :require_recovery_passcodes_for_mfa_registration!, only: %i(new create)
 
         def index
           authorize!(ClientTotpCredential, to: :index?)
@@ -111,18 +107,13 @@ module Auth
           session[:private_key] = nil
           reset_totp_ceremony_session!
 
-          recovery_passcode_top_up = top_up_recovery_passcodes_after_totp_registration
-          redirect_url =
-            if recovery_passcode_top_up.raw_values.any?
-              recovery_passcode_reveal_url(recovery_passcode_top_up.raw_values)
-            else
+          redirect_to(
+            bootstrap_return_path(
               auth_app_settings_totps_url(
                 ri: params[:ri],
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-              )
-            end
-          redirect_to(
-            bootstrap_return_path(redirect_url),
+              ),
+            ),
             allow_other_host: cross_host_redirect_allowed?,
             status: :see_other,
           )
@@ -355,53 +346,6 @@ module Auth
 
         def verification_scope
           "settings_totp"
-        end
-
-        def recovery_passcode_requirement_active_strong_credential_count
-          current_client.client_passkeys.active.count +
-            current_client.client_totp_credentials.where(
-              user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-            ).count
-        end
-
-        def recovery_passcode_requirement_actor
-          current_client
-        end
-
-        def recovery_passcode_requirement_credential_class
-          ClientSecretCredential
-        end
-
-        def recovery_passcode_setup_url
-          base_app_identity_secrets_url(
-            ri: params[:ri],
-            host: base_authority_host,
-          )
-        end
-
-        def top_up_recovery_passcodes_after_totp_registration
-          RecoveryPasscodeTopUp.call(
-            actor: current_client,
-            credential_class: ClientSecretCredential,
-            target_count: RecoveryPasscodeTopUp::TARGET_ACTIVE_RECOVERY_PASSCODES,
-          )
-        end
-
-        def recovery_passcode_reveal_url(raw_values)
-          return if raw_values.blank?
-
-          reveal = IdentityOneTimeReveal.issue!(
-            actor: current_client,
-            session_nonce: current_client.public_id,
-            value: raw_values,
-            purpose: "client.recovery_secret_credential",
-            metadata: {},
-          )
-          base_app_identity_secrets_url(
-            ri: params[:ri],
-            token: reveal.token,
-            host: base_authority_host,
-          )
         end
 
         private :initialize_totp, :handle_success, :handle_failure

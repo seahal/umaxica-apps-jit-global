@@ -26,10 +26,7 @@ module PreferenceRefreshTokenTransport
 
     if preference.present?
       if preference.replay?
-        # A concurrent sibling request may have rotated this token moments ago.
-        # In that grace case the handler adopts the replacement into @preferences
-        # and we serve the request with it instead of failing closed.
-        return [@preferences, false] if handle_preference_refresh_replay!(preference) == :grace
+        handle_preference_refresh_replay!(preference)
       else
         handle_preference_refresh_failed(preference, refresh_public_id)
       end
@@ -47,6 +44,52 @@ module PreferenceRefreshTokenTransport
     @refresh_public_id = nil
     preference = create_new_preference_record!
     [preference, true]
+  end
+
+  def load_read_only_preference_record_from_refresh_token!
+    token_value = refresh_token_value
+    return if token_value.blank?
+
+    @refresh_token_value = token_value
+    @refresh_presented_digest = nil
+    @refresh_public_id = nil
+
+    refresh_public_id, refresh_digest = refresh_token_data(token_value)
+    @refresh_presented_digest = refresh_digest
+    @refresh_public_id = refresh_public_id
+
+    preference =
+      if refresh_digest.present?
+        with_preference_connection(:writing) do
+          relation = preference_class.includes(preference_associations_to_preload)
+          if refresh_public_id.present?
+            relation.find_by(public_id: refresh_public_id)
+          else
+            relation.find_by(token_digest: refresh_digest)
+          end
+        end
+      end
+
+    binding_allowed = preference.present? && preference_refresh_binding_allowed?(preference)
+    valid = preference.present? && !refresh_digest_mismatch?(preference, refresh_digest) &&
+      valid_refresh_preference?(preference) && binding_allowed
+
+    if valid
+      @preferences = preference
+      return preference
+    end
+
+    @preference_refresh_failed = true
+    event = @preference_refresh_binding_reason.present? ? "preference.token.refresh.binding_denied" :
+      "preference.token.refresh.failed"
+    Rails.logger.warn(
+      JitLogEvent.format(
+        event,
+        reason: @preference_refresh_binding_reason || "invalid_or_inactive_refresh_token",
+        **preference_refresh_log_context(preference, refresh_public_id),
+      ),
+    )
+    nil
   end
 
   def refresh_token_data(token_value)
@@ -187,9 +230,6 @@ module PreferenceRefreshTokenTransport
 
   def refresh_refresh_token_lifetime(preference)
     return if @refresh_token_value.blank? || preference.blank? || @refresh_presented_digest.blank?
-    # A grace-window sibling already adopted the replacement read-only; do not
-    # attempt another rotation against the consumed parent digest.
-    return if @preference_refresh_grace
 
     rotated_preference =
       with_preference_connection(:writing) do

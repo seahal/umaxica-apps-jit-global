@@ -61,9 +61,11 @@ class PreferenceSignedInDualWriteTest < ActionDispatch::IntegrationTest
       patch public_send(region_path, ri: "jp"), params: { preference_region: { option_id: "US" } }, headers: headers
 
       assert_response :redirect, account_class.name
-      account = account_class.find_by!(fk => actor.id)
+      account_class.connection_class_for_self.connected_to(role: :writing) do
+        account = account_class.find_by!(fk => actor.id)
 
-      assert_equal us, account.public_send(region_assoc).option_id, account_class.name
+        assert_equal us, account.public_send(region_assoc).option_id, account_class.name
+      end
     end
   end
 end

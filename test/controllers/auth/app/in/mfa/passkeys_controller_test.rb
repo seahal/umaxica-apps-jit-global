@@ -9,9 +9,9 @@ require "ostruct"
 module Auth::App::In
   class MfaPasskeysControllerTest < ActionDispatch::IntegrationTest
     include ActiveSupport::Testing::TimeHelpers
+    include AuthEmailMfaHelper
 
-    fixtures :client_statuses, :client_passkey_statuses, :client_secret_credential_kinds,
-             :client_secret_credential_statuses, :client_email_statuses, :client_totp_credential_statuses
+    fixtures :client_statuses, :client_passkey_statuses, :client_email_statuses, :client_totp_credential_statuses
 
     setup do
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
@@ -20,7 +20,7 @@ module Auth::App::In
 
       @user = Client.create!(mfa_level_enabled: true)
       @email = "mfa_passkey_#{SecureRandom.hex(4)}@example.com".freeze
-      @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+      @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
       ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,
@@ -28,13 +28,6 @@ module Auth::App::In
         title: "totp",
       )
 
-      _secret_credential, @raw_secret_credential = ClientSecretCredential.issue!(
-        name: "Passkey MFA secret_credential",
-        user_id: @user.id,
-        user_secret_kind_id: ClientSecretCredentialKind::PERMANENT,
-        uses: 10,
-        status: :active,
-      )
 
       @raw_credential_id = "mfa-credential-123"
       @passkey = ClientPasskey.create!(
@@ -65,7 +58,7 @@ module Auth::App::In
     # sign-in. These four arms had no test on this surface.
     test "new sends the client back to the chooser when no passkey is registered" do
       @passkey.destroy!
-      travel(31.seconds) { establish_pending_mfa_via_secret_credential! }
+      travel(31.seconds) { establish_pending_mfa_via_email! }
 
       get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
 
@@ -74,7 +67,7 @@ module Auth::App::In
     end
 
     test "new sends the client back to the chooser when the relying party is not configured" do
-      travel(31.seconds) { establish_pending_mfa_via_secret_credential! }
+      travel(31.seconds) { establish_pending_mfa_via_email! }
       missing_config =
         lambda do |*|
           raise Webauthn::RelyingPartyConfigResolver::MissingConfigurationError, "rp_id missing"
@@ -89,7 +82,7 @@ module Auth::App::In
     end
 
     test "create refuses a failed stealth challenge and keeps the passkey challenge for a retry" do
-      travel(31.seconds) { establish_pending_mfa_via_secret_credential! }
+      travel(31.seconds) { establish_pending_mfa_via_email! }
       get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
       challenge_id = session[:passkey_challenges].keys.first
       TurnstileVerifierStub.challenge_response = { "success" => false }
@@ -103,7 +96,7 @@ module Auth::App::In
     end
 
     test "create sends the client back to the chooser when the assertion does not verify" do
-      travel(31.seconds) { establish_pending_mfa_via_secret_credential! }
+      travel(31.seconds) { establish_pending_mfa_via_email! }
       get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
       challenge_id = session[:passkey_challenges].keys.first
       failure = ->(**) { raise Webauthn::AssertionVerifier::VerificationError, "bad assertion" }
@@ -129,7 +122,7 @@ module Auth::App::In
     end
 
     test "create sends the client back to the chooser when the credential payload is not json" do
-      travel(31.seconds) { establish_pending_mfa_via_secret_credential! }
+      travel(31.seconds) { establish_pending_mfa_via_email! }
       get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
       challenge_id = session[:passkey_challenges].keys.first
 
@@ -146,7 +139,7 @@ module Auth::App::In
 
     test "create sends the client back to the chooser when the credential belongs to another account" do
       other_user = Client.create!(mfa_level_enabled: true)
-      travel(31.seconds) { establish_pending_mfa_via_secret_credential! }
+      travel(31.seconds) { establish_pending_mfa_via_email! }
       get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
       challenge_id = session[:passkey_challenges].keys.first
       @passkey.update!(user_id: other_user.id)
@@ -171,7 +164,7 @@ module Auth::App::In
 
     test "create verifies passkey and finalizes login with pending_mfa" do
       travel 31.seconds do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       get new_auth_app_sign_in_challenge_passkey_path(ri: "jp")
@@ -215,18 +208,9 @@ module Auth::App::In
 
     private
 
-    def establish_pending_mfa_via_secret_credential!
-      post(
-        auth_app_sign_in_secret_path(ri: "jp"), params: {
-          secret_credential_login_form: {
-            identifier: @email,
-            secret_credential_value: @raw_secret_credential,
-          },
-          "cf-turnstile-response": "test_token",
-        },
-      )
+    def establish_pending_mfa_via_email!
+      sign_in_with_email_to_mfa!(surface: :app, email_record: @email_record, email: @email)
 
-      assert_response :redirect
       assert_predicate session[:pending_mfa], :present?
     end
   end

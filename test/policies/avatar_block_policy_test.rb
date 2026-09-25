@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class AvatarBlockPolicyTest < ActiveSupport::TestCase
@@ -45,6 +46,6 @@ class AvatarBlockPolicyTest < ActiveSupport::TestCase
   private
 
   def create_avatar(moniker)
-    Avatar.create!(capability: @capability, active_handle: @handle, moniker: moniker)
+    AvatarTestFactory.create!(moniker: moniker, capability: @capability, active_handle: @handle)
   end
 end

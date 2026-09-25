@@ -21,11 +21,11 @@ class BranchCoverageBatch40LinePushTest < ActiveSupport::TestCase
     Actor.reset
   end
 
-  test "Side application HelperMethods delegates execute" do
+  test "Warp application HelperMethods delegates execute" do
     [
-      Side::App::ApplicationController,
-      Side::Com::ApplicationController,
-      Side::Org::ApplicationController,
+      Warp::App::ApplicationController,
+      Warp::Com::ApplicationController,
+      Warp::Org::ApplicationController,
     ].each do |klass|
       controller = klass.new
       controller.define_singleton_method(:current_resource) { nil }

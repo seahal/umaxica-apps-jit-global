@@ -46,10 +46,6 @@ module Auth
         assert_equal [
           [new_auth_app_sign_in_email_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.email")],
           [new_auth_app_sign_in_passkey_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.passkey")],
-          [
-            new_auth_app_sign_in_secret_path(query, ri: "jp"),
-            I18n.t("sign.app.authentication.new.links.secret_credential"),
-          ],
         ], inertia_props.fetch("methods").map { |method| [method.fetch("href"), method.fetch("label")] }
       end
 
@@ -87,7 +83,6 @@ module Auth
         assert_equal [
           new_auth_app_sign_in_email_path(ri: "jp"),
           new_auth_app_sign_in_passkey_path(ri: "jp"),
-          new_auth_app_sign_in_secret_path(ri: "jp"),
         ], inertia_props.fetch("methods").map { |method| method.fetch("href") }
       end
 

@@ -9,6 +9,14 @@ class AvatarGroup < AvatarRecord
 
   has_many :group_avatar_memberships, dependent: :restrict_with_error, inverse_of: :avatar_group
   has_many :avatars, through: :group_avatar_memberships
+  has_many :ownership_periods,
+           class_name: "AvatarGroupOwnershipPeriod",
+           dependent: :restrict_with_error,
+           inverse_of: :avatar_group
+  has_one :current_ownership_period,
+          -> { where("valid_to = 'infinity'::timestamp with time zone") },
+          class_name: "AvatarGroupOwnershipPeriod",
+          inverse_of: :avatar_group
 
   validates :account_surface, inclusion: { in: ACCOUNT_SURFACES }
   validates :account_public_id, presence: true

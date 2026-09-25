@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Compare Rails belongs_to mappings with live same-database FK coverage."""
+
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+
+catalog = json.loads(Path(sys.argv[1]).read_text())
+associations = json.loads(Path(sys.argv[2]).read_text())
+output = Path(sys.argv[3])
+assert output.as_posix().startswith("memos/") and output.suffix == ".md"
+tables = {(table["logical_database"], table["table_name"]): table for table in catalog["tables"]}
+counts = Counter()
+missing = []
+for association in associations:
+    if "error" in association:
+        raise RuntimeError(f"unresolved association: {association['model']}")
+    if association["polymorphic"]:
+        counts["polymorphic"] += 1
+        continue
+    if association["connection"] != association["parent_connection"]:
+        counts["cross_database"] += 1
+        continue
+    child = tables.get((association["connection"], association["table"]))
+    parent = tables.get((association["parent_connection"], association["parent_table"]))
+    if child is None or parent is None:
+        counts["table_absent_live"] += 1
+        continue
+    counts["same_database_live"] += 1
+    fk_columns = association["foreign_key"]
+    fk_columns = fk_columns if isinstance(fk_columns, list) else [fk_columns]
+    constraints = [constraint for constraint in child["constraints"]
+                   if constraint["type"] == "f" and
+                   constraint["parent_table"].split(".")[-1] == parent["table_name"]]
+    if any(set(fk_columns).issubset(set(json.loads(constraint["child_columns"])))
+           for constraint in constraints):
+        counts["covered_by_same_parent_fk"] += 1
+    else:
+        counts["no_same_parent_fk"] += 1
+        missing.append(association)
+
+lines = [
+    "# Rails Association and PostgreSQL FK Review",
+    "",
+    f"Source: {len(associations)} Rails `belongs_to` reflections captured through a verified isolated Rails boot and the read-only Global development catalog at {catalog['captured_at']}. This is a structural coverage screen: an FK covering the association column and target table may be composite and may enforce additional ownership. A missing single association FK is a review item, not automatically a defect. Cross-database and polymorphic associations cannot be represented by an ordinary same-database FK.",
+    "",
+    f"Counts: {counts['same_database_live']} associations with both tables live in the same logical DB; {counts['covered_by_same_parent_fk']} covered by a same-parent FK containing the association column(s); {counts['no_same_parent_fk']} without that coverage; {counts['cross_database']} cross-database; {counts['polymorphic']} polymorphic; {counts['table_absent_live']} with at least one table absent from shared development. The disjoint categories sum to {sum(counts.values()) - counts['same_database_live']}, equal to the reflection count.",
+    "",
+    "| Model | Association | Logical DB | Child table/column | Target table | Review |",
+    "| --- | --- | --- | --- | --- | --- |",
+]
+assert sum(counts.values()) - counts["same_database_live"] == len(associations)
+for item in missing:
+    columns = item["foreign_key"] if isinstance(item["foreign_key"], list) else [item["foreign_key"]]
+    lines.append(f"| `{item['model']}` | `{item['association']}` | {item['connection']} | "
+                 f"`{item['table']}({', '.join(columns)})` | `{item['parent_table']}` | "
+                 "No same-parent FK in shared development; check lifecycle and local migrations |")
+output.write_text("\n".join(lines) + "\n")
+print(f"wrote {output}: {dict(counts)}")

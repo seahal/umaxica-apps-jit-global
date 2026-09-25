@@ -14,9 +14,9 @@ class CycleCloseAuthenticatedRootsTest < ActionDispatch::IntegrationTest
     ["PUBLIC_CORE_SERVICE_URL", "core.app.localhost"],
     ["PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"],
     ["PUBLIC_CORE_STAFF_URL", "core.org.localhost"],
-    ["SIDE_SERVICE_URL", "wide.app.localhost"],
-    ["SIDE_CORPORATE_URL", "wide.com.localhost"],
-    ["SIDE_STAFF_URL", "wide.org.localhost"],
+    ["PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"],
+    ["PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"],
+    ["PUBLIC_WARP_STAFF_URL", "warp.org.localhost"],
     ["PUBLIC_EDIT_STAFF_URL", "edit.org.localhost"],
     ["PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"],
   ].freeze
@@ -36,13 +36,15 @@ class CycleCloseAuthenticatedRootsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "retired dashboard and lobby paths stay unrouted" do
+  test "Base dashboard is routed and retired lobby stays unrouted" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    %w(/dashboard /lobby).each do |path|
-      get path, params: { ri: "jp" }, headers: { "Host" => host }
+    get "/dashboard", params: { ri: "jp" }, headers: { "Host" => host }
 
-      assert_response :not_found, path
-    end
+    assert_includes [200, 302, 303, 401], response.status, "/dashboard"
+
+    get "/lobby", params: { ri: "jp" }, headers: { "Host" => host }
+
+    assert_response :not_found, "/lobby"
   end
 
   test "an unrecognized ri does not redirect off-host" do

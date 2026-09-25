@@ -41,99 +41,63 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
-  test "refresh token rotates access token and redirects when valid" do
+  test "GET sign-in does not transparently mutate authentication state" do
     token_record = ClientToken.create!(
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
     refresh_plain = token_record.rotate_refresh_token!
+    before = token_record.reload.attributes
 
     cookies[:auth_refresh] = refresh_plain
 
-    get auth_app_sign_in_path(ri: "jp"), headers: { "Host" => @host }
+    get auth_app_sign_in_path(ri: "jp"), params: { transaction_ref: login_challenge_for_sign_in },
+                                         headers: { "Host" => @host }
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
-
-    # The browser is refused at the sign-in boundary after transparent refresh;
-    # a second authentication ceremony must not start while authenticated.
-    new_refresh = response.cookies["auth_refresh"]
-
-    assert_not_nil new_refresh, "Refresh cookie should be rotated"
+    assert_response :success
+    assert_equal before, token_record.reload.attributes
   end
 
-  test "audit event is created on refresh" do
-    if ClientChronicleEvent.respond_to?(:ensure_defaults!)
-      ClientChronicleEvent.ensure_defaults!
-    elsif !ClientChronicleEvent.exists?(id: ClientChronicleEvent::TOKEN_REFRESHED)
-      ClientChronicleEvent.create!(id: ClientChronicleEvent::TOKEN_REFRESHED) rescue nil
-    end
-
+  test "GET sign-in with a refresh cookie leaves the refresh credential unchanged" do
     token_record = ClientToken.create!(
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
     refresh_plain = token_record.rotate_refresh_token!
+    before = token_record.reload.attributes
 
     cookies_header = "auth_refresh=#{refresh_plain}"
     get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
-
-    # Check audit using subject fields - may not always be created depending on auth flow
-    # The key assertion is that the first response was a redirect (auth processing happened)
+    assert_response :see_other
+    assert_equal before, token_record.reload.attributes
   end
 
-  test "S1: audit failure does not block authentication (refresh succeeds)" do
-    ClientChronicleEvent.ensure_defaults! if ClientChronicleEvent.respond_to?(:ensure_defaults!)
-    ClientChronicleLevel.ensure_defaults! if ClientChronicleLevel.respond_to?(:ensure_defaults!)
-
+  test "GET sign-in does not depend on the refresh audit writer" do
     token_record = ClientToken.create!(
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
     refresh_plain = token_record.rotate_refresh_token!
+    before = token_record.reload.attributes
 
-    AuthenticationAuditWriter.stub(:write, false) do
-      cookies_header = "auth_refresh=#{refresh_plain}"
-
-      events = []
-      subscriber =
-        ActiveSupport::Notifications.subscribe("authentication.audit.write_failed") do |_name, _start, _finish, _id,
-          payload|
-          events << payload
-        end
-
-      get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
-
-      assert_response :conflict
-      assert_equal "Sign-in is unavailable while authenticated.", response.body
-
-      ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+    audit_attempts = 0
+    audit_writer = lambda do |**|
+      audit_attempts += 1
+      false
     end
-  end
 
-  test "S1: audit failure does not block authentication (login succeeds)" do
-    ClientChronicleEvent.ensure_defaults! if ClientChronicleEvent.respond_to?(:ensure_defaults!)
-    ClientChronicleLevel.ensure_defaults! if ClientChronicleLevel.respond_to?(:ensure_defaults!)
-
-    token_record = ClientToken.create!(
-      user: @user,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-    )
-    refresh_plain = token_record.rotate_refresh_token!
-
-    AuthenticationAuditWriter.stub(:write, false) do
+    AuthenticationAuditWriter.stub(:write, audit_writer) do
       cookies_header = "auth_refresh=#{refresh_plain}"
       get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-      assert_response :conflict
-      assert_equal "Sign-in is unavailable while authenticated.", response.body
+      assert_response :see_other
+      assert_equal 0, audit_attempts
+      assert_equal before, token_record.reload.attributes
     end
   end
 
-  test "S3: inactive resource does not destroy token, only revokes" do
+  test "GET sign-in does not revoke or delete an inactive resource's refresh credential" do
     inactive_user = clients(:two)
 
     assert_not_nil inactive_user, "Fixture clients(:two) must exist for this test"
@@ -147,19 +111,15 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     )
     refresh_plain = token_record.rotate_refresh_token!
     token_id = token_record.id
+    before = token_record.reload.attributes
 
     cookies_header = "auth_refresh=#{refresh_plain}"
     get auth_app_sign_in_path, headers: { "Cookie" => cookies_header, "Host" => @host }
 
-    # Refresh should fail due to inactive user
-    # But token should still exist (only revoked, not destroyed)
-    assert ClientToken.exists?(id: token_id), "Token should still exist (S3: not destroyed)"
-
-    # The token may have been modified (e.g., generation incremented)
-    # but should not be destroyed
-    token_record.reload
-
-    assert_predicate token_record, :persisted?, "Token record should still be persisted"
+    assert_response :redirect
+    assert ClientToken.exists?(id: token_id), "GET navigation must not destroy the refresh credential"
+    assert_equal before, token_record.reload.attributes,
+                 "GET navigation must not revoke or rotate the refresh credential"
   end
 
   def login_challenge_for_sign_in

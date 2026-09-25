@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "timeout"
 
 # `consume` is the whole of the single-use guarantee: it locks the row, checks it is still
 # unconsumed and still inside its window, and marks it consumed in the same transaction. Each way
@@ -78,5 +79,55 @@ class SecurityOneTimeRevealTest < ActiveSupport::TestCase
 
   test "an unknown jti reveals nothing rather than raising" do
     assert_nil SecurityOneTimeReveal.consume(**ATTRIBUTES, jti_digest: SecureRandom.hex(16))
+  end
+end
+
+class SecurityOneTimeRevealConcurrencyTest < ActiveSupport::TestCase
+  self.use_transactional_tests = false
+  self.fixture_table_names = []
+
+  test "parallel consumers on independent connections return a reveal only once" do
+    attributes = {
+      jti_digest: SecureRandom.hex(16),
+      actor_type: "Client",
+      actor_id: 1,
+      session_nonce_digest: "parallel-nonce-digest",
+      purpose: "client.recovery_secret_credential",
+    }
+    record = SecurityOneTimeReveal.create!(
+      **attributes,
+      encrypted_payload: "sealed-parallel-payload",
+      expires_at: 15.minutes.from_now,
+    )
+    start = Queue.new
+    ready = Queue.new
+    results = []
+
+    # Separate checked-out connections make PostgreSQL serialize the real row-lock race.
+    # rubocop:disable ThreadSafety/NewThread
+    threads = Array.new(2) do
+      Thread.new do
+        SecurityOneTimeReveal.connection_pool.with_connection do
+          ready << true
+          start.pop
+          results << SecurityOneTimeReveal.consume(**attributes)
+        end
+      end
+    end
+    # rubocop:enable ThreadSafety/NewThread
+
+    Timeout.timeout(5) do
+      2.times { ready.pop }
+      2.times { start << true }
+      threads.each(&:value)
+    end
+
+    assert_equal 1, results.count("sealed-parallel-payload")
+    assert_equal 1, results.count(nil)
+    assert_predicate record.reload.consumed_at, :present?
+  ensure
+    threads&.each { |thread| thread.kill if thread.alive? }
+    threads&.each(&:join)
+    record&.destroy!
   end
 end

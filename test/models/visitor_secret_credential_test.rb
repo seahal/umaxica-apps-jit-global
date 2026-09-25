@@ -111,67 +111,10 @@ class VisitorSecretCredentialTest < ActiveSupport::TestCase
     assert_includes secret_credential.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
   end
 
-  test "usable_for_secret_credential_sign_in?" do
-    secret_credential, _ = VisitorSecretCredential.issue!(name: "Usable", visitor: @visitor)
-
-    assert_predicate secret_credential, :usable_for_secret_credential_sign_in?
-
-    secret_credential.update!(visitor_secret_credential_status_id: VisitorSecretCredentialStatus::NOTHING)
-
-    assert_not secret_credential.usable_for_secret_credential_sign_in?
-  end
-
-  test "verify_for_secret_credential_sign_in! for one-time secret_credential" do
-    secret_credential, raw = VisitorSecretCredential.issue!(
-      name: "One Time",
-      visitor: @visitor,
-      uses: 1,
-      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::ONE_TIME,
-    )
-
-    assert secret_credential.verify_for_secret_credential_sign_in!(raw)
-    assert_equal 0, secret_credential.reload.uses_remaining
-    assert_equal VisitorSecretCredentialStatus::USED, secret_credential.visitor_secret_credential_status_id
-  end
-
-  test "usable_for_secret_credential_sign_in? rejects exhausted one-time secret_credential" do
-    secret_credential, = VisitorSecretCredential.issue!(
-      name: "Exhausted Usable",
-      visitor: @visitor,
-      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::ONE_TIME,
-      uses: 0,
-    )
-
-    assert_not secret_credential.usable_for_secret_credential_sign_in?
-  end
-
-  test "verify_for_secret_credential_sign_in! fails with wrong password" do
-    secret_credential, _ = VisitorSecretCredential.issue!(name: "Wrong", visitor: @visitor)
-
-    assert_not secret_credential.verify_for_secret_credential_sign_in!("wrong-password")
-  end
-
-  test "expired_for_secret_credential_sign_in?" do
-    secret_credential, _ = VisitorSecretCredential.issue!(
-      name: "Expired", visitor: @visitor,
-      discard_at: 1.second.ago,
-    )
-
-    assert_not secret_credential.usable_for_secret_credential_sign_in?
-  end
-
-  test "allowed_for_secret_credential_sign_in scope" do
-    VisitorSecretCredential.issue!(name: "Allowed", visitor: @visitor)
-    VisitorSecretCredential.issue!(name: "Not Allowed", visitor: @visitor, status: :nothing)
-
-    assert_equal 1, VisitorSecretCredential.allowed_for_secret_credential_sign_in.count
-  end
-
   test "kind predicates reflect the visitor_secret_credential_kind_id" do
     secret_credential = VisitorSecretCredential.new(@valid_params.merge(visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN))
 
     assert_predicate secret_credential, :login_secret_credential?
-    assert_predicate secret_credential, :permanent_secret_credential?
     assert_not secret_credential.recovery_secret_credential?
     assert_not secret_credential.api_secret_credential?
     assert_not secret_credential.one_time_secret_credential?
@@ -198,29 +141,6 @@ class VisitorSecretCredentialTest < ActiveSupport::TestCase
     assert_equal secret_credential.public_id, secret_credential.to_param
   end
 
-  test "verify_for_secret_credential_sign_in! rejects disallowed kind status expiry and exhausted use" do
-    inactive, inactive_raw = VisitorSecretCredential.issue!(name: "Inactive", visitor: @visitor, status: :nothing)
-    api, api_raw = VisitorSecretCredential.issue!(
-      name: "API",
-      visitor: @visitor,
-      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::API,
-    )
-    expired, expired_raw = VisitorSecretCredential.issue!(
-      name: "Expired Secret", visitor: @visitor,
-      discard_at: 1.second.ago,
-    )
-    exhausted, exhausted_raw = VisitorSecretCredential.issue!(
-      name: "Exhausted",
-      visitor: @visitor,
-      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::ONE_TIME,
-      uses: 0,
-    )
-
-    assert_not inactive.verify_for_secret_credential_sign_in!(inactive_raw)
-    assert_not api.verify_for_secret_credential_sign_in!(api_raw)
-    assert_not expired.verify_for_secret_credential_sign_in!(expired_raw)
-    assert_not exhausted.verify_for_secret_credential_sign_in!(exhausted_raw)
-  end
   private
 end
 

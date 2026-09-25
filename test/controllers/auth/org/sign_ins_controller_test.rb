@@ -47,7 +47,6 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
 
     # The second stage is not offered as an entry point of its own.
     assert_not_includes method_hrefs, new_auth_org_sign_in_passkey_path(ri: "jp")
-    assert_not_includes method_hrefs, new_auth_org_sign_in_secret_path(ri: "jp")
   end
 
   test "direct entry offers the reciprocal sign up link" do

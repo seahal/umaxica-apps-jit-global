@@ -3,8 +3,8 @@
 ## Purpose
 
 Document retry, rollback, and cleanup behavior for unfinished sign-in attempts. This boundary covers
-email OTP, social login, passkey / WebAuthn, and secret credential sign-in. It does not cover
-sign-up completion or step-up freshness.
+email OTP, social login, and passkey / WebAuthn sign-in. Permanent-secret sign-in routes are retired.
+This document does not cover sign-up completion or step-up freshness.
 
 ## Shared Completion Gate
 
@@ -18,7 +18,7 @@ sign-up completion or step-up freshness.
 - Blank or invalid credentials fail closed with inline form errors or deterministic error responses.
 - Dummy or unknown-email OTP paths must remain timing-equalized.
 - Social callback failures must not leave usable auth state behind.
-- Passkey and secret credential failures must not leave usable auth state behind.
+- Passkey failures must not leave usable auth state behind.
 - MFA-required completion returns a pending MFA state without minting a new login unit.
 - Restricted completion returns the restricted session-management path without completing the normal
   callback.

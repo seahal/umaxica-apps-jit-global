@@ -59,6 +59,19 @@ class Auth::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "auth/com/roots/index", inertia_component
   end
+
+  test "a verified visitor without a telephone can reach the com ceremony root" do
+    visitor = create_verified_visitor_with_email(email_address: "com-root-no-telephone@example.com")
+
+    assert_not visitor.verified_telephone?
+
+    get auth_com_root_url(ri: "us"),
+        headers: as_visitor_headers(visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+
+    assert_response :success
+    assert_equal "auth/com/roots/index", inertia_component
+  end
+
   private
 
   def bearer_headers(token, host: nil, headers: {})
