@@ -26,11 +26,12 @@ sharing requires an explicit existing abstraction; cross-surface leakage is a se
 
 ## Task Rule Index
 
-Rule paths are relative to `.agents/harnesses/rules/`; documentation and ADR paths are relative
-to the repository root. This root `AGENTS.md` is the sole harness-routing entry point; nested
+Rule paths are relative to `.agents/harnesses/rules/`; documentation and ADR paths are relative to
+the repository root. This root `AGENTS.md` is the sole harness-routing entry point; nested
 `AGENTS.md` files are not used for rule loading.
 
-Always load `generic/model-behavior-calibration.mdc` — it applies to every task. Then load only
+Always load `generic/model-behavior-calibration.mdc` — it applies to every task. Load
+`generic/rails-change-discipline.mdc` for every Ruby on Rails implementation change. Then load only
 the remaining entries matching the task.
 
 - Controllers or endpoints: `generic/controllers.mdc`, `generic/routing.mdc`,
@@ -44,7 +45,7 @@ the remaining entries matching the task.
 - Adding any class outside `app/models` and `app/controllers` — values, results, services,
   operations, resolvers, policies, queries, forms, presenters, serializers, or adapters:
   `project/value-object-boundaries.mdc`
-- Migrations: `generic/migrations.mdc`
+- Migrations: `generic/migrations.mdc`, `generic/rails-change-discipline.mdc`
 - Persistent data or API shape, including JSON and database schemas: `generic/data-shape-design.mdc`
 - Security-sensitive work or broad refactors: `generic/absolute-rules.mdc`,
   `generic/no-silent-fallback.mdc`, `generic/fail-fast.mdc`, `project/regression-guards.mdc`
@@ -183,9 +184,10 @@ conflicts through the governing principles above.
 - **(H) Tests**
 
   - **MUST:** when a public contract includes a range, limit, format, or classification, verify each
-    identified boundary at the nearest representable value immediately below it, at the boundary, and
-    immediately above it. When a neighboring value is not representable, valid, or reachable, use the
-    nearest available value and record that exception in the test name or a comment on that test.
+    identified boundary at the nearest representable value immediately below it, at the boundary,
+    and immediately above it. When a neighboring value is not representable, valid, or reachable,
+    use the nearest available value and record that exception in the test name or a comment on that
+    test.
   - **SHOULD:** take one representative value from each equivalence partition. Add further points
     inside a partition only when the contract distinguishes values inside that partition.
   - **MUST:** verify sentinel and edge inputs that can reach the tested public interface, using
@@ -193,7 +195,6 @@ conflicts through the governing principles above.
     sentinels). Do not import sentinels from another language's type system.
   - **SHOULD:** make the required technique, boundary, partition, and any boundary exception
     recoverable from the test name and assertion, without a separate traceability matrix.
-
 
 ## Repository Content
 
@@ -220,9 +221,9 @@ relevant checks first, then broaden only when the affected boundary warrants it.
 
 Unit tests cover public methods and functions only. A private or protected subroutine needs no test
 case of its own: it is reached through the public interface that uses it, and a subroutine that
-seems to need a direct test is evidence that the implementation, not the test, needs changing
-(wrong ownership, a missing collaborator, or behavior that belongs on a public boundary). Never
-widen visibility, add a test-only wrapper or accessor, or reach in through `send`, reflection, or a
+seems to need a direct test is evidence that the implementation, not the test, needs changing (wrong
+ownership, a missing collaborator, or behavior that belongs on a public boundary). Never widen
+visibility, add a test-only wrapper or accessor, or reach in through `send`, reflection, or a
 redefinition to test one. Any exception carries a comment at the test stating the reason.
 
 Environment and tooling construction is the exception, and it is absolute: never add a Minitest or

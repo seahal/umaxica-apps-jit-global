@@ -1,0 +1,153 @@
+---
+name: rails-change-discipline
+description: Prefer Rails generators, prohibit new dynamic Ruby, and require migrations for every database schema change.
+---
+
+# Rails Change Discipline
+
+This rule applies to every Ruby on Rails implementation change.
+
+## Generator-first workflow
+
+Use the repository's Rails executable rather than a globally installed Rails command.
+
+When Rails provides a generator that matches the intended artifact, implementations SHOULD use:
+
+```bash
+bin/rails generate ...
+```
+
+rather than manually creating the equivalent Rails files.
+
+Examples include models, controllers, migrations, jobs, mailers, channels, and other artifacts for
+which this application has an applicable Rails generator.
+
+Generator output is only a starting point. Review the complete generated diff and remove generated
+files, routes, tests, helpers, assets, or other artifacts that are not required by the intended
+change.
+
+Do not select an unnecessarily broad generator merely to satisfy this rule.
+
+When reversing artifacts generated during the current change, prefer:
+
+```bash
+bin/rails destroy ...
+```
+
+provided that doing so cannot remove unrelated or subsequently modified work.
+
+Do not use `bin/rails destroy` against established application code merely because that code could
+originally have been generated. Established-code deletion remains an explicit source change and is
+subject to the repository's destructive-change rules.
+
+## No new dynamic Ruby
+
+Application-owned code MUST NOT introduce new reflection or metaprogramming that dynamically
+defines, resolves, dispatches, removes, aliases, or discovers application behavior at runtime.
+
+This includes new uses of constructs such as:
+
+- `define_method`
+- `define_singleton_method`
+- `method_missing`
+- `respond_to_missing?`
+- `const_missing`
+- `send`
+- `public_send`
+- `__send__`
+- `const_get`
+- `constantize`
+- `safe_constantize`
+- `method(...)`
+- `instance_variable_get`
+- `instance_variable_set`
+- `class_variable_get`
+- `class_variable_set`
+- `class_eval`
+- `module_eval`
+- `instance_eval`
+- `class_exec`
+- `module_exec`
+- `instance_exec`
+- `eval`
+- runtime method or constant aliasing/removal
+- runtime capability discovery used to select application behavior, including new
+  `respond_to?`-driven dispatch
+
+Prefer explicit methods, explicit constants, explicit interfaces, ordinary polymorphism, dependency
+injection, and statically visible `case` or type dispatch when a distinction is genuinely required.
+
+Standard Rails declarative DSL with statically declared names is not prohibited merely because Rails
+implements that DSL internally with metaprogramming. Examples include ordinary associations,
+validations, callbacks, scopes, routes, and equivalent framework declarations.
+
+Ordinary diagnostic inspection that does not dynamically select application behavior, such as
+recording `error.class`, is not prohibited.
+
+Existing dynamic-Ruby sites are legacy baseline. They may be removed or replaced, but MUST NOT be
+copied, expanded, or used as precedent for new code.
+
+Moving an existing dynamic implementation to a new location counts as introducing a new site unless
+the dynamic behavior is eliminated as part of the move.
+
+Tests are subject to the same rule. Do not use reflection or metaprogramming to reach private
+methods or implementation details from tests.
+
+## Database schema authority
+
+Rails migrations are the sole application-owned authority for changing database schema.
+
+Every new schema change MUST be represented by a migration, and the migration SHOULD be created
+with the applicable Rails generator:
+
+```bash
+bin/rails generate migration ...
+```
+
+Use the repository's applicable multi-database migration workflow when the target database is not
+the primary database.
+
+Application code, Rails console sessions, Rake tasks, seeds, tests, maintenance scripts, SQL
+clients, and operational commands MUST NOT directly create, alter, rename, or drop database schema
+objects.
+
+Do not introduce runtime DDL.
+
+Do not hand-edit generated schema dumps, including:
+
+- `db/schema.rb`
+- `db/*_schema.rb`
+- `db/*_structure.sql`
+- equivalent generated schema snapshot files
+
+Schema dump changes are valid only when produced by the repository's migration/schema-dump workflow
+and when they correspond to an intentional migration.
+
+Do not introduce new schema-builder abstractions that hide schema definition outside the migration
+that owns the change. Existing legacy migration-support machinery does not establish precedent for
+new schema metaprogramming.
+
+Prefer the Active Record migration DSL. New raw SQL DDL is prohibited unless the governing
+migration policy is deliberately amended for a concrete database capability that Rails cannot
+represent safely.
+
+## Verification
+
+For a change that introduces or modifies a migration:
+
+1. inspect the generated migration before execution;
+2. verify reversibility and production lock/data impact under `generic/migrations.mdc`;
+3. run the relevant migration workflow;
+4. inspect every generated schema-dump diff;
+5. run:
+
+   ```bash
+   bin/rails db:verify_no_schema_drift
+   ```
+
+6. run the narrowest relevant tests, followed by broader tests when the affected boundary warrants
+   them.
+
+A schema-dump diff without a corresponding intentional migration is a blocking finding.
+
+A migration without the expected generated schema-dump effect is also a blocking finding.
