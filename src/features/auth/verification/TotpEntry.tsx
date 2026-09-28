@@ -7,6 +7,9 @@ import Button from "@/components/ui/Button";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
 import type { VerificationFormBase, VerificationLink } from "./types";
@@ -38,6 +41,7 @@ export type TotpEntryProps = {
   form: TotpEntryForm;
   turnstile: TotpEntryTurnstile;
   back: VerificationLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function TotpEntry({
@@ -48,6 +52,7 @@ export default function TotpEntry({
   form,
   turnstile,
   back,
+  cancel,
 }: TotpEntryProps) {
   return (
     <Page
@@ -106,6 +111,8 @@ export default function TotpEntry({
 
         <Button type="submit">{form.submit_label}</Button>
       </form>
+      {/* Back returns to method selection; this ends the whole Step-Up ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

@@ -712,10 +712,6 @@ module PreferenceCore
     @refresh_public_id = nil
   end
 
-  def safe_return_to_path
-    safe_return_path(params[:return_to])
-  end
-
   def preference_surface_key
     preference_class.name.delete_suffix("Preference").downcase
   end

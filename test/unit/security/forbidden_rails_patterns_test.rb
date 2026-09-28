@@ -88,12 +88,18 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
   SENSITIVE_SKIP_PATTERN =
     /skip_before_action\s+:(?:enforce_verification_if_required|enforce_step_up_prereqs!|authenticate_client!)/
 
+  # The verification cancellations skip only enforce_step_up_prereqs!: cancelling ends state, and an
+  # actor with no Step-Up method reaches it from the setup page. They still authenticate and
+  # authorize the actor.
   SENSITIVE_SKIP_ALLOWLIST = %w(
     app/controllers/auth/app/verification/base_controller.rb
+    app/controllers/auth/app/verification/cancellations_controller.rb
     app/controllers/auth/app/verification/emails_controller.rb
     app/controllers/auth/com/verification/base_controller.rb
+    app/controllers/auth/com/verification/cancellations_controller.rb
     app/controllers/auth/com/verification/emails_controller.rb
     app/controllers/auth/org/verification/base_controller.rb
+    app/controllers/auth/org/verification/cancellations_controller.rb
     app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb

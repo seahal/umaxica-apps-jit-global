@@ -25,6 +25,12 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
     get auth_app_verification_url(ri: "jp"), headers: @headers
 
     assert_response :success
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
   end
 
   test "redirects to setup page when no verification methods are registered" do

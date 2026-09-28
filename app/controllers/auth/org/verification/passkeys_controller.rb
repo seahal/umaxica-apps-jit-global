@@ -31,6 +31,7 @@ class Auth::Org::Verification::PasskeysController < ::Auth::Org::Verification::B
         request_options: @passkey_request_options.as_json,
         submit_label: t("sign.org.verification.edit.authenticate_with_passkey"),
       },
+      cancel: step_up_cancellation_props,
       back_link: {
         label: t("sign.org.verification.edit.back"),
         href: auth_org_verification_path(ri: params[:ri]),

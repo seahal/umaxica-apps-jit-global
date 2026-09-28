@@ -33,7 +33,7 @@ module RestrictedSessionGuard
   def allowlisted_for_restricted_session?
     return false if restricted_session_expired?
 
-    controller_path.end_with?("in/sessions", "in/session/cancellations") ||
+    controller_path.end_with?("in/sessions") ||
       controller_path == "base/app/sign/in/limitations" ||
       %w(
         base/app/identity/mfa/resets

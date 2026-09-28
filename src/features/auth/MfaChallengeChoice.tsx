@@ -2,9 +2,13 @@
 //
 // Which factors the actor may use is decided on the server from the credentials they actually hold,
 // so a factor the actor cannot use is absent from `methods` rather than rendered and hidden. When
-// no factor is available the server sends the notice and the way back to the sign-in entry point.
+// no factor is available the server sends the notice, and cancellation is the only way out: the
+// first factor has already been consumed, so the sign-in form is not a step back.
 import NavList from "@/components/ui/NavList";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 
 export type MfaMethodLink = {
   key: string;
@@ -17,7 +21,7 @@ export type MfaChallengeChoiceProps = {
   description: string;
   methods: MfaMethodLink[];
   no_methods_notice: string | null;
-  back_link: MfaMethodLink | null;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function MfaChallengeChoice({
@@ -25,7 +29,7 @@ export default function MfaChallengeChoice({
   description,
   methods,
   no_methods_notice: noMethodsNotice,
-  back_link: backLink,
+  cancel,
 }: MfaChallengeChoiceProps) {
   return (
     <Page
@@ -36,16 +40,7 @@ export default function MfaChallengeChoice({
       <NavList items={methods} />
 
       {noMethodsNotice ? <p className="text-sm text-fg-muted">{noMethodsNotice}</p> : null}
-      {backLink ? (
-        <p className="text-sm text-fg-muted">
-          <a
-            href={backLink.href}
-            className="underline-offset-4 hover:text-fg hover:underline"
-          >
-            {backLink.label}
-          </a>
-        </p>
-      ) : null}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

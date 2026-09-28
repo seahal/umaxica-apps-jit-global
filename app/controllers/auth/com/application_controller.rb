@@ -98,6 +98,13 @@ module Auth
 
       private
 
+      # Every HTML action on the Auth host is a sign-in/sign-up ceremony screen or step that never
+      # acts on preference authority, so an unusable preference credential is detached instead of
+      # ending the request with 401. See PreferenceTransport#handle_unusable_preference_credential!.
+      def preference_entry_recovery_action?
+        true
+      end
+
       def current_verification_actor
         current_visitor
       end

@@ -59,7 +59,7 @@ end
 # several runs before it gates a group.
 SimpleCov.coverage :branch do
   ignore :implicit_else
-  minimum 90
+  minimum 93
   maximum_drop 0.5
 end
 
@@ -67,7 +67,7 @@ end
 # called at all. A method no test reaches is either dead code or an untested entry point, and
 # neither line nor branch coverage names it.
 SimpleCov.coverage :method do
-  minimum 95
+  minimum 97
 end
 
 # The `maximum_drop` checks above compare against `coverage/.last_run.json`, which SimpleCov writes

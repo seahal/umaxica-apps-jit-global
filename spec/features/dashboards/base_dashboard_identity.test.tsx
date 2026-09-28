@@ -35,6 +35,33 @@ describe("Base Dashboard identity navigation", () => {
     expect(switcherIndex).toBeLessThan(logoutIndex);
   });
 
+  it("renders the server-supplied Avatar image before the Persona name", () => {
+    const [menu] = props.sections;
+    const withImage: SurfaceDashboardProps = {
+      ...props,
+      sections: [
+        {
+          ...menu,
+          current_identity: {
+            display_name: "Selected Persona",
+            avatar_image: { src: "/dashboard/avatar_image?v=abc" },
+          },
+        },
+      ],
+    };
+    const markup = renderToStaticMarkup(<SurfaceDashboard {...withImage} />);
+
+    expect(markup).toContain('src="/dashboard/avatar_image?v=abc"');
+    expect(markup.indexOf("<img")).toBeLessThan(markup.indexOf("Selected Persona"));
+  });
+
+  it("renders no image element when the identity has no Avatar image", () => {
+    const markup = renderToStaticMarkup(<SurfaceDashboard {...props} />);
+
+    expect(markup).not.toContain("<img");
+    expect(markup).toContain("Selected Persona");
+  });
+
   it.each([
     ["base/app", BaseAppDashboardsShow],
     ["base/com", BaseComDashboardsShow],

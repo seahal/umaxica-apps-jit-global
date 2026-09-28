@@ -817,11 +817,6 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "auth/org/sign/in/challenges", action: "show" },
-      { path: "http://#{SIGN_ORG_HOST}/sign/in/challenge", method: :get },
-    )
-
-    assert_recognizes(
       { controller: "auth/org/sign/in/passkeys", action: "new" },
       { path: "http://#{SIGN_ORG_HOST}/sign/in/passkey/new", method: :get },
     )

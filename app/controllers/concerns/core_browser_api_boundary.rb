@@ -49,6 +49,7 @@ module CoreBrowserApiBoundary
       client_id: core_rp_client_id,
     )
     if payload.blank?
+      reject_core_browser_cookie!(reason: "invalid_access_token")
       render_problem(:authentication_required)
       return false
     end
@@ -56,6 +57,7 @@ module CoreBrowserApiBoundary
     @current_token_payload = payload
     @current_resource = find_core_resource(payload)
     unless current_resource&.active?
+      reject_core_browser_cookie!(reason: current_resource ? "inactive_resource" : "record_not_found")
       render_problem(:authentication_required)
       return false
     end
@@ -66,6 +68,28 @@ module CoreBrowserApiBoundary
 
   def render_csrf_failure
     render_problem(:csrf_verification_failed)
+  end
+
+  def reject_core_browser_cookie!(reason:)
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.credential_rejected",
+        surface: core_actor_tld,
+        credential_kind: "oidc_rp_access_cookie",
+        reason: reason,
+        category: (reason == "inactive_resource") ? "lifecycle" : "credential_rejection",
+        request_id: request.request_id,
+      ),
+    )
+    cookies.delete(
+      OidcRpBrowserCredentialContract::ACCESS_COOKIE,
+      OidcRpBrowserCredentialContract.access_cookie_deletion_options,
+    )
+    cookies.delete(
+      OidcRpBrowserCredentialContract::REFRESH_COOKIE,
+      OidcRpBrowserCredentialContract.refresh_cookie_deletion_options,
+    )
+    install_unauthenticated_actor!
   end
 
   def render_authorization_denied
@@ -217,17 +241,5 @@ module CoreBrowserApiBoundary
 
   def core_resource_type
     raise NotImplementedError, "controller must define core_resource_type"
-  end
-
-  def core_token_resource_method
-    case core_resource_type
-    when "operator" then :staff
-    when "visitor" then :visitor
-    else :user
-    end
-  end
-
-  def auth_cookie_service
-    @auth_cookie_service ||= AuthenticationCookieService.new(cookies, request)
   end
 end

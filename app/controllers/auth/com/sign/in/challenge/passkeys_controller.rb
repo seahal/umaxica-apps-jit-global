@@ -112,6 +112,9 @@ module Auth
                   submit_label: t("sign.app.in.mfa.passkey.authenticate"),
                 },
                 back_link: { label: t("sign.app.in.mfa.passkey.back"), href: auth_com_sign_in_challenge_path(ri: ri) },
+                cancel: { label: t("actions.cancel"),
+                          action: auth_com_sign_in_challenge_path(ri: ri),
+                          method: "delete", },
               }
             end
 

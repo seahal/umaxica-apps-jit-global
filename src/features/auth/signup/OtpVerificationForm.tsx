@@ -7,6 +7,9 @@
 // one with a redirect into the next step.
 import Button from "@/components/ui/Button";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 import { csrfToken } from "./csrf";
@@ -27,7 +30,8 @@ export type OtpVerificationFormProps = {
   /** Heading shown above the validation errors, or null when there are none. */
   error_heading: string | null;
   errors: string[];
-  return_link: { label: string; href: string };
+  /** Ends the sign-up; /sign/up is not a step back once a code has been sent. */
+  cancel: CeremonyCancellationProps;
 };
 
 export default function OtpVerificationForm({
@@ -42,7 +46,7 @@ export default function OtpVerificationForm({
   turnstile,
   error_heading: errorHeading,
   errors,
-  return_link: returnLink,
+  cancel,
 }: OtpVerificationFormProps) {
   return (
     <section className="flex flex-col gap-6">
@@ -105,14 +109,7 @@ export default function OtpVerificationForm({
 
       <p className="text-sm text-fg-muted">{deliveryHelp}</p>
 
-      <p className="text-sm">
-        <a
-          href={returnLink.href}
-          className="text-fg underline-offset-4 hover:underline"
-        >
-          {returnLink.label}
-        </a>
-      </p>
+      <CeremonyCancellation {...cancel} />
     </section>
   );
 }

@@ -132,6 +132,13 @@ class ApplicationPolicy < ActionPolicy::Base
       (defined?(Visitor) && user.is_a?(Visitor) && record.is_a?(Visitor))
   end
 
+  # adr/operator-capability-authorization.md: the only grant check org administrative policies use.
+  # Callers pass a fixed OperatorCapabilityGrant constant; being an Operator is necessary, never
+  # sufficient.
+  def operator_capability?(capability)
+    user.is_a?(::Operator) && user.capability?(capability)
+  end
+
   # Role-based checks
   def operator?
     user&.has_role?("operator", organization: organization)

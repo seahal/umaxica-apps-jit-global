@@ -20,7 +20,10 @@ scope(module: :base, as: :base) do
       # resource :mcp, only: :create
 
       resource :welcome, only: :show
-      resource :dashboard, only: :show, controller: :roots
+      resource :dashboard, only: :show, controller: :roots do
+        # Streams the selected Avatar's private image; see adr/base-dashboard-avatar-image-delivery.md.
+        resource :avatar_image, only: :show, controller: :dashboard_avatar_images
+      end
       resource :selector, only: %i(show update)
       resource :switcher, only: %i(show update)
       resources :billings, only: :index
@@ -464,7 +467,10 @@ scope(module: :base, as: :base) do
       # resource :mcp, only: :create
 
       resource :welcome, only: :show
-      resource :dashboard, only: :show, controller: :roots
+      resource :dashboard, only: :show, controller: :roots do
+        # Streams the selected Avatar's private image; see adr/base-dashboard-avatar-image-delivery.md.
+        resource :avatar_image, only: :show, controller: :dashboard_avatar_images
+      end
       resource :selector, only: %i(show update)
       resource :switcher, only: %i(show update)
       resource :preference, only: :show
@@ -475,7 +481,9 @@ scope(module: :base, as: :base) do
       post "avatar_ownership_transfers/:id/cancel", to: "avatar_ownership_transfers#cancel",
                                                     as: :cancel_avatar_ownership_transfer
       resources :organizations, only: %i(index show) do
-        resources :memberships, module: :organizations
+        # Org memberships are read-only: who may add, change, or end an Agent's membership in a
+        # Bureau is not yet specified (adr/operator-capability-authorization.md, Not provided).
+        resources :memberships, only: %i(index show), module: :organizations
       end
 
       namespace :preference do
@@ -541,31 +549,38 @@ scope(module: :base, as: :base) do
       resource :configuration, only: :show
       resources :accounts, only: %i(index show)
       resources :iam, only: :index
+      # adr/operator-capability-authorization.md, IAM: capability grants. A revocation is its own
+      # noun resource; `new` is the Step-Up-gated confirmation page for each mutation.
+      namespace :iam do
+        resources :grants, only: %i(index show new create) do
+          resource :revocation, only: %i(new create), module: :grants
+        end
+      end
       resources :system, only: :index
       resources :audit, only: :index
       resources :support, only: :index
       namespace :support do
-        resources :clients, only: [] do
-          resource :session, only: :destroy, controller: "clients/sessions", path: "sessions/purge"
+        # adr/operator-capability-authorization.md, Support: Clients are the app realm and Visitors
+        # the com realm, fixed by the resource name; no parameter selects the target class. Each
+        # session revocation is a recorded operation (`show` is its result).
+        resources :clients, only: %i(index show) do
+          resources :revocations, only: %i(new create show), module: :clients
         end
-        resources :visitors, only: [] do
-          resource(
-            :session_emergency_revocation,
-            only: :destroy,
-            controller: "visitors/sessions/emergency_revocations",
-            path: "sessions/emergency_revocation",
-          )
+        resources :visitors, only: %i(index show) do
+          resources :revocations, only: %i(new create show), module: :visitors
         end
 
         # adr/unified-enforcement.md, Approval: realm-scoped noun resources, per
         # .agents/harnesses/rules/generic/routing.mdc (no verb actions such as
-        # `approve`/`release`; each is its own nested resource with only `create`).
+        # `approve`/`release`; each is its own nested resource). `new` pages are the Step-Up-gated
+        # confirmation screens. The org realm stays routed but every policy rule denies it: no
+        # capability for disciplining operators is defined.
         %i(app com org).each do |enforcement_realm|
           scope(path: enforcement_realm, as: enforcement_realm, defaults: { realm: enforcement_realm }) do
-            resources :enforcement_cases, only: %i(index show create) do
-              resource :approval, only: :create, controller: "enforcement_cases/approvals"
-              resource :release, only: :create, controller: "enforcement_cases/releases"
-              resource :appeal_review, only: :create, controller: "enforcement_cases/appeal_reviews"
+            resources :enforcement_cases, only: %i(index show new create) do
+              resource :approval, only: %i(new create), controller: "enforcement_cases/approvals"
+              resource :release, only: %i(new create), controller: "enforcement_cases/releases"
+              resource :appeal_review, only: %i(new create), controller: "enforcement_cases/appeal_reviews"
             end
           end
         end

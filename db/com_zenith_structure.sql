@@ -32,7 +32,7 @@ SET default_table_access_method = heap;
 -- Name: action_push_native_devices; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.action_push_native_devices (
+CREATE TABLE public.action_push_native_devices (
     id bigint NOT NULL,
     name character varying,
     platform character varying NOT NULL,
@@ -48,7 +48,7 @@ CREATE UNLOGGED TABLE public.action_push_native_devices (
 -- Name: action_push_native_devices_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.action_push_native_devices_id_seq
+CREATE SEQUENCE public.action_push_native_devices_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -67,7 +67,7 @@ ALTER SEQUENCE public.action_push_native_devices_id_seq OWNED BY public.action_p
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -79,7 +79,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: com_enforcement_appeals; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_enforcement_appeals (
+CREATE TABLE public.com_enforcement_appeals (
     id bigint NOT NULL,
     com_enforcement_case_id bigint NOT NULL,
     public_id character varying NOT NULL,
@@ -101,7 +101,7 @@ CREATE UNLOGGED TABLE public.com_enforcement_appeals (
 -- Name: com_enforcement_appeals_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_enforcement_appeals_id_seq
+CREATE SEQUENCE public.com_enforcement_appeals_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -120,7 +120,7 @@ ALTER SEQUENCE public.com_enforcement_appeals_id_seq OWNED BY public.com_enforce
 -- Name: com_enforcement_authentication_method_effects; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_enforcement_authentication_method_effects (
+CREATE TABLE public.com_enforcement_authentication_method_effects (
     id bigint NOT NULL,
     com_enforcement_case_id bigint NOT NULL,
     principal_public_id character varying NOT NULL,
@@ -140,7 +140,7 @@ CREATE UNLOGGED TABLE public.com_enforcement_authentication_method_effects (
 -- Name: com_enforcement_authentication_method_effects_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_enforcement_authentication_method_effects_id_seq
+CREATE SEQUENCE public.com_enforcement_authentication_method_effects_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -159,7 +159,7 @@ ALTER SEQUENCE public.com_enforcement_authentication_method_effects_id_seq OWNED
 -- Name: com_enforcement_cases; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_enforcement_cases (
+CREATE TABLE public.com_enforcement_cases (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     kind character varying NOT NULL,
@@ -207,7 +207,7 @@ CREATE UNLOGGED TABLE public.com_enforcement_cases (
 -- Name: com_enforcement_cases_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_enforcement_cases_id_seq
+CREATE SEQUENCE public.com_enforcement_cases_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -226,7 +226,7 @@ ALTER SEQUENCE public.com_enforcement_cases_id_seq OWNED BY public.com_enforceme
 -- Name: com_enforcement_identifier_effects; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_enforcement_identifier_effects (
+CREATE TABLE public.com_enforcement_identifier_effects (
     id bigint NOT NULL,
     com_enforcement_case_id bigint NOT NULL,
     identifier_kind character varying NOT NULL,
@@ -251,7 +251,7 @@ CREATE UNLOGGED TABLE public.com_enforcement_identifier_effects (
 -- Name: com_enforcement_identifier_effects_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_enforcement_identifier_effects_id_seq
+CREATE SEQUENCE public.com_enforcement_identifier_effects_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -270,7 +270,7 @@ ALTER SEQUENCE public.com_enforcement_identifier_effects_id_seq OWNED BY public.
 -- Name: com_enforcement_principal_effects; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_enforcement_principal_effects (
+CREATE TABLE public.com_enforcement_principal_effects (
     id bigint NOT NULL,
     com_enforcement_case_id bigint NOT NULL,
     principal_public_id character varying NOT NULL,
@@ -292,7 +292,7 @@ CREATE UNLOGGED TABLE public.com_enforcement_principal_effects (
 -- Name: com_enforcement_principal_effects_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_enforcement_principal_effects_id_seq
+CREATE SEQUENCE public.com_enforcement_principal_effects_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -311,7 +311,7 @@ ALTER SEQUENCE public.com_enforcement_principal_effects_id_seq OWNED BY public.c
 -- Name: com_enforcement_principal_links; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_enforcement_principal_links (
+CREATE TABLE public.com_enforcement_principal_links (
     id bigint NOT NULL,
     com_enforcement_case_id bigint NOT NULL,
     principal_kind character varying NOT NULL,
@@ -329,7 +329,7 @@ CREATE UNLOGGED TABLE public.com_enforcement_principal_links (
 -- Name: com_enforcement_principal_links_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_enforcement_principal_links_id_seq
+CREATE SEQUENCE public.com_enforcement_principal_links_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -348,7 +348,7 @@ ALTER SEQUENCE public.com_enforcement_principal_links_id_seq OWNED BY public.com
 -- Name: companies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.companies (
+CREATE TABLE public.companies (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
@@ -363,7 +363,7 @@ CREATE UNLOGGED TABLE public.companies (
 -- Name: companies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.companies_id_seq
+CREATE SEQUENCE public.companies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -382,7 +382,7 @@ ALTER SEQUENCE public.companies_id_seq OWNED BY public.companies.id;
 -- Name: company_administration_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_administration_grants (
+CREATE TABLE public.company_administration_grants (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -395,7 +395,7 @@ CREATE UNLOGGED TABLE public.company_administration_grants (
 -- Name: company_administration_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_administration_grants_id_seq
+CREATE SEQUENCE public.company_administration_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -414,7 +414,7 @@ ALTER SEQUENCE public.company_administration_grants_id_seq OWNED BY public.compa
 -- Name: company_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_delegation_grants (
+CREATE TABLE public.company_delegation_grants (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -427,7 +427,7 @@ CREATE UNLOGGED TABLE public.company_delegation_grants (
 -- Name: company_delegation_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_delegation_grants_id_seq
+CREATE SEQUENCE public.company_delegation_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -446,7 +446,7 @@ ALTER SEQUENCE public.company_delegation_grants_id_seq OWNED BY public.company_d
 -- Name: company_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_ownership_transfer_requests (
+CREATE TABLE public.company_ownership_transfer_requests (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     source_visitor_id bigint NOT NULL,
@@ -473,7 +473,7 @@ CREATE UNLOGGED TABLE public.company_ownership_transfer_requests (
 -- Name: company_ownership_transfer_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_ownership_transfer_requests_id_seq
+CREATE SEQUENCE public.company_ownership_transfer_requests_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -492,7 +492,7 @@ ALTER SEQUENCE public.company_ownership_transfer_requests_id_seq OWNED BY public
 -- Name: company_ownerships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_ownerships (
+CREATE TABLE public.company_ownerships (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -507,7 +507,7 @@ CREATE UNLOGGED TABLE public.company_ownerships (
 -- Name: company_ownerships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_ownerships_id_seq
+CREATE SEQUENCE public.company_ownerships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -526,7 +526,7 @@ ALTER SEQUENCE public.company_ownerships_id_seq OWNED BY public.company_ownershi
 -- Name: company_unit_closures; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_unit_closures (
+CREATE TABLE public.company_unit_closures (
     id bigint NOT NULL,
     ancestor_id bigint NOT NULL,
     descendant_id bigint NOT NULL,
@@ -542,7 +542,7 @@ CREATE UNLOGGED TABLE public.company_unit_closures (
 -- Name: company_unit_closures_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_unit_closures_id_seq
+CREATE SEQUENCE public.company_unit_closures_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -561,7 +561,7 @@ ALTER SEQUENCE public.company_unit_closures_id_seq OWNED BY public.company_unit_
 -- Name: company_units; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_units (
+CREATE TABLE public.company_units (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     parent_id bigint,
@@ -577,7 +577,7 @@ CREATE UNLOGGED TABLE public.company_units (
 -- Name: company_units_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_units_id_seq
+CREATE SEQUENCE public.company_units_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -596,7 +596,7 @@ ALTER SEQUENCE public.company_units_id_seq OWNED BY public.company_units.id;
 -- Name: company_view_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.company_view_grants (
+CREATE TABLE public.company_view_grants (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -609,7 +609,7 @@ CREATE UNLOGGED TABLE public.company_view_grants (
 -- Name: company_view_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.company_view_grants_id_seq
+CREATE SEQUENCE public.company_view_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -628,7 +628,7 @@ ALTER SEQUENCE public.company_view_grants_id_seq OWNED BY public.company_view_gr
 -- Name: core_com_visitor_bridges; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.core_com_visitor_bridges (
+CREATE TABLE public.core_com_visitor_bridges (
     id bigint NOT NULL,
     visitor_id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
@@ -645,7 +645,7 @@ CREATE UNLOGGED TABLE public.core_com_visitor_bridges (
 -- Name: core_com_visitor_bridges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.core_com_visitor_bridges_id_seq
+CREATE SEQUENCE public.core_com_visitor_bridges_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -664,7 +664,7 @@ ALTER SEQUENCE public.core_com_visitor_bridges_id_seq OWNED BY public.core_com_v
 -- Name: individual_administration_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_administration_grants (
+CREATE TABLE public.individual_administration_grants (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -677,7 +677,7 @@ CREATE UNLOGGED TABLE public.individual_administration_grants (
 -- Name: individual_administration_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_administration_grants_id_seq
+CREATE SEQUENCE public.individual_administration_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -696,7 +696,7 @@ ALTER SEQUENCE public.individual_administration_grants_id_seq OWNED BY public.in
 -- Name: individual_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_assignments (
+CREATE TABLE public.individual_assignments (
     id bigint NOT NULL,
     public_id character varying NOT NULL,
     individual_id bigint NOT NULL,
@@ -712,7 +712,7 @@ CREATE UNLOGGED TABLE public.individual_assignments (
 -- Name: individual_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_assignments_id_seq
+CREATE SEQUENCE public.individual_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -731,7 +731,7 @@ ALTER SEQUENCE public.individual_assignments_id_seq OWNED BY public.individual_a
 -- Name: individual_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_delegation_grants (
+CREATE TABLE public.individual_delegation_grants (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -744,7 +744,7 @@ CREATE UNLOGGED TABLE public.individual_delegation_grants (
 -- Name: individual_delegation_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_delegation_grants_id_seq
+CREATE SEQUENCE public.individual_delegation_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -763,7 +763,7 @@ ALTER SEQUENCE public.individual_delegation_grants_id_seq OWNED BY public.indivi
 -- Name: individual_membership_kinds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_membership_kinds (
+CREATE TABLE public.individual_membership_kinds (
     id bigint NOT NULL
 );
 
@@ -772,7 +772,7 @@ CREATE UNLOGGED TABLE public.individual_membership_kinds (
 -- Name: individual_membership_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_membership_kinds_id_seq
+CREATE SEQUENCE public.individual_membership_kinds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -791,7 +791,7 @@ ALTER SEQUENCE public.individual_membership_kinds_id_seq OWNED BY public.individ
 -- Name: individual_membership_revoke_reasons; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_membership_revoke_reasons (
+CREATE TABLE public.individual_membership_revoke_reasons (
     id bigint NOT NULL
 );
 
@@ -800,7 +800,7 @@ CREATE UNLOGGED TABLE public.individual_membership_revoke_reasons (
 -- Name: individual_membership_revoke_reasons_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_membership_revoke_reasons_id_seq
+CREATE SEQUENCE public.individual_membership_revoke_reasons_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -819,7 +819,7 @@ ALTER SEQUENCE public.individual_membership_revoke_reasons_id_seq OWNED BY publi
 -- Name: individual_membership_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_membership_states (
+CREATE TABLE public.individual_membership_states (
     id bigint NOT NULL
 );
 
@@ -828,7 +828,7 @@ CREATE UNLOGGED TABLE public.individual_membership_states (
 -- Name: individual_membership_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_membership_states_id_seq
+CREATE SEQUENCE public.individual_membership_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -847,7 +847,7 @@ ALTER SEQUENCE public.individual_membership_states_id_seq OWNED BY public.indivi
 -- Name: individual_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_memberships (
+CREATE TABLE public.individual_memberships (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     company_id bigint NOT NULL,
@@ -872,7 +872,7 @@ CREATE UNLOGGED TABLE public.individual_memberships (
 -- Name: individual_memberships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_memberships_id_seq
+CREATE SEQUENCE public.individual_memberships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -891,7 +891,7 @@ ALTER SEQUENCE public.individual_memberships_id_seq OWNED BY public.individual_m
 -- Name: individual_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_ownership_transfer_requests (
+CREATE TABLE public.individual_ownership_transfer_requests (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     source_visitor_id bigint NOT NULL,
@@ -918,7 +918,7 @@ CREATE UNLOGGED TABLE public.individual_ownership_transfer_requests (
 -- Name: individual_ownership_transfer_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_ownership_transfer_requests_id_seq
+CREATE SEQUENCE public.individual_ownership_transfer_requests_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -937,7 +937,7 @@ ALTER SEQUENCE public.individual_ownership_transfer_requests_id_seq OWNED BY pub
 -- Name: individual_ownerships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_ownerships (
+CREATE TABLE public.individual_ownerships (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -952,7 +952,7 @@ CREATE UNLOGGED TABLE public.individual_ownerships (
 -- Name: individual_ownerships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_ownerships_id_seq
+CREATE SEQUENCE public.individual_ownerships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -971,7 +971,7 @@ ALTER SEQUENCE public.individual_ownerships_id_seq OWNED BY public.individual_ow
 -- Name: individual_usage_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_usage_grants (
+CREATE TABLE public.individual_usage_grants (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -984,7 +984,7 @@ CREATE UNLOGGED TABLE public.individual_usage_grants (
 -- Name: individual_usage_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_usage_grants_id_seq
+CREATE SEQUENCE public.individual_usage_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1003,7 +1003,7 @@ ALTER SEQUENCE public.individual_usage_grants_id_seq OWNED BY public.individual_
 -- Name: individual_view_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individual_view_grants (
+CREATE TABLE public.individual_view_grants (
     id bigint NOT NULL,
     individual_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -1016,7 +1016,7 @@ CREATE UNLOGGED TABLE public.individual_view_grants (
 -- Name: individual_view_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individual_view_grants_id_seq
+CREATE SEQUENCE public.individual_view_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1035,7 +1035,7 @@ ALTER SEQUENCE public.individual_view_grants_id_seq OWNED BY public.individual_v
 -- Name: individuals; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.individuals (
+CREATE TABLE public.individuals (
     id bigint NOT NULL,
     visitor_identity_id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
@@ -1051,7 +1051,7 @@ CREATE UNLOGGED TABLE public.individuals (
 -- Name: individuals_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.individuals_id_seq
+CREATE SEQUENCE public.individuals_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1070,7 +1070,7 @@ ALTER SEQUENCE public.individuals_id_seq OWNED BY public.individuals.id;
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 
@@ -1079,7 +1079,7 @@ CREATE UNLOGGED TABLE public.schema_migrations (
 -- Name: visitor_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_accounts (
+CREATE TABLE public.visitor_accounts (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     visitor_id bigint NOT NULL,
@@ -1092,7 +1092,7 @@ CREATE UNLOGGED TABLE public.visitor_accounts (
 -- Name: visitor_accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_accounts_id_seq
+CREATE SEQUENCE public.visitor_accounts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1111,7 +1111,7 @@ ALTER SEQUENCE public.visitor_accounts_id_seq OWNED BY public.visitor_accounts.i
 -- Name: visitor_authority_locks; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_authority_locks (
+CREATE TABLE public.visitor_authority_locks (
     id bigint NOT NULL,
     visitor_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -1123,7 +1123,7 @@ CREATE UNLOGGED TABLE public.visitor_authority_locks (
 -- Name: visitor_authority_locks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_authority_locks_id_seq
+CREATE SEQUENCE public.visitor_authority_locks_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1142,7 +1142,7 @@ ALTER SEQUENCE public.visitor_authority_locks_id_seq OWNED BY public.visitor_aut
 -- Name: visitor_banners; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_banners (
+CREATE TABLE public.visitor_banners (
     id bigint NOT NULL,
     visitor_id bigint NOT NULL,
     title character varying DEFAULT ''::character varying NOT NULL,
@@ -1160,7 +1160,7 @@ CREATE UNLOGGED TABLE public.visitor_banners (
 -- Name: visitor_banners_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_banners_id_seq
+CREATE SEQUENCE public.visitor_banners_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1179,7 +1179,7 @@ ALTER SEQUENCE public.visitor_banners_id_seq OWNED BY public.visitor_banners.id;
 -- Name: visitor_email_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_email_statuses (
+CREATE TABLE public.visitor_email_statuses (
     id bigint NOT NULL
 );
 
@@ -1188,7 +1188,7 @@ CREATE UNLOGGED TABLE public.visitor_email_statuses (
 -- Name: visitor_email_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_email_statuses_id_seq
+CREATE SEQUENCE public.visitor_email_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1207,7 +1207,7 @@ ALTER SEQUENCE public.visitor_email_statuses_id_seq OWNED BY public.visitor_emai
 -- Name: visitor_emails; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_emails (
+CREATE TABLE public.visitor_emails (
     id bigint NOT NULL,
     address character varying DEFAULT ''::character varying NOT NULL,
     address_digest character varying,
@@ -1236,7 +1236,7 @@ CREATE UNLOGGED TABLE public.visitor_emails (
 -- Name: visitor_emails_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_emails_id_seq
+CREATE SEQUENCE public.visitor_emails_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1255,7 +1255,7 @@ ALTER SEQUENCE public.visitor_emails_id_seq OWNED BY public.visitor_emails.id;
 -- Name: visitor_enforcement_recovery_ceremonies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_enforcement_recovery_ceremonies (
+CREATE TABLE public.visitor_enforcement_recovery_ceremonies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     visitor_id bigint NOT NULL,
@@ -1275,7 +1275,7 @@ CREATE UNLOGGED TABLE public.visitor_enforcement_recovery_ceremonies (
 -- Name: visitor_enforcement_recovery_ceremonies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_enforcement_recovery_ceremonies_id_seq
+CREATE SEQUENCE public.visitor_enforcement_recovery_ceremonies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1294,7 +1294,7 @@ ALTER SEQUENCE public.visitor_enforcement_recovery_ceremonies_id_seq OWNED BY pu
 -- Name: visitor_identities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_identities (
+CREATE TABLE public.visitor_identities (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     issuer character varying NOT NULL,
@@ -1313,7 +1313,7 @@ CREATE UNLOGGED TABLE public.visitor_identities (
 -- Name: visitor_identities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_identities_id_seq
+CREATE SEQUENCE public.visitor_identities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1332,7 +1332,7 @@ ALTER SEQUENCE public.visitor_identities_id_seq OWNED BY public.visitor_identiti
 -- Name: visitor_identity_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_identity_states (
+CREATE TABLE public.visitor_identity_states (
     id bigint NOT NULL
 );
 
@@ -1341,7 +1341,7 @@ CREATE UNLOGGED TABLE public.visitor_identity_states (
 -- Name: visitor_identity_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_identity_states_id_seq
+CREATE SEQUENCE public.visitor_identity_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1360,7 +1360,7 @@ ALTER SEQUENCE public.visitor_identity_states_id_seq OWNED BY public.visitor_ide
 -- Name: visitor_mfa_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_mfa_levels (
+CREATE TABLE public.visitor_mfa_levels (
     id bigint NOT NULL
 );
 
@@ -1369,7 +1369,7 @@ CREATE UNLOGGED TABLE public.visitor_mfa_levels (
 -- Name: visitor_mfa_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_mfa_levels_id_seq
+CREATE SEQUENCE public.visitor_mfa_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1388,7 +1388,7 @@ ALTER SEQUENCE public.visitor_mfa_levels_id_seq OWNED BY public.visitor_mfa_leve
 -- Name: visitor_mfa_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_mfa_statuses (
+CREATE TABLE public.visitor_mfa_statuses (
     id bigint NOT NULL
 );
 
@@ -1397,7 +1397,7 @@ CREATE UNLOGGED TABLE public.visitor_mfa_statuses (
 -- Name: visitor_mfa_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_mfa_statuses_id_seq
+CREATE SEQUENCE public.visitor_mfa_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1416,7 +1416,7 @@ ALTER SEQUENCE public.visitor_mfa_statuses_id_seq OWNED BY public.visitor_mfa_st
 -- Name: visitor_passkey_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_passkey_statuses (
+CREATE TABLE public.visitor_passkey_statuses (
     id bigint NOT NULL
 );
 
@@ -1425,7 +1425,7 @@ CREATE UNLOGGED TABLE public.visitor_passkey_statuses (
 -- Name: visitor_passkey_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_passkey_statuses_id_seq
+CREATE SEQUENCE public.visitor_passkey_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1444,7 +1444,7 @@ ALTER SEQUENCE public.visitor_passkey_statuses_id_seq OWNED BY public.visitor_pa
 -- Name: visitor_passkeys; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_passkeys (
+CREATE TABLE public.visitor_passkeys (
     id bigint NOT NULL,
     description character varying DEFAULT ''::character varying NOT NULL,
     external_id uuid NOT NULL,
@@ -1474,7 +1474,7 @@ CREATE UNLOGGED TABLE public.visitor_passkeys (
 -- Name: visitor_passkeys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_passkeys_id_seq
+CREATE SEQUENCE public.visitor_passkeys_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1493,7 +1493,7 @@ ALTER SEQUENCE public.visitor_passkeys_id_seq OWNED BY public.visitor_passkeys.i
 -- Name: visitor_preference_adult_content_gate_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_adult_content_gate_options (
+CREATE TABLE public.visitor_preference_adult_content_gate_options (
     id bigint NOT NULL
 );
 
@@ -1502,7 +1502,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_adult_content_gate_options (
 -- Name: visitor_preference_adult_content_gate_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_adult_content_gate_options_id_seq
+CREATE SEQUENCE public.visitor_preference_adult_content_gate_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1521,7 +1521,7 @@ ALTER SEQUENCE public.visitor_preference_adult_content_gate_options_id_seq OWNED
 -- Name: visitor_preference_adult_content_gates; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_adult_content_gates (
+CREATE TABLE public.visitor_preference_adult_content_gates (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1534,7 +1534,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_adult_content_gates (
 -- Name: visitor_preference_adult_content_gates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_adult_content_gates_id_seq
+CREATE SEQUENCE public.visitor_preference_adult_content_gates_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1553,7 +1553,7 @@ ALTER SEQUENCE public.visitor_preference_adult_content_gates_id_seq OWNED BY pub
 -- Name: visitor_preference_currencies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_currencies (
+CREATE TABLE public.visitor_preference_currencies (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1566,7 +1566,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_currencies (
 -- Name: visitor_preference_currencies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_currencies_id_seq
+CREATE SEQUENCE public.visitor_preference_currencies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1585,7 +1585,7 @@ ALTER SEQUENCE public.visitor_preference_currencies_id_seq OWNED BY public.visit
 -- Name: visitor_preference_currency_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_currency_options (
+CREATE TABLE public.visitor_preference_currency_options (
     id bigint NOT NULL
 );
 
@@ -1594,7 +1594,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_currency_options (
 -- Name: visitor_preference_currency_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_currency_options_id_seq
+CREATE SEQUENCE public.visitor_preference_currency_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1613,7 +1613,7 @@ ALTER SEQUENCE public.visitor_preference_currency_options_id_seq OWNED BY public
 -- Name: visitor_preference_date_format_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_date_format_options (
+CREATE TABLE public.visitor_preference_date_format_options (
     id bigint NOT NULL
 );
 
@@ -1622,7 +1622,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_date_format_options (
 -- Name: visitor_preference_date_format_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_date_format_options_id_seq
+CREATE SEQUENCE public.visitor_preference_date_format_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1641,7 +1641,7 @@ ALTER SEQUENCE public.visitor_preference_date_format_options_id_seq OWNED BY pub
 -- Name: visitor_preference_date_formats; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_date_formats (
+CREATE TABLE public.visitor_preference_date_formats (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1654,7 +1654,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_date_formats (
 -- Name: visitor_preference_date_formats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_date_formats_id_seq
+CREATE SEQUENCE public.visitor_preference_date_formats_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1673,7 +1673,7 @@ ALTER SEQUENCE public.visitor_preference_date_formats_id_seq OWNED BY public.vis
 -- Name: visitor_preference_densities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_densities (
+CREATE TABLE public.visitor_preference_densities (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1686,7 +1686,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_densities (
 -- Name: visitor_preference_densities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_densities_id_seq
+CREATE SEQUENCE public.visitor_preference_densities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1705,7 +1705,7 @@ ALTER SEQUENCE public.visitor_preference_densities_id_seq OWNED BY public.visito
 -- Name: visitor_preference_density_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_density_options (
+CREATE TABLE public.visitor_preference_density_options (
     id bigint NOT NULL
 );
 
@@ -1714,7 +1714,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_density_options (
 -- Name: visitor_preference_density_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_density_options_id_seq
+CREATE SEQUENCE public.visitor_preference_density_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1733,7 +1733,7 @@ ALTER SEQUENCE public.visitor_preference_density_options_id_seq OWNED BY public.
 -- Name: visitor_preference_language_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_language_options (
+CREATE TABLE public.visitor_preference_language_options (
     id bigint NOT NULL
 );
 
@@ -1742,7 +1742,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_language_options (
 -- Name: visitor_preference_language_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_language_options_id_seq
+CREATE SEQUENCE public.visitor_preference_language_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1761,7 +1761,7 @@ ALTER SEQUENCE public.visitor_preference_language_options_id_seq OWNED BY public
 -- Name: visitor_preference_languages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_languages (
+CREATE TABLE public.visitor_preference_languages (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1774,7 +1774,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_languages (
 -- Name: visitor_preference_languages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_languages_id_seq
+CREATE SEQUENCE public.visitor_preference_languages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1793,7 +1793,7 @@ ALTER SEQUENCE public.visitor_preference_languages_id_seq OWNED BY public.visito
 -- Name: visitor_preference_motion_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_motion_options (
+CREATE TABLE public.visitor_preference_motion_options (
     id bigint NOT NULL
 );
 
@@ -1802,7 +1802,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_motion_options (
 -- Name: visitor_preference_motion_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_motion_options_id_seq
+CREATE SEQUENCE public.visitor_preference_motion_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1821,7 +1821,7 @@ ALTER SEQUENCE public.visitor_preference_motion_options_id_seq OWNED BY public.v
 -- Name: visitor_preference_motions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_motions (
+CREATE TABLE public.visitor_preference_motions (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1834,7 +1834,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_motions (
 -- Name: visitor_preference_motions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_motions_id_seq
+CREATE SEQUENCE public.visitor_preference_motions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1853,7 +1853,7 @@ ALTER SEQUENCE public.visitor_preference_motions_id_seq OWNED BY public.visitor_
 -- Name: visitor_preference_page_size_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_page_size_options (
+CREATE TABLE public.visitor_preference_page_size_options (
     id bigint NOT NULL
 );
 
@@ -1862,7 +1862,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_page_size_options (
 -- Name: visitor_preference_page_size_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_page_size_options_id_seq
+CREATE SEQUENCE public.visitor_preference_page_size_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1881,7 +1881,7 @@ ALTER SEQUENCE public.visitor_preference_page_size_options_id_seq OWNED BY publi
 -- Name: visitor_preference_page_sizes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_page_sizes (
+CREATE TABLE public.visitor_preference_page_sizes (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1894,7 +1894,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_page_sizes (
 -- Name: visitor_preference_page_sizes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_page_sizes_id_seq
+CREATE SEQUENCE public.visitor_preference_page_sizes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1913,7 +1913,7 @@ ALTER SEQUENCE public.visitor_preference_page_sizes_id_seq OWNED BY public.visit
 -- Name: visitor_preference_region_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_region_options (
+CREATE TABLE public.visitor_preference_region_options (
     id bigint NOT NULL
 );
 
@@ -1922,7 +1922,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_region_options (
 -- Name: visitor_preference_region_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_region_options_id_seq
+CREATE SEQUENCE public.visitor_preference_region_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1941,7 +1941,7 @@ ALTER SEQUENCE public.visitor_preference_region_options_id_seq OWNED BY public.v
 -- Name: visitor_preference_regions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_regions (
+CREATE TABLE public.visitor_preference_regions (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1954,7 +1954,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_regions (
 -- Name: visitor_preference_regions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_regions_id_seq
+CREATE SEQUENCE public.visitor_preference_regions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1973,7 +1973,7 @@ ALTER SEQUENCE public.visitor_preference_regions_id_seq OWNED BY public.visitor_
 -- Name: visitor_preference_theme_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_theme_options (
+CREATE TABLE public.visitor_preference_theme_options (
     id bigint NOT NULL
 );
 
@@ -1982,7 +1982,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_theme_options (
 -- Name: visitor_preference_theme_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_theme_options_id_seq
+CREATE SEQUENCE public.visitor_preference_theme_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2001,7 +2001,7 @@ ALTER SEQUENCE public.visitor_preference_theme_options_id_seq OWNED BY public.vi
 -- Name: visitor_preference_themes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_themes (
+CREATE TABLE public.visitor_preference_themes (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -2014,7 +2014,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_themes (
 -- Name: visitor_preference_themes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_themes_id_seq
+CREATE SEQUENCE public.visitor_preference_themes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2033,7 +2033,7 @@ ALTER SEQUENCE public.visitor_preference_themes_id_seq OWNED BY public.visitor_p
 -- Name: visitor_preference_time_format_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_time_format_options (
+CREATE TABLE public.visitor_preference_time_format_options (
     id bigint NOT NULL
 );
 
@@ -2042,7 +2042,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_time_format_options (
 -- Name: visitor_preference_time_format_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_time_format_options_id_seq
+CREATE SEQUENCE public.visitor_preference_time_format_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2061,7 +2061,7 @@ ALTER SEQUENCE public.visitor_preference_time_format_options_id_seq OWNED BY pub
 -- Name: visitor_preference_time_formats; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_time_formats (
+CREATE TABLE public.visitor_preference_time_formats (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -2074,7 +2074,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_time_formats (
 -- Name: visitor_preference_time_formats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_time_formats_id_seq
+CREATE SEQUENCE public.visitor_preference_time_formats_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2093,7 +2093,7 @@ ALTER SEQUENCE public.visitor_preference_time_formats_id_seq OWNED BY public.vis
 -- Name: visitor_preference_timezone_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_timezone_options (
+CREATE TABLE public.visitor_preference_timezone_options (
     id bigint NOT NULL
 );
 
@@ -2102,7 +2102,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_timezone_options (
 -- Name: visitor_preference_timezone_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_timezone_options_id_seq
+CREATE SEQUENCE public.visitor_preference_timezone_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2121,7 +2121,7 @@ ALTER SEQUENCE public.visitor_preference_timezone_options_id_seq OWNED BY public
 -- Name: visitor_preference_timezones; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preference_timezones (
+CREATE TABLE public.visitor_preference_timezones (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -2134,7 +2134,7 @@ CREATE UNLOGGED TABLE public.visitor_preference_timezones (
 -- Name: visitor_preference_timezones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preference_timezones_id_seq
+CREATE SEQUENCE public.visitor_preference_timezones_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2153,7 +2153,7 @@ ALTER SEQUENCE public.visitor_preference_timezones_id_seq OWNED BY public.visito
 -- Name: visitor_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_preferences (
+CREATE TABLE public.visitor_preferences (
     id bigint NOT NULL,
     visitor_id bigint NOT NULL,
     consented boolean DEFAULT false NOT NULL,
@@ -2183,7 +2183,7 @@ CREATE UNLOGGED TABLE public.visitor_preferences (
 -- Name: visitor_preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_preferences_id_seq
+CREATE SEQUENCE public.visitor_preferences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2202,7 +2202,7 @@ ALTER SEQUENCE public.visitor_preferences_id_seq OWNED BY public.visitor_prefere
 -- Name: visitor_privacy_request_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_privacy_request_statuses (
+CREATE TABLE public.visitor_privacy_request_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -2212,7 +2212,7 @@ CREATE UNLOGGED TABLE public.visitor_privacy_request_statuses (
 -- Name: visitor_privacy_request_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_privacy_request_statuses_id_seq
+CREATE SEQUENCE public.visitor_privacy_request_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2231,7 +2231,7 @@ ALTER SEQUENCE public.visitor_privacy_request_statuses_id_seq OWNED BY public.vi
 -- Name: visitor_privacy_requests; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_privacy_requests (
+CREATE TABLE public.visitor_privacy_requests (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     visitor_id bigint NOT NULL,
@@ -2263,7 +2263,7 @@ CREATE UNLOGGED TABLE public.visitor_privacy_requests (
 -- Name: visitor_privacy_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_privacy_requests_id_seq
+CREATE SEQUENCE public.visitor_privacy_requests_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2282,7 +2282,7 @@ ALTER SEQUENCE public.visitor_privacy_requests_id_seq OWNED BY public.visitor_pr
 -- Name: visitor_processor_erasure_notification_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_processor_erasure_notification_attempts (
+CREATE TABLE public.visitor_processor_erasure_notification_attempts (
     id bigint NOT NULL,
     visitor_processor_erasure_notification_id bigint NOT NULL,
     delivery_generation bigint NOT NULL,
@@ -2309,7 +2309,7 @@ CREATE UNLOGGED TABLE public.visitor_processor_erasure_notification_attempts (
 -- Name: visitor_processor_erasure_notification_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_processor_erasure_notification_attempts_id_seq
+CREATE SEQUENCE public.visitor_processor_erasure_notification_attempts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2328,7 +2328,7 @@ ALTER SEQUENCE public.visitor_processor_erasure_notification_attempts_id_seq OWN
 -- Name: visitor_processor_erasure_notification_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_processor_erasure_notification_statuses (
+CREATE TABLE public.visitor_processor_erasure_notification_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -2338,7 +2338,7 @@ CREATE UNLOGGED TABLE public.visitor_processor_erasure_notification_statuses (
 -- Name: visitor_processor_erasure_notification_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_processor_erasure_notification_statuses_id_seq
+CREATE SEQUENCE public.visitor_processor_erasure_notification_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2357,7 +2357,7 @@ ALTER SEQUENCE public.visitor_processor_erasure_notification_statuses_id_seq OWN
 -- Name: visitor_processor_erasure_notifications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_processor_erasure_notifications (
+CREATE TABLE public.visitor_processor_erasure_notifications (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     visitor_privacy_request_id bigint NOT NULL,
@@ -2388,7 +2388,7 @@ CREATE UNLOGGED TABLE public.visitor_processor_erasure_notifications (
 -- Name: visitor_processor_erasure_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_processor_erasure_notifications_id_seq
+CREATE SEQUENCE public.visitor_processor_erasure_notifications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2407,7 +2407,7 @@ ALTER SEQUENCE public.visitor_processor_erasure_notifications_id_seq OWNED BY pu
 -- Name: visitor_retention_hold_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_retention_hold_statuses (
+CREATE TABLE public.visitor_retention_hold_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -2417,7 +2417,7 @@ CREATE UNLOGGED TABLE public.visitor_retention_hold_statuses (
 -- Name: visitor_retention_hold_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_retention_hold_statuses_id_seq
+CREATE SEQUENCE public.visitor_retention_hold_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2436,7 +2436,7 @@ ALTER SEQUENCE public.visitor_retention_hold_statuses_id_seq OWNED BY public.vis
 -- Name: visitor_retention_holds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_retention_holds (
+CREATE TABLE public.visitor_retention_holds (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     visitor_id bigint NOT NULL,
@@ -2461,7 +2461,7 @@ CREATE UNLOGGED TABLE public.visitor_retention_holds (
 -- Name: visitor_retention_holds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_retention_holds_id_seq
+CREATE SEQUENCE public.visitor_retention_holds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2480,7 +2480,7 @@ ALTER SEQUENCE public.visitor_retention_holds_id_seq OWNED BY public.visitor_ret
 -- Name: visitor_secret_credential_kinds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_secret_credential_kinds (
+CREATE TABLE public.visitor_secret_credential_kinds (
     id bigint NOT NULL
 );
 
@@ -2489,7 +2489,7 @@ CREATE UNLOGGED TABLE public.visitor_secret_credential_kinds (
 -- Name: visitor_secret_credential_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_secret_credential_kinds_id_seq
+CREATE SEQUENCE public.visitor_secret_credential_kinds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2508,7 +2508,7 @@ ALTER SEQUENCE public.visitor_secret_credential_kinds_id_seq OWNED BY public.vis
 -- Name: visitor_secret_credential_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_secret_credential_statuses (
+CREATE TABLE public.visitor_secret_credential_statuses (
     id bigint NOT NULL
 );
 
@@ -2517,7 +2517,7 @@ CREATE UNLOGGED TABLE public.visitor_secret_credential_statuses (
 -- Name: visitor_secret_credential_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_secret_credential_statuses_id_seq
+CREATE SEQUENCE public.visitor_secret_credential_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2536,7 +2536,7 @@ ALTER SEQUENCE public.visitor_secret_credential_statuses_id_seq OWNED BY public.
 -- Name: visitor_secret_credentials; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_secret_credentials (
+CREATE TABLE public.visitor_secret_credentials (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
     password_digest character varying DEFAULT ''::character varying NOT NULL,
@@ -2577,7 +2577,7 @@ CREATE UNLOGGED TABLE public.visitor_secret_credentials (
 -- Name: visitor_secret_credentials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_secret_credentials_id_seq
+CREATE SEQUENCE public.visitor_secret_credentials_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2596,7 +2596,7 @@ ALTER SEQUENCE public.visitor_secret_credentials_id_seq OWNED BY public.visitor_
 -- Name: visitor_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_statuses (
+CREATE TABLE public.visitor_statuses (
     id bigint NOT NULL
 );
 
@@ -2605,7 +2605,7 @@ CREATE UNLOGGED TABLE public.visitor_statuses (
 -- Name: visitor_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_statuses_id_seq
+CREATE SEQUENCE public.visitor_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2624,7 +2624,7 @@ ALTER SEQUENCE public.visitor_statuses_id_seq OWNED BY public.visitor_statuses.i
 -- Name: visitor_telephone_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_telephone_statuses (
+CREATE TABLE public.visitor_telephone_statuses (
     id bigint NOT NULL
 );
 
@@ -2633,7 +2633,7 @@ CREATE UNLOGGED TABLE public.visitor_telephone_statuses (
 -- Name: visitor_telephone_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_telephone_statuses_id_seq
+CREATE SEQUENCE public.visitor_telephone_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2652,7 +2652,7 @@ ALTER SEQUENCE public.visitor_telephone_statuses_id_seq OWNED BY public.visitor_
 -- Name: visitor_telephones; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_telephones (
+CREATE TABLE public.visitor_telephones (
     id bigint NOT NULL,
     number character varying DEFAULT ''::character varying NOT NULL,
     number_digest character varying,
@@ -2675,7 +2675,7 @@ CREATE UNLOGGED TABLE public.visitor_telephones (
 -- Name: visitor_telephones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_telephones_id_seq
+CREATE SEQUENCE public.visitor_telephones_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2694,7 +2694,7 @@ ALTER SEQUENCE public.visitor_telephones_id_seq OWNED BY public.visitor_telephon
 -- Name: visitor_visibilities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_visibilities (
+CREATE TABLE public.visitor_visibilities (
     id bigint NOT NULL
 );
 
@@ -2703,7 +2703,7 @@ CREATE UNLOGGED TABLE public.visitor_visibilities (
 -- Name: visitor_visibilities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_visibilities_id_seq
+CREATE SEQUENCE public.visitor_visibilities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2722,7 +2722,7 @@ ALTER SEQUENCE public.visitor_visibilities_id_seq OWNED BY public.visitor_visibi
 -- Name: visitor_withdrawal_ceremonies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_withdrawal_ceremonies (
+CREATE TABLE public.visitor_withdrawal_ceremonies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     visitor_id bigint NOT NULL,
@@ -2744,7 +2744,7 @@ CREATE UNLOGGED TABLE public.visitor_withdrawal_ceremonies (
 -- Name: visitor_withdrawal_ceremonies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_withdrawal_ceremonies_id_seq
+CREATE SEQUENCE public.visitor_withdrawal_ceremonies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2763,7 +2763,7 @@ ALTER SEQUENCE public.visitor_withdrawal_ceremonies_id_seq OWNED BY public.visit
 -- Name: visitor_withdrawal_flow_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_withdrawal_flow_events (
+CREATE TABLE public.visitor_withdrawal_flow_events (
     id bigint NOT NULL,
     visitor_withdrawal_flow_id bigint NOT NULL,
     visitor_id bigint NOT NULL,
@@ -2782,7 +2782,7 @@ CREATE UNLOGGED TABLE public.visitor_withdrawal_flow_events (
 -- Name: visitor_withdrawal_flow_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_withdrawal_flow_events_id_seq
+CREATE SEQUENCE public.visitor_withdrawal_flow_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2801,7 +2801,7 @@ ALTER SEQUENCE public.visitor_withdrawal_flow_events_id_seq OWNED BY public.visi
 -- Name: visitor_withdrawal_flow_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_withdrawal_flow_statuses (
+CREATE TABLE public.visitor_withdrawal_flow_statuses (
     id bigint NOT NULL
 );
 
@@ -2810,7 +2810,7 @@ CREATE UNLOGGED TABLE public.visitor_withdrawal_flow_statuses (
 -- Name: visitor_withdrawal_flow_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_withdrawal_flow_statuses_id_seq
+CREATE SEQUENCE public.visitor_withdrawal_flow_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2829,7 +2829,7 @@ ALTER SEQUENCE public.visitor_withdrawal_flow_statuses_id_seq OWNED BY public.vi
 -- Name: visitor_withdrawal_flows; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_withdrawal_flows (
+CREATE TABLE public.visitor_withdrawal_flows (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     visitor_id bigint NOT NULL,
@@ -2849,7 +2849,7 @@ CREATE UNLOGGED TABLE public.visitor_withdrawal_flows (
 -- Name: visitor_withdrawal_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_withdrawal_flows_id_seq
+CREATE SEQUENCE public.visitor_withdrawal_flows_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2868,7 +2868,7 @@ ALTER SEQUENCE public.visitor_withdrawal_flows_id_seq OWNED BY public.visitor_wi
 -- Name: visitors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitors (
+CREATE TABLE public.visitors (
     id bigint NOT NULL,
     deactivated_at timestamp(6) with time zone,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
@@ -2905,7 +2905,7 @@ CREATE UNLOGGED TABLE public.visitors (
 -- Name: visitors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitors_id_seq
+CREATE SEQUENCE public.visitors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE

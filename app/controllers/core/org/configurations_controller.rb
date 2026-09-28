@@ -7,7 +7,9 @@ module Core
       AUTHENTICATION_MODE = :private
 
       def show
-        authorize!(:org_staff, to: :show?, with: OrgStaffPolicy)
+        # Closed for every operator: no authoritative configuration data source is exposed here yet
+        # (adr/operator-capability-authorization.md, Not provided).
+        authorize!(:org_console, to: :configuration?, with: OrgConsolePolicy)
         render template: "acme/org/roots/index"
       end
     end

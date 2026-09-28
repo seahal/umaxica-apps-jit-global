@@ -19,10 +19,13 @@ const patch = vi.fn(
   (_url: string, _options?: { onFinish?: (visit: ClientSideVisitOptions) => void }) => undefined,
 );
 const setData = vi.fn();
+const formDataOverride = vi.hoisted(() => ({
+  current: undefined as Record<string, unknown> | undefined,
+}));
 
 vi.mock("@inertiajs/react", () => ({
   useForm: (initial: Record<string, unknown>) => ({
-    data: initial,
+    data: formDataOverride.current ?? initial,
     setData,
     post,
     patch,
@@ -162,6 +165,7 @@ afterEach(() => {
   document.head.innerHTML = "";
   delete window.turnstile;
   vi.clearAllMocks();
+  formDataOverride.current = undefined;
   vi.useRealTimers();
 });
 
@@ -526,6 +530,28 @@ describe("passkey sign-in panel", () => {
     expect(window.location.href).toBe("/identity");
   });
 
+  it("sends the empty identifier when the sign-in route requires its parameter", async () => {
+    solveInvisibleTurnstile.mockResolvedValue("turnstile-token");
+    getAssertion.mockResolvedValue(SERIALIZED_ASSERTION);
+    const fetchMock = stubFetchQueue(
+      httpJsonResponse({ challenge_id: "challenge-1", options: {} }),
+      httpJsonResponse({ status: "ok", redirect_url: "/identity" }),
+    );
+    vi.stubGlobal("location", { href: "", reload: vi.fn() });
+
+    mount(
+      <PasskeySignInPanel
+        {...props}
+        identifier_param="identifier"
+      />,
+    );
+    click("button");
+    await flush();
+
+    expect(requestBody(fetchMock, 0)).toMatchObject({ identifier: "" });
+    expect(window.location.href).toBe("/identity");
+  });
+
   it("uses the ceremony fallback when the options response names no error", async () => {
     solveInvisibleTurnstile.mockResolvedValue("turnstile-token");
     vi.stubGlobal(
@@ -787,6 +813,7 @@ describe("step-up passkey screen", () => {
       submit_label: "認証する",
     },
     back_link: backLink,
+    cancel: { label: "キャンセル", action: "/sign/in/challenge", method: "delete" as const },
   };
 
   it("refuses to start on a browser without WebAuthn", async () => {
@@ -868,6 +895,7 @@ describe("totp challenge form interaction", () => {
     form_errors: [] as string[],
     turnstile,
     back_link: backLink,
+    cancel: { label: "キャンセル", action: "/sign/in/challenge", method: "delete" as const },
   };
 
   it("posts the one-time code", async () => {
@@ -884,6 +912,124 @@ describe("totp challenge form interaction", () => {
 
     expect(setData).toHaveBeenCalledWith("totp_challenge_form", { token: "123456" });
     expect(post).toHaveBeenCalledWith("/sign/in/challenge/totp");
+  });
+
+  it("lists the errors the server returned", async () => {
+    mount(
+      <TotpChallengeForm
+        {...props}
+        form_errors={["コードが違います"]}
+      />,
+    );
+    await flush();
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("入力を確認してください");
+    expect(alert?.textContent).toContain("コードが違います");
+  });
+
+  it("defaults the credential selector to the first option and records a change", async () => {
+    mount(
+      <TotpChallengeForm
+        {...props}
+        form={{
+          ...props.form,
+          credential_selector: {
+            name: "totp_challenge_form[credential_id]",
+            field: "credential_id",
+            scope: "totp_challenge_form",
+            label: "認証アプリ",
+            options: [
+              { value: "totp-1", label: "スマートフォン" },
+              { value: "totp-2", label: "タブレット" },
+            ],
+          },
+        }}
+      />,
+    );
+    await flush();
+
+    const select = container.querySelector<HTMLSelectElement>(
+      'select[name="totp_challenge_form[credential_id]"]',
+    );
+    expect(select?.value).toBe("totp-1");
+
+    act(() => {
+      if (select) {
+        select.value = "totp-2";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(setData).toHaveBeenCalledWith("totp_challenge_form", {
+      token: "",
+      credential_id: "totp-2",
+    });
+  });
+
+  it("accepts an absent scoped value as an empty code", () => {
+    formDataOverride.current = { "cf-turnstile-response": "" };
+    mount(<TotpChallengeForm {...props} />);
+
+    expect(
+      container.querySelector<HTMLInputElement>('input[name="totp_challenge_form[token]"]')?.value,
+    ).toBe("");
+    type('input[name="totp_challenge_form[token]"]', "123456");
+    expect(setData).toHaveBeenCalledWith("totp_challenge_form", { token: "123456" });
+  });
+
+  it("accepts a non-object scoped value as an empty code", () => {
+    formDataOverride.current = { totp_challenge_form: "unexpected" };
+    mount(<TotpChallengeForm {...props} />);
+
+    expect(
+      container.querySelector<HTMLInputElement>('input[name="totp_challenge_form[token]"]')?.value,
+    ).toBe("");
+    type('input[name="totp_challenge_form[token]"]', "123456");
+    expect(setData).toHaveBeenCalledWith("totp_challenge_form", { token: "123456" });
+  });
+
+  it("selects the first credential when the saved selection is missing", () => {
+    formDataOverride.current = { totp_challenge_form: { token: "" } };
+    mount(
+      <TotpChallengeForm
+        {...props}
+        form={{
+          ...props.form,
+          credential_selector: {
+            name: "totp_challenge_form[credential_id]",
+            field: "credential_id",
+            scope: "totp_challenge_form",
+            label: "Authenticator",
+            options: [{ value: "totp-1", label: "Phone" }],
+          },
+        }}
+      />,
+    );
+
+    expect(container.querySelector<HTMLSelectElement>("select")?.value).toBe("totp-1");
+  });
+
+  it("leaves an empty selection when no credentials are available", () => {
+    formDataOverride.current = { totp_challenge_form: { token: "" } };
+    mount(
+      <TotpChallengeForm
+        {...props}
+        form={{
+          ...props.form,
+          credential_selector: {
+            name: "totp_challenge_form[credential_id]",
+            field: "credential_id",
+            scope: "totp_challenge_form",
+            label: "Authenticator",
+            options: [],
+          },
+        }}
+      />,
+    );
+
+    expect(container.querySelector<HTMLSelectElement>("select")?.value).toBe("");
+    expect(container.querySelectorAll("select option")).toHaveLength(0);
   });
 });
 

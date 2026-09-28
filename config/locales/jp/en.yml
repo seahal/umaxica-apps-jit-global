@@ -756,6 +756,7 @@ en:
     app_preferences: App preferences
     area_occurrence_id: Area occurrence
     attempt_count: Attempt count
+    authentication_method_effects: Authentication method effects
     avatars: Avatars
     base: Base
     birthdate: Birthdate
@@ -797,6 +798,7 @@ en:
     handle_id: Handle
     id: ID
     identifier: Identifier
+    identifier_effects: Identifier effects
     initiator_actor_id: Initiator actor
     invited_by: Invited by
     ip_occurrence_id: IP occurrence
@@ -825,6 +827,7 @@ en:
     performant: Performance
     preference: Preference
     preference_id: Preference
+    principal_effect: Principal effect
     private_key: Private key
     public_id: Public ID
     publish_at: Publish at
@@ -2157,6 +2160,7 @@ en:
         one: "%{count} error prohibited this %{model} from being saved"
         other: "%{count} errors prohibited this %{model} from being saved"
     webauthn:
+      passkey_limit_reached: "You have reached the maximum number of passkeys. Remove one before adding another."
       challenge_id_required: Challenge ID is required
       challenge_invalid: Challenge is invalid or expired
       credential_already_registered: This passkey is already registered
@@ -3863,20 +3867,6 @@ en:
         checkpoints:
           show:
             title: Sign-in check
-        mfa:
-          description: Additional verification is required to continue.
-          methods:
-            passkey: Authenticate with passkey
-          no_methods_available: No verification methods are available.
-          passkey:
-            authenticate: Authenticate with passkey
-            back: Back
-            description: Use your passkey to verify your identity.
-            success: Passkey authentication succeeded.
-            title: Passkey authentication
-          title: Multi-factor authentication
-          turnstile_failed: Verification failed. Please try again.
-          verification_failed: Verification failed.
         session:
           cancelled: Session cancelled. Please sign in again.
           cannot_revoke_current: The current session cannot be revoked.
@@ -4323,6 +4313,10 @@ en:
         one_time_notice: Only the newly generated passcodes are shown here.
         title: Recovery passcodes
     shared:
+      birthdate:
+        errors:
+          format: "Enter your date of birth as YYYY-MM-DD."
+          not_before_today: "Enter a date of birth before today."
       sign_out:
         already_signed_out: You are already signed out.
         button: Sign out

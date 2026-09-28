@@ -34,6 +34,11 @@ module Base
           private
 
           def current_preference_record_for_dbsc
+            # A refused credential deletes its cookie from the jar, so a second lookup in the same
+            # request would see no cookie and create a replacement row on this GET. The refusal holds
+            # for the whole request.
+            return if preference_refresh_failed?
+
             preference, = load_preference_record_from_refresh_token!(create_if_missing: true)
             preference
           end

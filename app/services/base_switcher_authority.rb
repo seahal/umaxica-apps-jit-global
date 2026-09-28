@@ -93,6 +93,18 @@ class BaseSwitcherAuthority
     available_avatars.find { |avatar| avatar.public_id == public_id }
   end
 
+  public
+
+  # The Avatar of the session's whole current selection (Persona, organization, unit, Avatar),
+  # re-validated against the real candidates. A selection that is no longer a candidate raises;
+  # nil means the valid candidate has no Avatar slot (org optional, com none).
+  def selected_avatar
+    candidate = candidate_for_public_ids(current_selection || {})
+    raise ActiveRecord::RecordNotFound, "selected context is not available to this principal" if candidate.blank?
+
+    candidate.fetch(:avatar)
+  end
+
   private
 
   attr_reader :config, :principal, :session

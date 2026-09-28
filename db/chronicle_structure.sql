@@ -32,7 +32,7 @@ SET default_table_access_method = heap;
 -- Name: account_access_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.account_access_events (
+CREATE TABLE public.account_access_events (
     id bigint NOT NULL,
     account_type character varying NOT NULL,
     account_id bigint NOT NULL,
@@ -59,7 +59,7 @@ CREATE UNLOGGED TABLE public.account_access_events (
 -- Name: account_access_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.account_access_events_id_seq
+CREATE SEQUENCE public.account_access_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -78,7 +78,7 @@ ALTER SEQUENCE public.account_access_events_id_seq OWNED BY public.account_acces
 -- Name: app_document_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_document_audit_events (
+CREATE TABLE public.app_document_audit_events (
     id bigint NOT NULL
 );
 
@@ -87,7 +87,7 @@ CREATE UNLOGGED TABLE public.app_document_audit_events (
 -- Name: app_document_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_document_audit_events_id_seq
+CREATE SEQUENCE public.app_document_audit_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -106,7 +106,7 @@ ALTER SEQUENCE public.app_document_audit_events_id_seq OWNED BY public.app_docum
 -- Name: app_document_audit_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_document_audit_levels (
+CREATE TABLE public.app_document_audit_levels (
     id bigint NOT NULL
 );
 
@@ -115,7 +115,7 @@ CREATE UNLOGGED TABLE public.app_document_audit_levels (
 -- Name: app_document_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_document_audit_levels_id_seq
+CREATE SEQUENCE public.app_document_audit_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -134,7 +134,7 @@ ALTER SEQUENCE public.app_document_audit_levels_id_seq OWNED BY public.app_docum
 -- Name: app_document_audits; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_document_audits (
+CREATE TABLE public.app_document_audits (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -159,7 +159,7 @@ CREATE UNLOGGED TABLE public.app_document_audits (
 -- Name: app_document_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_document_audits_id_seq
+CREATE SEQUENCE public.app_document_audits_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -178,7 +178,7 @@ ALTER SEQUENCE public.app_document_audits_id_seq OWNED BY public.app_document_au
 -- Name: app_document_behavior_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_document_behavior_events (
+CREATE TABLE public.app_document_behavior_events (
     id bigint NOT NULL
 );
 
@@ -187,7 +187,7 @@ CREATE UNLOGGED TABLE public.app_document_behavior_events (
 -- Name: app_document_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_document_behavior_events_id_seq
+CREATE SEQUENCE public.app_document_behavior_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -206,7 +206,7 @@ ALTER SEQUENCE public.app_document_behavior_events_id_seq OWNED BY public.app_do
 -- Name: app_document_behavior_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_document_behavior_levels (
+CREATE TABLE public.app_document_behavior_levels (
     id bigint NOT NULL
 );
 
@@ -215,7 +215,7 @@ CREATE UNLOGGED TABLE public.app_document_behavior_levels (
 -- Name: app_document_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_document_behavior_levels_id_seq
+CREATE SEQUENCE public.app_document_behavior_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -234,7 +234,7 @@ ALTER SEQUENCE public.app_document_behavior_levels_id_seq OWNED BY public.app_do
 -- Name: app_document_behaviors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_document_behaviors (
+CREATE TABLE public.app_document_behaviors (
     id bigint NOT NULL,
     actor_id bigint,
     actor_type character varying,
@@ -253,7 +253,7 @@ CREATE UNLOGGED TABLE public.app_document_behaviors (
 -- Name: app_document_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_document_behaviors_id_seq
+CREATE SEQUENCE public.app_document_behaviors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -272,7 +272,7 @@ ALTER SEQUENCE public.app_document_behaviors_id_seq OWNED BY public.app_document
 -- Name: app_preference_chronicle_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_chronicle_events (
+CREATE TABLE public.app_preference_chronicle_events (
     id bigint NOT NULL
 );
 
@@ -281,7 +281,7 @@ CREATE UNLOGGED TABLE public.app_preference_chronicle_events (
 -- Name: app_preference_chronicle_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_chronicle_events_id_seq
+CREATE SEQUENCE public.app_preference_chronicle_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -300,7 +300,7 @@ ALTER SEQUENCE public.app_preference_chronicle_events_id_seq OWNED BY public.app
 -- Name: app_preference_chronicle_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_chronicle_levels (
+CREATE TABLE public.app_preference_chronicle_levels (
     id bigint NOT NULL
 );
 
@@ -309,7 +309,7 @@ CREATE UNLOGGED TABLE public.app_preference_chronicle_levels (
 -- Name: app_preference_chronicle_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_chronicle_levels_id_seq
+CREATE SEQUENCE public.app_preference_chronicle_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -328,7 +328,7 @@ ALTER SEQUENCE public.app_preference_chronicle_levels_id_seq OWNED BY public.app
 -- Name: app_preference_chronicles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_chronicles (
+CREATE TABLE public.app_preference_chronicles (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -354,7 +354,7 @@ CREATE UNLOGGED TABLE public.app_preference_chronicles (
 -- Name: app_preference_chronicles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_chronicles_id_seq
+CREATE SEQUENCE public.app_preference_chronicles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -373,7 +373,7 @@ ALTER SEQUENCE public.app_preference_chronicles_id_seq OWNED BY public.app_prefe
 -- Name: app_timeline_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_timeline_audit_events (
+CREATE TABLE public.app_timeline_audit_events (
     id bigint NOT NULL
 );
 
@@ -382,7 +382,7 @@ CREATE UNLOGGED TABLE public.app_timeline_audit_events (
 -- Name: app_timeline_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_timeline_audit_events_id_seq
+CREATE SEQUENCE public.app_timeline_audit_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -401,7 +401,7 @@ ALTER SEQUENCE public.app_timeline_audit_events_id_seq OWNED BY public.app_timel
 -- Name: app_timeline_audit_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_timeline_audit_levels (
+CREATE TABLE public.app_timeline_audit_levels (
     id bigint NOT NULL
 );
 
@@ -410,7 +410,7 @@ CREATE UNLOGGED TABLE public.app_timeline_audit_levels (
 -- Name: app_timeline_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_timeline_audit_levels_id_seq
+CREATE SEQUENCE public.app_timeline_audit_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -429,7 +429,7 @@ ALTER SEQUENCE public.app_timeline_audit_levels_id_seq OWNED BY public.app_timel
 -- Name: app_timeline_audits; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_timeline_audits (
+CREATE TABLE public.app_timeline_audits (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -454,7 +454,7 @@ CREATE UNLOGGED TABLE public.app_timeline_audits (
 -- Name: app_timeline_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_timeline_audits_id_seq
+CREATE SEQUENCE public.app_timeline_audits_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -473,7 +473,7 @@ ALTER SEQUENCE public.app_timeline_audits_id_seq OWNED BY public.app_timeline_au
 -- Name: app_timeline_behavior_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_timeline_behavior_events (
+CREATE TABLE public.app_timeline_behavior_events (
     id bigint NOT NULL
 );
 
@@ -482,7 +482,7 @@ CREATE UNLOGGED TABLE public.app_timeline_behavior_events (
 -- Name: app_timeline_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_timeline_behavior_events_id_seq
+CREATE SEQUENCE public.app_timeline_behavior_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -501,7 +501,7 @@ ALTER SEQUENCE public.app_timeline_behavior_events_id_seq OWNED BY public.app_ti
 -- Name: app_timeline_behavior_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_timeline_behavior_levels (
+CREATE TABLE public.app_timeline_behavior_levels (
     id bigint NOT NULL
 );
 
@@ -510,7 +510,7 @@ CREATE UNLOGGED TABLE public.app_timeline_behavior_levels (
 -- Name: app_timeline_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_timeline_behavior_levels_id_seq
+CREATE SEQUENCE public.app_timeline_behavior_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -529,7 +529,7 @@ ALTER SEQUENCE public.app_timeline_behavior_levels_id_seq OWNED BY public.app_ti
 -- Name: app_timeline_behaviors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_timeline_behaviors (
+CREATE TABLE public.app_timeline_behaviors (
     id bigint NOT NULL,
     actor_id bigint,
     actor_type character varying,
@@ -548,7 +548,7 @@ CREATE UNLOGGED TABLE public.app_timeline_behaviors (
 -- Name: app_timeline_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_timeline_behaviors_id_seq
+CREATE SEQUENCE public.app_timeline_behaviors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -567,7 +567,7 @@ ALTER SEQUENCE public.app_timeline_behaviors_id_seq OWNED BY public.app_timeline
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -579,7 +579,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: chronicle_outbox_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.chronicle_outbox_entries (
+CREATE TABLE public.chronicle_outbox_entries (
     id bigint NOT NULL,
     chronicle_id bigint,
     event_uuid character varying NOT NULL,
@@ -596,7 +596,7 @@ CREATE UNLOGGED TABLE public.chronicle_outbox_entries (
 -- Name: chronicle_outbox_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.chronicle_outbox_entries_id_seq
+CREATE SEQUENCE public.chronicle_outbox_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -615,7 +615,7 @@ ALTER SEQUENCE public.chronicle_outbox_entries_id_seq OWNED BY public.chronicle_
 -- Name: chronicle_retention_policies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.chronicle_retention_policies (
+CREATE TABLE public.chronicle_retention_policies (
     id bigint NOT NULL,
     code character varying NOT NULL,
     name character varying NOT NULL,
@@ -631,7 +631,7 @@ CREATE UNLOGGED TABLE public.chronicle_retention_policies (
 -- Name: chronicle_retention_policies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.chronicle_retention_policies_id_seq
+CREATE SEQUENCE public.chronicle_retention_policies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -650,7 +650,7 @@ ALTER SEQUENCE public.chronicle_retention_policies_id_seq OWNED BY public.chroni
 -- Name: chronicle_visibilities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.chronicle_visibilities (
+CREATE TABLE public.chronicle_visibilities (
     id bigint NOT NULL,
     chronicle_id bigint NOT NULL,
     chronicle_visibility_context_id bigint NOT NULL,
@@ -663,7 +663,7 @@ CREATE UNLOGGED TABLE public.chronicle_visibilities (
 -- Name: chronicle_visibilities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.chronicle_visibilities_id_seq
+CREATE SEQUENCE public.chronicle_visibilities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -682,7 +682,7 @@ ALTER SEQUENCE public.chronicle_visibilities_id_seq OWNED BY public.chronicle_vi
 -- Name: chronicle_visibility_contexts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.chronicle_visibility_contexts (
+CREATE TABLE public.chronicle_visibility_contexts (
     id bigint NOT NULL,
     code character varying NOT NULL,
     name character varying NOT NULL,
@@ -695,7 +695,7 @@ CREATE UNLOGGED TABLE public.chronicle_visibility_contexts (
 -- Name: chronicle_visibility_contexts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.chronicle_visibility_contexts_id_seq
+CREATE SEQUENCE public.chronicle_visibility_contexts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -714,7 +714,7 @@ ALTER SEQUENCE public.chronicle_visibility_contexts_id_seq OWNED BY public.chron
 -- Name: chronicles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.chronicles (
+CREATE TABLE public.chronicles (
     id bigint NOT NULL,
     event_uuid character varying NOT NULL,
     actor_type character varying,
@@ -742,7 +742,7 @@ CREATE UNLOGGED TABLE public.chronicles (
 -- Name: chronicles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.chronicles_id_seq
+CREATE SEQUENCE public.chronicles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -761,7 +761,7 @@ ALTER SEQUENCE public.chronicles_id_seq OWNED BY public.chronicles.id;
 -- Name: client_chronicle_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_chronicle_events (
+CREATE TABLE public.client_chronicle_events (
     id bigint NOT NULL
 );
 
@@ -770,7 +770,7 @@ CREATE UNLOGGED TABLE public.client_chronicle_events (
 -- Name: client_chronicle_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_chronicle_events_id_seq
+CREATE SEQUENCE public.client_chronicle_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -789,7 +789,7 @@ ALTER SEQUENCE public.client_chronicle_events_id_seq OWNED BY public.client_chro
 -- Name: client_chronicle_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_chronicle_levels (
+CREATE TABLE public.client_chronicle_levels (
     id bigint NOT NULL
 );
 
@@ -798,7 +798,7 @@ CREATE UNLOGGED TABLE public.client_chronicle_levels (
 -- Name: client_chronicle_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_chronicle_levels_id_seq
+CREATE SEQUENCE public.client_chronicle_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -817,7 +817,7 @@ ALTER SEQUENCE public.client_chronicle_levels_id_seq OWNED BY public.client_chro
 -- Name: client_chronicles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_chronicles (
+CREATE TABLE public.client_chronicles (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -843,7 +843,7 @@ CREATE UNLOGGED TABLE public.client_chronicles (
 -- Name: client_chronicles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_chronicles_id_seq
+CREATE SEQUENCE public.client_chronicles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -862,7 +862,7 @@ ALTER SEQUENCE public.client_chronicles_id_seq OWNED BY public.client_chronicles
 -- Name: com_document_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_document_audit_events (
+CREATE TABLE public.com_document_audit_events (
     id bigint NOT NULL
 );
 
@@ -871,7 +871,7 @@ CREATE UNLOGGED TABLE public.com_document_audit_events (
 -- Name: com_document_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_document_audit_events_id_seq
+CREATE SEQUENCE public.com_document_audit_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -890,7 +890,7 @@ ALTER SEQUENCE public.com_document_audit_events_id_seq OWNED BY public.com_docum
 -- Name: com_document_audit_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_document_audit_levels (
+CREATE TABLE public.com_document_audit_levels (
     id bigint NOT NULL
 );
 
@@ -899,7 +899,7 @@ CREATE UNLOGGED TABLE public.com_document_audit_levels (
 -- Name: com_document_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_document_audit_levels_id_seq
+CREATE SEQUENCE public.com_document_audit_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -918,7 +918,7 @@ ALTER SEQUENCE public.com_document_audit_levels_id_seq OWNED BY public.com_docum
 -- Name: com_document_audits; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_document_audits (
+CREATE TABLE public.com_document_audits (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -943,7 +943,7 @@ CREATE UNLOGGED TABLE public.com_document_audits (
 -- Name: com_document_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_document_audits_id_seq
+CREATE SEQUENCE public.com_document_audits_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -962,7 +962,7 @@ ALTER SEQUENCE public.com_document_audits_id_seq OWNED BY public.com_document_au
 -- Name: com_document_behavior_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_document_behavior_events (
+CREATE TABLE public.com_document_behavior_events (
     id bigint NOT NULL
 );
 
@@ -971,7 +971,7 @@ CREATE UNLOGGED TABLE public.com_document_behavior_events (
 -- Name: com_document_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_document_behavior_events_id_seq
+CREATE SEQUENCE public.com_document_behavior_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -990,7 +990,7 @@ ALTER SEQUENCE public.com_document_behavior_events_id_seq OWNED BY public.com_do
 -- Name: com_document_behavior_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_document_behavior_levels (
+CREATE TABLE public.com_document_behavior_levels (
     id bigint NOT NULL
 );
 
@@ -999,7 +999,7 @@ CREATE UNLOGGED TABLE public.com_document_behavior_levels (
 -- Name: com_document_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_document_behavior_levels_id_seq
+CREATE SEQUENCE public.com_document_behavior_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1018,7 +1018,7 @@ ALTER SEQUENCE public.com_document_behavior_levels_id_seq OWNED BY public.com_do
 -- Name: com_document_behaviors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_document_behaviors (
+CREATE TABLE public.com_document_behaviors (
     id bigint NOT NULL,
     actor_id bigint,
     actor_type character varying,
@@ -1037,7 +1037,7 @@ CREATE UNLOGGED TABLE public.com_document_behaviors (
 -- Name: com_document_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_document_behaviors_id_seq
+CREATE SEQUENCE public.com_document_behaviors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1056,7 +1056,7 @@ ALTER SEQUENCE public.com_document_behaviors_id_seq OWNED BY public.com_document
 -- Name: com_preference_chronicle_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_preference_chronicle_events (
+CREATE TABLE public.com_preference_chronicle_events (
     id bigint NOT NULL
 );
 
@@ -1065,7 +1065,7 @@ CREATE UNLOGGED TABLE public.com_preference_chronicle_events (
 -- Name: com_preference_chronicle_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_preference_chronicle_events_id_seq
+CREATE SEQUENCE public.com_preference_chronicle_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1084,7 +1084,7 @@ ALTER SEQUENCE public.com_preference_chronicle_events_id_seq OWNED BY public.com
 -- Name: com_preference_chronicle_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_preference_chronicle_levels (
+CREATE TABLE public.com_preference_chronicle_levels (
     id bigint NOT NULL
 );
 
@@ -1093,7 +1093,7 @@ CREATE UNLOGGED TABLE public.com_preference_chronicle_levels (
 -- Name: com_preference_chronicle_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_preference_chronicle_levels_id_seq
+CREATE SEQUENCE public.com_preference_chronicle_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1112,7 +1112,7 @@ ALTER SEQUENCE public.com_preference_chronicle_levels_id_seq OWNED BY public.com
 -- Name: com_preference_chronicles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_preference_chronicles (
+CREATE TABLE public.com_preference_chronicles (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -1138,7 +1138,7 @@ CREATE UNLOGGED TABLE public.com_preference_chronicles (
 -- Name: com_preference_chronicles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_preference_chronicles_id_seq
+CREATE SEQUENCE public.com_preference_chronicles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1157,7 +1157,7 @@ ALTER SEQUENCE public.com_preference_chronicles_id_seq OWNED BY public.com_prefe
 -- Name: com_timeline_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_timeline_audit_events (
+CREATE TABLE public.com_timeline_audit_events (
     id bigint NOT NULL
 );
 
@@ -1166,7 +1166,7 @@ CREATE UNLOGGED TABLE public.com_timeline_audit_events (
 -- Name: com_timeline_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_timeline_audit_events_id_seq
+CREATE SEQUENCE public.com_timeline_audit_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1185,7 +1185,7 @@ ALTER SEQUENCE public.com_timeline_audit_events_id_seq OWNED BY public.com_timel
 -- Name: com_timeline_audit_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_timeline_audit_levels (
+CREATE TABLE public.com_timeline_audit_levels (
     id bigint NOT NULL
 );
 
@@ -1194,7 +1194,7 @@ CREATE UNLOGGED TABLE public.com_timeline_audit_levels (
 -- Name: com_timeline_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_timeline_audit_levels_id_seq
+CREATE SEQUENCE public.com_timeline_audit_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1213,7 +1213,7 @@ ALTER SEQUENCE public.com_timeline_audit_levels_id_seq OWNED BY public.com_timel
 -- Name: com_timeline_audits; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_timeline_audits (
+CREATE TABLE public.com_timeline_audits (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -1238,7 +1238,7 @@ CREATE UNLOGGED TABLE public.com_timeline_audits (
 -- Name: com_timeline_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_timeline_audits_id_seq
+CREATE SEQUENCE public.com_timeline_audits_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1257,7 +1257,7 @@ ALTER SEQUENCE public.com_timeline_audits_id_seq OWNED BY public.com_timeline_au
 -- Name: com_timeline_behavior_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_timeline_behavior_events (
+CREATE TABLE public.com_timeline_behavior_events (
     id bigint NOT NULL
 );
 
@@ -1266,7 +1266,7 @@ CREATE UNLOGGED TABLE public.com_timeline_behavior_events (
 -- Name: com_timeline_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_timeline_behavior_events_id_seq
+CREATE SEQUENCE public.com_timeline_behavior_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1285,7 +1285,7 @@ ALTER SEQUENCE public.com_timeline_behavior_events_id_seq OWNED BY public.com_ti
 -- Name: com_timeline_behavior_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_timeline_behavior_levels (
+CREATE TABLE public.com_timeline_behavior_levels (
     id bigint NOT NULL
 );
 
@@ -1294,7 +1294,7 @@ CREATE UNLOGGED TABLE public.com_timeline_behavior_levels (
 -- Name: com_timeline_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_timeline_behavior_levels_id_seq
+CREATE SEQUENCE public.com_timeline_behavior_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1313,7 +1313,7 @@ ALTER SEQUENCE public.com_timeline_behavior_levels_id_seq OWNED BY public.com_ti
 -- Name: com_timeline_behaviors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.com_timeline_behaviors (
+CREATE TABLE public.com_timeline_behaviors (
     id bigint NOT NULL,
     actor_id bigint,
     actor_type character varying,
@@ -1332,7 +1332,7 @@ CREATE UNLOGGED TABLE public.com_timeline_behaviors (
 -- Name: com_timeline_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.com_timeline_behaviors_id_seq
+CREATE SEQUENCE public.com_timeline_behaviors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1351,7 +1351,7 @@ ALTER SEQUENCE public.com_timeline_behaviors_id_seq OWNED BY public.com_timeline
 -- Name: enforcement_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enforcement_events (
+CREATE TABLE public.enforcement_events (
     id bigint NOT NULL,
     realm character varying NOT NULL,
     case_public_id character varying NOT NULL,
@@ -1374,7 +1374,7 @@ CREATE UNLOGGED TABLE public.enforcement_events (
 -- Name: enforcement_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enforcement_events_id_seq
+CREATE SEQUENCE public.enforcement_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1393,7 +1393,7 @@ ALTER SEQUENCE public.enforcement_events_id_seq OWNED BY public.enforcement_even
 -- Name: operator_chronicle_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_chronicle_events (
+CREATE TABLE public.operator_chronicle_events (
     id bigint NOT NULL
 );
 
@@ -1402,7 +1402,7 @@ CREATE UNLOGGED TABLE public.operator_chronicle_events (
 -- Name: operator_chronicle_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_chronicle_events_id_seq
+CREATE SEQUENCE public.operator_chronicle_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1421,7 +1421,7 @@ ALTER SEQUENCE public.operator_chronicle_events_id_seq OWNED BY public.operator_
 -- Name: operator_chronicle_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_chronicle_levels (
+CREATE TABLE public.operator_chronicle_levels (
     id bigint NOT NULL
 );
 
@@ -1430,7 +1430,7 @@ CREATE UNLOGGED TABLE public.operator_chronicle_levels (
 -- Name: operator_chronicle_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_chronicle_levels_id_seq
+CREATE SEQUENCE public.operator_chronicle_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1449,7 +1449,7 @@ ALTER SEQUENCE public.operator_chronicle_levels_id_seq OWNED BY public.operator_
 -- Name: operator_chronicles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_chronicles (
+CREATE TABLE public.operator_chronicles (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -1475,7 +1475,7 @@ CREATE UNLOGGED TABLE public.operator_chronicles (
 -- Name: operator_chronicles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_chronicles_id_seq
+CREATE SEQUENCE public.operator_chronicles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1494,7 +1494,7 @@ ALTER SEQUENCE public.operator_chronicles_id_seq OWNED BY public.operator_chroni
 -- Name: org_document_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_document_audit_events (
+CREATE TABLE public.org_document_audit_events (
     id bigint NOT NULL
 );
 
@@ -1503,7 +1503,7 @@ CREATE UNLOGGED TABLE public.org_document_audit_events (
 -- Name: org_document_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_document_audit_events_id_seq
+CREATE SEQUENCE public.org_document_audit_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1522,7 +1522,7 @@ ALTER SEQUENCE public.org_document_audit_events_id_seq OWNED BY public.org_docum
 -- Name: org_document_audit_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_document_audit_levels (
+CREATE TABLE public.org_document_audit_levels (
     id bigint NOT NULL
 );
 
@@ -1531,7 +1531,7 @@ CREATE UNLOGGED TABLE public.org_document_audit_levels (
 -- Name: org_document_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_document_audit_levels_id_seq
+CREATE SEQUENCE public.org_document_audit_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1550,7 +1550,7 @@ ALTER SEQUENCE public.org_document_audit_levels_id_seq OWNED BY public.org_docum
 -- Name: org_document_audits; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_document_audits (
+CREATE TABLE public.org_document_audits (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -1575,7 +1575,7 @@ CREATE UNLOGGED TABLE public.org_document_audits (
 -- Name: org_document_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_document_audits_id_seq
+CREATE SEQUENCE public.org_document_audits_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1594,7 +1594,7 @@ ALTER SEQUENCE public.org_document_audits_id_seq OWNED BY public.org_document_au
 -- Name: org_document_behavior_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_document_behavior_events (
+CREATE TABLE public.org_document_behavior_events (
     id bigint NOT NULL
 );
 
@@ -1603,7 +1603,7 @@ CREATE UNLOGGED TABLE public.org_document_behavior_events (
 -- Name: org_document_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_document_behavior_events_id_seq
+CREATE SEQUENCE public.org_document_behavior_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1622,7 +1622,7 @@ ALTER SEQUENCE public.org_document_behavior_events_id_seq OWNED BY public.org_do
 -- Name: org_document_behavior_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_document_behavior_levels (
+CREATE TABLE public.org_document_behavior_levels (
     id bigint NOT NULL
 );
 
@@ -1631,7 +1631,7 @@ CREATE UNLOGGED TABLE public.org_document_behavior_levels (
 -- Name: org_document_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_document_behavior_levels_id_seq
+CREATE SEQUENCE public.org_document_behavior_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1650,7 +1650,7 @@ ALTER SEQUENCE public.org_document_behavior_levels_id_seq OWNED BY public.org_do
 -- Name: org_document_behaviors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_document_behaviors (
+CREATE TABLE public.org_document_behaviors (
     id bigint NOT NULL,
     actor_id bigint,
     actor_type character varying,
@@ -1669,7 +1669,7 @@ CREATE UNLOGGED TABLE public.org_document_behaviors (
 -- Name: org_document_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_document_behaviors_id_seq
+CREATE SEQUENCE public.org_document_behaviors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1688,7 +1688,7 @@ ALTER SEQUENCE public.org_document_behaviors_id_seq OWNED BY public.org_document
 -- Name: org_preference_chronicle_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_preference_chronicle_events (
+CREATE TABLE public.org_preference_chronicle_events (
     id bigint NOT NULL
 );
 
@@ -1697,7 +1697,7 @@ CREATE UNLOGGED TABLE public.org_preference_chronicle_events (
 -- Name: org_preference_chronicle_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_preference_chronicle_events_id_seq
+CREATE SEQUENCE public.org_preference_chronicle_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1716,7 +1716,7 @@ ALTER SEQUENCE public.org_preference_chronicle_events_id_seq OWNED BY public.org
 -- Name: org_preference_chronicle_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_preference_chronicle_levels (
+CREATE TABLE public.org_preference_chronicle_levels (
     id bigint NOT NULL
 );
 
@@ -1725,7 +1725,7 @@ CREATE UNLOGGED TABLE public.org_preference_chronicle_levels (
 -- Name: org_preference_chronicle_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_preference_chronicle_levels_id_seq
+CREATE SEQUENCE public.org_preference_chronicle_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1744,7 +1744,7 @@ ALTER SEQUENCE public.org_preference_chronicle_levels_id_seq OWNED BY public.org
 -- Name: org_preference_chronicles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_preference_chronicles (
+CREATE TABLE public.org_preference_chronicles (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -1770,7 +1770,7 @@ CREATE UNLOGGED TABLE public.org_preference_chronicles (
 -- Name: org_preference_chronicles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_preference_chronicles_id_seq
+CREATE SEQUENCE public.org_preference_chronicles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1789,7 +1789,7 @@ ALTER SEQUENCE public.org_preference_chronicles_id_seq OWNED BY public.org_prefe
 -- Name: org_timeline_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_timeline_audit_events (
+CREATE TABLE public.org_timeline_audit_events (
     id bigint NOT NULL
 );
 
@@ -1798,7 +1798,7 @@ CREATE UNLOGGED TABLE public.org_timeline_audit_events (
 -- Name: org_timeline_audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_timeline_audit_events_id_seq
+CREATE SEQUENCE public.org_timeline_audit_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1817,7 +1817,7 @@ ALTER SEQUENCE public.org_timeline_audit_events_id_seq OWNED BY public.org_timel
 -- Name: org_timeline_audit_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_timeline_audit_levels (
+CREATE TABLE public.org_timeline_audit_levels (
     id bigint NOT NULL
 );
 
@@ -1826,7 +1826,7 @@ CREATE UNLOGGED TABLE public.org_timeline_audit_levels (
 -- Name: org_timeline_audit_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_timeline_audit_levels_id_seq
+CREATE SEQUENCE public.org_timeline_audit_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1845,7 +1845,7 @@ ALTER SEQUENCE public.org_timeline_audit_levels_id_seq OWNED BY public.org_timel
 -- Name: org_timeline_audits; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_timeline_audits (
+CREATE TABLE public.org_timeline_audits (
     id bigint NOT NULL,
     actor_id bigint DEFAULT 0 NOT NULL,
     actor_type text DEFAULT ''::text NOT NULL,
@@ -1870,7 +1870,7 @@ CREATE UNLOGGED TABLE public.org_timeline_audits (
 -- Name: org_timeline_audits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_timeline_audits_id_seq
+CREATE SEQUENCE public.org_timeline_audits_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1889,7 +1889,7 @@ ALTER SEQUENCE public.org_timeline_audits_id_seq OWNED BY public.org_timeline_au
 -- Name: org_timeline_behavior_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_timeline_behavior_events (
+CREATE TABLE public.org_timeline_behavior_events (
     id bigint NOT NULL
 );
 
@@ -1898,7 +1898,7 @@ CREATE UNLOGGED TABLE public.org_timeline_behavior_events (
 -- Name: org_timeline_behavior_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_timeline_behavior_events_id_seq
+CREATE SEQUENCE public.org_timeline_behavior_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1917,7 +1917,7 @@ ALTER SEQUENCE public.org_timeline_behavior_events_id_seq OWNED BY public.org_ti
 -- Name: org_timeline_behavior_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_timeline_behavior_levels (
+CREATE TABLE public.org_timeline_behavior_levels (
     id bigint NOT NULL
 );
 
@@ -1926,7 +1926,7 @@ CREATE UNLOGGED TABLE public.org_timeline_behavior_levels (
 -- Name: org_timeline_behavior_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_timeline_behavior_levels_id_seq
+CREATE SEQUENCE public.org_timeline_behavior_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1945,7 +1945,7 @@ ALTER SEQUENCE public.org_timeline_behavior_levels_id_seq OWNED BY public.org_ti
 -- Name: org_timeline_behaviors; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.org_timeline_behaviors (
+CREATE TABLE public.org_timeline_behaviors (
     id bigint NOT NULL,
     actor_id bigint,
     actor_type character varying,
@@ -1964,7 +1964,7 @@ CREATE UNLOGGED TABLE public.org_timeline_behaviors (
 -- Name: org_timeline_behaviors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.org_timeline_behaviors_id_seq
+CREATE SEQUENCE public.org_timeline_behaviors_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1983,7 +1983,7 @@ ALTER SEQUENCE public.org_timeline_behaviors_id_seq OWNED BY public.org_timeline
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 
@@ -4130,6 +4130,7 @@ ALTER TABLE ONLY public.org_preference_chronicles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926130000'),
 ('20260921133000'),
 ('20260727130000'),
 ('20260616150020'),

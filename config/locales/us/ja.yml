@@ -727,6 +727,7 @@ ja:
     app_preferences: アプリ設定
     area_occurrence_id: エリア発生ID
     attempt_count: 試行回数
+    authentication_method_effects: 認証方式への効果
     avatars: アバター
     base: ベース
     birthdate: 生年月日
@@ -768,6 +769,7 @@ ja:
     handle_id: ハンドルID
     id: ID
     identifier: 識別子
+    identifier_effects: 識別子への効果
     initiator_actor_id: 開始アクターID
     invited_by: 招待者
     ip_occurrence_id: IP発生ID
@@ -796,6 +798,7 @@ ja:
     performant: パフォーマンスCookie
     preference: 設定
     preference_id: 設定ID
+    principal_effect: アカウントへの効果
     private_key: 秘密鍵
     public_id: 公開ID
     publish_at: 公開日時
@@ -1975,6 +1978,7 @@ ja:
       header: "%{model}に%{count}個のエラーが発生しました"
     unauthorized: 不正なアクセスです
     webauthn:
+      passkey_limit_reached: "登録できるパスキーの上限に達しています。追加するには既存のパスキーを削除してください。"
       challenge_id_required: チャレンジIDが必要です
       challenge_invalid: WebAuthn認証に失敗しました。もう一度やり直してください。
       credential_already_registered: このパスキーは既に登録されています。
@@ -2613,7 +2617,6 @@ ja:
     cannot_revoke_current: 現在のセッションは無効化できません。
     edit:
       active_sessions: アクティブなセッション
-      back: 戻る
       cancel_logout: キャンセルしてログアウト
       cancel_logout_confirm: キャンセルしますか？ログアウトされます。
       created_at: 作成日時
@@ -3410,21 +3413,6 @@ ja:
         checkpoints:
           show:
             title: サインインの確認
-        mfa:
-          description: 続行するには追加の認証が必要です
-          methods:
-            passkey: パスキーで認証
-          no_methods_available: 利用可能な認証方法がありません
-          passkey:
-            authenticate: パスキーで認証する
-            back: 戻る
-            description: パスキーを使用して本人確認を行います
-            success: パスキー認証に成功しました
-            title: パスキー認証
-          session_expired: MFA セッションの有効期限が切れました。もう一度サインインしてください。
-          title: 多要素認証
-          turnstile_failed: 検証に失敗しました。もう一度お試しください。
-          verification_failed: 認証に失敗しました。
         session:
           cancelled: セッションをキャンセルしました。もう一度ログインしてください。
           cannot_revoke_current: 現在のセッションは無効化できません。
@@ -3956,6 +3944,10 @@ ja:
         success:
           complete: 検証が完了しました
     shared:
+      birthdate:
+        errors:
+          format: "生年月日はYYYY-MM-DD形式で入力してください。"
+          not_before_today: "生年月日は本日より前の日付を入力してください。"
       sign_out:
         already_signed_out: すでにサインアウトしています。
         button: ログアウトします

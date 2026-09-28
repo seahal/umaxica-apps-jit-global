@@ -32,7 +32,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -44,7 +44,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: avatar_agent_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_agent_bindings (
+CREATE TABLE public.avatar_agent_bindings (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     agent_id bigint NOT NULL,
@@ -61,7 +61,7 @@ CREATE UNLOGGED TABLE public.avatar_agent_bindings (
 -- Name: avatar_agent_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_agent_bindings_id_seq
+CREATE SEQUENCE public.avatar_agent_bindings_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -80,7 +80,7 @@ ALTER SEQUENCE public.avatar_agent_bindings_id_seq OWNED BY public.avatar_agent_
 -- Name: avatar_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_assignments (
+CREATE TABLE public.avatar_assignments (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -95,7 +95,7 @@ CREATE UNLOGGED TABLE public.avatar_assignments (
 -- Name: avatar_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_assignments_id_seq
+CREATE SEQUENCE public.avatar_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -114,7 +114,7 @@ ALTER SEQUENCE public.avatar_assignments_id_seq OWNED BY public.avatar_assignmen
 -- Name: avatar_blocks; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_blocks (
+CREATE TABLE public.avatar_blocks (
     id bigint NOT NULL,
     blocked_avatar_id bigint NOT NULL,
     blocker_avatar_id bigint NOT NULL,
@@ -130,7 +130,7 @@ CREATE UNLOGGED TABLE public.avatar_blocks (
 -- Name: avatar_blocks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_blocks_id_seq
+CREATE SEQUENCE public.avatar_blocks_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -149,7 +149,7 @@ ALTER SEQUENCE public.avatar_blocks_id_seq OWNED BY public.avatar_blocks.id;
 -- Name: avatar_capabilities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_capabilities (
+CREATE TABLE public.avatar_capabilities (
     id bigint NOT NULL
 );
 
@@ -158,7 +158,7 @@ CREATE UNLOGGED TABLE public.avatar_capabilities (
 -- Name: avatar_capabilities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_capabilities_id_seq
+CREATE SEQUENCE public.avatar_capabilities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -177,7 +177,7 @@ ALTER SEQUENCE public.avatar_capabilities_id_seq OWNED BY public.avatar_capabili
 -- Name: avatar_follows; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_follows (
+CREATE TABLE public.avatar_follows (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     followed_avatar_id bigint NOT NULL,
@@ -191,7 +191,7 @@ CREATE UNLOGGED TABLE public.avatar_follows (
 -- Name: avatar_follows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_follows_id_seq
+CREATE SEQUENCE public.avatar_follows_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -210,7 +210,7 @@ ALTER SEQUENCE public.avatar_follows_id_seq OWNED BY public.avatar_follows.id;
 -- Name: avatar_group_ownership_periods; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_group_ownership_periods (
+CREATE TABLE public.avatar_group_ownership_periods (
     id bigint NOT NULL,
     avatar_group_id bigint NOT NULL,
     owner_surface character varying NOT NULL,
@@ -229,7 +229,7 @@ CREATE UNLOGGED TABLE public.avatar_group_ownership_periods (
 -- Name: avatar_group_ownership_periods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_group_ownership_periods_id_seq
+CREATE SEQUENCE public.avatar_group_ownership_periods_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -248,7 +248,7 @@ ALTER SEQUENCE public.avatar_group_ownership_periods_id_seq OWNED BY public.avat
 -- Name: avatar_groups; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_groups (
+CREATE TABLE public.avatar_groups (
     id bigint NOT NULL,
     public_id character varying NOT NULL,
     account_surface character varying NOT NULL,
@@ -269,7 +269,7 @@ CREATE UNLOGGED TABLE public.avatar_groups (
 -- Name: avatar_groups_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_groups_id_seq
+CREATE SEQUENCE public.avatar_groups_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -288,7 +288,7 @@ ALTER SEQUENCE public.avatar_groups_id_seq OWNED BY public.avatar_groups.id;
 -- Name: avatar_individual_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_individual_bindings (
+CREATE TABLE public.avatar_individual_bindings (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     individual_id bigint NOT NULL,
@@ -305,7 +305,7 @@ CREATE UNLOGGED TABLE public.avatar_individual_bindings (
 -- Name: avatar_individual_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_individual_bindings_id_seq
+CREATE SEQUENCE public.avatar_individual_bindings_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -324,7 +324,7 @@ ALTER SEQUENCE public.avatar_individual_bindings_id_seq OWNED BY public.avatar_i
 -- Name: avatar_lifecycle_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_lifecycle_events (
+CREATE TABLE public.avatar_lifecycle_events (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     from_state_key character varying NOT NULL,
@@ -342,7 +342,7 @@ CREATE UNLOGGED TABLE public.avatar_lifecycle_events (
 -- Name: avatar_lifecycle_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_lifecycle_events_id_seq
+CREATE SEQUENCE public.avatar_lifecycle_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -361,7 +361,7 @@ ALTER SEQUENCE public.avatar_lifecycle_events_id_seq OWNED BY public.avatar_life
 -- Name: avatar_lifecycle_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_lifecycle_states (
+CREATE TABLE public.avatar_lifecycle_states (
     id bigint NOT NULL,
     key character varying NOT NULL,
     title character varying NOT NULL,
@@ -385,7 +385,7 @@ CREATE UNLOGGED TABLE public.avatar_lifecycle_states (
 -- Name: avatar_lifecycle_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_lifecycle_states_id_seq
+CREATE SEQUENCE public.avatar_lifecycle_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -404,7 +404,7 @@ ALTER SEQUENCE public.avatar_lifecycle_states_id_seq OWNED BY public.avatar_life
 -- Name: avatar_membership_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_membership_statuses (
+CREATE TABLE public.avatar_membership_statuses (
     id bigint NOT NULL
 );
 
@@ -413,7 +413,7 @@ CREATE UNLOGGED TABLE public.avatar_membership_statuses (
 -- Name: avatar_membership_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_membership_statuses_id_seq
+CREATE SEQUENCE public.avatar_membership_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -432,7 +432,7 @@ ALTER SEQUENCE public.avatar_membership_statuses_id_seq OWNED BY public.avatar_m
 -- Name: avatar_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_memberships (
+CREATE TABLE public.avatar_memberships (
     id bigint NOT NULL,
     actor_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -453,7 +453,7 @@ CREATE UNLOGGED TABLE public.avatar_memberships (
 -- Name: avatar_memberships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_memberships_id_seq
+CREATE SEQUENCE public.avatar_memberships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -472,7 +472,7 @@ ALTER SEQUENCE public.avatar_memberships_id_seq OWNED BY public.avatar_membershi
 -- Name: avatar_monikers; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_monikers (
+CREATE TABLE public.avatar_monikers (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -488,7 +488,7 @@ CREATE UNLOGGED TABLE public.avatar_monikers (
 -- Name: avatar_monikers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_monikers_id_seq
+CREATE SEQUENCE public.avatar_monikers_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -507,7 +507,7 @@ ALTER SEQUENCE public.avatar_monikers_id_seq OWNED BY public.avatar_monikers.id;
 -- Name: avatar_mutes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_mutes (
+CREATE TABLE public.avatar_mutes (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone,
@@ -522,7 +522,7 @@ CREATE UNLOGGED TABLE public.avatar_mutes (
 -- Name: avatar_mutes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_mutes_id_seq
+CREATE SEQUENCE public.avatar_mutes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -541,7 +541,7 @@ ALTER SEQUENCE public.avatar_mutes_id_seq OWNED BY public.avatar_mutes.id;
 -- Name: avatar_ownership_periods; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_ownership_periods (
+CREATE TABLE public.avatar_ownership_periods (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     avatar_ownership_status_id bigint,
@@ -562,7 +562,7 @@ CREATE UNLOGGED TABLE public.avatar_ownership_periods (
 -- Name: avatar_ownership_periods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_ownership_periods_id_seq
+CREATE SEQUENCE public.avatar_ownership_periods_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -581,7 +581,7 @@ ALTER SEQUENCE public.avatar_ownership_periods_id_seq OWNED BY public.avatar_own
 -- Name: avatar_ownership_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_ownership_statuses (
+CREATE TABLE public.avatar_ownership_statuses (
     id bigint NOT NULL
 );
 
@@ -590,7 +590,7 @@ CREATE UNLOGGED TABLE public.avatar_ownership_statuses (
 -- Name: avatar_ownership_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_ownership_statuses_id_seq
+CREATE SEQUENCE public.avatar_ownership_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -609,7 +609,7 @@ ALTER SEQUENCE public.avatar_ownership_statuses_id_seq OWNED BY public.avatar_ow
 -- Name: avatar_ownership_transfers; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_ownership_transfers (
+CREATE TABLE public.avatar_ownership_transfers (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
@@ -644,7 +644,7 @@ CREATE UNLOGGED TABLE public.avatar_ownership_transfers (
 -- Name: avatar_ownership_transfers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_ownership_transfers_id_seq
+CREATE SEQUENCE public.avatar_ownership_transfers_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -663,7 +663,7 @@ ALTER SEQUENCE public.avatar_ownership_transfers_id_seq OWNED BY public.avatar_o
 -- Name: avatar_permissions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_permissions (
+CREATE TABLE public.avatar_permissions (
     id bigint NOT NULL
 );
 
@@ -672,7 +672,7 @@ CREATE UNLOGGED TABLE public.avatar_permissions (
 -- Name: avatar_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_permissions_id_seq
+CREATE SEQUENCE public.avatar_permissions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -691,7 +691,7 @@ ALTER SEQUENCE public.avatar_permissions_id_seq OWNED BY public.avatar_permissio
 -- Name: avatar_persona_bindings; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_persona_bindings (
+CREATE TABLE public.avatar_persona_bindings (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     avatar_id bigint NOT NULL,
@@ -708,7 +708,7 @@ CREATE UNLOGGED TABLE public.avatar_persona_bindings (
 -- Name: avatar_persona_bindings_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_persona_bindings_id_seq
+CREATE SEQUENCE public.avatar_persona_bindings_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -727,7 +727,7 @@ ALTER SEQUENCE public.avatar_persona_bindings_id_seq OWNED BY public.avatar_pers
 -- Name: avatar_role_permissions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_role_permissions (
+CREATE TABLE public.avatar_role_permissions (
     id bigint NOT NULL,
     avatar_permission_id bigint DEFAULT 0 NOT NULL,
     avatar_role_id bigint DEFAULT 0 NOT NULL,
@@ -740,7 +740,7 @@ CREATE UNLOGGED TABLE public.avatar_role_permissions (
 -- Name: avatar_role_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_role_permissions_id_seq
+CREATE SEQUENCE public.avatar_role_permissions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -759,7 +759,7 @@ ALTER SEQUENCE public.avatar_role_permissions_id_seq OWNED BY public.avatar_role
 -- Name: avatar_roles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatar_roles (
+CREATE TABLE public.avatar_roles (
     id bigint NOT NULL
 );
 
@@ -768,7 +768,7 @@ CREATE UNLOGGED TABLE public.avatar_roles (
 -- Name: avatar_roles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatar_roles_id_seq
+CREATE SEQUENCE public.avatar_roles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -787,7 +787,7 @@ ALTER SEQUENCE public.avatar_roles_id_seq OWNED BY public.avatar_roles.id;
 -- Name: avatars; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.avatars (
+CREATE TABLE public.avatars (
     id bigint NOT NULL,
     active_handle_id bigint NOT NULL,
     avatar_status_id character varying,
@@ -811,7 +811,7 @@ CREATE UNLOGGED TABLE public.avatars (
 -- Name: avatars_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.avatars_id_seq
+CREATE SEQUENCE public.avatars_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -830,7 +830,7 @@ ALTER SEQUENCE public.avatars_id_seq OWNED BY public.avatars.id;
 -- Name: client_avatar_accesses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_accesses (
+CREATE TABLE public.client_avatar_accesses (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -843,7 +843,7 @@ CREATE UNLOGGED TABLE public.client_avatar_accesses (
 -- Name: client_avatar_accesses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_accesses_id_seq
+CREATE SEQUENCE public.client_avatar_accesses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -862,7 +862,7 @@ ALTER SEQUENCE public.client_avatar_accesses_id_seq OWNED BY public.client_avata
 -- Name: client_avatar_deletions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_deletions (
+CREATE TABLE public.client_avatar_deletions (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -875,7 +875,7 @@ CREATE UNLOGGED TABLE public.client_avatar_deletions (
 -- Name: client_avatar_deletions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_deletions_id_seq
+CREATE SEQUENCE public.client_avatar_deletions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -894,7 +894,7 @@ ALTER SEQUENCE public.client_avatar_deletions_id_seq OWNED BY public.client_avat
 -- Name: client_avatar_extractions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_extractions (
+CREATE TABLE public.client_avatar_extractions (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -907,7 +907,7 @@ CREATE UNLOGGED TABLE public.client_avatar_extractions (
 -- Name: client_avatar_extractions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_extractions_id_seq
+CREATE SEQUENCE public.client_avatar_extractions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -926,7 +926,7 @@ ALTER SEQUENCE public.client_avatar_extractions_id_seq OWNED BY public.client_av
 -- Name: client_avatar_impersonations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_impersonations (
+CREATE TABLE public.client_avatar_impersonations (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -939,7 +939,7 @@ CREATE UNLOGGED TABLE public.client_avatar_impersonations (
 -- Name: client_avatar_impersonations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_impersonations_id_seq
+CREATE SEQUENCE public.client_avatar_impersonations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -958,7 +958,7 @@ ALTER SEQUENCE public.client_avatar_impersonations_id_seq OWNED BY public.client
 -- Name: client_avatar_oversights; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_oversights (
+CREATE TABLE public.client_avatar_oversights (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -971,7 +971,7 @@ CREATE UNLOGGED TABLE public.client_avatar_oversights (
 -- Name: client_avatar_oversights_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_oversights_id_seq
+CREATE SEQUENCE public.client_avatar_oversights_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -990,7 +990,7 @@ ALTER SEQUENCE public.client_avatar_oversights_id_seq OWNED BY public.client_ava
 -- Name: client_avatar_suspensions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_suspensions (
+CREATE TABLE public.client_avatar_suspensions (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1003,7 +1003,7 @@ CREATE UNLOGGED TABLE public.client_avatar_suspensions (
 -- Name: client_avatar_suspensions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_suspensions_id_seq
+CREATE SEQUENCE public.client_avatar_suspensions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1022,7 +1022,7 @@ ALTER SEQUENCE public.client_avatar_suspensions_id_seq OWNED BY public.client_av
 -- Name: client_avatar_visibilities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_avatar_visibilities (
+CREATE TABLE public.client_avatar_visibilities (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1035,7 +1035,7 @@ CREATE UNLOGGED TABLE public.client_avatar_visibilities (
 -- Name: client_avatar_visibilities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_avatar_visibilities_id_seq
+CREATE SEQUENCE public.client_avatar_visibilities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1054,7 +1054,7 @@ ALTER SEQUENCE public.client_avatar_visibilities_id_seq OWNED BY public.client_a
 -- Name: group_avatar_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.group_avatar_memberships (
+CREATE TABLE public.group_avatar_memberships (
     id bigint NOT NULL,
     public_id character varying NOT NULL,
     avatar_group_id bigint NOT NULL,
@@ -1077,7 +1077,7 @@ CREATE UNLOGGED TABLE public.group_avatar_memberships (
 -- Name: group_avatar_memberships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.group_avatar_memberships_id_seq
+CREATE SEQUENCE public.group_avatar_memberships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1096,7 +1096,7 @@ ALTER SEQUENCE public.group_avatar_memberships_id_seq OWNED BY public.group_avat
 -- Name: handle_assignment_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.handle_assignment_statuses (
+CREATE TABLE public.handle_assignment_statuses (
     id bigint NOT NULL
 );
 
@@ -1105,7 +1105,7 @@ CREATE UNLOGGED TABLE public.handle_assignment_statuses (
 -- Name: handle_assignment_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.handle_assignment_statuses_id_seq
+CREATE SEQUENCE public.handle_assignment_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1124,7 +1124,7 @@ ALTER SEQUENCE public.handle_assignment_statuses_id_seq OWNED BY public.handle_a
 -- Name: handle_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.handle_assignments (
+CREATE TABLE public.handle_assignments (
     id bigint NOT NULL,
     assigned_by_actor_id bigint,
     avatar_id bigint NOT NULL,
@@ -1142,7 +1142,7 @@ CREATE UNLOGGED TABLE public.handle_assignments (
 -- Name: handle_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.handle_assignments_id_seq
+CREATE SEQUENCE public.handle_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1161,7 +1161,7 @@ ALTER SEQUENCE public.handle_assignments_id_seq OWNED BY public.handle_assignmen
 -- Name: handle_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.handle_statuses (
+CREATE TABLE public.handle_statuses (
     id bigint NOT NULL
 );
 
@@ -1170,7 +1170,7 @@ CREATE UNLOGGED TABLE public.handle_statuses (
 -- Name: handle_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.handle_statuses_id_seq
+CREATE SEQUENCE public.handle_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1189,7 +1189,7 @@ ALTER SEQUENCE public.handle_statuses_id_seq OWNED BY public.handle_statuses.id;
 -- Name: handles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.handles (
+CREATE TABLE public.handles (
     id bigint NOT NULL,
     cooldown_until timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -1206,7 +1206,7 @@ CREATE UNLOGGED TABLE public.handles (
 -- Name: handles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.handles_id_seq
+CREATE SEQUENCE public.handles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1225,7 +1225,7 @@ ALTER SEQUENCE public.handles_id_seq OWNED BY public.handles.id;
 -- Name: member_avatar_accesses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_accesses (
+CREATE TABLE public.member_avatar_accesses (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1238,7 +1238,7 @@ CREATE UNLOGGED TABLE public.member_avatar_accesses (
 -- Name: member_avatar_accesses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_accesses_id_seq
+CREATE SEQUENCE public.member_avatar_accesses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1257,7 +1257,7 @@ ALTER SEQUENCE public.member_avatar_accesses_id_seq OWNED BY public.member_avata
 -- Name: member_avatar_deletions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_deletions (
+CREATE TABLE public.member_avatar_deletions (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1270,7 +1270,7 @@ CREATE UNLOGGED TABLE public.member_avatar_deletions (
 -- Name: member_avatar_deletions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_deletions_id_seq
+CREATE SEQUENCE public.member_avatar_deletions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1289,7 +1289,7 @@ ALTER SEQUENCE public.member_avatar_deletions_id_seq OWNED BY public.member_avat
 -- Name: member_avatar_extractions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_extractions (
+CREATE TABLE public.member_avatar_extractions (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1302,7 +1302,7 @@ CREATE UNLOGGED TABLE public.member_avatar_extractions (
 -- Name: member_avatar_extractions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_extractions_id_seq
+CREATE SEQUENCE public.member_avatar_extractions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1321,7 +1321,7 @@ ALTER SEQUENCE public.member_avatar_extractions_id_seq OWNED BY public.member_av
 -- Name: member_avatar_impersonations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_impersonations (
+CREATE TABLE public.member_avatar_impersonations (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1334,7 +1334,7 @@ CREATE UNLOGGED TABLE public.member_avatar_impersonations (
 -- Name: member_avatar_impersonations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_impersonations_id_seq
+CREATE SEQUENCE public.member_avatar_impersonations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1353,7 +1353,7 @@ ALTER SEQUENCE public.member_avatar_impersonations_id_seq OWNED BY public.member
 -- Name: member_avatar_oversights; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_oversights (
+CREATE TABLE public.member_avatar_oversights (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1366,7 +1366,7 @@ CREATE UNLOGGED TABLE public.member_avatar_oversights (
 -- Name: member_avatar_oversights_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_oversights_id_seq
+CREATE SEQUENCE public.member_avatar_oversights_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1385,7 +1385,7 @@ ALTER SEQUENCE public.member_avatar_oversights_id_seq OWNED BY public.member_ava
 -- Name: member_avatar_suspensions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_suspensions (
+CREATE TABLE public.member_avatar_suspensions (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1398,7 +1398,7 @@ CREATE UNLOGGED TABLE public.member_avatar_suspensions (
 -- Name: member_avatar_suspensions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_suspensions_id_seq
+CREATE SEQUENCE public.member_avatar_suspensions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1417,7 +1417,7 @@ ALTER SEQUENCE public.member_avatar_suspensions_id_seq OWNED BY public.member_av
 -- Name: member_avatar_visibilities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_avatar_visibilities (
+CREATE TABLE public.member_avatar_visibilities (
     id bigint NOT NULL,
     member_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
@@ -1430,7 +1430,7 @@ CREATE UNLOGGED TABLE public.member_avatar_visibilities (
 -- Name: member_avatar_visibilities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_avatar_visibilities_id_seq
+CREATE SEQUENCE public.member_avatar_visibilities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1449,7 +1449,7 @@ ALTER SEQUENCE public.member_avatar_visibilities_id_seq OWNED BY public.member_a
 -- Name: post_review_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.post_review_statuses (
+CREATE TABLE public.post_review_statuses (
     id bigint NOT NULL
 );
 
@@ -1458,7 +1458,7 @@ CREATE UNLOGGED TABLE public.post_review_statuses (
 -- Name: post_review_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.post_review_statuses_id_seq
+CREATE SEQUENCE public.post_review_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1477,7 +1477,7 @@ ALTER SEQUENCE public.post_review_statuses_id_seq OWNED BY public.post_review_st
 -- Name: post_reviews; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.post_reviews (
+CREATE TABLE public.post_reviews (
     id bigint NOT NULL,
     comment text,
     created_at timestamp(6) with time zone NOT NULL,
@@ -1494,7 +1494,7 @@ CREATE UNLOGGED TABLE public.post_reviews (
 -- Name: post_reviews_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.post_reviews_id_seq
+CREATE SEQUENCE public.post_reviews_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1513,7 +1513,7 @@ ALTER SEQUENCE public.post_reviews_id_seq OWNED BY public.post_reviews.id;
 -- Name: post_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.post_statuses (
+CREATE TABLE public.post_statuses (
     id bigint NOT NULL
 );
 
@@ -1522,7 +1522,7 @@ CREATE UNLOGGED TABLE public.post_statuses (
 -- Name: post_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.post_statuses_id_seq
+CREATE SEQUENCE public.post_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1541,7 +1541,7 @@ ALTER SEQUENCE public.post_statuses_id_seq OWNED BY public.post_statuses.id;
 -- Name: post_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.post_versions (
+CREATE TABLE public.post_versions (
     id bigint NOT NULL,
     body text,
     created_at timestamp(6) with time zone NOT NULL,
@@ -1564,7 +1564,7 @@ CREATE UNLOGGED TABLE public.post_versions (
 -- Name: post_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.post_versions_id_seq
+CREATE SEQUENCE public.post_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1583,7 +1583,7 @@ ALTER SEQUENCE public.post_versions_id_seq OWNED BY public.post_versions.id;
 -- Name: posts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.posts (
+CREATE TABLE public.posts (
     id bigint NOT NULL,
     author_avatar_id bigint NOT NULL,
     body text NOT NULL,
@@ -1602,7 +1602,7 @@ CREATE UNLOGGED TABLE public.posts (
 -- Name: posts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.posts_id_seq
+CREATE SEQUENCE public.posts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1621,7 +1621,7 @@ ALTER SEQUENCE public.posts_id_seq OWNED BY public.posts.id;
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 

@@ -1,6 +1,9 @@
 # Decision proposals: Dashboard Avatar image and Emergency Credential acknowledgement
 
-Status: proposal, awaiting owner decision. Nothing here is implemented.
+Status: decided 2026-09-26. The owner approved option A for both sections. Decisions are recorded in
+`adr/base-dashboard-avatar-image-delivery.md` and
+`adr/emergency-secret-credential-commit-acknowledgement.md`; remaining work is tracked in
+`plans/backlog/2026-09-26-integrated-auth-remaining-ledger.md`. The text below is the original proposal.
 
 Two acceptance gates in `plans/backlog/2026-09-24-integrated-auth-avatar-warp-plan.md` stay open
 because they need a contract decision rather than more code. This note states the observed facts and

@@ -72,6 +72,114 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
                         I18n.t("sign.app.in.mfa.methods.passkey")
   end
 
+  # ===================================================================
+  # MFA cancellation (DELETE /sign/in/challenge)
+  # ===================================================================
+
+  test "destroy ends the pending MFA ceremony and returns to the sign-in entry point" do
+    establish_pending_mfa_via_email!
+    cycle = ClientSignInFlow.where(principal_id: @user.id).order(:id).last
+
+    assert_predicate cycle, :sign_in_mfa_pending?
+
+    assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+      delete auth_app_sign_in_challenge_path(ri: "jp")
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_in_path(ri: "jp")
+    assert_predicate cycle.reload, :sign_in_failed?
+    assert_nil session[:pending_mfa]
+    assert_nil session[:mfa_user_id]
+    assert_nil session[:pending_login_user_id]
+    assert_nil session[:app_sign_in_flow_locator]
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY].presence
+  end
+
+  test "a cancelled MFA challenge cannot be resumed or answered" do
+    establish_pending_mfa_via_email!
+    delete auth_app_sign_in_challenge_path(ri: "jp")
+
+    get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_in_path(ri: "jp")
+
+    assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+      post auth_app_sign_in_challenge_totp_path(ri: "jp"),
+           params: { totp_challenge_form: { token: "123456" }, "cf-turnstile-response": "test_token" }
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_in_path(ri: "jp")
+  end
+
+  test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do
+    assert_no_difference -> { ClientToken.count } do
+      delete auth_app_sign_in_challenge_path(ri: "jp")
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_in_path(ri: "jp")
+  end
+
+  test "the method selection page offers cancellation and no back link" do
+    establish_pending_mfa_via_email!
+    follow_redirect!
+
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_sign_in_challenge_path(ri: "jp"),
+        "method" => "delete", },
+      inertia_props.fetch("cancel"),
+    )
+    assert_not inertia_props.key?("back_link")
+  end
+
+  test "with no usable method the page keeps cancellation as the only exit" do
+    @user.client_totp_credentials.delete_all
+    @user.client_passkeys.delete_all
+    establish_pending_mfa_via_email!
+    follow_redirect!
+
+    assert_empty inertia_props.fetch("methods")
+    assert_predicate inertia_props.fetch("no_methods_notice"), :present?
+    assert_not inertia_props.key?("back_link")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+  end
+
+  test "the TOTP challenge keeps back to method selection separate from cancellation" do
+    establish_pending_mfa_via_email!
+
+    get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+
+    assert_response :success
+    assert_equal auth_app_sign_in_challenge_path(ri: "jp"), inertia_props.fetch("back_link").fetch("href")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+    assert_equal auth_app_sign_in_challenge_path(ri: "jp"), inertia_props.fetch("cancel").fetch("action")
+
+    # Following Back is a GET and leaves the ceremony running.
+    get auth_app_sign_in_challenge_path(ri: "jp")
+
+    assert_response :success
+    assert_predicate session[:pending_mfa], :present?
+  end
+
+  test "cancelling on the com host leaves the app ceremony untouched" do
+    establish_pending_mfa_via_email!
+
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    delete auth_com_sign_in_challenge_path(ri: "jp")
+
+    assert_response :see_other
+
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    get auth_app_sign_in_challenge_path(ri: "jp")
+
+    assert_response :success
+    assert_predicate ClientSignInFlow.where(principal_id: @user.id).order(:id).last, :sign_in_mfa_pending?
+  end
+
   private
 
   def establish_pending_mfa_via_email!

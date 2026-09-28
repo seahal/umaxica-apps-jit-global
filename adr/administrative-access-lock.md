@@ -106,6 +106,10 @@ Initial reason codes:
 
 ## Related
 
+- `adr/unified-enforcement.md` and `adr/operator-capability-authorization.md`: the only org
+  controller path that locks or unlocks is an Enforcement Case, authorized by operator capability.
+  There is no standalone access-lock endpoint.
+
 - `adr/identity-authority-boundary.md`
 - `adr/acme-session-and-token-authority.md`
 - `adr/sign-withdrawal-and-membership-surface-policy.md`

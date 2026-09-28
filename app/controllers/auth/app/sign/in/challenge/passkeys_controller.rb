@@ -116,6 +116,7 @@ module Auth
                   submit_label: page_t("#{scope}.authenticate"),
                 },
                 back_link: { label: page_t("#{scope}.back"), href: auth_app_sign_in_challenge_path },
+                cancel: { label: t("actions.cancel"), action: auth_app_sign_in_challenge_path, method: "delete" },
               }
             end
 

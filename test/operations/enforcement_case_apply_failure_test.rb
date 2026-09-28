@@ -29,7 +29,9 @@ class EnforcementCaseApplyFailureTest < ActiveSupport::TestCase
 
     def revoke_method_sessions! = raise(ActiveRecord::RecordNotUnique, "duplicate revocation")
 
-    def write_audit_event_once!(_name) = true
+    def write_audit_event_once!(_name, actor_operator_public_id:) = actor_operator_public_id
+
+    def approved_by_operator_public_id = nil
 
     def principal_effect = nil
 
@@ -56,7 +58,7 @@ class EnforcementCaseApplyFailureTest < ActiveSupport::TestCase
     enforcement_case = FakeCase.new(persisted: true)
 
     assert_raises(ActiveRecord::RecordNotUnique) do
-      EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+      EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case, actor_operator_public_id: "OPERATOR-A")
     end
 
     assert_equal "failed", enforcement_case.state
@@ -66,7 +68,7 @@ class EnforcementCaseApplyFailureTest < ActiveSupport::TestCase
     enforcement_case = FakeCase.new(persisted: false)
 
     assert_raises(ActiveRecord::RecordNotUnique) do
-      EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+      EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case, actor_operator_public_id: "OPERATOR-A")
     end
 
     # The state transition itself committed; only the "failed" marking is skipped

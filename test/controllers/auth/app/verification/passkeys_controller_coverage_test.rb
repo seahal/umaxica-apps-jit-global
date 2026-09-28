@@ -35,6 +35,10 @@ class AuthAppVerificationPasskeysControllerCoverageTest < ActiveSupport::TestCas
       "/verification?#{kwargs.to_query}"
     end
 
+    def auth_app_verification_cancellation_path(**kwargs)
+      "/verification/cancellation?#{kwargs.to_query}"
+    end
+
     def form_authenticity_token
       "csrf"
     end

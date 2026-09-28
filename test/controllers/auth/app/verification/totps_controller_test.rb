@@ -297,6 +297,12 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     end
 
     assert_response :unprocessable_content
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
   end
 
   test "returns 422 on malformed code" do

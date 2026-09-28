@@ -68,13 +68,6 @@ module AuthCeremonyContext
     reset_session
   end
 
-  def cancel_auth_ceremony_session!
-    record = admitted_auth_ceremony_session
-    return if record.nil?
-
-    record.cancel!
-  end
-
   def auth_ceremony_admission_present?
     admitted_auth_ceremony_session.present?
   end

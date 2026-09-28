@@ -118,10 +118,8 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
 
     get edit_base_com_preference_theme_url(ri: "jp")
 
-    # A presented-but-non-matching refresh token fails closed (same invariant
-    # as a corrupt cookie, see preference_corrupt_cookie_test.rb) rather than
-    # being silently ignored, so it can never resolve to an unrelated Com row.
-    assert_response :unauthorized
+    # The cross-surface credential is detached and cannot resolve to a Com row.
+    assert_response :success
     assert_equal com_count_before, ComPreference.count,
                  "an app-issued refresh cookie must not resolve to any Com preference; com bootstraps its own"
   end
@@ -145,7 +143,7 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
 
     get edit_base_org_preference_theme_url(ri: "jp")
 
-    assert_response :unauthorized
+    assert_response :success
     assert_equal org_count_before, OrgPreference.count,
                  "an app-issued refresh cookie must not resolve to any Org preference; org bootstraps its own"
   end

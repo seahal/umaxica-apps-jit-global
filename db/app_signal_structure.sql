@@ -18,7 +18,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -30,7 +30,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: client_notification_records; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_notification_records (
+CREATE TABLE public.client_notification_records (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     user_id bigint NOT NULL,
@@ -43,7 +43,7 @@ CREATE UNLOGGED TABLE public.client_notification_records (
 -- Name: client_notification_records_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_notification_records_id_seq
+CREATE SEQUENCE public.client_notification_records_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -62,7 +62,7 @@ ALTER SEQUENCE public.client_notification_records_id_seq OWNED BY public.client_
 -- Name: member_notifications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_notifications (
+CREATE TABLE public.member_notifications (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     user_notification_id bigint NOT NULL,
@@ -75,7 +75,7 @@ CREATE UNLOGGED TABLE public.member_notifications (
 -- Name: member_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_notifications_id_seq
+CREATE SEQUENCE public.member_notifications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -94,7 +94,7 @@ ALTER SEQUENCE public.member_notifications_id_seq OWNED BY public.member_notific
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 

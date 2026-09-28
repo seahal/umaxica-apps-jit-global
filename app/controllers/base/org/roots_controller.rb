@@ -61,6 +61,12 @@ module Base
 
       private
 
+      # The sign-in/sign-up start POST only issues an admission; it needs no preference authority,
+      # so a stale preference credential must not refuse it.
+      def preference_entry_recovery_action?
+        action_name == "create"
+      end
+
       def render_authenticated_home
         return unless require_selected_actor_context_for_root!
 
@@ -91,8 +97,25 @@ module Base
               items: menu_links,
             },
             { heading: t("base.shared.dashboard.sections.primary_links"), items: primary_links },
-          ],
+            administration_section,
+          ].compact,
         }
+      end
+
+      # adr/operator-capability-authorization.md: administration is listed apart from the operator's
+      # own links, and only for consoles this operator holds a capability for. Hiding a link is
+      # presentation; every console authorizes again on its own.
+      def administration_section
+        items = []
+        if allowed_to?(:support?, :org_console, with: OrgConsolePolicy)
+          items << { label: t("base.org.admin.support.title"), href: base_org_support_index_path(ri: params[:ri]) }
+        end
+        if allowed_to?(:iam?, :org_console, with: OrgConsolePolicy)
+          items << { label: t("base.org.admin.iam.title"), href: base_org_iam_index_path(ri: params[:ri]) }
+        end
+        return nil if items.empty?
+
+        { heading: t("base.org.admin.dashboard.administration"), items: items }
       end
 
       def dashboard_current_identity
@@ -102,7 +125,13 @@ module Base
         display_name = persona.moniker
         raise "selected org Persona has no display name" if display_name.blank?
 
-        { display_name: display_name }
+        identity = { display_name: display_name }
+        avatar = switcher.selected_avatar
+        # org Avatars are optional; without an Avatar or a stored image there is no image element.
+        if avatar&.image
+          identity[:avatar_image] = { src: base_org_dashboard_avatar_image_path(v: avatar.image_cache_key) }
+        end
+        identity
       end
 
       def switcher

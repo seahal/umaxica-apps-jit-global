@@ -8,6 +8,9 @@ import { useForm } from "@inertiajs/react";
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 import { readString } from "@/lib/payload";
 
@@ -44,6 +47,7 @@ export type TotpChallengeFormProps = {
   form_errors: string[];
   turnstile: SignInTurnstile;
   back_link: SignInLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function TotpChallengeForm({
@@ -54,6 +58,7 @@ export default function TotpChallengeForm({
   form_errors: formErrors,
   turnstile,
   back_link: backLink,
+  cancel,
 }: TotpChallengeFormProps) {
   const field = form.token_field;
   const selector = form.credential_selector;
@@ -155,6 +160,9 @@ export default function TotpChallengeForm({
           </a>
         </div>
       </form>
+
+      {/* Back returns to method selection; this ends the whole sign-in ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

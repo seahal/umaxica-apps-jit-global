@@ -31,8 +31,4 @@ class OperatorPolicy < ApplicationPolicy
   def update?
     owner?
   end
-
-  def purge_sessions?
-    user.is_a?(Operator)
-  end
 end

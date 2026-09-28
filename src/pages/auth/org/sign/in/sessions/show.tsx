@@ -27,7 +27,6 @@ export type OrgSessionLimitPageProps = {
   last_used_label: string;
   no_sessions: string;
   submit_label: string;
-  back_link: { label: string; href: string };
   cancel_logout_label: string;
   cancel_logout_confirm: string;
   sessions: SessionRow[];
@@ -43,7 +42,6 @@ export default function OrgSessionLimitPage({
   last_used_label: lastUsedLabel,
   no_sessions: noSessions,
   submit_label: submitLabel,
-  back_link: backLink,
   cancel_logout_label: cancelLogoutLabel,
   cancel_logout_confirm: cancelLogoutConfirm,
   sessions,
@@ -59,10 +57,11 @@ export default function OrgSessionLimitPage({
   };
 
   return (
+    // No link back to the sign-in form: authentication has already succeeded and a restricted
+    // session exists, so the only way out of this page is the DELETE cancellation below.
     <Page
       title={heading}
       description={description}
-      up={backLink}
     >
       <form
         action={formAction}

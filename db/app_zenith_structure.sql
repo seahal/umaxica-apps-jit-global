@@ -109,7 +109,7 @@ SET default_table_access_method = heap;
 -- Name: accounts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.accounts (
+CREATE TABLE public.accounts (
     id bigint NOT NULL,
     accountable_id bigint NOT NULL,
     accountable_type character varying NOT NULL,
@@ -124,7 +124,7 @@ CREATE UNLOGGED TABLE public.accounts (
 -- Name: accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.accounts_id_seq
+CREATE SEQUENCE public.accounts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -143,7 +143,7 @@ ALTER SEQUENCE public.accounts_id_seq OWNED BY public.accounts.id;
 -- Name: app_enforcement_appeals; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_enforcement_appeals (
+CREATE TABLE public.app_enforcement_appeals (
     id bigint NOT NULL,
     app_enforcement_case_id bigint NOT NULL,
     public_id character varying NOT NULL,
@@ -165,7 +165,7 @@ CREATE UNLOGGED TABLE public.app_enforcement_appeals (
 -- Name: app_enforcement_appeals_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_enforcement_appeals_id_seq
+CREATE SEQUENCE public.app_enforcement_appeals_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -184,7 +184,7 @@ ALTER SEQUENCE public.app_enforcement_appeals_id_seq OWNED BY public.app_enforce
 -- Name: app_enforcement_authentication_method_effects; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_enforcement_authentication_method_effects (
+CREATE TABLE public.app_enforcement_authentication_method_effects (
     id bigint NOT NULL,
     app_enforcement_case_id bigint NOT NULL,
     principal_public_id character varying NOT NULL,
@@ -205,7 +205,7 @@ CREATE UNLOGGED TABLE public.app_enforcement_authentication_method_effects (
 -- Name: app_enforcement_authentication_method_effects_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_enforcement_authentication_method_effects_id_seq
+CREATE SEQUENCE public.app_enforcement_authentication_method_effects_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -224,7 +224,7 @@ ALTER SEQUENCE public.app_enforcement_authentication_method_effects_id_seq OWNED
 -- Name: app_enforcement_cases; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_enforcement_cases (
+CREATE TABLE public.app_enforcement_cases (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     kind character varying NOT NULL,
@@ -272,7 +272,7 @@ CREATE UNLOGGED TABLE public.app_enforcement_cases (
 -- Name: app_enforcement_cases_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_enforcement_cases_id_seq
+CREATE SEQUENCE public.app_enforcement_cases_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -291,7 +291,7 @@ ALTER SEQUENCE public.app_enforcement_cases_id_seq OWNED BY public.app_enforceme
 -- Name: app_enforcement_identifier_effects; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_enforcement_identifier_effects (
+CREATE TABLE public.app_enforcement_identifier_effects (
     id bigint NOT NULL,
     app_enforcement_case_id bigint NOT NULL,
     identifier_kind character varying NOT NULL,
@@ -316,7 +316,7 @@ CREATE UNLOGGED TABLE public.app_enforcement_identifier_effects (
 -- Name: app_enforcement_identifier_effects_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_enforcement_identifier_effects_id_seq
+CREATE SEQUENCE public.app_enforcement_identifier_effects_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -335,7 +335,7 @@ ALTER SEQUENCE public.app_enforcement_identifier_effects_id_seq OWNED BY public.
 -- Name: app_enforcement_principal_effects; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_enforcement_principal_effects (
+CREATE TABLE public.app_enforcement_principal_effects (
     id bigint NOT NULL,
     app_enforcement_case_id bigint NOT NULL,
     principal_public_id character varying NOT NULL,
@@ -357,7 +357,7 @@ CREATE UNLOGGED TABLE public.app_enforcement_principal_effects (
 -- Name: app_enforcement_principal_effects_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_enforcement_principal_effects_id_seq
+CREATE SEQUENCE public.app_enforcement_principal_effects_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -376,7 +376,7 @@ ALTER SEQUENCE public.app_enforcement_principal_effects_id_seq OWNED BY public.a
 -- Name: app_enforcement_principal_links; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_enforcement_principal_links (
+CREATE TABLE public.app_enforcement_principal_links (
     id bigint NOT NULL,
     app_enforcement_case_id bigint NOT NULL,
     principal_kind character varying NOT NULL,
@@ -394,7 +394,7 @@ CREATE UNLOGGED TABLE public.app_enforcement_principal_links (
 -- Name: app_enforcement_principal_links_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_enforcement_principal_links_id_seq
+CREATE SEQUENCE public.app_enforcement_principal_links_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -413,7 +413,7 @@ ALTER SEQUENCE public.app_enforcement_principal_links_id_seq OWNED BY public.app
 -- Name: apple_auths; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.apple_auths (
+CREATE TABLE public.apple_auths (
     id bigint NOT NULL,
     access_token text NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -432,7 +432,7 @@ CREATE UNLOGGED TABLE public.apple_auths (
 -- Name: apple_auths_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.apple_auths_id_seq
+CREATE SEQUENCE public.apple_auths_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -451,7 +451,7 @@ ALTER SEQUENCE public.apple_auths_id_seq OWNED BY public.apple_auths.id;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -463,7 +463,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: client_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_accounts (
+CREATE TABLE public.client_accounts (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     user_id bigint NOT NULL,
@@ -476,7 +476,7 @@ CREATE UNLOGGED TABLE public.client_accounts (
 -- Name: client_accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_accounts_id_seq
+CREATE SEQUENCE public.client_accounts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -495,7 +495,7 @@ ALTER SEQUENCE public.client_accounts_id_seq OWNED BY public.client_accounts.id;
 -- Name: client_apple_notification_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_apple_notification_events (
+CREATE TABLE public.client_apple_notification_events (
     id bigint NOT NULL,
     jti character varying NOT NULL,
     event_type character varying(32) NOT NULL,
@@ -521,7 +521,7 @@ CREATE UNLOGGED TABLE public.client_apple_notification_events (
 -- Name: client_apple_notification_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_apple_notification_events_id_seq
+CREATE SEQUENCE public.client_apple_notification_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -540,7 +540,7 @@ ALTER SEQUENCE public.client_apple_notification_events_id_seq OWNED BY public.cl
 -- Name: client_authority_locks; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_authority_locks (
+CREATE TABLE public.client_authority_locks (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -552,7 +552,7 @@ CREATE UNLOGGED TABLE public.client_authority_locks (
 -- Name: client_authority_locks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_authority_locks_id_seq
+CREATE SEQUENCE public.client_authority_locks_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -571,7 +571,7 @@ ALTER SEQUENCE public.client_authority_locks_id_seq OWNED BY public.client_autho
 -- Name: client_banners; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_banners (
+CREATE TABLE public.client_banners (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     title character varying DEFAULT ''::character varying NOT NULL,
@@ -589,7 +589,7 @@ CREATE UNLOGGED TABLE public.client_banners (
 -- Name: client_banners_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_banners_id_seq
+CREATE SEQUENCE public.client_banners_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -608,7 +608,7 @@ ALTER SEQUENCE public.client_banners_id_seq OWNED BY public.client_banners.id;
 -- Name: client_bulletins; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_bulletins (
+CREATE TABLE public.client_bulletins (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
@@ -624,7 +624,7 @@ CREATE UNLOGGED TABLE public.client_bulletins (
 -- Name: client_bulletins_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_bulletins_id_seq
+CREATE SEQUENCE public.client_bulletins_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -643,7 +643,7 @@ ALTER SEQUENCE public.client_bulletins_id_seq OWNED BY public.client_bulletins.i
 -- Name: client_email_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_email_statuses (
+CREATE TABLE public.client_email_statuses (
     id bigint NOT NULL
 );
 
@@ -652,7 +652,7 @@ CREATE UNLOGGED TABLE public.client_email_statuses (
 -- Name: client_email_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_email_statuses_id_seq
+CREATE SEQUENCE public.client_email_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -671,7 +671,7 @@ ALTER SEQUENCE public.client_email_statuses_id_seq OWNED BY public.client_email_
 -- Name: client_emails; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_emails (
+CREATE TABLE public.client_emails (
     id bigint NOT NULL,
     address character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -700,7 +700,7 @@ CREATE UNLOGGED TABLE public.client_emails (
 -- Name: client_emails_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_emails_id_seq
+CREATE SEQUENCE public.client_emails_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -719,7 +719,7 @@ ALTER SEQUENCE public.client_emails_id_seq OWNED BY public.client_emails.id;
 -- Name: client_enforcement_recovery_ceremonies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_enforcement_recovery_ceremonies (
+CREATE TABLE public.client_enforcement_recovery_ceremonies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     client_id bigint NOT NULL,
@@ -739,7 +739,7 @@ CREATE UNLOGGED TABLE public.client_enforcement_recovery_ceremonies (
 -- Name: client_enforcement_recovery_ceremonies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_enforcement_recovery_ceremonies_id_seq
+CREATE SEQUENCE public.client_enforcement_recovery_ceremonies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -758,7 +758,7 @@ ALTER SEQUENCE public.client_enforcement_recovery_ceremonies_id_seq OWNED BY pub
 -- Name: client_external_identities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_external_identities (
+CREATE TABLE public.client_external_identities (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     provider character varying(16) NOT NULL,
@@ -781,7 +781,7 @@ CREATE UNLOGGED TABLE public.client_external_identities (
 -- Name: client_external_identities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_external_identities_id_seq
+CREATE SEQUENCE public.client_external_identities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -800,7 +800,7 @@ ALTER SEQUENCE public.client_external_identities_id_seq OWNED BY public.client_e
 -- Name: client_identities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_identities (
+CREATE TABLE public.client_identities (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     issuer character varying NOT NULL,
@@ -819,7 +819,7 @@ CREATE UNLOGGED TABLE public.client_identities (
 -- Name: client_identities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_identities_id_seq
+CREATE SEQUENCE public.client_identities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -838,7 +838,7 @@ ALTER SEQUENCE public.client_identities_id_seq OWNED BY public.client_identities
 -- Name: client_identity_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_identity_states (
+CREATE TABLE public.client_identity_states (
     id bigint NOT NULL
 );
 
@@ -847,7 +847,7 @@ CREATE UNLOGGED TABLE public.client_identity_states (
 -- Name: client_identity_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_identity_states_id_seq
+CREATE SEQUENCE public.client_identity_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -866,7 +866,7 @@ ALTER SEQUENCE public.client_identity_states_id_seq OWNED BY public.client_ident
 -- Name: client_member_deletions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_member_deletions (
+CREATE TABLE public.client_member_deletions (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -879,7 +879,7 @@ CREATE UNLOGGED TABLE public.client_member_deletions (
 -- Name: client_member_deletions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_member_deletions_id_seq
+CREATE SEQUENCE public.client_member_deletions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -898,7 +898,7 @@ ALTER SEQUENCE public.client_member_deletions_id_seq OWNED BY public.client_memb
 -- Name: client_member_discoveries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_member_discoveries (
+CREATE TABLE public.client_member_discoveries (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -911,7 +911,7 @@ CREATE UNLOGGED TABLE public.client_member_discoveries (
 -- Name: client_member_discoveries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_member_discoveries_id_seq
+CREATE SEQUENCE public.client_member_discoveries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -930,7 +930,7 @@ ALTER SEQUENCE public.client_member_discoveries_id_seq OWNED BY public.client_me
 -- Name: client_member_impersonations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_member_impersonations (
+CREATE TABLE public.client_member_impersonations (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -943,7 +943,7 @@ CREATE UNLOGGED TABLE public.client_member_impersonations (
 -- Name: client_member_impersonations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_member_impersonations_id_seq
+CREATE SEQUENCE public.client_member_impersonations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -962,7 +962,7 @@ ALTER SEQUENCE public.client_member_impersonations_id_seq OWNED BY public.client
 -- Name: client_member_observations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_member_observations (
+CREATE TABLE public.client_member_observations (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -975,7 +975,7 @@ CREATE UNLOGGED TABLE public.client_member_observations (
 -- Name: client_member_observations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_member_observations_id_seq
+CREATE SEQUENCE public.client_member_observations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -994,7 +994,7 @@ ALTER SEQUENCE public.client_member_observations_id_seq OWNED BY public.client_m
 -- Name: client_member_revocations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_member_revocations (
+CREATE TABLE public.client_member_revocations (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -1007,7 +1007,7 @@ CREATE UNLOGGED TABLE public.client_member_revocations (
 -- Name: client_member_revocations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_member_revocations_id_seq
+CREATE SEQUENCE public.client_member_revocations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1026,7 +1026,7 @@ ALTER SEQUENCE public.client_member_revocations_id_seq OWNED BY public.client_me
 -- Name: client_member_suspensions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_member_suspensions (
+CREATE TABLE public.client_member_suspensions (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -1039,7 +1039,7 @@ CREATE UNLOGGED TABLE public.client_member_suspensions (
 -- Name: client_member_suspensions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_member_suspensions_id_seq
+CREATE SEQUENCE public.client_member_suspensions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1058,7 +1058,7 @@ ALTER SEQUENCE public.client_member_suspensions_id_seq OWNED BY public.client_me
 -- Name: client_members; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_members (
+CREATE TABLE public.client_members (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     member_id bigint NOT NULL,
@@ -1071,7 +1071,7 @@ CREATE UNLOGGED TABLE public.client_members (
 -- Name: client_members_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_members_id_seq
+CREATE SEQUENCE public.client_members_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1090,7 +1090,7 @@ ALTER SEQUENCE public.client_members_id_seq OWNED BY public.client_members.id;
 -- Name: client_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_memberships (
+CREATE TABLE public.client_memberships (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     joined_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -1105,7 +1105,7 @@ CREATE UNLOGGED TABLE public.client_memberships (
 -- Name: client_memberships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_memberships_id_seq
+CREATE SEQUENCE public.client_memberships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1124,7 +1124,7 @@ ALTER SEQUENCE public.client_memberships_id_seq OWNED BY public.client_membershi
 -- Name: client_mfa_levels; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_mfa_levels (
+CREATE TABLE public.client_mfa_levels (
     id bigint NOT NULL
 );
 
@@ -1133,7 +1133,7 @@ CREATE UNLOGGED TABLE public.client_mfa_levels (
 -- Name: client_mfa_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_mfa_levels_id_seq
+CREATE SEQUENCE public.client_mfa_levels_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1152,7 +1152,7 @@ ALTER SEQUENCE public.client_mfa_levels_id_seq OWNED BY public.client_mfa_levels
 -- Name: client_mfa_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_mfa_statuses (
+CREATE TABLE public.client_mfa_statuses (
     id bigint NOT NULL
 );
 
@@ -1161,7 +1161,7 @@ CREATE UNLOGGED TABLE public.client_mfa_statuses (
 -- Name: client_mfa_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_mfa_statuses_id_seq
+CREATE SEQUENCE public.client_mfa_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1180,7 +1180,7 @@ ALTER SEQUENCE public.client_mfa_statuses_id_seq OWNED BY public.client_mfa_stat
 -- Name: client_passkey_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_passkey_statuses (
+CREATE TABLE public.client_passkey_statuses (
     id bigint NOT NULL
 );
 
@@ -1189,7 +1189,7 @@ CREATE UNLOGGED TABLE public.client_passkey_statuses (
 -- Name: client_passkey_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_passkey_statuses_id_seq
+CREATE SEQUENCE public.client_passkey_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1208,7 +1208,7 @@ ALTER SEQUENCE public.client_passkey_statuses_id_seq OWNED BY public.client_pass
 -- Name: client_passkeys; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_passkeys (
+CREATE TABLE public.client_passkeys (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     description character varying DEFAULT ''::character varying NOT NULL,
@@ -1238,7 +1238,7 @@ CREATE UNLOGGED TABLE public.client_passkeys (
 -- Name: client_passkeys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_passkeys_id_seq
+CREATE SEQUENCE public.client_passkeys_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1257,7 +1257,7 @@ ALTER SEQUENCE public.client_passkeys_id_seq OWNED BY public.client_passkeys.id;
 -- Name: client_persona_administration_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_persona_administration_grants (
+CREATE TABLE public.client_persona_administration_grants (
     id bigint NOT NULL,
     client_persona_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1270,7 +1270,7 @@ CREATE UNLOGGED TABLE public.client_persona_administration_grants (
 -- Name: client_persona_administration_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_persona_administration_grants_id_seq
+CREATE SEQUENCE public.client_persona_administration_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1289,7 +1289,7 @@ ALTER SEQUENCE public.client_persona_administration_grants_id_seq OWNED BY publi
 -- Name: client_persona_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_persona_delegation_grants (
+CREATE TABLE public.client_persona_delegation_grants (
     id bigint NOT NULL,
     client_persona_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1302,7 +1302,7 @@ CREATE UNLOGGED TABLE public.client_persona_delegation_grants (
 -- Name: client_persona_delegation_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_persona_delegation_grants_id_seq
+CREATE SEQUENCE public.client_persona_delegation_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1321,7 +1321,7 @@ ALTER SEQUENCE public.client_persona_delegation_grants_id_seq OWNED BY public.cl
 -- Name: client_persona_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_persona_ownership_transfer_requests (
+CREATE TABLE public.client_persona_ownership_transfer_requests (
     id bigint NOT NULL,
     client_persona_id bigint NOT NULL,
     source_client_id bigint NOT NULL,
@@ -1348,7 +1348,7 @@ CREATE UNLOGGED TABLE public.client_persona_ownership_transfer_requests (
 -- Name: client_persona_ownership_transfer_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_persona_ownership_transfer_requests_id_seq
+CREATE SEQUENCE public.client_persona_ownership_transfer_requests_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1367,7 +1367,7 @@ ALTER SEQUENCE public.client_persona_ownership_transfer_requests_id_seq OWNED BY
 -- Name: client_persona_ownerships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_persona_ownerships (
+CREATE TABLE public.client_persona_ownerships (
     id bigint NOT NULL,
     client_persona_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1382,7 +1382,7 @@ CREATE UNLOGGED TABLE public.client_persona_ownerships (
 -- Name: client_persona_ownerships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_persona_ownerships_id_seq
+CREATE SEQUENCE public.client_persona_ownerships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1401,7 +1401,7 @@ ALTER SEQUENCE public.client_persona_ownerships_id_seq OWNED BY public.client_pe
 -- Name: client_persona_usage_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_persona_usage_grants (
+CREATE TABLE public.client_persona_usage_grants (
     id bigint NOT NULL,
     client_persona_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1414,7 +1414,7 @@ CREATE UNLOGGED TABLE public.client_persona_usage_grants (
 -- Name: client_persona_usage_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_persona_usage_grants_id_seq
+CREATE SEQUENCE public.client_persona_usage_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1433,7 +1433,7 @@ ALTER SEQUENCE public.client_persona_usage_grants_id_seq OWNED BY public.client_
 -- Name: client_persona_view_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_persona_view_grants (
+CREATE TABLE public.client_persona_view_grants (
     id bigint NOT NULL,
     client_persona_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -1446,7 +1446,7 @@ CREATE UNLOGGED TABLE public.client_persona_view_grants (
 -- Name: client_persona_view_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_persona_view_grants_id_seq
+CREATE SEQUENCE public.client_persona_view_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1465,7 +1465,7 @@ ALTER SEQUENCE public.client_persona_view_grants_id_seq OWNED BY public.client_p
 -- Name: client_preference_adult_content_gate_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_adult_content_gate_options (
+CREATE TABLE public.client_preference_adult_content_gate_options (
     id bigint NOT NULL
 );
 
@@ -1474,7 +1474,7 @@ CREATE UNLOGGED TABLE public.client_preference_adult_content_gate_options (
 -- Name: client_preference_adult_content_gate_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_adult_content_gate_options_id_seq
+CREATE SEQUENCE public.client_preference_adult_content_gate_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1493,7 +1493,7 @@ ALTER SEQUENCE public.client_preference_adult_content_gate_options_id_seq OWNED 
 -- Name: client_preference_adult_content_gates; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_adult_content_gates (
+CREATE TABLE public.client_preference_adult_content_gates (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1506,7 +1506,7 @@ CREATE UNLOGGED TABLE public.client_preference_adult_content_gates (
 -- Name: client_preference_adult_content_gates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_adult_content_gates_id_seq
+CREATE SEQUENCE public.client_preference_adult_content_gates_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1525,7 +1525,7 @@ ALTER SEQUENCE public.client_preference_adult_content_gates_id_seq OWNED BY publ
 -- Name: client_preference_currencies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_currencies (
+CREATE TABLE public.client_preference_currencies (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1538,7 +1538,7 @@ CREATE UNLOGGED TABLE public.client_preference_currencies (
 -- Name: client_preference_currencies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_currencies_id_seq
+CREATE SEQUENCE public.client_preference_currencies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1557,7 +1557,7 @@ ALTER SEQUENCE public.client_preference_currencies_id_seq OWNED BY public.client
 -- Name: client_preference_currency_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_currency_options (
+CREATE TABLE public.client_preference_currency_options (
     id bigint NOT NULL
 );
 
@@ -1566,7 +1566,7 @@ CREATE UNLOGGED TABLE public.client_preference_currency_options (
 -- Name: client_preference_currency_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_currency_options_id_seq
+CREATE SEQUENCE public.client_preference_currency_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1585,7 +1585,7 @@ ALTER SEQUENCE public.client_preference_currency_options_id_seq OWNED BY public.
 -- Name: client_preference_date_format_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_date_format_options (
+CREATE TABLE public.client_preference_date_format_options (
     id bigint NOT NULL
 );
 
@@ -1594,7 +1594,7 @@ CREATE UNLOGGED TABLE public.client_preference_date_format_options (
 -- Name: client_preference_date_format_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_date_format_options_id_seq
+CREATE SEQUENCE public.client_preference_date_format_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1613,7 +1613,7 @@ ALTER SEQUENCE public.client_preference_date_format_options_id_seq OWNED BY publ
 -- Name: client_preference_date_formats; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_date_formats (
+CREATE TABLE public.client_preference_date_formats (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1626,7 +1626,7 @@ CREATE UNLOGGED TABLE public.client_preference_date_formats (
 -- Name: client_preference_date_formats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_date_formats_id_seq
+CREATE SEQUENCE public.client_preference_date_formats_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1645,7 +1645,7 @@ ALTER SEQUENCE public.client_preference_date_formats_id_seq OWNED BY public.clie
 -- Name: client_preference_densities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_densities (
+CREATE TABLE public.client_preference_densities (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1658,7 +1658,7 @@ CREATE UNLOGGED TABLE public.client_preference_densities (
 -- Name: client_preference_densities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_densities_id_seq
+CREATE SEQUENCE public.client_preference_densities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1677,7 +1677,7 @@ ALTER SEQUENCE public.client_preference_densities_id_seq OWNED BY public.client_
 -- Name: client_preference_density_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_density_options (
+CREATE TABLE public.client_preference_density_options (
     id bigint NOT NULL
 );
 
@@ -1686,7 +1686,7 @@ CREATE UNLOGGED TABLE public.client_preference_density_options (
 -- Name: client_preference_density_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_density_options_id_seq
+CREATE SEQUENCE public.client_preference_density_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1705,7 +1705,7 @@ ALTER SEQUENCE public.client_preference_density_options_id_seq OWNED BY public.c
 -- Name: client_preference_language_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_language_options (
+CREATE TABLE public.client_preference_language_options (
     id bigint NOT NULL
 );
 
@@ -1714,7 +1714,7 @@ CREATE UNLOGGED TABLE public.client_preference_language_options (
 -- Name: client_preference_language_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_language_options_id_seq
+CREATE SEQUENCE public.client_preference_language_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1733,7 +1733,7 @@ ALTER SEQUENCE public.client_preference_language_options_id_seq OWNED BY public.
 -- Name: client_preference_languages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_languages (
+CREATE TABLE public.client_preference_languages (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1746,7 +1746,7 @@ CREATE UNLOGGED TABLE public.client_preference_languages (
 -- Name: client_preference_languages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_languages_id_seq
+CREATE SEQUENCE public.client_preference_languages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1765,7 +1765,7 @@ ALTER SEQUENCE public.client_preference_languages_id_seq OWNED BY public.client_
 -- Name: client_preference_motion_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_motion_options (
+CREATE TABLE public.client_preference_motion_options (
     id bigint NOT NULL
 );
 
@@ -1774,7 +1774,7 @@ CREATE UNLOGGED TABLE public.client_preference_motion_options (
 -- Name: client_preference_motion_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_motion_options_id_seq
+CREATE SEQUENCE public.client_preference_motion_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1793,7 +1793,7 @@ ALTER SEQUENCE public.client_preference_motion_options_id_seq OWNED BY public.cl
 -- Name: client_preference_motions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_motions (
+CREATE TABLE public.client_preference_motions (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1806,7 +1806,7 @@ CREATE UNLOGGED TABLE public.client_preference_motions (
 -- Name: client_preference_motions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_motions_id_seq
+CREATE SEQUENCE public.client_preference_motions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1825,7 +1825,7 @@ ALTER SEQUENCE public.client_preference_motions_id_seq OWNED BY public.client_pr
 -- Name: client_preference_page_size_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_page_size_options (
+CREATE TABLE public.client_preference_page_size_options (
     id bigint NOT NULL
 );
 
@@ -1834,7 +1834,7 @@ CREATE UNLOGGED TABLE public.client_preference_page_size_options (
 -- Name: client_preference_page_size_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_page_size_options_id_seq
+CREATE SEQUENCE public.client_preference_page_size_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1853,7 +1853,7 @@ ALTER SEQUENCE public.client_preference_page_size_options_id_seq OWNED BY public
 -- Name: client_preference_page_sizes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_page_sizes (
+CREATE TABLE public.client_preference_page_sizes (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1866,7 +1866,7 @@ CREATE UNLOGGED TABLE public.client_preference_page_sizes (
 -- Name: client_preference_page_sizes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_page_sizes_id_seq
+CREATE SEQUENCE public.client_preference_page_sizes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1885,7 +1885,7 @@ ALTER SEQUENCE public.client_preference_page_sizes_id_seq OWNED BY public.client
 -- Name: client_preference_region_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_region_options (
+CREATE TABLE public.client_preference_region_options (
     id bigint NOT NULL
 );
 
@@ -1894,7 +1894,7 @@ CREATE UNLOGGED TABLE public.client_preference_region_options (
 -- Name: client_preference_region_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_region_options_id_seq
+CREATE SEQUENCE public.client_preference_region_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1913,7 +1913,7 @@ ALTER SEQUENCE public.client_preference_region_options_id_seq OWNED BY public.cl
 -- Name: client_preference_regions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_regions (
+CREATE TABLE public.client_preference_regions (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1926,7 +1926,7 @@ CREATE UNLOGGED TABLE public.client_preference_regions (
 -- Name: client_preference_regions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_regions_id_seq
+CREATE SEQUENCE public.client_preference_regions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1945,7 +1945,7 @@ ALTER SEQUENCE public.client_preference_regions_id_seq OWNED BY public.client_pr
 -- Name: client_preference_theme_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_theme_options (
+CREATE TABLE public.client_preference_theme_options (
     id bigint NOT NULL
 );
 
@@ -1954,7 +1954,7 @@ CREATE UNLOGGED TABLE public.client_preference_theme_options (
 -- Name: client_preference_theme_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_theme_options_id_seq
+CREATE SEQUENCE public.client_preference_theme_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1973,7 +1973,7 @@ ALTER SEQUENCE public.client_preference_theme_options_id_seq OWNED BY public.cli
 -- Name: client_preference_themes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_themes (
+CREATE TABLE public.client_preference_themes (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -1986,7 +1986,7 @@ CREATE UNLOGGED TABLE public.client_preference_themes (
 -- Name: client_preference_themes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_themes_id_seq
+CREATE SEQUENCE public.client_preference_themes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2005,7 +2005,7 @@ ALTER SEQUENCE public.client_preference_themes_id_seq OWNED BY public.client_pre
 -- Name: client_preference_time_format_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_time_format_options (
+CREATE TABLE public.client_preference_time_format_options (
     id bigint NOT NULL
 );
 
@@ -2014,7 +2014,7 @@ CREATE UNLOGGED TABLE public.client_preference_time_format_options (
 -- Name: client_preference_time_format_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_time_format_options_id_seq
+CREATE SEQUENCE public.client_preference_time_format_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2033,7 +2033,7 @@ ALTER SEQUENCE public.client_preference_time_format_options_id_seq OWNED BY publ
 -- Name: client_preference_time_formats; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_time_formats (
+CREATE TABLE public.client_preference_time_formats (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -2046,7 +2046,7 @@ CREATE UNLOGGED TABLE public.client_preference_time_formats (
 -- Name: client_preference_time_formats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_time_formats_id_seq
+CREATE SEQUENCE public.client_preference_time_formats_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2065,7 +2065,7 @@ ALTER SEQUENCE public.client_preference_time_formats_id_seq OWNED BY public.clie
 -- Name: client_preference_timezone_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_timezone_options (
+CREATE TABLE public.client_preference_timezone_options (
     id bigint NOT NULL
 );
 
@@ -2074,7 +2074,7 @@ CREATE UNLOGGED TABLE public.client_preference_timezone_options (
 -- Name: client_preference_timezone_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_timezone_options_id_seq
+CREATE SEQUENCE public.client_preference_timezone_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2093,7 +2093,7 @@ ALTER SEQUENCE public.client_preference_timezone_options_id_seq OWNED BY public.
 -- Name: client_preference_timezones; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preference_timezones (
+CREATE TABLE public.client_preference_timezones (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -2106,7 +2106,7 @@ CREATE UNLOGGED TABLE public.client_preference_timezones (
 -- Name: client_preference_timezones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preference_timezones_id_seq
+CREATE SEQUENCE public.client_preference_timezones_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2125,7 +2125,7 @@ ALTER SEQUENCE public.client_preference_timezones_id_seq OWNED BY public.client_
 -- Name: client_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_preferences (
+CREATE TABLE public.client_preferences (
     id bigint NOT NULL,
     user_id bigint NOT NULL,
     consented boolean DEFAULT false NOT NULL,
@@ -2155,7 +2155,7 @@ CREATE UNLOGGED TABLE public.client_preferences (
 -- Name: client_preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_preferences_id_seq
+CREATE SEQUENCE public.client_preferences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2174,7 +2174,7 @@ ALTER SEQUENCE public.client_preferences_id_seq OWNED BY public.client_preferenc
 -- Name: client_privacy_request_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_privacy_request_statuses (
+CREATE TABLE public.client_privacy_request_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -2184,7 +2184,7 @@ CREATE UNLOGGED TABLE public.client_privacy_request_statuses (
 -- Name: client_privacy_request_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_privacy_request_statuses_id_seq
+CREATE SEQUENCE public.client_privacy_request_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2203,7 +2203,7 @@ ALTER SEQUENCE public.client_privacy_request_statuses_id_seq OWNED BY public.cli
 -- Name: client_privacy_requests; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_privacy_requests (
+CREATE TABLE public.client_privacy_requests (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     client_id bigint NOT NULL,
@@ -2235,7 +2235,7 @@ CREATE UNLOGGED TABLE public.client_privacy_requests (
 -- Name: client_privacy_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_privacy_requests_id_seq
+CREATE SEQUENCE public.client_privacy_requests_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2254,7 +2254,7 @@ ALTER SEQUENCE public.client_privacy_requests_id_seq OWNED BY public.client_priv
 -- Name: client_processor_erasure_notification_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_processor_erasure_notification_attempts (
+CREATE TABLE public.client_processor_erasure_notification_attempts (
     id bigint NOT NULL,
     client_processor_erasure_notification_id bigint NOT NULL,
     delivery_generation bigint NOT NULL,
@@ -2281,7 +2281,7 @@ CREATE UNLOGGED TABLE public.client_processor_erasure_notification_attempts (
 -- Name: client_processor_erasure_notification_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_processor_erasure_notification_attempts_id_seq
+CREATE SEQUENCE public.client_processor_erasure_notification_attempts_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2300,7 +2300,7 @@ ALTER SEQUENCE public.client_processor_erasure_notification_attempts_id_seq OWNE
 -- Name: client_processor_erasure_notification_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_processor_erasure_notification_statuses (
+CREATE TABLE public.client_processor_erasure_notification_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -2310,7 +2310,7 @@ CREATE UNLOGGED TABLE public.client_processor_erasure_notification_statuses (
 -- Name: client_processor_erasure_notification_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_processor_erasure_notification_statuses_id_seq
+CREATE SEQUENCE public.client_processor_erasure_notification_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2329,7 +2329,7 @@ ALTER SEQUENCE public.client_processor_erasure_notification_statuses_id_seq OWNE
 -- Name: client_processor_erasure_notifications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_processor_erasure_notifications (
+CREATE TABLE public.client_processor_erasure_notifications (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     client_privacy_request_id bigint NOT NULL,
@@ -2360,7 +2360,7 @@ CREATE UNLOGGED TABLE public.client_processor_erasure_notifications (
 -- Name: client_processor_erasure_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_processor_erasure_notifications_id_seq
+CREATE SEQUENCE public.client_processor_erasure_notifications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2379,7 +2379,7 @@ ALTER SEQUENCE public.client_processor_erasure_notifications_id_seq OWNED BY pub
 -- Name: client_profile_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_profile_statuses (
+CREATE TABLE public.client_profile_statuses (
     id bigint NOT NULL
 );
 
@@ -2388,7 +2388,7 @@ CREATE UNLOGGED TABLE public.client_profile_statuses (
 -- Name: client_profile_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_profile_statuses_id_seq
+CREATE SEQUENCE public.client_profile_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2407,7 +2407,7 @@ ALTER SEQUENCE public.client_profile_statuses_id_seq OWNED BY public.client_prof
 -- Name: client_profiles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_profiles (
+CREATE TABLE public.client_profiles (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     division_id bigint,
@@ -2425,7 +2425,7 @@ CREATE UNLOGGED TABLE public.client_profiles (
 -- Name: client_profiles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_profiles_id_seq
+CREATE SEQUENCE public.client_profiles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2444,7 +2444,7 @@ ALTER SEQUENCE public.client_profiles_id_seq OWNED BY public.client_profiles.id;
 -- Name: client_retention_hold_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_retention_hold_statuses (
+CREATE TABLE public.client_retention_hold_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -2454,7 +2454,7 @@ CREATE UNLOGGED TABLE public.client_retention_hold_statuses (
 -- Name: client_retention_hold_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_retention_hold_statuses_id_seq
+CREATE SEQUENCE public.client_retention_hold_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2473,7 +2473,7 @@ ALTER SEQUENCE public.client_retention_hold_statuses_id_seq OWNED BY public.clie
 -- Name: client_retention_holds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_retention_holds (
+CREATE TABLE public.client_retention_holds (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     client_id bigint NOT NULL,
@@ -2498,7 +2498,7 @@ CREATE UNLOGGED TABLE public.client_retention_holds (
 -- Name: client_retention_holds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_retention_holds_id_seq
+CREATE SEQUENCE public.client_retention_holds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2517,7 +2517,7 @@ ALTER SEQUENCE public.client_retention_holds_id_seq OWNED BY public.client_reten
 -- Name: client_secret_credential_kinds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_secret_credential_kinds (
+CREATE TABLE public.client_secret_credential_kinds (
     id bigint NOT NULL
 );
 
@@ -2526,7 +2526,7 @@ CREATE UNLOGGED TABLE public.client_secret_credential_kinds (
 -- Name: client_secret_credential_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_secret_credential_kinds_id_seq
+CREATE SEQUENCE public.client_secret_credential_kinds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2545,7 +2545,7 @@ ALTER SEQUENCE public.client_secret_credential_kinds_id_seq OWNED BY public.clie
 -- Name: client_secret_credential_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_secret_credential_statuses (
+CREATE TABLE public.client_secret_credential_statuses (
     id bigint NOT NULL
 );
 
@@ -2554,7 +2554,7 @@ CREATE UNLOGGED TABLE public.client_secret_credential_statuses (
 -- Name: client_secret_credential_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_secret_credential_statuses_id_seq
+CREATE SEQUENCE public.client_secret_credential_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2573,7 +2573,7 @@ ALTER SEQUENCE public.client_secret_credential_statuses_id_seq OWNED BY public.c
 -- Name: client_secret_credentials; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_secret_credentials (
+CREATE TABLE public.client_secret_credentials (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     last_used_at timestamp(6) with time zone,
@@ -2614,7 +2614,7 @@ CREATE UNLOGGED TABLE public.client_secret_credentials (
 -- Name: client_secret_credentials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_secret_credentials_id_seq
+CREATE SEQUENCE public.client_secret_credentials_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2633,7 +2633,7 @@ ALTER SEQUENCE public.client_secret_credentials_id_seq OWNED BY public.client_se
 -- Name: client_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_statuses (
+CREATE TABLE public.client_statuses (
     id bigint NOT NULL
 );
 
@@ -2642,7 +2642,7 @@ CREATE UNLOGGED TABLE public.client_statuses (
 -- Name: client_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_statuses_id_seq
+CREATE SEQUENCE public.client_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2661,7 +2661,7 @@ ALTER SEQUENCE public.client_statuses_id_seq OWNED BY public.client_statuses.id;
 -- Name: client_telephone_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_telephone_statuses (
+CREATE TABLE public.client_telephone_statuses (
     id bigint NOT NULL
 );
 
@@ -2670,7 +2670,7 @@ CREATE UNLOGGED TABLE public.client_telephone_statuses (
 -- Name: client_telephone_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_telephone_statuses_id_seq
+CREATE SEQUENCE public.client_telephone_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2689,7 +2689,7 @@ ALTER SEQUENCE public.client_telephone_statuses_id_seq OWNED BY public.client_te
 -- Name: client_telephones; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_telephones (
+CREATE TABLE public.client_telephones (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     locked_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
@@ -2712,7 +2712,7 @@ CREATE UNLOGGED TABLE public.client_telephones (
 -- Name: client_telephones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_telephones_id_seq
+CREATE SEQUENCE public.client_telephones_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2731,7 +2731,7 @@ ALTER SEQUENCE public.client_telephones_id_seq OWNED BY public.client_telephones
 -- Name: client_totp_credential_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_totp_credential_statuses (
+CREATE TABLE public.client_totp_credential_statuses (
     id bigint NOT NULL
 );
 
@@ -2740,7 +2740,7 @@ CREATE UNLOGGED TABLE public.client_totp_credential_statuses (
 -- Name: client_totp_credential_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_totp_credential_statuses_id_seq
+CREATE SEQUENCE public.client_totp_credential_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2759,7 +2759,7 @@ ALTER SEQUENCE public.client_totp_credential_statuses_id_seq OWNED BY public.cli
 -- Name: client_totp_credentials; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_totp_credentials (
+CREATE TABLE public.client_totp_credentials (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     last_otp_at timestamp(6) with time zone,
@@ -2778,7 +2778,7 @@ CREATE UNLOGGED TABLE public.client_totp_credentials (
 -- Name: client_totp_credentials_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_totp_credentials_id_seq
+CREATE SEQUENCE public.client_totp_credentials_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2797,7 +2797,7 @@ ALTER SEQUENCE public.client_totp_credentials_id_seq OWNED BY public.client_totp
 -- Name: client_visibilities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_visibilities (
+CREATE TABLE public.client_visibilities (
     id bigint NOT NULL
 );
 
@@ -2806,7 +2806,7 @@ CREATE UNLOGGED TABLE public.client_visibilities (
 -- Name: client_visibilities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_visibilities_id_seq
+CREATE SEQUENCE public.client_visibilities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2825,7 +2825,7 @@ ALTER SEQUENCE public.client_visibilities_id_seq OWNED BY public.client_visibili
 -- Name: client_withdrawal_ceremonies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_withdrawal_ceremonies (
+CREATE TABLE public.client_withdrawal_ceremonies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     client_id bigint NOT NULL,
@@ -2847,7 +2847,7 @@ CREATE UNLOGGED TABLE public.client_withdrawal_ceremonies (
 -- Name: client_withdrawal_ceremonies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_withdrawal_ceremonies_id_seq
+CREATE SEQUENCE public.client_withdrawal_ceremonies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2866,7 +2866,7 @@ ALTER SEQUENCE public.client_withdrawal_ceremonies_id_seq OWNED BY public.client
 -- Name: client_withdrawal_flow_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_withdrawal_flow_events (
+CREATE TABLE public.client_withdrawal_flow_events (
     id bigint NOT NULL,
     client_withdrawal_flow_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -2885,7 +2885,7 @@ CREATE UNLOGGED TABLE public.client_withdrawal_flow_events (
 -- Name: client_withdrawal_flow_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_withdrawal_flow_events_id_seq
+CREATE SEQUENCE public.client_withdrawal_flow_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2904,7 +2904,7 @@ ALTER SEQUENCE public.client_withdrawal_flow_events_id_seq OWNED BY public.clien
 -- Name: client_withdrawal_flow_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_withdrawal_flow_statuses (
+CREATE TABLE public.client_withdrawal_flow_statuses (
     id bigint NOT NULL
 );
 
@@ -2913,7 +2913,7 @@ CREATE UNLOGGED TABLE public.client_withdrawal_flow_statuses (
 -- Name: client_withdrawal_flow_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_withdrawal_flow_statuses_id_seq
+CREATE SEQUENCE public.client_withdrawal_flow_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2932,7 +2932,7 @@ ALTER SEQUENCE public.client_withdrawal_flow_statuses_id_seq OWNED BY public.cli
 -- Name: client_withdrawal_flows; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_withdrawal_flows (
+CREATE TABLE public.client_withdrawal_flows (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     client_id bigint NOT NULL,
@@ -2952,7 +2952,7 @@ CREATE UNLOGGED TABLE public.client_withdrawal_flows (
 -- Name: client_withdrawal_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_withdrawal_flows_id_seq
+CREATE SEQUENCE public.client_withdrawal_flows_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2971,7 +2971,7 @@ ALTER SEQUENCE public.client_withdrawal_flows_id_seq OWNED BY public.client_with
 -- Name: clients; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.clients (
+CREATE TABLE public.clients (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     last_step_up_at timestamp(6) with time zone,
@@ -3009,7 +3009,7 @@ CREATE UNLOGGED TABLE public.clients (
 -- Name: clients_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.clients_id_seq
+CREATE SEQUENCE public.clients_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3028,7 +3028,7 @@ ALTER SEQUENCE public.clients_id_seq OWNED BY public.clients.id;
 -- Name: core_app_client_bridges; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.core_app_client_bridges (
+CREATE TABLE public.core_app_client_bridges (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
@@ -3045,7 +3045,7 @@ CREATE UNLOGGED TABLE public.core_app_client_bridges (
 -- Name: core_app_client_bridges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.core_app_client_bridges_id_seq
+CREATE SEQUENCE public.core_app_client_bridges_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3064,7 +3064,7 @@ ALTER SEQUENCE public.core_app_client_bridges_id_seq OWNED BY public.core_app_cl
 -- Name: enterprise_administration_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_administration_grants (
+CREATE TABLE public.enterprise_administration_grants (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -3077,7 +3077,7 @@ CREATE UNLOGGED TABLE public.enterprise_administration_grants (
 -- Name: enterprise_administration_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_administration_grants_id_seq
+CREATE SEQUENCE public.enterprise_administration_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3096,7 +3096,7 @@ ALTER SEQUENCE public.enterprise_administration_grants_id_seq OWNED BY public.en
 -- Name: enterprise_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_delegation_grants (
+CREATE TABLE public.enterprise_delegation_grants (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -3109,7 +3109,7 @@ CREATE UNLOGGED TABLE public.enterprise_delegation_grants (
 -- Name: enterprise_delegation_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_delegation_grants_id_seq
+CREATE SEQUENCE public.enterprise_delegation_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3128,7 +3128,7 @@ ALTER SEQUENCE public.enterprise_delegation_grants_id_seq OWNED BY public.enterp
 -- Name: enterprise_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_ownership_transfer_requests (
+CREATE TABLE public.enterprise_ownership_transfer_requests (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
     source_client_id bigint NOT NULL,
@@ -3155,7 +3155,7 @@ CREATE UNLOGGED TABLE public.enterprise_ownership_transfer_requests (
 -- Name: enterprise_ownership_transfer_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_ownership_transfer_requests_id_seq
+CREATE SEQUENCE public.enterprise_ownership_transfer_requests_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3174,7 +3174,7 @@ ALTER SEQUENCE public.enterprise_ownership_transfer_requests_id_seq OWNED BY pub
 -- Name: enterprise_ownerships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_ownerships (
+CREATE TABLE public.enterprise_ownerships (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -3189,7 +3189,7 @@ CREATE UNLOGGED TABLE public.enterprise_ownerships (
 -- Name: enterprise_ownerships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_ownerships_id_seq
+CREATE SEQUENCE public.enterprise_ownerships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3208,7 +3208,7 @@ ALTER SEQUENCE public.enterprise_ownerships_id_seq OWNED BY public.enterprise_ow
 -- Name: enterprise_unit_closures; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_unit_closures (
+CREATE TABLE public.enterprise_unit_closures (
     id bigint NOT NULL,
     ancestor_id bigint NOT NULL,
     descendant_id bigint NOT NULL,
@@ -3224,7 +3224,7 @@ CREATE UNLOGGED TABLE public.enterprise_unit_closures (
 -- Name: enterprise_unit_closures_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_unit_closures_id_seq
+CREATE SEQUENCE public.enterprise_unit_closures_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3243,7 +3243,7 @@ ALTER SEQUENCE public.enterprise_unit_closures_id_seq OWNED BY public.enterprise
 -- Name: enterprise_units; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_units (
+CREATE TABLE public.enterprise_units (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
     parent_id bigint,
@@ -3259,7 +3259,7 @@ CREATE UNLOGGED TABLE public.enterprise_units (
 -- Name: enterprise_units_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_units_id_seq
+CREATE SEQUENCE public.enterprise_units_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3278,7 +3278,7 @@ ALTER SEQUENCE public.enterprise_units_id_seq OWNED BY public.enterprise_units.i
 -- Name: enterprise_view_grants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprise_view_grants (
+CREATE TABLE public.enterprise_view_grants (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
     client_id bigint NOT NULL,
@@ -3291,7 +3291,7 @@ CREATE UNLOGGED TABLE public.enterprise_view_grants (
 -- Name: enterprise_view_grants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprise_view_grants_id_seq
+CREATE SEQUENCE public.enterprise_view_grants_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3310,7 +3310,7 @@ ALTER SEQUENCE public.enterprise_view_grants_id_seq OWNED BY public.enterprise_v
 -- Name: enterprises; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.enterprises (
+CREATE TABLE public.enterprises (
     id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
@@ -3325,7 +3325,7 @@ CREATE UNLOGGED TABLE public.enterprises (
 -- Name: enterprises_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.enterprises_id_seq
+CREATE SEQUENCE public.enterprises_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3344,7 +3344,7 @@ ALTER SEQUENCE public.enterprises_id_seq OWNED BY public.enterprises.id;
 -- Name: legacy_replaced_client_banners; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.legacy_replaced_client_banners (
+CREATE TABLE public.legacy_replaced_client_banners (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     title character varying DEFAULT ''::character varying NOT NULL,
@@ -3362,7 +3362,7 @@ CREATE UNLOGGED TABLE public.legacy_replaced_client_banners (
 -- Name: legacy_replaced_client_banners_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.legacy_replaced_client_banners_id_seq
+CREATE SEQUENCE public.legacy_replaced_client_banners_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3381,7 +3381,7 @@ ALTER SEQUENCE public.legacy_replaced_client_banners_id_seq OWNED BY public.lega
 -- Name: legacy_replaced_client_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.legacy_replaced_client_statuses (
+CREATE TABLE public.legacy_replaced_client_statuses (
     id bigint NOT NULL
 );
 
@@ -3390,7 +3390,7 @@ CREATE UNLOGGED TABLE public.legacy_replaced_client_statuses (
 -- Name: legacy_replaced_client_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.legacy_replaced_client_statuses_id_seq
+CREATE SEQUENCE public.legacy_replaced_client_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3409,7 +3409,7 @@ ALTER SEQUENCE public.legacy_replaced_client_statuses_id_seq OWNED BY public.leg
 -- Name: legacy_replaced_clients; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.legacy_replaced_clients (
+CREATE TABLE public.legacy_replaced_clients (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     division_id bigint,
@@ -3427,7 +3427,7 @@ CREATE UNLOGGED TABLE public.legacy_replaced_clients (
 -- Name: legacy_replaced_clients_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.legacy_replaced_clients_id_seq
+CREATE SEQUENCE public.legacy_replaced_clients_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3446,7 +3446,7 @@ ALTER SEQUENCE public.legacy_replaced_clients_id_seq OWNED BY public.legacy_repl
 -- Name: member_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.member_statuses (
+CREATE TABLE public.member_statuses (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL
@@ -3457,7 +3457,7 @@ CREATE UNLOGGED TABLE public.member_statuses (
 -- Name: member_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.member_statuses_id_seq
+CREATE SEQUENCE public.member_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3476,7 +3476,7 @@ ALTER SEQUENCE public.member_statuses_id_seq OWNED BY public.member_statuses.id;
 -- Name: members; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.members (
+CREATE TABLE public.members (
     id bigint NOT NULL,
     public_id character varying NOT NULL,
     moniker character varying,
@@ -3494,7 +3494,7 @@ CREATE UNLOGGED TABLE public.members (
 -- Name: members_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.members_id_seq
+CREATE SEQUENCE public.members_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3513,7 +3513,7 @@ ALTER SEQUENCE public.members_id_seq OWNED BY public.members.id;
 -- Name: persona_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.persona_assignments (
+CREATE TABLE public.persona_assignments (
     id bigint NOT NULL,
     public_id character varying NOT NULL,
     persona_id bigint NOT NULL,
@@ -3529,7 +3529,7 @@ CREATE UNLOGGED TABLE public.persona_assignments (
 -- Name: persona_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.persona_assignments_id_seq
+CREATE SEQUENCE public.persona_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3548,7 +3548,7 @@ ALTER SEQUENCE public.persona_assignments_id_seq OWNED BY public.persona_assignm
 -- Name: persona_membership_kinds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.persona_membership_kinds (
+CREATE TABLE public.persona_membership_kinds (
     id bigint NOT NULL
 );
 
@@ -3557,7 +3557,7 @@ CREATE UNLOGGED TABLE public.persona_membership_kinds (
 -- Name: persona_membership_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.persona_membership_kinds_id_seq
+CREATE SEQUENCE public.persona_membership_kinds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3576,7 +3576,7 @@ ALTER SEQUENCE public.persona_membership_kinds_id_seq OWNED BY public.persona_me
 -- Name: persona_membership_revoke_reasons; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.persona_membership_revoke_reasons (
+CREATE TABLE public.persona_membership_revoke_reasons (
     id bigint NOT NULL
 );
 
@@ -3585,7 +3585,7 @@ CREATE UNLOGGED TABLE public.persona_membership_revoke_reasons (
 -- Name: persona_membership_revoke_reasons_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.persona_membership_revoke_reasons_id_seq
+CREATE SEQUENCE public.persona_membership_revoke_reasons_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3604,7 +3604,7 @@ ALTER SEQUENCE public.persona_membership_revoke_reasons_id_seq OWNED BY public.p
 -- Name: persona_membership_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.persona_membership_states (
+CREATE TABLE public.persona_membership_states (
     id bigint NOT NULL
 );
 
@@ -3613,7 +3613,7 @@ CREATE UNLOGGED TABLE public.persona_membership_states (
 -- Name: persona_membership_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.persona_membership_states_id_seq
+CREATE SEQUENCE public.persona_membership_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3632,7 +3632,7 @@ ALTER SEQUENCE public.persona_membership_states_id_seq OWNED BY public.persona_m
 -- Name: persona_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.persona_memberships (
+CREATE TABLE public.persona_memberships (
     id bigint NOT NULL,
     persona_id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
@@ -3657,7 +3657,7 @@ CREATE UNLOGGED TABLE public.persona_memberships (
 -- Name: persona_memberships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.persona_memberships_id_seq
+CREATE SEQUENCE public.persona_memberships_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3676,7 +3676,7 @@ ALTER SEQUENCE public.persona_memberships_id_seq OWNED BY public.persona_members
 -- Name: personas; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.personas (
+CREATE TABLE public.personas (
     id bigint NOT NULL,
     client_identity_id bigint NOT NULL,
     public_id character varying DEFAULT ''::character varying NOT NULL,
@@ -3692,7 +3692,7 @@ CREATE UNLOGGED TABLE public.personas (
 -- Name: personas_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.personas_id_seq
+CREATE SEQUENCE public.personas_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3711,7 +3711,7 @@ ALTER SEQUENCE public.personas_id_seq OWNED BY public.personas.id;
 -- Name: roles; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.roles (
+CREATE TABLE public.roles (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     description text DEFAULT ''::text NOT NULL,
@@ -3726,7 +3726,7 @@ CREATE UNLOGGED TABLE public.roles (
 -- Name: roles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.roles_id_seq
+CREATE SEQUENCE public.roles_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3745,7 +3745,7 @@ ALTER SEQUENCE public.roles_id_seq OWNED BY public.roles.id;
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 
@@ -3754,7 +3754,7 @@ CREATE UNLOGGED TABLE public.schema_migrations (
 -- Name: user_client_deletions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_client_deletions (
+CREATE TABLE public.user_client_deletions (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3767,7 +3767,7 @@ CREATE UNLOGGED TABLE public.user_client_deletions (
 -- Name: user_client_deletions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_client_deletions_id_seq
+CREATE SEQUENCE public.user_client_deletions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3786,7 +3786,7 @@ ALTER SEQUENCE public.user_client_deletions_id_seq OWNED BY public.user_client_d
 -- Name: user_client_discoveries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_client_discoveries (
+CREATE TABLE public.user_client_discoveries (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3799,7 +3799,7 @@ CREATE UNLOGGED TABLE public.user_client_discoveries (
 -- Name: user_client_discoveries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_client_discoveries_id_seq
+CREATE SEQUENCE public.user_client_discoveries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3818,7 +3818,7 @@ ALTER SEQUENCE public.user_client_discoveries_id_seq OWNED BY public.user_client
 -- Name: user_client_impersonations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_client_impersonations (
+CREATE TABLE public.user_client_impersonations (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3831,7 +3831,7 @@ CREATE UNLOGGED TABLE public.user_client_impersonations (
 -- Name: user_client_impersonations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_client_impersonations_id_seq
+CREATE SEQUENCE public.user_client_impersonations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3850,7 +3850,7 @@ ALTER SEQUENCE public.user_client_impersonations_id_seq OWNED BY public.user_cli
 -- Name: user_client_observations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_client_observations (
+CREATE TABLE public.user_client_observations (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3863,7 +3863,7 @@ CREATE UNLOGGED TABLE public.user_client_observations (
 -- Name: user_client_observations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_client_observations_id_seq
+CREATE SEQUENCE public.user_client_observations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3882,7 +3882,7 @@ ALTER SEQUENCE public.user_client_observations_id_seq OWNED BY public.user_clien
 -- Name: user_client_revocations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_client_revocations (
+CREATE TABLE public.user_client_revocations (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3895,7 +3895,7 @@ CREATE UNLOGGED TABLE public.user_client_revocations (
 -- Name: user_client_revocations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_client_revocations_id_seq
+CREATE SEQUENCE public.user_client_revocations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3914,7 +3914,7 @@ ALTER SEQUENCE public.user_client_revocations_id_seq OWNED BY public.user_client
 -- Name: user_client_suspensions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_client_suspensions (
+CREATE TABLE public.user_client_suspensions (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3927,7 +3927,7 @@ CREATE UNLOGGED TABLE public.user_client_suspensions (
 -- Name: user_client_suspensions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_client_suspensions_id_seq
+CREATE SEQUENCE public.user_client_suspensions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3946,7 +3946,7 @@ ALTER SEQUENCE public.user_client_suspensions_id_seq OWNED BY public.user_client
 -- Name: user_clients; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.user_clients (
+CREATE TABLE public.user_clients (
     id bigint NOT NULL,
     client_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -3959,7 +3959,7 @@ CREATE UNLOGGED TABLE public.user_clients (
 -- Name: user_clients_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.user_clients_id_seq
+CREATE SEQUENCE public.user_clients_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE

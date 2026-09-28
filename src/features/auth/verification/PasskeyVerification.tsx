@@ -9,6 +9,9 @@ import { useRef } from "react";
 import Button from "@/components/ui/Button";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import { PASSKEY_MESSAGES, authenticationErrorMessage } from "@/features/auth/passkeys/messages";
 import { useCeremonyMessages } from "@/features/auth/passkeys/useCeremonyMessages";
 import { getAssertion, passkeysSupported } from "@/features/auth/passkeys/webauthn";
@@ -29,6 +32,7 @@ export type PasskeyVerificationProps = {
   errors: string[];
   form: PasskeyVerificationForm;
   back: VerificationLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function PasskeyVerification({
@@ -37,6 +41,7 @@ export default function PasskeyVerification({
   errors,
   form,
   back,
+  cancel,
 }: PasskeyVerificationProps) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const credentialRef = useRef<HTMLInputElement | null>(null);
@@ -120,6 +125,8 @@ export default function PasskeyVerification({
         ) : null}
         {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
       </form>
+      {/* Back returns to method selection; this ends the whole Step-Up ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

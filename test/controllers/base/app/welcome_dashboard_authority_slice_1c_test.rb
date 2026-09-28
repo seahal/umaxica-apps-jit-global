@@ -55,7 +55,11 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
 
     menu_links = sections.first.fetch("items")
 
-    assert_equal({ "display_name" => "Selected App Persona" }, sections.first.fetch("current_identity"))
+    assert_equal(
+      { "display_name" => "Selected App Persona",
+        "avatar_image" => { "src" => base_app_dashboard_avatar_image_path(v: "default") }, },
+      sections.first.fetch("current_identity"),
+    )
     primary_links = sections.second.fetch("items")
     links = sections.flat_map { |section| section.fetch("items") }
     hrefs = links.map { |link| link.fetch("href") }
@@ -112,7 +116,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     identity = inertia_props.fetch("sections").first.fetch("current_identity")
 
     assert_equal "Authenticated App Persona", identity.fetch("display_name")
-    assert_equal ["display_name"], identity.keys
+    assert_equal %w(display_name avatar_image), identity.keys
     assert_equal selected_account_public_id, token.reload.selected_account_public_id
     assert_equal last_used_at, token.reload.last_used_at
   end

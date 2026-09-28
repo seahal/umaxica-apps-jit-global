@@ -46,7 +46,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -58,7 +58,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: operator_auth_ceremony_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_auth_ceremony_sessions (
+CREATE TABLE public.operator_auth_ceremony_sessions (
     id bigint NOT NULL,
     sid_digest character varying(64) NOT NULL,
     expires_at timestamp(6) with time zone NOT NULL,
@@ -84,7 +84,7 @@ CREATE UNLOGGED TABLE public.operator_auth_ceremony_sessions (
 -- Name: operator_auth_ceremony_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_auth_ceremony_sessions_id_seq
+CREATE SEQUENCE public.operator_auth_ceremony_sessions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -103,7 +103,7 @@ ALTER SEQUENCE public.operator_auth_ceremony_sessions_id_seq OWNED BY public.ope
 -- Name: operator_device_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_device_sessions (
+CREATE TABLE public.operator_device_sessions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     staff_id bigint NOT NULL,
@@ -127,7 +127,7 @@ CREATE UNLOGGED TABLE public.operator_device_sessions (
 -- Name: operator_device_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_device_sessions_id_seq
+CREATE SEQUENCE public.operator_device_sessions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -146,7 +146,7 @@ ALTER SEQUENCE public.operator_device_sessions_id_seq OWNED BY public.operator_d
 -- Name: operator_dpop_proof_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_dpop_proof_states (
+CREATE TABLE public.operator_dpop_proof_states (
     id bigint NOT NULL,
     jti character varying,
     jkt character varying,
@@ -165,7 +165,7 @@ CREATE UNLOGGED TABLE public.operator_dpop_proof_states (
 -- Name: operator_dpop_proof_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_dpop_proof_states_id_seq
+CREATE SEQUENCE public.operator_dpop_proof_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -184,7 +184,7 @@ ALTER SEQUENCE public.operator_dpop_proof_states_id_seq OWNED BY public.operator
 -- Name: operator_email_ceremony_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_email_ceremony_transactions (
+CREATE TABLE public.operator_email_ceremony_transactions (
     id bigint NOT NULL,
     transaction_id character varying NOT NULL,
     surface character varying NOT NULL,
@@ -217,7 +217,7 @@ CREATE UNLOGGED TABLE public.operator_email_ceremony_transactions (
 -- Name: operator_email_ceremony_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_email_ceremony_transactions_id_seq
+CREATE SEQUENCE public.operator_email_ceremony_transactions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -236,7 +236,7 @@ ALTER SEQUENCE public.operator_email_ceremony_transactions_id_seq OWNED BY publi
 -- Name: operator_oauth_callback_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_oauth_callback_states (
+CREATE TABLE public.operator_oauth_callback_states (
     id bigint NOT NULL,
     state_digest character varying NOT NULL,
     provider character varying NOT NULL,
@@ -253,7 +253,7 @@ CREATE UNLOGGED TABLE public.operator_oauth_callback_states (
 -- Name: operator_oauth_callback_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_oauth_callback_states_id_seq
+CREATE SEQUENCE public.operator_oauth_callback_states_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -272,7 +272,7 @@ ALTER SEQUENCE public.operator_oauth_callback_states_id_seq OWNED BY public.oper
 -- Name: operator_oidc_authorization_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_oidc_authorization_transactions (
+CREATE TABLE public.operator_oidc_authorization_transactions (
     id bigint NOT NULL,
     transaction_id character varying NOT NULL,
     surface character varying NOT NULL,
@@ -314,7 +314,7 @@ CREATE UNLOGGED TABLE public.operator_oidc_authorization_transactions (
 -- Name: operator_oidc_authorization_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_oidc_authorization_transactions_id_seq
+CREATE SEQUENCE public.operator_oidc_authorization_transactions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -333,7 +333,7 @@ ALTER SEQUENCE public.operator_oidc_authorization_transactions_id_seq OWNED BY p
 -- Name: operator_oidc_connections; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_oidc_connections (
+CREATE TABLE public.operator_oidc_connections (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     staff_id bigint NOT NULL,
@@ -350,7 +350,7 @@ CREATE UNLOGGED TABLE public.operator_oidc_connections (
 -- Name: operator_oidc_connections_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_oidc_connections_id_seq
+CREATE SEQUENCE public.operator_oidc_connections_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -369,7 +369,7 @@ ALTER SEQUENCE public.operator_oidc_connections_id_seq OWNED BY public.operator_
 -- Name: operator_passkey_ceremony_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_passkey_ceremony_transactions (
+CREATE TABLE public.operator_passkey_ceremony_transactions (
     id bigint NOT NULL,
     transaction_id character varying NOT NULL,
     surface character varying NOT NULL,
@@ -395,7 +395,7 @@ CREATE UNLOGGED TABLE public.operator_passkey_ceremony_transactions (
 -- Name: operator_passkey_ceremony_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_passkey_ceremony_transactions_id_seq
+CREATE SEQUENCE public.operator_passkey_ceremony_transactions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -414,7 +414,7 @@ ALTER SEQUENCE public.operator_passkey_ceremony_transactions_id_seq OWNED BY pub
 -- Name: operator_rp_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_rp_sessions (
+CREATE TABLE public.operator_rp_sessions (
     id bigint NOT NULL,
     operator_token_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
@@ -445,7 +445,7 @@ CREATE UNLOGGED TABLE public.operator_rp_sessions (
 -- Name: operator_rp_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_rp_sessions_id_seq
+CREATE SEQUENCE public.operator_rp_sessions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -464,7 +464,7 @@ ALTER SEQUENCE public.operator_rp_sessions_id_seq OWNED BY public.operator_rp_se
 -- Name: operator_secret_credential_ceremony_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_secret_credential_ceremony_transactions (
+CREATE TABLE public.operator_secret_credential_ceremony_transactions (
     id bigint NOT NULL,
     transaction_id character varying NOT NULL,
     surface character varying NOT NULL,
@@ -488,7 +488,7 @@ CREATE UNLOGGED TABLE public.operator_secret_credential_ceremony_transactions (
 -- Name: operator_secret_credential_ceremony_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_secret_credential_ceremony_transactions_id_seq
+CREATE SEQUENCE public.operator_secret_credential_ceremony_transactions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -507,7 +507,7 @@ ALTER SEQUENCE public.operator_secret_credential_ceremony_transactions_id_seq OW
 -- Name: operator_sign_in_flow_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_in_flow_statuses (
+CREATE TABLE public.operator_sign_in_flow_statuses (
     id bigint NOT NULL
 );
 
@@ -516,7 +516,7 @@ CREATE UNLOGGED TABLE public.operator_sign_in_flow_statuses (
 -- Name: operator_sign_in_flow_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_in_flow_statuses_id_seq
+CREATE SEQUENCE public.operator_sign_in_flow_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -535,7 +535,7 @@ ALTER SEQUENCE public.operator_sign_in_flow_statuses_id_seq OWNED BY public.oper
 -- Name: operator_sign_in_flows; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_in_flows (
+CREATE TABLE public.operator_sign_in_flows (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     principal_id bigint,
@@ -565,7 +565,7 @@ CREATE UNLOGGED TABLE public.operator_sign_in_flows (
 -- Name: operator_sign_in_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_in_flows_id_seq
+CREATE SEQUENCE public.operator_sign_in_flows_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -584,7 +584,7 @@ ALTER SEQUENCE public.operator_sign_in_flows_id_seq OWNED BY public.operator_sig
 -- Name: operator_sign_out_flow_kinds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_out_flow_kinds (
+CREATE TABLE public.operator_sign_out_flow_kinds (
     id bigint NOT NULL
 );
 
@@ -593,7 +593,7 @@ CREATE UNLOGGED TABLE public.operator_sign_out_flow_kinds (
 -- Name: operator_sign_out_flow_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_out_flow_kinds_id_seq
+CREATE SEQUENCE public.operator_sign_out_flow_kinds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -612,7 +612,7 @@ ALTER SEQUENCE public.operator_sign_out_flow_kinds_id_seq OWNED BY public.operat
 -- Name: operator_sign_out_flow_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_out_flow_statuses (
+CREATE TABLE public.operator_sign_out_flow_statuses (
     id bigint NOT NULL
 );
 
@@ -621,7 +621,7 @@ CREATE UNLOGGED TABLE public.operator_sign_out_flow_statuses (
 -- Name: operator_sign_out_flow_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_out_flow_statuses_id_seq
+CREATE SEQUENCE public.operator_sign_out_flow_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -640,7 +640,7 @@ ALTER SEQUENCE public.operator_sign_out_flow_statuses_id_seq OWNED BY public.ope
 -- Name: operator_sign_out_flows; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_out_flows (
+CREATE TABLE public.operator_sign_out_flows (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     principal_id bigint,
@@ -670,7 +670,7 @@ CREATE UNLOGGED TABLE public.operator_sign_out_flows (
 -- Name: operator_sign_out_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_out_flows_id_seq
+CREATE SEQUENCE public.operator_sign_out_flows_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -689,7 +689,7 @@ ALTER SEQUENCE public.operator_sign_out_flows_id_seq OWNED BY public.operator_si
 -- Name: operator_sign_up_flow_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_up_flow_statuses (
+CREATE TABLE public.operator_sign_up_flow_statuses (
     id bigint NOT NULL
 );
 
@@ -698,7 +698,7 @@ CREATE UNLOGGED TABLE public.operator_sign_up_flow_statuses (
 -- Name: operator_sign_up_flow_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_up_flow_statuses_id_seq
+CREATE SEQUENCE public.operator_sign_up_flow_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -717,7 +717,7 @@ ALTER SEQUENCE public.operator_sign_up_flow_statuses_id_seq OWNED BY public.oper
 -- Name: operator_sign_up_flows; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_sign_up_flows (
+CREATE TABLE public.operator_sign_up_flows (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     principal_id bigint,
@@ -743,7 +743,7 @@ CREATE UNLOGGED TABLE public.operator_sign_up_flows (
 -- Name: operator_sign_up_flows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_sign_up_flows_id_seq
+CREATE SEQUENCE public.operator_sign_up_flows_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -762,7 +762,7 @@ ALTER SEQUENCE public.operator_sign_up_flows_id_seq OWNED BY public.operator_sig
 -- Name: operator_step_up_ceremony_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_step_up_ceremony_transactions (
+CREATE TABLE public.operator_step_up_ceremony_transactions (
     id bigint NOT NULL,
     transaction_id character varying NOT NULL,
     surface character varying NOT NULL,
@@ -793,7 +793,7 @@ CREATE UNLOGGED TABLE public.operator_step_up_ceremony_transactions (
 -- Name: operator_step_up_ceremony_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_step_up_ceremony_transactions_id_seq
+CREATE SEQUENCE public.operator_step_up_ceremony_transactions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -812,7 +812,7 @@ ALTER SEQUENCE public.operator_step_up_ceremony_transactions_id_seq OWNED BY pub
 -- Name: operator_step_up_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_step_up_sessions (
+CREATE TABLE public.operator_step_up_sessions (
     id bigint NOT NULL,
     attempt_count integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -832,7 +832,7 @@ CREATE UNLOGGED TABLE public.operator_step_up_sessions (
 -- Name: operator_step_up_sessions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_step_up_sessions_id_seq
+CREATE SEQUENCE public.operator_step_up_sessions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -851,7 +851,7 @@ ALTER SEQUENCE public.operator_step_up_sessions_id_seq OWNED BY public.operator_
 -- Name: operator_telephone_ceremony_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_telephone_ceremony_transactions (
+CREATE TABLE public.operator_telephone_ceremony_transactions (
     id bigint NOT NULL,
     transaction_id character varying NOT NULL,
     surface character varying NOT NULL,
@@ -875,7 +875,7 @@ CREATE UNLOGGED TABLE public.operator_telephone_ceremony_transactions (
 -- Name: operator_telephone_ceremony_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_telephone_ceremony_transactions_id_seq
+CREATE SEQUENCE public.operator_telephone_ceremony_transactions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -894,7 +894,7 @@ ALTER SEQUENCE public.operator_telephone_ceremony_transactions_id_seq OWNED BY p
 -- Name: operator_token_binding_methods; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_token_binding_methods (
+CREATE TABLE public.operator_token_binding_methods (
     id bigint NOT NULL
 );
 
@@ -903,7 +903,7 @@ CREATE UNLOGGED TABLE public.operator_token_binding_methods (
 -- Name: operator_token_binding_methods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_token_binding_methods_id_seq
+CREATE SEQUENCE public.operator_token_binding_methods_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -922,7 +922,7 @@ ALTER SEQUENCE public.operator_token_binding_methods_id_seq OWNED BY public.oper
 -- Name: operator_token_dbsc_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_token_dbsc_statuses (
+CREATE TABLE public.operator_token_dbsc_statuses (
     id bigint NOT NULL
 );
 
@@ -931,7 +931,7 @@ CREATE UNLOGGED TABLE public.operator_token_dbsc_statuses (
 -- Name: operator_token_dbsc_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_token_dbsc_statuses_id_seq
+CREATE SEQUENCE public.operator_token_dbsc_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -950,7 +950,7 @@ ALTER SEQUENCE public.operator_token_dbsc_statuses_id_seq OWNED BY public.operat
 -- Name: operator_token_kinds; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_token_kinds (
+CREATE TABLE public.operator_token_kinds (
     id bigint NOT NULL
 );
 
@@ -959,7 +959,7 @@ CREATE UNLOGGED TABLE public.operator_token_kinds (
 -- Name: operator_token_kinds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_token_kinds_id_seq
+CREATE SEQUENCE public.operator_token_kinds_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -978,7 +978,7 @@ ALTER SEQUENCE public.operator_token_kinds_id_seq OWNED BY public.operator_token
 -- Name: operator_token_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_token_statuses (
+CREATE TABLE public.operator_token_statuses (
     id bigint NOT NULL
 );
 
@@ -987,7 +987,7 @@ CREATE UNLOGGED TABLE public.operator_token_statuses (
 -- Name: operator_token_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_token_statuses_id_seq
+CREATE SEQUENCE public.operator_token_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1006,7 +1006,7 @@ ALTER SEQUENCE public.operator_token_statuses_id_seq OWNED BY public.operator_to
 -- Name: operator_tokens; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_tokens (
+CREATE TABLE public.operator_tokens (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     dbsc_challenge text,
@@ -1061,7 +1061,7 @@ CREATE UNLOGGED TABLE public.operator_tokens (
 -- Name: operator_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_tokens_id_seq
+CREATE SEQUENCE public.operator_tokens_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1080,7 +1080,7 @@ ALTER SEQUENCE public.operator_tokens_id_seq OWNED BY public.operator_tokens.id;
 -- Name: operator_verifications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_verifications (
+CREATE TABLE public.operator_verifications (
     id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     last_used_at timestamp(6) with time zone,
@@ -1097,7 +1097,7 @@ CREATE UNLOGGED TABLE public.operator_verifications (
 -- Name: operator_verifications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_verifications_id_seq
+CREATE SEQUENCE public.operator_verifications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1116,7 +1116,7 @@ ALTER SEQUENCE public.operator_verifications_id_seq OWNED BY public.operator_ver
 -- Name: organization_invitations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.organization_invitations (
+CREATE TABLE public.organization_invitations (
     id bigint NOT NULL,
     code character varying(32) NOT NULL,
     consumed_at timestamp(6) with time zone,
@@ -1134,7 +1134,7 @@ CREATE UNLOGGED TABLE public.organization_invitations (
 -- Name: organization_invitations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.organization_invitations_id_seq
+CREATE SEQUENCE public.organization_invitations_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1153,7 +1153,7 @@ ALTER SEQUENCE public.organization_invitations_id_seq OWNED BY public.organizati
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 
@@ -1162,7 +1162,7 @@ CREATE UNLOGGED TABLE public.schema_migrations (
 -- Name: staff_verifications_staff_token_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.staff_verifications_staff_token_id_seq
+CREATE SEQUENCE public.staff_verifications_staff_token_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE

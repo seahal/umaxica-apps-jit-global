@@ -80,6 +80,11 @@ module PreferenceRefreshTokenTransport
     end
 
     @preference_refresh_failed = true
+    @preference_credential_failure =
+      classify_refresh_credential_failure(preference, refresh_public_id, refresh_digest)
+    if @preference_credential_failure == :replay_detected && superseded_preference_generation?(preference)
+      @preference_credential_failure = :superseded_generation
+    end
     event =
       @preference_refresh_binding_reason.present? ? "preference.token.refresh.binding_denied" :
            "preference.token.refresh.failed"
@@ -91,6 +96,30 @@ module PreferenceRefreshTokenTransport
       ),
     )
     nil
+  end
+
+  # Names why a presented refresh credential cannot be used. Only states the database positively
+  # confirmed are named; a lookup that raised never reaches here. A token that does not parse into
+  # the current `public_id.verifier` shape and matches no legacy digest is :malformed.
+  def classify_refresh_credential_failure(preference, refresh_public_id, refresh_digest)
+    return :malformed if refresh_digest.blank?
+    return (refresh_public_id.present? ? :record_not_found : :malformed) if preference.nil?
+    return :digest_mismatch if refresh_digest_mismatch?(preference, refresh_digest)
+    return :binding_denied if @preference_refresh_binding_reason.present?
+    return :replay_detected if preference.replay?
+    return :ordinarily_deleted if preference.status_id == preference_status_class::DELETED
+    # expires_at is an alias of discard_at, which replay handling and revocation also set, so the
+    # schema cannot tell an ordinary expiry from a revocation. The name says exactly that.
+    return :expired_or_revoked if preference.revoked?
+
+    :unclassified
+  end
+
+  # Consumed by ordinary rotation (not retired by replay handling or sign-out, which also end its
+  # life), and recently enough to be a request that raced the rotating write.
+  def superseded_preference_generation?(preference)
+    preference.used_at.present? && preference.replaced_by_id.present? && !preference.revoked? &&
+      preference.used_at > PreferenceTransport::PREFERENCE_STALE_GENERATION_WINDOW.ago
   end
 
   def refresh_token_data(token_value)
@@ -145,6 +174,7 @@ module PreferenceRefreshTokenTransport
   end
 
   def handle_invalid_refresh_digest(pref, refresh_public_id)
+    @preference_credential_failure = :digest_mismatch
     handle_preference_refresh_failed(pref, refresh_public_id)
     nil
   end
@@ -241,15 +271,23 @@ module PreferenceRefreshTokenTransport
       end
 
     unless rotated_preference
-      replayed_preference = find_preference_by_presented_token
-      if replayed_preference&.replay?
-        handle_preference_refresh_replay!(replayed_preference)
+      current = with_preference_connection(:writing) { find_preference_by_presented_token }
+      if current&.replay?
+        handle_preference_refresh_replay!(current)
         return
       end
 
+      # The row passed validation but was not consumable under the row lock. Name the state the
+      # database now confirms (a concurrent expiry, revocation, or deletion). A row that is still
+      # valid means rotation itself failed; that is a system failure, not a credential refusal.
+      log_preference_refresh_rotation_failed(preference, @refresh_public_id)
+      failure = classify_refresh_credential_failure(current, @refresh_public_id, @refresh_presented_digest)
+      raise PreferenceBase::ResolutionError, "preference refresh rotation failed for a valid credential" if
+        failure == :unclassified
+
       clear_preference_auth_cookies!
       @preference_refresh_failed = true
-      log_preference_refresh_rotation_failed(preference, @refresh_public_id)
+      @preference_credential_failure = failure
       return
     end
 
@@ -281,7 +319,9 @@ module PreferenceRefreshTokenTransport
   # Accepting them via URL/body params leaks them to logs, history, and Referer
   # headers, defeating the HttpOnly/Secure cookie protections.
   def refresh_token_value
-    refresh_token_cookie_names.lazy.filter_map { |cookie_name| cookies[cookie_name].to_s.presence }.first
+    refresh_token_cookie_names.lazy.filter_map { |cookie_name|
+      BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
+    }.first
   end
 
   def refresh_token_expiry

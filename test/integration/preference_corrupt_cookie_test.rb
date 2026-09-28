@@ -5,9 +5,8 @@ require "test_helper"
 
 # A garbage/corrupt preference refresh cookie or access JWT must never raise
 # an unhandled exception and must never be treated as authority over existing
-# DB state. A malformed refresh credential is a controlled 401. The GET keeps
-# the cookie and persisted state unchanged; cleanup belongs to an explicit
-# mutation boundary.
+# DB state. A malformed refresh credential is detached on GET without creating
+# a replacement database row.
 class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
   setup do
     https!
@@ -17,7 +16,7 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
   REFRESH_COOKIE_NAME = -> { PreferenceCookieName.refresh(production: false, surface: :app) }
   ACCESS_COOKIE_NAME = -> { PreferenceCookieName.access(production: false, surface: :app) }
 
-  test "garbage refresh cookie fails closed without clearing it on GET" do
+  test "garbage refresh cookie is cleared and a public GET continues without a database write" do
     invalid_token = "not-a-real-token.garbage"
     cookies[REFRESH_COOKIE_NAME.call] = invalid_token
 
@@ -25,8 +24,31 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
       get "/preference?ri=jp"
     end
 
-    assert_response :unauthorized
-    assert_equal invalid_token, cookies[REFRESH_COOKIE_NAME.call]
+    assert_response :success
+    assert_cookie_deleted(REFRESH_COOKIE_NAME.call)
+  end
+
+  test "an explicit preference update after recovery persists on the next request" do
+    cookies[REFRESH_COOKIE_NAME.call] = "not-a-real-token.garbage"
+
+    assert_no_difference -> { AppPreference.count } do
+      get "/preference?ri=jp"
+    end
+
+    assert_response :success
+    assert_cookie_deleted(REFRESH_COOKIE_NAME.call)
+
+    patch base_app_preference_region_path(ri: "jp"),
+          params: { preference_region: { option_id: AppPreferenceRegionOption::US } }
+
+    assert_response :redirect
+    assert_predicate cookies[REFRESH_COOKIE_NAME.call], :present?
+
+    get "/preference?ri=jp"
+
+    assert_response :success
+    assert_equal AppPreferenceRegionOption::US,
+                 AppPreference.order(:created_at).last.app_preference_region.option_id
   end
 
   test "garbage refresh cookie does not overwrite an existing preference's DB state" do
@@ -45,7 +67,7 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
 
     get "/preference?ri=us"
 
-    assert_response :unauthorized
+    assert_response :success
 
     existing.reload
 
@@ -92,5 +114,6 @@ class PreferenceCorruptCookieTest < ActionDispatch::IntegrationTest
     get "/preference?ri=jp"
 
     assert_response :success
+    assert_cookie_deleted(ACCESS_COOKIE_NAME.call)
   end
 end

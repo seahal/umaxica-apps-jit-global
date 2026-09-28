@@ -22,7 +22,58 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     assert_equal 1, hrefs.count { |href| href.include?("/identity/emails/registration/new") }
     assert_equal 1, hrefs.count(new_auth_app_settings_totp_path(ri: "jp", pt: pt))
   end
+  # Setup is shown only when the actor has no Step-Up method, so method selection is not a prior
+  # state and the success continuation is not a Back: the page offers Cancel only, and that Cancel
+  # works for an actor with no method.
+  test "setup offers cancellation and no back link to the success continuation" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! host
+    user = Client.create!
+    token = ClientToken.create!(user_id: user.id)
+    headers = as_user_headers(user, host: host, session_public_id: token.public_id)
+    success = "/settings/telephones?ri=jp"
+    pt = signed_step_up_pt_for(
+      success, surface: "app", session_nonce: token.try(:device_session)&.public_id.presence || token.public_id,
+    )
+
+    get new_auth_app_verification_setup_url(ri: "jp", pt: pt), headers: headers
+
+    assert_response :success
+    assert_nil inertia_props["back"]
+    assert_not_includes response.body, %(href="#{success}")
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
+    # Success keeps its continuation: each registration method carries the same pt.
+    assert inertia_props.fetch("methods").any? { |method| method.fetch("href").include?(pt) }
+
+    post auth_app_verification_cancellation_url(ri: "jp"), headers: headers
+
+    assert_response :see_other
+    assert_equal auth_app_settings_path(ri: "jp"), URI.parse(response.location).request_uri
+  end
+
   private
+
+  def signed_step_up_pt_for(path, surface:, session_nonce:)
+    verifier = ActiveSupport::MessageVerifier.new(
+      Rails.application.key_generator.generate_key("path_target_token", 32),
+      digest: "SHA256",
+      serializer: JSON,
+      url_safe: true,
+    )
+    verifier.generate(
+      { "flow" => "step_up.bootstrap",
+        "surface" => surface.to_s,
+        "session_nonce" => session_nonce.to_s,
+        "pt" => path.to_s, },
+      purpose: :path_target,
+      expires_in: 15.minutes,
+    )
+  end
 
   def host_headers(host = nil)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]

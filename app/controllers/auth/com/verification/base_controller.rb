@@ -39,6 +39,14 @@ module Auth
           authorize!(current_verification_actor, to: :show?)
         end
 
+        # Cancel ends the whole Step-Up ceremony, unlike Back, which only returns to method selection.
+        # The cancellation endpoint picks the destination from the server-held ceremony origin.
+        def step_up_cancellation_props
+          { label: t("actions.cancel"),
+            action: auth_com_verification_cancellation_path(ri: params[:ri]),
+            method: "post", }
+        end
+
         # The step-up completion hand-off is an auto-submitting ERB document, not an Inertia page.
         # Descendants that render Inertia carry the Inertia layout, which has no `yield`, so the
         # completion template names the document layout explicitly and reaches acme unchanged.

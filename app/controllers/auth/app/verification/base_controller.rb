@@ -36,6 +36,14 @@ module Auth
           authorize!(current_verification_actor, to: :show?)
         end
 
+        # Cancel ends the whole Step-Up ceremony, unlike Back, which only returns to method selection.
+        # The cancellation endpoint picks the destination from the server-held ceremony origin.
+        def step_up_cancellation_props
+          { label: t("actions.cancel"),
+            action: auth_app_verification_cancellation_path(ri: params[:ri]),
+            method: "post", }
+        end
+
         def valid_step_up_session?(rs)
           rs.present? &&
             rs.discard_at > Time.current &&

@@ -81,4 +81,31 @@ class GuidSurfaceTest < ActionDispatch::IntegrationTest
     assert_equal "application/problem+json", response.media_type
     assert_equal "urn:umaxica:problem:not-acceptable", response.parsed_body.fetch("type")
   end
+
+  test "text revision endpoint reports the revision as plain text" do
+    get "/revision", headers: { "Host" => GUID_HOST }
+
+    assert_response :success
+    assert_equal "text/plain", response.media_type
+    assert_includes response.body, "title: Revision status\n"
+  end
+
+  test "liveness, readiness and startup probes answer the plain probe contract" do
+    %w(/health/liveness /health/readiness /health/startup).each do |path|
+      get path, headers: { "Host" => GUID_HOST }
+
+      assert_includes [200, 503], response.status, path
+      assert_equal "text/plain", response.media_type, path
+      assert_includes ["ok\n", "unavailable\n"], response.body, path
+    end
+  end
+
+  test "a CSP violation report is accepted with no content" do
+    post "/csp-violation-report",
+         params: { "csp-report" => { "document-uri" => "https://guid.umaxica.net/",
+                                     "violated-directive" => "script-src", } }.to_json,
+         headers: { "Host" => GUID_HOST, "Content-Type" => "application/csp-report" }
+
+    assert_response :no_content
+  end
 end

@@ -132,7 +132,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -144,7 +144,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: publishing_docs_app_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_entries (
+CREATE TABLE public.publishing_docs_app_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -165,7 +165,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_entries (
 -- Name: publishing_docs_app_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_entries_id_seq
+CREATE SEQUENCE public.publishing_docs_app_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -184,7 +184,7 @@ ALTER SEQUENCE public.publishing_docs_app_entries_id_seq OWNED BY public.publish
 -- Name: publishing_docs_app_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_entry_revisions (
+CREATE TABLE public.publishing_docs_app_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -212,7 +212,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_entry_revisions (
 -- Name: publishing_docs_app_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_docs_app_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -231,7 +231,7 @@ ALTER SEQUENCE public.publishing_docs_app_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_docs_app_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_entry_slugs (
+CREATE TABLE public.publishing_docs_app_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -253,7 +253,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_entry_slugs (
 -- Name: publishing_docs_app_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_docs_app_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -272,7 +272,7 @@ ALTER SEQUENCE public.publishing_docs_app_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_docs_app_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_entry_versions (
+CREATE TABLE public.publishing_docs_app_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -298,7 +298,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_entry_versions (
 -- Name: publishing_docs_app_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_docs_app_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -317,7 +317,7 @@ ALTER SEQUENCE public.publishing_docs_app_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_docs_app_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_publications (
+CREATE TABLE public.publishing_docs_app_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -344,7 +344,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_publications (
 -- Name: publishing_docs_app_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_publications_id_seq
+CREATE SEQUENCE public.publishing_docs_app_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -363,7 +363,7 @@ ALTER SEQUENCE public.publishing_docs_app_publications_id_seq OWNED BY public.pu
 -- Name: publishing_docs_app_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_revision_media_usages (
+CREATE TABLE public.publishing_docs_app_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -388,7 +388,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_revision_media_usages (
 -- Name: publishing_docs_app_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_docs_app_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -407,7 +407,7 @@ ALTER SEQUENCE public.publishing_docs_app_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_docs_app_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_app_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -426,7 +426,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_revision_multiple_taxonomy_assi
 -- Name: publishing_docs_app_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_docs_app_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -445,7 +445,7 @@ ALTER SEQUENCE public.publishing_docs_app_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_docs_app_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_app_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -462,7 +462,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_revision_single_taxonomy_assign
 -- Name: publishing_docs_app_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_docs_app_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -481,7 +481,7 @@ ALTER SEQUENCE public.publishing_docs_app_revision_single_taxonomy_assignments_i
 -- Name: publishing_docs_app_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_taxonomy_terms (
+CREATE TABLE public.publishing_docs_app_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -514,7 +514,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_taxonomy_terms (
 -- Name: publishing_docs_app_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_docs_app_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -533,7 +533,7 @@ ALTER SEQUENCE public.publishing_docs_app_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_docs_app_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_version_media_usages (
+CREATE TABLE public.publishing_docs_app_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -558,7 +558,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_version_media_usages (
 -- Name: publishing_docs_app_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_docs_app_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -577,7 +577,7 @@ ALTER SEQUENCE public.publishing_docs_app_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_docs_app_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_app_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -611,7 +611,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_version_multiple_taxonomy_assig
 -- Name: publishing_docs_app_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_docs_app_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -630,7 +630,7 @@ ALTER SEQUENCE public.publishing_docs_app_version_multiple_taxonomy_assignment_i
 -- Name: publishing_docs_app_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_app_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -661,7 +661,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_version_single_taxonomy_assignm
 -- Name: publishing_docs_app_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_docs_app_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -680,7 +680,7 @@ ALTER SEQUENCE public.publishing_docs_app_version_single_taxonomy_assignments_id
 -- Name: publishing_docs_app_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_app_vocabularies (
+CREATE TABLE public.publishing_docs_app_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -703,7 +703,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_app_vocabularies (
 -- Name: publishing_docs_app_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_app_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_docs_app_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -722,7 +722,7 @@ ALTER SEQUENCE public.publishing_docs_app_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_docs_com_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_entries (
+CREATE TABLE public.publishing_docs_com_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -743,7 +743,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_entries (
 -- Name: publishing_docs_com_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_entries_id_seq
+CREATE SEQUENCE public.publishing_docs_com_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -762,7 +762,7 @@ ALTER SEQUENCE public.publishing_docs_com_entries_id_seq OWNED BY public.publish
 -- Name: publishing_docs_com_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_entry_revisions (
+CREATE TABLE public.publishing_docs_com_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -790,7 +790,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_entry_revisions (
 -- Name: publishing_docs_com_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_docs_com_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -809,7 +809,7 @@ ALTER SEQUENCE public.publishing_docs_com_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_docs_com_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_entry_slugs (
+CREATE TABLE public.publishing_docs_com_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -831,7 +831,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_entry_slugs (
 -- Name: publishing_docs_com_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_docs_com_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -850,7 +850,7 @@ ALTER SEQUENCE public.publishing_docs_com_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_docs_com_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_entry_versions (
+CREATE TABLE public.publishing_docs_com_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -876,7 +876,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_entry_versions (
 -- Name: publishing_docs_com_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_docs_com_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -895,7 +895,7 @@ ALTER SEQUENCE public.publishing_docs_com_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_docs_com_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_publications (
+CREATE TABLE public.publishing_docs_com_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -922,7 +922,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_publications (
 -- Name: publishing_docs_com_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_publications_id_seq
+CREATE SEQUENCE public.publishing_docs_com_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -941,7 +941,7 @@ ALTER SEQUENCE public.publishing_docs_com_publications_id_seq OWNED BY public.pu
 -- Name: publishing_docs_com_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_revision_media_usages (
+CREATE TABLE public.publishing_docs_com_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -966,7 +966,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_revision_media_usages (
 -- Name: publishing_docs_com_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_docs_com_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -985,7 +985,7 @@ ALTER SEQUENCE public.publishing_docs_com_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_docs_com_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_com_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1004,7 +1004,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_revision_multiple_taxonomy_assi
 -- Name: publishing_docs_com_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_docs_com_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1023,7 +1023,7 @@ ALTER SEQUENCE public.publishing_docs_com_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_docs_com_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_com_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1040,7 +1040,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_revision_single_taxonomy_assign
 -- Name: publishing_docs_com_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_docs_com_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1059,7 +1059,7 @@ ALTER SEQUENCE public.publishing_docs_com_revision_single_taxonomy_assignments_i
 -- Name: publishing_docs_com_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_taxonomy_terms (
+CREATE TABLE public.publishing_docs_com_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1092,7 +1092,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_taxonomy_terms (
 -- Name: publishing_docs_com_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_docs_com_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1111,7 +1111,7 @@ ALTER SEQUENCE public.publishing_docs_com_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_docs_com_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_version_media_usages (
+CREATE TABLE public.publishing_docs_com_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -1136,7 +1136,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_version_media_usages (
 -- Name: publishing_docs_com_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_docs_com_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1155,7 +1155,7 @@ ALTER SEQUENCE public.publishing_docs_com_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_docs_com_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_com_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1189,7 +1189,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_version_multiple_taxonomy_assig
 -- Name: publishing_docs_com_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_docs_com_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1208,7 +1208,7 @@ ALTER SEQUENCE public.publishing_docs_com_version_multiple_taxonomy_assignment_i
 -- Name: publishing_docs_com_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_com_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1239,7 +1239,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_version_single_taxonomy_assignm
 -- Name: publishing_docs_com_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_docs_com_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1258,7 +1258,7 @@ ALTER SEQUENCE public.publishing_docs_com_version_single_taxonomy_assignments_id
 -- Name: publishing_docs_com_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_com_vocabularies (
+CREATE TABLE public.publishing_docs_com_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -1281,7 +1281,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_com_vocabularies (
 -- Name: publishing_docs_com_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_com_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_docs_com_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1300,7 +1300,7 @@ ALTER SEQUENCE public.publishing_docs_com_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_docs_org_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_entries (
+CREATE TABLE public.publishing_docs_org_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -1321,7 +1321,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_entries (
 -- Name: publishing_docs_org_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_entries_id_seq
+CREATE SEQUENCE public.publishing_docs_org_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1340,7 +1340,7 @@ ALTER SEQUENCE public.publishing_docs_org_entries_id_seq OWNED BY public.publish
 -- Name: publishing_docs_org_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_entry_revisions (
+CREATE TABLE public.publishing_docs_org_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -1368,7 +1368,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_entry_revisions (
 -- Name: publishing_docs_org_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_docs_org_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1387,7 +1387,7 @@ ALTER SEQUENCE public.publishing_docs_org_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_docs_org_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_entry_slugs (
+CREATE TABLE public.publishing_docs_org_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -1409,7 +1409,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_entry_slugs (
 -- Name: publishing_docs_org_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_docs_org_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1428,7 +1428,7 @@ ALTER SEQUENCE public.publishing_docs_org_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_docs_org_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_entry_versions (
+CREATE TABLE public.publishing_docs_org_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -1454,7 +1454,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_entry_versions (
 -- Name: publishing_docs_org_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_docs_org_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1473,7 +1473,7 @@ ALTER SEQUENCE public.publishing_docs_org_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_docs_org_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_publications (
+CREATE TABLE public.publishing_docs_org_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -1500,7 +1500,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_publications (
 -- Name: publishing_docs_org_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_publications_id_seq
+CREATE SEQUENCE public.publishing_docs_org_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1519,7 +1519,7 @@ ALTER SEQUENCE public.publishing_docs_org_publications_id_seq OWNED BY public.pu
 -- Name: publishing_docs_org_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_revision_media_usages (
+CREATE TABLE public.publishing_docs_org_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -1544,7 +1544,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_revision_media_usages (
 -- Name: publishing_docs_org_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_docs_org_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1563,7 +1563,7 @@ ALTER SEQUENCE public.publishing_docs_org_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_docs_org_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_org_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1582,7 +1582,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_revision_multiple_taxonomy_assi
 -- Name: publishing_docs_org_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_docs_org_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1601,7 +1601,7 @@ ALTER SEQUENCE public.publishing_docs_org_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_docs_org_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_org_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1618,7 +1618,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_revision_single_taxonomy_assign
 -- Name: publishing_docs_org_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_docs_org_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1637,7 +1637,7 @@ ALTER SEQUENCE public.publishing_docs_org_revision_single_taxonomy_assignments_i
 -- Name: publishing_docs_org_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_taxonomy_terms (
+CREATE TABLE public.publishing_docs_org_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1670,7 +1670,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_taxonomy_terms (
 -- Name: publishing_docs_org_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_docs_org_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1689,7 +1689,7 @@ ALTER SEQUENCE public.publishing_docs_org_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_docs_org_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_version_media_usages (
+CREATE TABLE public.publishing_docs_org_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -1714,7 +1714,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_version_media_usages (
 -- Name: publishing_docs_org_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_docs_org_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1733,7 +1733,7 @@ ALTER SEQUENCE public.publishing_docs_org_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_docs_org_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_org_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1767,7 +1767,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_version_multiple_taxonomy_assig
 -- Name: publishing_docs_org_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_docs_org_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1786,7 +1786,7 @@ ALTER SEQUENCE public.publishing_docs_org_version_multiple_taxonomy_assignment_i
 -- Name: publishing_docs_org_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_docs_org_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -1817,7 +1817,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_version_single_taxonomy_assignm
 -- Name: publishing_docs_org_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_docs_org_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1836,7 +1836,7 @@ ALTER SEQUENCE public.publishing_docs_org_version_single_taxonomy_assignments_id
 -- Name: publishing_docs_org_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_docs_org_vocabularies (
+CREATE TABLE public.publishing_docs_org_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -1859,7 +1859,7 @@ CREATE UNLOGGED TABLE public.publishing_docs_org_vocabularies (
 -- Name: publishing_docs_org_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_docs_org_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_docs_org_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1878,7 +1878,7 @@ ALTER SEQUENCE public.publishing_docs_org_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_help_app_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_entries (
+CREATE TABLE public.publishing_help_app_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -1899,7 +1899,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_entries (
 -- Name: publishing_help_app_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_entries_id_seq
+CREATE SEQUENCE public.publishing_help_app_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1918,7 +1918,7 @@ ALTER SEQUENCE public.publishing_help_app_entries_id_seq OWNED BY public.publish
 -- Name: publishing_help_app_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_entry_revisions (
+CREATE TABLE public.publishing_help_app_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -1946,7 +1946,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_entry_revisions (
 -- Name: publishing_help_app_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_help_app_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1965,7 +1965,7 @@ ALTER SEQUENCE public.publishing_help_app_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_help_app_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_entry_slugs (
+CREATE TABLE public.publishing_help_app_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -1987,7 +1987,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_entry_slugs (
 -- Name: publishing_help_app_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_help_app_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2006,7 +2006,7 @@ ALTER SEQUENCE public.publishing_help_app_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_help_app_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_entry_versions (
+CREATE TABLE public.publishing_help_app_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -2032,7 +2032,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_entry_versions (
 -- Name: publishing_help_app_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_help_app_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2051,7 +2051,7 @@ ALTER SEQUENCE public.publishing_help_app_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_help_app_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_publications (
+CREATE TABLE public.publishing_help_app_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -2078,7 +2078,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_publications (
 -- Name: publishing_help_app_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_publications_id_seq
+CREATE SEQUENCE public.publishing_help_app_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2097,7 +2097,7 @@ ALTER SEQUENCE public.publishing_help_app_publications_id_seq OWNED BY public.pu
 -- Name: publishing_help_app_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_revision_media_usages (
+CREATE TABLE public.publishing_help_app_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -2122,7 +2122,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_revision_media_usages (
 -- Name: publishing_help_app_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_help_app_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2141,7 +2141,7 @@ ALTER SEQUENCE public.publishing_help_app_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_help_app_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_help_app_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2160,7 +2160,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_revision_multiple_taxonomy_assi
 -- Name: publishing_help_app_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_help_app_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2179,7 +2179,7 @@ ALTER SEQUENCE public.publishing_help_app_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_help_app_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_help_app_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2196,7 +2196,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_revision_single_taxonomy_assign
 -- Name: publishing_help_app_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_help_app_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2215,7 +2215,7 @@ ALTER SEQUENCE public.publishing_help_app_revision_single_taxonomy_assignments_i
 -- Name: publishing_help_app_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_taxonomy_terms (
+CREATE TABLE public.publishing_help_app_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2248,7 +2248,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_taxonomy_terms (
 -- Name: publishing_help_app_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_help_app_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2267,7 +2267,7 @@ ALTER SEQUENCE public.publishing_help_app_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_help_app_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_version_media_usages (
+CREATE TABLE public.publishing_help_app_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -2292,7 +2292,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_version_media_usages (
 -- Name: publishing_help_app_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_help_app_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2311,7 +2311,7 @@ ALTER SEQUENCE public.publishing_help_app_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_help_app_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_help_app_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2345,7 +2345,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_version_multiple_taxonomy_assig
 -- Name: publishing_help_app_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_help_app_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2364,7 +2364,7 @@ ALTER SEQUENCE public.publishing_help_app_version_multiple_taxonomy_assignment_i
 -- Name: publishing_help_app_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_help_app_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2395,7 +2395,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_version_single_taxonomy_assignm
 -- Name: publishing_help_app_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_help_app_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2414,7 +2414,7 @@ ALTER SEQUENCE public.publishing_help_app_version_single_taxonomy_assignments_id
 -- Name: publishing_help_app_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_app_vocabularies (
+CREATE TABLE public.publishing_help_app_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -2437,7 +2437,7 @@ CREATE UNLOGGED TABLE public.publishing_help_app_vocabularies (
 -- Name: publishing_help_app_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_app_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_help_app_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2456,7 +2456,7 @@ ALTER SEQUENCE public.publishing_help_app_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_help_com_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_entries (
+CREATE TABLE public.publishing_help_com_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -2477,7 +2477,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_entries (
 -- Name: publishing_help_com_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_entries_id_seq
+CREATE SEQUENCE public.publishing_help_com_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2496,7 +2496,7 @@ ALTER SEQUENCE public.publishing_help_com_entries_id_seq OWNED BY public.publish
 -- Name: publishing_help_com_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_entry_revisions (
+CREATE TABLE public.publishing_help_com_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -2524,7 +2524,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_entry_revisions (
 -- Name: publishing_help_com_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_help_com_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2543,7 +2543,7 @@ ALTER SEQUENCE public.publishing_help_com_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_help_com_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_entry_slugs (
+CREATE TABLE public.publishing_help_com_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -2565,7 +2565,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_entry_slugs (
 -- Name: publishing_help_com_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_help_com_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2584,7 +2584,7 @@ ALTER SEQUENCE public.publishing_help_com_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_help_com_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_entry_versions (
+CREATE TABLE public.publishing_help_com_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -2610,7 +2610,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_entry_versions (
 -- Name: publishing_help_com_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_help_com_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2629,7 +2629,7 @@ ALTER SEQUENCE public.publishing_help_com_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_help_com_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_publications (
+CREATE TABLE public.publishing_help_com_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -2656,7 +2656,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_publications (
 -- Name: publishing_help_com_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_publications_id_seq
+CREATE SEQUENCE public.publishing_help_com_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2675,7 +2675,7 @@ ALTER SEQUENCE public.publishing_help_com_publications_id_seq OWNED BY public.pu
 -- Name: publishing_help_com_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_revision_media_usages (
+CREATE TABLE public.publishing_help_com_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -2700,7 +2700,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_revision_media_usages (
 -- Name: publishing_help_com_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_help_com_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2719,7 +2719,7 @@ ALTER SEQUENCE public.publishing_help_com_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_help_com_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_help_com_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2738,7 +2738,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_revision_multiple_taxonomy_assi
 -- Name: publishing_help_com_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_help_com_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2757,7 +2757,7 @@ ALTER SEQUENCE public.publishing_help_com_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_help_com_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_help_com_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2774,7 +2774,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_revision_single_taxonomy_assign
 -- Name: publishing_help_com_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_help_com_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2793,7 +2793,7 @@ ALTER SEQUENCE public.publishing_help_com_revision_single_taxonomy_assignments_i
 -- Name: publishing_help_com_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_taxonomy_terms (
+CREATE TABLE public.publishing_help_com_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2826,7 +2826,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_taxonomy_terms (
 -- Name: publishing_help_com_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_help_com_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2845,7 +2845,7 @@ ALTER SEQUENCE public.publishing_help_com_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_help_com_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_version_media_usages (
+CREATE TABLE public.publishing_help_com_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -2870,7 +2870,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_version_media_usages (
 -- Name: publishing_help_com_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_help_com_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2889,7 +2889,7 @@ ALTER SEQUENCE public.publishing_help_com_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_help_com_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_help_com_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2923,7 +2923,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_version_multiple_taxonomy_assig
 -- Name: publishing_help_com_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_help_com_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2942,7 +2942,7 @@ ALTER SEQUENCE public.publishing_help_com_version_multiple_taxonomy_assignment_i
 -- Name: publishing_help_com_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_help_com_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -2973,7 +2973,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_version_single_taxonomy_assignm
 -- Name: publishing_help_com_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_help_com_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -2992,7 +2992,7 @@ ALTER SEQUENCE public.publishing_help_com_version_single_taxonomy_assignments_id
 -- Name: publishing_help_com_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_com_vocabularies (
+CREATE TABLE public.publishing_help_com_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -3015,7 +3015,7 @@ CREATE UNLOGGED TABLE public.publishing_help_com_vocabularies (
 -- Name: publishing_help_com_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_com_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_help_com_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3034,7 +3034,7 @@ ALTER SEQUENCE public.publishing_help_com_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_help_org_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_entries (
+CREATE TABLE public.publishing_help_org_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -3055,7 +3055,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_entries (
 -- Name: publishing_help_org_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_entries_id_seq
+CREATE SEQUENCE public.publishing_help_org_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3074,7 +3074,7 @@ ALTER SEQUENCE public.publishing_help_org_entries_id_seq OWNED BY public.publish
 -- Name: publishing_help_org_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_entry_revisions (
+CREATE TABLE public.publishing_help_org_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3102,7 +3102,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_entry_revisions (
 -- Name: publishing_help_org_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_help_org_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3121,7 +3121,7 @@ ALTER SEQUENCE public.publishing_help_org_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_help_org_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_entry_slugs (
+CREATE TABLE public.publishing_help_org_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3143,7 +3143,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_entry_slugs (
 -- Name: publishing_help_org_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_help_org_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3162,7 +3162,7 @@ ALTER SEQUENCE public.publishing_help_org_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_help_org_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_entry_versions (
+CREATE TABLE public.publishing_help_org_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3188,7 +3188,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_entry_versions (
 -- Name: publishing_help_org_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_help_org_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3207,7 +3207,7 @@ ALTER SEQUENCE public.publishing_help_org_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_help_org_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_publications (
+CREATE TABLE public.publishing_help_org_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3234,7 +3234,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_publications (
 -- Name: publishing_help_org_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_publications_id_seq
+CREATE SEQUENCE public.publishing_help_org_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3253,7 +3253,7 @@ ALTER SEQUENCE public.publishing_help_org_publications_id_seq OWNED BY public.pu
 -- Name: publishing_help_org_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_revision_media_usages (
+CREATE TABLE public.publishing_help_org_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -3278,7 +3278,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_revision_media_usages (
 -- Name: publishing_help_org_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_help_org_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3297,7 +3297,7 @@ ALTER SEQUENCE public.publishing_help_org_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_help_org_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_help_org_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3316,7 +3316,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_revision_multiple_taxonomy_assi
 -- Name: publishing_help_org_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_help_org_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3335,7 +3335,7 @@ ALTER SEQUENCE public.publishing_help_org_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_help_org_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_help_org_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3352,7 +3352,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_revision_single_taxonomy_assign
 -- Name: publishing_help_org_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_help_org_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3371,7 +3371,7 @@ ALTER SEQUENCE public.publishing_help_org_revision_single_taxonomy_assignments_i
 -- Name: publishing_help_org_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_taxonomy_terms (
+CREATE TABLE public.publishing_help_org_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3404,7 +3404,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_taxonomy_terms (
 -- Name: publishing_help_org_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_help_org_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3423,7 +3423,7 @@ ALTER SEQUENCE public.publishing_help_org_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_help_org_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_version_media_usages (
+CREATE TABLE public.publishing_help_org_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -3448,7 +3448,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_version_media_usages (
 -- Name: publishing_help_org_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_help_org_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3467,7 +3467,7 @@ ALTER SEQUENCE public.publishing_help_org_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_help_org_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_help_org_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3501,7 +3501,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_version_multiple_taxonomy_assig
 -- Name: publishing_help_org_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_help_org_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3520,7 +3520,7 @@ ALTER SEQUENCE public.publishing_help_org_version_multiple_taxonomy_assignment_i
 -- Name: publishing_help_org_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_help_org_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3551,7 +3551,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_version_single_taxonomy_assignm
 -- Name: publishing_help_org_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_help_org_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3570,7 +3570,7 @@ ALTER SEQUENCE public.publishing_help_org_version_single_taxonomy_assignments_id
 -- Name: publishing_help_org_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_help_org_vocabularies (
+CREATE TABLE public.publishing_help_org_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -3593,7 +3593,7 @@ CREATE UNLOGGED TABLE public.publishing_help_org_vocabularies (
 -- Name: publishing_help_org_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_help_org_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_help_org_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3612,7 +3612,7 @@ ALTER SEQUENCE public.publishing_help_org_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_info_app_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_entries (
+CREATE TABLE public.publishing_info_app_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -3633,7 +3633,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_entries (
 -- Name: publishing_info_app_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_entries_id_seq
+CREATE SEQUENCE public.publishing_info_app_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3652,7 +3652,7 @@ ALTER SEQUENCE public.publishing_info_app_entries_id_seq OWNED BY public.publish
 -- Name: publishing_info_app_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_entry_revisions (
+CREATE TABLE public.publishing_info_app_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3680,7 +3680,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_entry_revisions (
 -- Name: publishing_info_app_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_info_app_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3699,7 +3699,7 @@ ALTER SEQUENCE public.publishing_info_app_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_info_app_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_entry_slugs (
+CREATE TABLE public.publishing_info_app_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3721,7 +3721,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_entry_slugs (
 -- Name: publishing_info_app_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_info_app_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3740,7 +3740,7 @@ ALTER SEQUENCE public.publishing_info_app_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_info_app_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_entry_versions (
+CREATE TABLE public.publishing_info_app_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3766,7 +3766,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_entry_versions (
 -- Name: publishing_info_app_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_info_app_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3785,7 +3785,7 @@ ALTER SEQUENCE public.publishing_info_app_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_info_app_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_publications (
+CREATE TABLE public.publishing_info_app_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -3812,7 +3812,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_publications (
 -- Name: publishing_info_app_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_publications_id_seq
+CREATE SEQUENCE public.publishing_info_app_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3831,7 +3831,7 @@ ALTER SEQUENCE public.publishing_info_app_publications_id_seq OWNED BY public.pu
 -- Name: publishing_info_app_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_revision_media_usages (
+CREATE TABLE public.publishing_info_app_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -3856,7 +3856,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_revision_media_usages (
 -- Name: publishing_info_app_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_info_app_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3875,7 +3875,7 @@ ALTER SEQUENCE public.publishing_info_app_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_info_app_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_info_app_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3894,7 +3894,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_revision_multiple_taxonomy_assi
 -- Name: publishing_info_app_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_info_app_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3913,7 +3913,7 @@ ALTER SEQUENCE public.publishing_info_app_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_info_app_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_info_app_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3930,7 +3930,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_revision_single_taxonomy_assign
 -- Name: publishing_info_app_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_info_app_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -3949,7 +3949,7 @@ ALTER SEQUENCE public.publishing_info_app_revision_single_taxonomy_assignments_i
 -- Name: publishing_info_app_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_taxonomy_terms (
+CREATE TABLE public.publishing_info_app_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -3982,7 +3982,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_taxonomy_terms (
 -- Name: publishing_info_app_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_info_app_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4001,7 +4001,7 @@ ALTER SEQUENCE public.publishing_info_app_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_info_app_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_version_media_usages (
+CREATE TABLE public.publishing_info_app_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -4026,7 +4026,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_version_media_usages (
 -- Name: publishing_info_app_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_info_app_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4045,7 +4045,7 @@ ALTER SEQUENCE public.publishing_info_app_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_info_app_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_info_app_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4079,7 +4079,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_version_multiple_taxonomy_assig
 -- Name: publishing_info_app_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_info_app_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4098,7 +4098,7 @@ ALTER SEQUENCE public.publishing_info_app_version_multiple_taxonomy_assignment_i
 -- Name: publishing_info_app_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_info_app_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4129,7 +4129,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_version_single_taxonomy_assignm
 -- Name: publishing_info_app_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_info_app_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4148,7 +4148,7 @@ ALTER SEQUENCE public.publishing_info_app_version_single_taxonomy_assignments_id
 -- Name: publishing_info_app_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_app_vocabularies (
+CREATE TABLE public.publishing_info_app_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -4171,7 +4171,7 @@ CREATE UNLOGGED TABLE public.publishing_info_app_vocabularies (
 -- Name: publishing_info_app_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_app_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_info_app_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4190,7 +4190,7 @@ ALTER SEQUENCE public.publishing_info_app_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_info_com_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_entries (
+CREATE TABLE public.publishing_info_com_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -4211,7 +4211,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_entries (
 -- Name: publishing_info_com_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_entries_id_seq
+CREATE SEQUENCE public.publishing_info_com_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4230,7 +4230,7 @@ ALTER SEQUENCE public.publishing_info_com_entries_id_seq OWNED BY public.publish
 -- Name: publishing_info_com_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_entry_revisions (
+CREATE TABLE public.publishing_info_com_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4258,7 +4258,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_entry_revisions (
 -- Name: publishing_info_com_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_info_com_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4277,7 +4277,7 @@ ALTER SEQUENCE public.publishing_info_com_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_info_com_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_entry_slugs (
+CREATE TABLE public.publishing_info_com_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4299,7 +4299,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_entry_slugs (
 -- Name: publishing_info_com_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_info_com_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4318,7 +4318,7 @@ ALTER SEQUENCE public.publishing_info_com_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_info_com_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_entry_versions (
+CREATE TABLE public.publishing_info_com_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4344,7 +4344,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_entry_versions (
 -- Name: publishing_info_com_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_info_com_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4363,7 +4363,7 @@ ALTER SEQUENCE public.publishing_info_com_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_info_com_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_publications (
+CREATE TABLE public.publishing_info_com_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4390,7 +4390,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_publications (
 -- Name: publishing_info_com_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_publications_id_seq
+CREATE SEQUENCE public.publishing_info_com_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4409,7 +4409,7 @@ ALTER SEQUENCE public.publishing_info_com_publications_id_seq OWNED BY public.pu
 -- Name: publishing_info_com_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_revision_media_usages (
+CREATE TABLE public.publishing_info_com_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -4434,7 +4434,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_revision_media_usages (
 -- Name: publishing_info_com_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_info_com_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4453,7 +4453,7 @@ ALTER SEQUENCE public.publishing_info_com_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_info_com_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_info_com_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4472,7 +4472,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_revision_multiple_taxonomy_assi
 -- Name: publishing_info_com_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_info_com_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4491,7 +4491,7 @@ ALTER SEQUENCE public.publishing_info_com_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_info_com_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_info_com_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4508,7 +4508,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_revision_single_taxonomy_assign
 -- Name: publishing_info_com_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_info_com_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4527,7 +4527,7 @@ ALTER SEQUENCE public.publishing_info_com_revision_single_taxonomy_assignments_i
 -- Name: publishing_info_com_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_taxonomy_terms (
+CREATE TABLE public.publishing_info_com_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4560,7 +4560,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_taxonomy_terms (
 -- Name: publishing_info_com_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_info_com_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4579,7 +4579,7 @@ ALTER SEQUENCE public.publishing_info_com_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_info_com_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_version_media_usages (
+CREATE TABLE public.publishing_info_com_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -4604,7 +4604,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_version_media_usages (
 -- Name: publishing_info_com_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_info_com_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4623,7 +4623,7 @@ ALTER SEQUENCE public.publishing_info_com_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_info_com_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_info_com_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4657,7 +4657,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_version_multiple_taxonomy_assig
 -- Name: publishing_info_com_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_info_com_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4676,7 +4676,7 @@ ALTER SEQUENCE public.publishing_info_com_version_multiple_taxonomy_assignment_i
 -- Name: publishing_info_com_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_info_com_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -4707,7 +4707,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_version_single_taxonomy_assignm
 -- Name: publishing_info_com_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_info_com_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4726,7 +4726,7 @@ ALTER SEQUENCE public.publishing_info_com_version_single_taxonomy_assignments_id
 -- Name: publishing_info_com_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_com_vocabularies (
+CREATE TABLE public.publishing_info_com_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -4749,7 +4749,7 @@ CREATE UNLOGGED TABLE public.publishing_info_com_vocabularies (
 -- Name: publishing_info_com_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_com_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_info_com_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4768,7 +4768,7 @@ ALTER SEQUENCE public.publishing_info_com_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_info_org_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_entries (
+CREATE TABLE public.publishing_info_org_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -4789,7 +4789,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_entries (
 -- Name: publishing_info_org_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_entries_id_seq
+CREATE SEQUENCE public.publishing_info_org_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4808,7 +4808,7 @@ ALTER SEQUENCE public.publishing_info_org_entries_id_seq OWNED BY public.publish
 -- Name: publishing_info_org_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_entry_revisions (
+CREATE TABLE public.publishing_info_org_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4836,7 +4836,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_entry_revisions (
 -- Name: publishing_info_org_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_info_org_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4855,7 +4855,7 @@ ALTER SEQUENCE public.publishing_info_org_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_info_org_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_entry_slugs (
+CREATE TABLE public.publishing_info_org_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4877,7 +4877,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_entry_slugs (
 -- Name: publishing_info_org_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_info_org_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4896,7 +4896,7 @@ ALTER SEQUENCE public.publishing_info_org_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_info_org_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_entry_versions (
+CREATE TABLE public.publishing_info_org_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4922,7 +4922,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_entry_versions (
 -- Name: publishing_info_org_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_info_org_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4941,7 +4941,7 @@ ALTER SEQUENCE public.publishing_info_org_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_info_org_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_publications (
+CREATE TABLE public.publishing_info_org_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -4968,7 +4968,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_publications (
 -- Name: publishing_info_org_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_publications_id_seq
+CREATE SEQUENCE public.publishing_info_org_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -4987,7 +4987,7 @@ ALTER SEQUENCE public.publishing_info_org_publications_id_seq OWNED BY public.pu
 -- Name: publishing_info_org_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_revision_media_usages (
+CREATE TABLE public.publishing_info_org_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -5012,7 +5012,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_revision_media_usages (
 -- Name: publishing_info_org_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_info_org_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5031,7 +5031,7 @@ ALTER SEQUENCE public.publishing_info_org_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_info_org_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_info_org_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5050,7 +5050,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_revision_multiple_taxonomy_assi
 -- Name: publishing_info_org_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_info_org_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5069,7 +5069,7 @@ ALTER SEQUENCE public.publishing_info_org_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_info_org_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_info_org_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5086,7 +5086,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_revision_single_taxonomy_assign
 -- Name: publishing_info_org_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_info_org_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5105,7 +5105,7 @@ ALTER SEQUENCE public.publishing_info_org_revision_single_taxonomy_assignments_i
 -- Name: publishing_info_org_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_taxonomy_terms (
+CREATE TABLE public.publishing_info_org_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5138,7 +5138,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_taxonomy_terms (
 -- Name: publishing_info_org_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_info_org_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5157,7 +5157,7 @@ ALTER SEQUENCE public.publishing_info_org_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_info_org_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_version_media_usages (
+CREATE TABLE public.publishing_info_org_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -5182,7 +5182,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_version_media_usages (
 -- Name: publishing_info_org_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_info_org_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5201,7 +5201,7 @@ ALTER SEQUENCE public.publishing_info_org_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_info_org_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_info_org_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5235,7 +5235,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_version_multiple_taxonomy_assig
 -- Name: publishing_info_org_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_info_org_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5254,7 +5254,7 @@ ALTER SEQUENCE public.publishing_info_org_version_multiple_taxonomy_assignment_i
 -- Name: publishing_info_org_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_info_org_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5285,7 +5285,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_version_single_taxonomy_assignm
 -- Name: publishing_info_org_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_info_org_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5304,7 +5304,7 @@ ALTER SEQUENCE public.publishing_info_org_version_single_taxonomy_assignments_id
 -- Name: publishing_info_org_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_info_org_vocabularies (
+CREATE TABLE public.publishing_info_org_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -5327,7 +5327,7 @@ CREATE UNLOGGED TABLE public.publishing_info_org_vocabularies (
 -- Name: publishing_info_org_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_info_org_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_info_org_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5346,7 +5346,7 @@ ALTER SEQUENCE public.publishing_info_org_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_media_files; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_media_files (
+CREATE TABLE public.publishing_media_files (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     storage_key character varying NOT NULL,
@@ -5376,7 +5376,7 @@ CREATE UNLOGGED TABLE public.publishing_media_files (
 -- Name: publishing_media_files_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_media_files_id_seq
+CREATE SEQUENCE public.publishing_media_files_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5395,7 +5395,7 @@ ALTER SEQUENCE public.publishing_media_files_id_seq OWNED BY public.publishing_m
 -- Name: publishing_news_app_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_entries (
+CREATE TABLE public.publishing_news_app_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -5416,7 +5416,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_entries (
 -- Name: publishing_news_app_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_entries_id_seq
+CREATE SEQUENCE public.publishing_news_app_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5435,7 +5435,7 @@ ALTER SEQUENCE public.publishing_news_app_entries_id_seq OWNED BY public.publish
 -- Name: publishing_news_app_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_entry_revisions (
+CREATE TABLE public.publishing_news_app_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -5463,7 +5463,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_entry_revisions (
 -- Name: publishing_news_app_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_news_app_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5482,7 +5482,7 @@ ALTER SEQUENCE public.publishing_news_app_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_news_app_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_entry_slugs (
+CREATE TABLE public.publishing_news_app_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -5504,7 +5504,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_entry_slugs (
 -- Name: publishing_news_app_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_news_app_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5523,7 +5523,7 @@ ALTER SEQUENCE public.publishing_news_app_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_news_app_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_entry_versions (
+CREATE TABLE public.publishing_news_app_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -5549,7 +5549,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_entry_versions (
 -- Name: publishing_news_app_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_news_app_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5568,7 +5568,7 @@ ALTER SEQUENCE public.publishing_news_app_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_news_app_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_publications (
+CREATE TABLE public.publishing_news_app_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -5595,7 +5595,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_publications (
 -- Name: publishing_news_app_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_publications_id_seq
+CREATE SEQUENCE public.publishing_news_app_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5614,7 +5614,7 @@ ALTER SEQUENCE public.publishing_news_app_publications_id_seq OWNED BY public.pu
 -- Name: publishing_news_app_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_revision_media_usages (
+CREATE TABLE public.publishing_news_app_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -5639,7 +5639,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_revision_media_usages (
 -- Name: publishing_news_app_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_news_app_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5658,7 +5658,7 @@ ALTER SEQUENCE public.publishing_news_app_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_news_app_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_news_app_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5677,7 +5677,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_revision_multiple_taxonomy_assi
 -- Name: publishing_news_app_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_news_app_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5696,7 +5696,7 @@ ALTER SEQUENCE public.publishing_news_app_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_news_app_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_news_app_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5713,7 +5713,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_revision_single_taxonomy_assign
 -- Name: publishing_news_app_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_news_app_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5732,7 +5732,7 @@ ALTER SEQUENCE public.publishing_news_app_revision_single_taxonomy_assignments_i
 -- Name: publishing_news_app_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_taxonomy_terms (
+CREATE TABLE public.publishing_news_app_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5765,7 +5765,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_taxonomy_terms (
 -- Name: publishing_news_app_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_news_app_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5784,7 +5784,7 @@ ALTER SEQUENCE public.publishing_news_app_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_news_app_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_version_media_usages (
+CREATE TABLE public.publishing_news_app_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -5809,7 +5809,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_version_media_usages (
 -- Name: publishing_news_app_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_news_app_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5828,7 +5828,7 @@ ALTER SEQUENCE public.publishing_news_app_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_news_app_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_news_app_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5862,7 +5862,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_version_multiple_taxonomy_assig
 -- Name: publishing_news_app_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_news_app_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5881,7 +5881,7 @@ ALTER SEQUENCE public.publishing_news_app_version_multiple_taxonomy_assignment_i
 -- Name: publishing_news_app_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_news_app_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -5912,7 +5912,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_version_single_taxonomy_assignm
 -- Name: publishing_news_app_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_news_app_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5931,7 +5931,7 @@ ALTER SEQUENCE public.publishing_news_app_version_single_taxonomy_assignments_id
 -- Name: publishing_news_app_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_app_vocabularies (
+CREATE TABLE public.publishing_news_app_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -5954,7 +5954,7 @@ CREATE UNLOGGED TABLE public.publishing_news_app_vocabularies (
 -- Name: publishing_news_app_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_app_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_news_app_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -5973,7 +5973,7 @@ ALTER SEQUENCE public.publishing_news_app_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_news_com_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_entries (
+CREATE TABLE public.publishing_news_com_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -5994,7 +5994,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_entries (
 -- Name: publishing_news_com_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_entries_id_seq
+CREATE SEQUENCE public.publishing_news_com_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6013,7 +6013,7 @@ ALTER SEQUENCE public.publishing_news_com_entries_id_seq OWNED BY public.publish
 -- Name: publishing_news_com_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_entry_revisions (
+CREATE TABLE public.publishing_news_com_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6041,7 +6041,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_entry_revisions (
 -- Name: publishing_news_com_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_news_com_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6060,7 +6060,7 @@ ALTER SEQUENCE public.publishing_news_com_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_news_com_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_entry_slugs (
+CREATE TABLE public.publishing_news_com_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6082,7 +6082,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_entry_slugs (
 -- Name: publishing_news_com_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_news_com_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6101,7 +6101,7 @@ ALTER SEQUENCE public.publishing_news_com_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_news_com_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_entry_versions (
+CREATE TABLE public.publishing_news_com_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6127,7 +6127,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_entry_versions (
 -- Name: publishing_news_com_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_news_com_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6146,7 +6146,7 @@ ALTER SEQUENCE public.publishing_news_com_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_news_com_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_publications (
+CREATE TABLE public.publishing_news_com_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6173,7 +6173,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_publications (
 -- Name: publishing_news_com_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_publications_id_seq
+CREATE SEQUENCE public.publishing_news_com_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6192,7 +6192,7 @@ ALTER SEQUENCE public.publishing_news_com_publications_id_seq OWNED BY public.pu
 -- Name: publishing_news_com_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_revision_media_usages (
+CREATE TABLE public.publishing_news_com_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -6217,7 +6217,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_revision_media_usages (
 -- Name: publishing_news_com_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_news_com_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6236,7 +6236,7 @@ ALTER SEQUENCE public.publishing_news_com_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_news_com_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_news_com_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6255,7 +6255,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_revision_multiple_taxonomy_assi
 -- Name: publishing_news_com_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_news_com_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6274,7 +6274,7 @@ ALTER SEQUENCE public.publishing_news_com_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_news_com_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_news_com_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6291,7 +6291,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_revision_single_taxonomy_assign
 -- Name: publishing_news_com_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_news_com_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6310,7 +6310,7 @@ ALTER SEQUENCE public.publishing_news_com_revision_single_taxonomy_assignments_i
 -- Name: publishing_news_com_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_taxonomy_terms (
+CREATE TABLE public.publishing_news_com_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6343,7 +6343,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_taxonomy_terms (
 -- Name: publishing_news_com_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_news_com_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6362,7 +6362,7 @@ ALTER SEQUENCE public.publishing_news_com_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_news_com_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_version_media_usages (
+CREATE TABLE public.publishing_news_com_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -6387,7 +6387,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_version_media_usages (
 -- Name: publishing_news_com_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_news_com_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6406,7 +6406,7 @@ ALTER SEQUENCE public.publishing_news_com_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_news_com_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_news_com_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6440,7 +6440,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_version_multiple_taxonomy_assig
 -- Name: publishing_news_com_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_news_com_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6459,7 +6459,7 @@ ALTER SEQUENCE public.publishing_news_com_version_multiple_taxonomy_assignment_i
 -- Name: publishing_news_com_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_news_com_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6490,7 +6490,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_version_single_taxonomy_assignm
 -- Name: publishing_news_com_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_news_com_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6509,7 +6509,7 @@ ALTER SEQUENCE public.publishing_news_com_version_single_taxonomy_assignments_id
 -- Name: publishing_news_com_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_com_vocabularies (
+CREATE TABLE public.publishing_news_com_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -6532,7 +6532,7 @@ CREATE UNLOGGED TABLE public.publishing_news_com_vocabularies (
 -- Name: publishing_news_com_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_com_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_news_com_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6551,7 +6551,7 @@ ALTER SEQUENCE public.publishing_news_com_vocabularies_id_seq OWNED BY public.pu
 -- Name: publishing_news_org_entries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_entries (
+CREATE TABLE public.publishing_news_org_entries (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     locale character varying NOT NULL,
@@ -6572,7 +6572,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_entries (
 -- Name: publishing_news_org_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_entries_id_seq
+CREATE SEQUENCE public.publishing_news_org_entries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6591,7 +6591,7 @@ ALTER SEQUENCE public.publishing_news_org_entries_id_seq OWNED BY public.publish
 -- Name: publishing_news_org_entry_revisions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_entry_revisions (
+CREATE TABLE public.publishing_news_org_entry_revisions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6619,7 +6619,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_entry_revisions (
 -- Name: publishing_news_org_entry_revisions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_entry_revisions_id_seq
+CREATE SEQUENCE public.publishing_news_org_entry_revisions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6638,7 +6638,7 @@ ALTER SEQUENCE public.publishing_news_org_entry_revisions_id_seq OWNED BY public
 -- Name: publishing_news_org_entry_slugs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_entry_slugs (
+CREATE TABLE public.publishing_news_org_entry_slugs (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6660,7 +6660,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_entry_slugs (
 -- Name: publishing_news_org_entry_slugs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_entry_slugs_id_seq
+CREATE SEQUENCE public.publishing_news_org_entry_slugs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6679,7 +6679,7 @@ ALTER SEQUENCE public.publishing_news_org_entry_slugs_id_seq OWNED BY public.pub
 -- Name: publishing_news_org_entry_versions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_entry_versions (
+CREATE TABLE public.publishing_news_org_entry_versions (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6705,7 +6705,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_entry_versions (
 -- Name: publishing_news_org_entry_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_entry_versions_id_seq
+CREATE SEQUENCE public.publishing_news_org_entry_versions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6724,7 +6724,7 @@ ALTER SEQUENCE public.publishing_news_org_entry_versions_id_seq OWNED BY public.
 -- Name: publishing_news_org_publications; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_publications (
+CREATE TABLE public.publishing_news_org_publications (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     entry_id bigint NOT NULL,
@@ -6751,7 +6751,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_publications (
 -- Name: publishing_news_org_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_publications_id_seq
+CREATE SEQUENCE public.publishing_news_org_publications_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6770,7 +6770,7 @@ ALTER SEQUENCE public.publishing_news_org_publications_id_seq OWNED BY public.pu
 -- Name: publishing_news_org_revision_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_revision_media_usages (
+CREATE TABLE public.publishing_news_org_revision_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -6795,7 +6795,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_revision_media_usages (
 -- Name: publishing_news_org_revision_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_revision_media_usages_id_seq
+CREATE SEQUENCE public.publishing_news_org_revision_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6814,7 +6814,7 @@ ALTER SEQUENCE public.publishing_news_org_revision_media_usages_id_seq OWNED BY 
 -- Name: publishing_news_org_revision_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_revision_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_news_org_revision_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6833,7 +6833,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_revision_multiple_taxonomy_assi
 -- Name: publishing_news_org_revision_multiple_taxonomy_assignmen_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_revision_multiple_taxonomy_assignmen_id_seq
+CREATE SEQUENCE public.publishing_news_org_revision_multiple_taxonomy_assignmen_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6852,7 +6852,7 @@ ALTER SEQUENCE public.publishing_news_org_revision_multiple_taxonomy_assignmen_i
 -- Name: publishing_news_org_revision_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_revision_single_taxonomy_assignments (
+CREATE TABLE public.publishing_news_org_revision_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_revision_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6869,7 +6869,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_revision_single_taxonomy_assign
 -- Name: publishing_news_org_revision_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_revision_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_news_org_revision_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6888,7 +6888,7 @@ ALTER SEQUENCE public.publishing_news_org_revision_single_taxonomy_assignments_i
 -- Name: publishing_news_org_taxonomy_terms; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_taxonomy_terms (
+CREATE TABLE public.publishing_news_org_taxonomy_terms (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -6921,7 +6921,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_taxonomy_terms (
 -- Name: publishing_news_org_taxonomy_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_taxonomy_terms_id_seq
+CREATE SEQUENCE public.publishing_news_org_taxonomy_terms_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6940,7 +6940,7 @@ ALTER SEQUENCE public.publishing_news_org_taxonomy_terms_id_seq OWNED BY public.
 -- Name: publishing_news_org_version_media_usages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_version_media_usages (
+CREATE TABLE public.publishing_news_org_version_media_usages (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     media_file_id bigint NOT NULL,
@@ -6965,7 +6965,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_version_media_usages (
 -- Name: publishing_news_org_version_media_usages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_version_media_usages_id_seq
+CREATE SEQUENCE public.publishing_news_org_version_media_usages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6984,7 +6984,7 @@ ALTER SEQUENCE public.publishing_news_org_version_media_usages_id_seq OWNED BY p
 -- Name: publishing_news_org_version_multiple_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_version_multiple_taxonomy_assignments (
+CREATE TABLE public.publishing_news_org_version_multiple_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -7018,7 +7018,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_version_multiple_taxonomy_assig
 -- Name: publishing_news_org_version_multiple_taxonomy_assignment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_version_multiple_taxonomy_assignment_id_seq
+CREATE SEQUENCE public.publishing_news_org_version_multiple_taxonomy_assignment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -7037,7 +7037,7 @@ ALTER SEQUENCE public.publishing_news_org_version_multiple_taxonomy_assignment_i
 -- Name: publishing_news_org_version_single_taxonomy_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_version_single_taxonomy_assignments (
+CREATE TABLE public.publishing_news_org_version_single_taxonomy_assignments (
     id bigint NOT NULL,
     entry_version_id bigint NOT NULL,
     vocabulary_id bigint NOT NULL,
@@ -7068,7 +7068,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_version_single_taxonomy_assignm
 -- Name: publishing_news_org_version_single_taxonomy_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_version_single_taxonomy_assignments_id_seq
+CREATE SEQUENCE public.publishing_news_org_version_single_taxonomy_assignments_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -7087,7 +7087,7 @@ ALTER SEQUENCE public.publishing_news_org_version_single_taxonomy_assignments_id
 -- Name: publishing_news_org_vocabularies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.publishing_news_org_vocabularies (
+CREATE TABLE public.publishing_news_org_vocabularies (
     id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     key character varying NOT NULL,
@@ -7110,7 +7110,7 @@ CREATE UNLOGGED TABLE public.publishing_news_org_vocabularies (
 -- Name: publishing_news_org_vocabularies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.publishing_news_org_vocabularies_id_seq
+CREATE SEQUENCE public.publishing_news_org_vocabularies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -7129,7 +7129,7 @@ ALTER SEQUENCE public.publishing_news_org_vocabularies_id_seq OWNED BY public.pu
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 

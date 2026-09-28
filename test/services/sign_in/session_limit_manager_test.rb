@@ -127,6 +127,70 @@ module SignIn
       end
     end
 
+    test "rejects an actor of another surface's class before touching the cycle" do
+      client = create_client
+      cycle = create_cycle(ClientSignInFlow, client)
+
+      assert_no_difference("ClientToken.count") do
+        assert_raises(SignInSessionLimitManager::ActorMismatch) do
+          SignInSessionLimitManager.new(cycle: cycle, actor: create_visitor).issue_restricted!
+        end
+      end
+
+      assert_nil cycle.reload.token_id
+    end
+
+    test "cancel revokes the bound restricted token when the current token is that token" do
+      actor = create_client
+      cycle = create_cycle(ClientSignInFlow, actor)
+      restricted = SignInSessionLimitManager.new(cycle: cycle, actor: actor).issue_restricted!.token
+
+      result = SignInSessionLimitManager.new(cycle: cycle.reload, actor: actor, token: restricted).cancel!
+
+      assert_predicate result.cycle, :sign_in_failed?
+      assert_predicate restricted.reload, :revoked?
+    end
+
+    test "cancel refuses a bound cycle when no current token is presented" do
+      actor = create_client
+      cycle = create_cycle(ClientSignInFlow, actor)
+      restricted = SignInSessionLimitManager.new(cycle: cycle, actor: actor).issue_restricted!.token
+
+      assert_raises(SignInSessionLimitManager::TokenMismatch) do
+        SignInSessionLimitManager.new(cycle: cycle.reload, actor: actor, token: nil).cancel!
+      end
+
+      assert_predicate cycle.reload, :sign_in_session_limit_pending?
+      assert_not_predicate restricted.reload, :revoked?
+    end
+
+    test "cancel refuses a bound cycle when the current token is a different token" do
+      actor = create_client
+      cycle = create_cycle(ClientSignInFlow, actor)
+      restricted = SignInSessionLimitManager.new(cycle: cycle, actor: actor).issue_restricted!.token
+      other_token = ClientToken.create!(user: actor)
+
+      assert_raises(SignInSessionLimitManager::TokenMismatch) do
+        SignInSessionLimitManager.new(cycle: cycle.reload, actor: actor, token: other_token).cancel!
+      end
+
+      assert_predicate cycle.reload, :sign_in_session_limit_pending?
+      assert_not_predicate restricted.reload, :revoked?
+    end
+
+    test "cancel refuses a bound cycle whose token is no longer restricted" do
+      actor = create_client
+      cycle = create_cycle(ClientSignInFlow, actor)
+      bound = SignInSessionLimitManager.new(cycle: cycle, actor: actor).issue_restricted!.token
+      bound.update!(ClientToken.token_status_foreign_key => ClientTokenStatus::ACTIVE)
+
+      assert_raises(SignInSessionLimitManager::TokenMismatch) do
+        SignInSessionLimitManager.new(cycle: cycle.reload, actor: actor, token: bound).cancel!
+      end
+
+      assert_predicate cycle.reload, :sign_in_session_limit_pending?
+    end
+
     private
 
     def create_client

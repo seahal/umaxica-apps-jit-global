@@ -131,6 +131,102 @@ class Auth::App::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     end
   end
 
+  # The OTP page offers no link back to /sign/up: that left the ticket in the session and the next
+  # attempt ended in `invalid_transition`. Its only exit is the DELETE cancellation, which ends the
+  # ticket so a new sign-up can start cleanly in the same session.
+  test "the email OTP page ends sign-up through its DELETE cancellation" do
+    first_email = start_pending_email_flow!("cancel-a-#{SecureRandom.hex(3)}@example.com")
+    first_flow = ClientSignUpFlow.order(:created_at).last
+    get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: { "Host" => @host }
+
+    assert_response :success
+    assert_not inertia_props.key?("return_link")
+    cancel = inertia_props.fetch("cancel")
+
+    assert_equal "delete", cancel.fetch("method")
+    assert_equal auth_app_sign_up_check_email_otp_path(ri: "jp"), URI.parse(cancel.fetch("action")).path + "?ri=jp"
+
+    assert_no_difference(["Client.count", "ClientToken.count"]) do
+      delete cancel.fetch("action"), headers: { "Host" => @host }
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+    assert_equal ClientSignUpFlowStatus::CANCELLED, first_flow.reload.status_id
+
+    # The cancelled ticket's code no longer advances anything.
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+          params: { client_email: { pass_code: otp_code_for(first_email) } },
+          headers: { "Host" => @host }
+
+    assert_not_equal auth_app_sign_up_check_email_birthdate_url(ri: "jp"), response.location
+    assert_equal ClientSignUpFlowStatus::CANCELLED, first_flow.reload.status_id
+
+    # A new sign-up in the same session proceeds instead of ending in `invalid_transition`.
+    advance_to_birthdate_checkpoint!("cancel-b-#{SecureRandom.hex(3)}@example.com")
+
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+  end
+
+  # An address that already has an account runs a decoy flow with no real ticket; its cancellation
+  # must answer exactly like a real one so the response does not reveal the address exists.
+  test "cancelling the decoy flow of an existing address answers like a real cancellation" do
+    existing = "cancel-existing-#{SecureRandom.hex(3)}@example.com"
+    ClientEmail.create!(
+      user: Client.create!, address: existing, user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    start_pending_email_flow!(existing)
+    get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: { "Host" => @host }
+
+    assert_response :success
+    cancel = inertia_props.fetch("cancel")
+
+    delete cancel.fetch("action"), headers: { "Host" => @host }
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+  end
+
+  # Birthdate rejections map the validation reason to a fixed public message key, so the actor can
+  # correct the input while the model's own error wording is not the response contract.
+  {
+    "2999-01-01" => "sign.shared.birthdate.errors.not_before_today",
+    "19900115" => "sign.shared.birthdate.errors.format",
+  }.each do |birthdate, key|
+    test "a rejected birthdate #{birthdate} answers with the public message #{key}" do
+      advance_to_birthdate_checkpoint!("birthdate-reject-#{SecureRandom.hex(3)}@example.com")
+      flow = ClientSignUpFlow.order(:created_at).last
+
+      patch auth_app_sign_up_check_email_birthdate_url(ri: "jp"),
+            params: { requirement: "birthdate", checkpoint_version: flow.checkpoint_version, birthdate: birthdate },
+            headers: { "Host" => @host }
+
+      assert_response :unprocessable_content
+      assert_equal "text/plain", response.media_type
+      assert_equal I18n.t(key, raise: true), response.body
+      assert_nil response.location
+      assert_not flow.reload.requirement_cleared?(:birthdate)
+    end
+  end
+
+  # The state machine's own classification (here `invalid_transition`) stays server-side; the body
+  # is a fixed public message with no redirect and no markup.
+  test "a rejected sign-up transition answers with a coarse plain-text message" do
+    advance_to_birthdate_checkpoint!("transition-a-#{SecureRandom.hex(3)}@example.com")
+    user_email = start_pending_email_flow!("transition-b-#{SecureRandom.hex(3)}@example.com")
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
+          params: { client_email: { pass_code: otp_code_for(user_email) } },
+          headers: { "Host" => @host }
+
+    assert_response :unprocessable_content
+    assert_equal "text/plain", response.media_type
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_nil response.location
+    assert_not_includes response.body, "invalid_transition"
+    assert_not_includes response.body, "<"
+  end
+
   private
 
   def advance_to_birthdate_checkpoint!(email)

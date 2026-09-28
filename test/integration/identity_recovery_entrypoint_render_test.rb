@@ -162,7 +162,10 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: subject.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
   end
 
   def create_client

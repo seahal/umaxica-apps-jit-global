@@ -98,6 +98,71 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_equal "cancelled", response.parsed_body.fetch("status")
   end
 
+  test "the source client cannot accept its own outgoing transfer and the denial is audited" do
+    grant_step_up!(@client_token, scope: "avatar_transfer_request", surface: "app")
+    post base_app_avatar_ownership_transfers_url(host: @host),
+         params: request_params,
+         headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+    transfer_id = response.parsed_body.fetch("transfer_public_id")
+    grant_step_up!(@client_token, scope: "avatar_transfer_accept", surface: "app")
+    before =
+      ChronicleRecord.connected_to(role: :writing) do
+        ClientChronicle.where(event_id: ClientChronicleEvent::AUTHORIZATION_FAILED).count
+      end
+
+    post base_app_accept_avatar_ownership_transfer_url(transfer_id, host: @host),
+         headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+
+    assert_response :forbidden
+    assert_equal({ "error" => "Unauthorized" }, response.parsed_body)
+    assert_equal "pending", AvatarOwnershipTransfer.find_by!(public_id: transfer_id).state
+    after =
+      ChronicleRecord.connected_to(role: :writing) do
+        ClientChronicle.where(event_id: ClientChronicleEvent::AUTHORIZATION_FAILED).count
+      end
+
+    assert_equal before + 1, after
+  end
+
+  test "cancelling a transfer past its expiry marks it expired and answers 410" do
+    grant_step_up!(@client_token, scope: "avatar_transfer_request", surface: "app")
+    post base_app_avatar_ownership_transfers_url(host: @host),
+         params: request_params,
+         headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+    transfer = AvatarOwnershipTransfer.find_by!(public_id: response.parsed_body.fetch("transfer_public_id"))
+    # Backdate the pending transfer instead of moving the clock, which would also expire the access token.
+    transfer.update_columns(requested_at: 2.days.ago, expires_at: 1.second.ago) # rubocop:disable Rails/SkipsModelValidations
+    grant_step_up!(@client_token, scope: "avatar_transfer_cancel", surface: "app")
+
+    post base_app_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+
+    assert_response :gone
+    assert_equal "expired", transfer.reload.state
+  end
+
+  test "a request naming an unknown target collective is rejected without creating a transfer" do
+    grant_step_up!(@client_token, scope: "avatar_transfer_request", surface: "app")
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_app_avatar_ownership_transfers_url(host: @host),
+           params: request_params.merge(target_collective_public_id: "no-such-collective"),
+           headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "target collective not found", response.body
+  end
+
+  test "an unknown transfer id is not found" do
+    grant_step_up!(@client_token, scope: "avatar_transfer_accept", surface: "app")
+
+    post base_app_accept_avatar_ownership_transfer_url("no-such-transfer", host: @host),
+         headers: as_user_headers(@client, host: @host, session_public_id: @client_token.public_id), as: :json
+
+    assert_response :not_found
+  end
+
   private
 
   def request_params

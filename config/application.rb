@@ -182,6 +182,8 @@ module Jit
     config.time_zone = "UTC"
     config.active_record.default_timezone = :utc
     config.active_record.schema_format = :sql
+    config.active_record.strict_loading_by_default = true
+    config.active_record.action_on_strict_loading_violation = :raise
 
     # SMS Provider Configuration
     config.sms_provider = ENV.fetch("SMS_PROVIDER", "aws_sns")

@@ -253,6 +253,14 @@ class Avatar < AvatarRecord
       raise(ActiveRecord::RecordNotFound, "Avatar #{public_id} has no current AvatarMoniker")
   end
 
+  public
+
+  # Opaque cache key for the stored image. It changes when the Avatar or its stored file
+  # changes, so a Persona switch never reuses the previous Avatar's cached image.
+  def image_cache_key
+    Digest::SHA256.hexdigest("#{public_id}:#{image&.id}")[0, 24]
+  end
+
   def current_persona
     current_avatar_persona_binding&.persona
   end

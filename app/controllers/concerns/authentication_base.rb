@@ -86,6 +86,36 @@ module AuthenticationBase
   ACCESS_COOKIE_KEY = AuthenticationCookieName.access
   REFRESH_COOKIE_KEY = AuthenticationCookieName.refresh
   DBSC_COOKIE_KEY = AuthenticationCookieName.dbsc
+  # adr/invalid-browser-credential-recovery.md. Every reason an auth browser credential can be
+  # refused for, by category. `credential_rejection`: the presented credential itself is unusable
+  # (malformed, unknown, digest or binding mismatch, reuse). `lifecycle`: an ordinary end of a
+  # valid credential's life (expiry, idle timeout, deactivation). Policy states such as
+  # `withdrawal_required` and `administrative_access_locked` are absent on purpose: the credential
+  # is valid, and their gates need it. Database and dependency errors never produce a reason; they
+  # propagate. `fetch` on this map raises for an unlisted reason instead of guessing a category.
+  AUTH_CREDENTIAL_FAILURE_CATEGORIES = {
+    "token_decode_failed" => "credential_rejection",
+    "missing_session_id" => "credential_rejection",
+    "token_session_not_found" => "credential_rejection",
+    "token_jti_mismatch" => "credential_rejection",
+    "dpop_verification_failed" => "credential_rejection",
+    "dpop_binding_mismatch" => "credential_rejection",
+    "actor_mismatch" => "credential_rejection",
+    "resource_not_found" => "credential_rejection",
+    "invalid_format" => "credential_rejection",
+    "token_not_found" => "credential_rejection",
+    "invalid_digest" => "credential_rejection",
+    "refresh_token_reuse_detected" => "credential_rejection",
+    "binding_denied" => "credential_rejection",
+    "idle_timeout" => "lifecycle",
+    "inactive_token" => "lifecycle",
+  }.freeze
+  # Access cookie failures after which the cookie is detached and the request continues anonymous.
+  AUTH_ACCESS_DETACHABLE_FAILURES = AUTH_CREDENTIAL_FAILURE_CATEGORIES.slice(
+    "token_decode_failed", "missing_session_id", "token_session_not_found", "token_jti_mismatch",
+    "dpop_verification_failed", "dpop_binding_mismatch", "actor_mismatch", "resource_not_found",
+    "idle_timeout",
+  ).transform_keys(&:to_sym).freeze
   BULLETIN_SESSION_KEY = :sign_in_checkpoint
   BULLETIN_TIMEOUT = 2.hours
   OIDC_RP_SESSION_KEYS = %i(
@@ -549,16 +579,6 @@ module AuthenticationBase
       resource, token_record, new_refresh_plain,
       previous_token_record: previous_token_record,
     )
-  rescue StandardError => e
-    Rails.logger.error(
-      JitLogEvent.format(
-        "auth.token.refresh.error",
-        error_class: e.class.name,
-        message: e.message,
-        exception: e,
-      ),
-    )
-    handle_refresh_error(e, refresh_public_id, resource)
   end
 
   def refresh_failure_status
@@ -942,6 +962,7 @@ module AuthenticationBase
   # hard-revoked.
   def handle_refresh_idle_timeout(_token_record, refresh_public_id)
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
+    log_auth_credential_rejection("refresh_cookie", "idle_timeout")
     destroy_refresh_token_from_cookie
     clear_auth_cookies!
 
@@ -1164,6 +1185,7 @@ module AuthenticationBase
 
   def handle_invalid_refresh_token_reason(reason, refresh_public_id, token_record = nil, log_reason: reason)
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
+    log_auth_credential_rejection("refresh_cookie", log_reason)
 
     if reason == "refresh_token_reuse_detected"
       write_refresh_occurrence(
@@ -1185,6 +1207,8 @@ module AuthenticationBase
         reset_session_and_clear_inertia_history!
       end
     end
+
+    clear_auth_cookies! unless reason == "refresh_token_reuse_detected"
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -1226,6 +1250,10 @@ module AuthenticationBase
 
     revoke_refresh_session_after_dbsc_failure!(token_record) if @refresh_dbsc_reason.present?
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
+    log_auth_credential_rejection(
+      token_record&.binding_method_dbsc? ? "dbsc_cookie" : "refresh_cookie",
+      "binding_denied",
+    )
     destroy_refresh_token_from_cookie
     clear_auth_cookies!
     reset_session_and_clear_inertia_history! if @refresh_dbsc_reason.present?
@@ -1237,32 +1265,6 @@ module AuthenticationBase
         reason: binding_failure_reason(reason, token_record),
         ip_address: request_ip_address,
       ),
-    )
-
-    nil
-  end
-
-  def handle_refresh_error(exception, refresh_public_id, resource)
-    set_refresh_failure!(:unauthorized, "invalid_refresh_token")
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "#{resource_type}.token.refresh.error",
-        "#{resource_type}_id": resource&.id,
-        refresh_token_id: refresh_public_id,
-        error_message: exception.message,
-        ip_address: request_ip_address,
-      ),
-    )
-
-    SignRiskEmitter.emit(
-      "refresh_failed",
-      **risk_actor_payload(resource&.id),
-      user_token_id: refresh_public_id,
-      ip: request&.remote_ip,
-      user_agent: request&.user_agent,
-      request_id: request&.request_id,
-      meta: { error_class: exception.class.name },
     )
 
     nil
@@ -1616,8 +1618,8 @@ module AuthenticationBase
               access_token: access_token,
     )
     emit_actor_mismatch_event(result.payload) if result.failure_reason == :actor_mismatch
-    @current_session_public_id = result.session_public_id if result.session_public_id.present?
-    @current_token_public_id = result.token_public_id if result.token_public_id.present?
+    @current_session_public_id = result.session_public_id if result.resource.present? && result.session_public_id.present?
+    @current_token_public_id = result.token_public_id if result.resource.present? && result.token_public_id.present?
 
     if result.resource.present?
       # ActorSupport#set_current_actor rebuilds Actor.authz later in the request and reads
@@ -1636,6 +1638,30 @@ module AuthenticationBase
       authorization_scheme.present? ||
       result.failure_reason != :blank_access_token ||
       result.payload.present?
+
+    return unless authentication_credentials_invalid?
+    # JSON keeps its existing authentication failure response; only HTML continues anonymous.
+    return if request.format.json?
+    return if AuthAuthorizationHeader.access_token(request).present?
+    return if BrowserCredentialCookie.read(cookies, ACCESS_COOKIE_KEY).blank?
+    return unless AUTH_ACCESS_DETACHABLE_FAILURES.key?(result.failure_reason)
+
+    log_auth_credential_rejection("access_cookie", result.failure_reason)
+    clear_auth_cookies!
+    @current_authentication_credentials_present = false
+  end
+
+  def log_auth_credential_rejection(kind, reason)
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.credential_rejected",
+        surface: CoreSurface.current(request),
+        credential_kind: kind,
+        reason: reason,
+        category: AUTH_CREDENTIAL_FAILURE_CATEGORIES.fetch(reason.to_s),
+        request_id: request.request_id,
+      ),
+    )
   end
 
   def authentication_credentials_invalid?
@@ -2274,6 +2300,20 @@ module AuthenticationBase
   def clear_pending_mfa!
     session.delete(:pending_mfa)
     session.delete(:mfa_user_id)
+  end
+
+  # Ends a sign-in ceremony that is waiting on its second factor: the sign-in cycle is failed so it
+  # cannot be resumed, its browser locator and the pending MFA state are removed, and no session or
+  # token is issued. The outer Auth ceremony (and any OIDC authorization transaction it carries) is
+  # left intact so the actor returns to the same sign-in entry point.
+  def cancel_pending_mfa!
+    actor = pending_mfa_user
+    if actor
+      cycle = pending_mfa_sign_in_flow_for(actor)
+      cycle.fail_sign_in! if cycle&.sign_in_mfa_pending?
+      sign_in_flow_locator_for(actor: actor).clear!
+    end
+    clear_pending_mfa!
   end
 
   # adr/unified-enforcement.md, JWT AMR: derives `amr` from

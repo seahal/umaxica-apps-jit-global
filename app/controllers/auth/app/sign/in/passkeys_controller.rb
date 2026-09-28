@@ -20,8 +20,6 @@ module Auth
 
           include EmailValidation
 
-          include IdentifierDetection
-
           include MinimumResponseBudget
 
           include SessionLimitGate

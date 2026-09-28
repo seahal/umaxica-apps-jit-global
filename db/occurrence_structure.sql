@@ -46,7 +46,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -58,7 +58,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: area_client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_client_occurrences (
+CREATE TABLE public.area_client_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
@@ -71,7 +71,7 @@ CREATE UNLOGGED TABLE public.area_client_occurrences (
 -- Name: area_client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_client_occurrences_id_seq
+CREATE SEQUENCE public.area_client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -90,7 +90,7 @@ ALTER SEQUENCE public.area_client_occurrences_id_seq OWNED BY public.area_client
 -- Name: area_domain_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_domain_occurrences (
+CREATE TABLE public.area_domain_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
@@ -103,7 +103,7 @@ CREATE UNLOGGED TABLE public.area_domain_occurrences (
 -- Name: area_domain_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_domain_occurrences_id_seq
+CREATE SEQUENCE public.area_domain_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -122,7 +122,7 @@ ALTER SEQUENCE public.area_domain_occurrences_id_seq OWNED BY public.area_domain
 -- Name: area_email_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_email_occurrences (
+CREATE TABLE public.area_email_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
@@ -135,7 +135,7 @@ CREATE UNLOGGED TABLE public.area_email_occurrences (
 -- Name: area_email_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_email_occurrences_id_seq
+CREATE SEQUENCE public.area_email_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -154,7 +154,7 @@ ALTER SEQUENCE public.area_email_occurrences_id_seq OWNED BY public.area_email_o
 -- Name: area_ip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_ip_occurrences (
+CREATE TABLE public.area_ip_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
@@ -167,7 +167,7 @@ CREATE UNLOGGED TABLE public.area_ip_occurrences (
 -- Name: area_ip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_ip_occurrences_id_seq
+CREATE SEQUENCE public.area_ip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -186,7 +186,7 @@ ALTER SEQUENCE public.area_ip_occurrences_id_seq OWNED BY public.area_ip_occurre
 -- Name: area_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_occurrence_statuses (
+CREATE TABLE public.area_occurrence_statuses (
     id bigint NOT NULL
 );
 
@@ -195,7 +195,7 @@ CREATE UNLOGGED TABLE public.area_occurrence_statuses (
 -- Name: area_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_occurrence_statuses_id_seq
+CREATE SEQUENCE public.area_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -214,7 +214,7 @@ ALTER SEQUENCE public.area_occurrence_statuses_id_seq OWNED BY public.area_occur
 -- Name: area_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_occurrences (
+CREATE TABLE public.area_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -232,7 +232,7 @@ CREATE UNLOGGED TABLE public.area_occurrences (
 -- Name: area_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_occurrences_id_seq
+CREATE SEQUENCE public.area_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -251,7 +251,7 @@ ALTER SEQUENCE public.area_occurrences_id_seq OWNED BY public.area_occurrences.i
 -- Name: area_operator_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_operator_occurrences (
+CREATE TABLE public.area_operator_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
@@ -264,7 +264,7 @@ CREATE UNLOGGED TABLE public.area_operator_occurrences (
 -- Name: area_operator_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_operator_occurrences_id_seq
+CREATE SEQUENCE public.area_operator_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -283,7 +283,7 @@ ALTER SEQUENCE public.area_operator_occurrences_id_seq OWNED BY public.area_oper
 -- Name: area_telephone_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_telephone_occurrences (
+CREATE TABLE public.area_telephone_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
@@ -296,7 +296,7 @@ CREATE UNLOGGED TABLE public.area_telephone_occurrences (
 -- Name: area_telephone_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_telephone_occurrences_id_seq
+CREATE SEQUENCE public.area_telephone_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -315,7 +315,7 @@ ALTER SEQUENCE public.area_telephone_occurrences_id_seq OWNED BY public.area_tel
 -- Name: area_visitor_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_visitor_occurrences (
+CREATE TABLE public.area_visitor_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     visitor_occurrence_id bigint NOT NULL,
@@ -328,7 +328,7 @@ CREATE UNLOGGED TABLE public.area_visitor_occurrences (
 -- Name: area_visitor_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_visitor_occurrences_id_seq
+CREATE SEQUENCE public.area_visitor_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -347,7 +347,7 @@ ALTER SEQUENCE public.area_visitor_occurrences_id_seq OWNED BY public.area_visit
 -- Name: area_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.area_zip_occurrences (
+CREATE TABLE public.area_zip_occurrences (
     id bigint NOT NULL,
     area_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -360,7 +360,7 @@ CREATE UNLOGGED TABLE public.area_zip_occurrences (
 -- Name: area_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.area_zip_occurrences_id_seq
+CREATE SEQUENCE public.area_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -379,7 +379,7 @@ ALTER SEQUENCE public.area_zip_occurrences_id_seq OWNED BY public.area_zip_occur
 -- Name: client_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_occurrence_statuses (
+CREATE TABLE public.client_occurrence_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -389,7 +389,7 @@ CREATE UNLOGGED TABLE public.client_occurrence_statuses (
 -- Name: client_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_occurrence_statuses_id_seq
+CREATE SEQUENCE public.client_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -408,7 +408,7 @@ ALTER SEQUENCE public.client_occurrence_statuses_id_seq OWNED BY public.client_o
 -- Name: client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_occurrences (
+CREATE TABLE public.client_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -428,7 +428,7 @@ CREATE UNLOGGED TABLE public.client_occurrences (
 -- Name: client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_occurrences_id_seq
+CREATE SEQUENCE public.client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -447,7 +447,7 @@ ALTER SEQUENCE public.client_occurrences_id_seq OWNED BY public.client_occurrenc
 -- Name: client_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.client_zip_occurrences (
+CREATE TABLE public.client_zip_occurrences (
     id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -460,7 +460,7 @@ CREATE UNLOGGED TABLE public.client_zip_occurrences (
 -- Name: client_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.client_zip_occurrences_id_seq
+CREATE SEQUENCE public.client_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -479,7 +479,7 @@ ALTER SEQUENCE public.client_zip_occurrences_id_seq OWNED BY public.client_zip_o
 -- Name: domain_client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_client_occurrences (
+CREATE TABLE public.domain_client_occurrences (
     id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
@@ -492,7 +492,7 @@ CREATE UNLOGGED TABLE public.domain_client_occurrences (
 -- Name: domain_client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_client_occurrences_id_seq
+CREATE SEQUENCE public.domain_client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -511,7 +511,7 @@ ALTER SEQUENCE public.domain_client_occurrences_id_seq OWNED BY public.domain_cl
 -- Name: domain_email_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_email_occurrences (
+CREATE TABLE public.domain_email_occurrences (
     id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
@@ -524,7 +524,7 @@ CREATE UNLOGGED TABLE public.domain_email_occurrences (
 -- Name: domain_email_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_email_occurrences_id_seq
+CREATE SEQUENCE public.domain_email_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -543,7 +543,7 @@ ALTER SEQUENCE public.domain_email_occurrences_id_seq OWNED BY public.domain_ema
 -- Name: domain_ip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_ip_occurrences (
+CREATE TABLE public.domain_ip_occurrences (
     id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
@@ -556,7 +556,7 @@ CREATE UNLOGGED TABLE public.domain_ip_occurrences (
 -- Name: domain_ip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_ip_occurrences_id_seq
+CREATE SEQUENCE public.domain_ip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -575,7 +575,7 @@ ALTER SEQUENCE public.domain_ip_occurrences_id_seq OWNED BY public.domain_ip_occ
 -- Name: domain_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_occurrence_statuses (
+CREATE TABLE public.domain_occurrence_statuses (
     id bigint NOT NULL
 );
 
@@ -584,7 +584,7 @@ CREATE UNLOGGED TABLE public.domain_occurrence_statuses (
 -- Name: domain_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_occurrence_statuses_id_seq
+CREATE SEQUENCE public.domain_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -603,7 +603,7 @@ ALTER SEQUENCE public.domain_occurrence_statuses_id_seq OWNED BY public.domain_o
 -- Name: domain_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_occurrences (
+CREATE TABLE public.domain_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -621,7 +621,7 @@ CREATE UNLOGGED TABLE public.domain_occurrences (
 -- Name: domain_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_occurrences_id_seq
+CREATE SEQUENCE public.domain_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -640,7 +640,7 @@ ALTER SEQUENCE public.domain_occurrences_id_seq OWNED BY public.domain_occurrenc
 -- Name: domain_operator_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_operator_occurrences (
+CREATE TABLE public.domain_operator_occurrences (
     id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
@@ -653,7 +653,7 @@ CREATE UNLOGGED TABLE public.domain_operator_occurrences (
 -- Name: domain_operator_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_operator_occurrences_id_seq
+CREATE SEQUENCE public.domain_operator_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -672,7 +672,7 @@ ALTER SEQUENCE public.domain_operator_occurrences_id_seq OWNED BY public.domain_
 -- Name: domain_telephone_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_telephone_occurrences (
+CREATE TABLE public.domain_telephone_occurrences (
     id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
@@ -685,7 +685,7 @@ CREATE UNLOGGED TABLE public.domain_telephone_occurrences (
 -- Name: domain_telephone_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_telephone_occurrences_id_seq
+CREATE SEQUENCE public.domain_telephone_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -704,7 +704,7 @@ ALTER SEQUENCE public.domain_telephone_occurrences_id_seq OWNED BY public.domain
 -- Name: domain_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.domain_zip_occurrences (
+CREATE TABLE public.domain_zip_occurrences (
     id bigint NOT NULL,
     domain_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -717,7 +717,7 @@ CREATE UNLOGGED TABLE public.domain_zip_occurrences (
 -- Name: domain_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.domain_zip_occurrences_id_seq
+CREATE SEQUENCE public.domain_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -736,7 +736,7 @@ ALTER SEQUENCE public.domain_zip_occurrences_id_seq OWNED BY public.domain_zip_o
 -- Name: email_client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_client_occurrences (
+CREATE TABLE public.email_client_occurrences (
     id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
@@ -749,7 +749,7 @@ CREATE UNLOGGED TABLE public.email_client_occurrences (
 -- Name: email_client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_client_occurrences_id_seq
+CREATE SEQUENCE public.email_client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -768,7 +768,7 @@ ALTER SEQUENCE public.email_client_occurrences_id_seq OWNED BY public.email_clie
 -- Name: email_ip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_ip_occurrences (
+CREATE TABLE public.email_ip_occurrences (
     id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
@@ -781,7 +781,7 @@ CREATE UNLOGGED TABLE public.email_ip_occurrences (
 -- Name: email_ip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_ip_occurrences_id_seq
+CREATE SEQUENCE public.email_ip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -800,7 +800,7 @@ ALTER SEQUENCE public.email_ip_occurrences_id_seq OWNED BY public.email_ip_occur
 -- Name: email_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_occurrence_statuses (
+CREATE TABLE public.email_occurrence_statuses (
     id bigint NOT NULL
 );
 
@@ -809,7 +809,7 @@ CREATE UNLOGGED TABLE public.email_occurrence_statuses (
 -- Name: email_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_occurrence_statuses_id_seq
+CREATE SEQUENCE public.email_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -828,7 +828,7 @@ ALTER SEQUENCE public.email_occurrence_statuses_id_seq OWNED BY public.email_occ
 -- Name: email_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_occurrences (
+CREATE TABLE public.email_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -847,7 +847,7 @@ CREATE UNLOGGED TABLE public.email_occurrences (
 -- Name: email_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_occurrences_id_seq
+CREATE SEQUENCE public.email_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -866,7 +866,7 @@ ALTER SEQUENCE public.email_occurrences_id_seq OWNED BY public.email_occurrences
 -- Name: email_operator_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_operator_occurrences (
+CREATE TABLE public.email_operator_occurrences (
     id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
@@ -879,7 +879,7 @@ CREATE UNLOGGED TABLE public.email_operator_occurrences (
 -- Name: email_operator_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_operator_occurrences_id_seq
+CREATE SEQUENCE public.email_operator_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -898,7 +898,7 @@ ALTER SEQUENCE public.email_operator_occurrences_id_seq OWNED BY public.email_op
 -- Name: email_telephone_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_telephone_occurrences (
+CREATE TABLE public.email_telephone_occurrences (
     id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
@@ -911,7 +911,7 @@ CREATE UNLOGGED TABLE public.email_telephone_occurrences (
 -- Name: email_telephone_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_telephone_occurrences_id_seq
+CREATE SEQUENCE public.email_telephone_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -930,7 +930,7 @@ ALTER SEQUENCE public.email_telephone_occurrences_id_seq OWNED BY public.email_t
 -- Name: email_visitor_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_visitor_occurrences (
+CREATE TABLE public.email_visitor_occurrences (
     id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
     visitor_occurrence_id bigint NOT NULL,
@@ -943,7 +943,7 @@ CREATE UNLOGGED TABLE public.email_visitor_occurrences (
 -- Name: email_visitor_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_visitor_occurrences_id_seq
+CREATE SEQUENCE public.email_visitor_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -962,7 +962,7 @@ ALTER SEQUENCE public.email_visitor_occurrences_id_seq OWNED BY public.email_vis
 -- Name: email_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.email_zip_occurrences (
+CREATE TABLE public.email_zip_occurrences (
     id bigint NOT NULL,
     email_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -975,7 +975,7 @@ CREATE UNLOGGED TABLE public.email_zip_occurrences (
 -- Name: email_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.email_zip_occurrences_id_seq
+CREATE SEQUENCE public.email_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -994,7 +994,7 @@ ALTER SEQUENCE public.email_zip_occurrences_id_seq OWNED BY public.email_zip_occ
 -- Name: ip_client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_client_occurrences (
+CREATE TABLE public.ip_client_occurrences (
     id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
@@ -1007,7 +1007,7 @@ CREATE UNLOGGED TABLE public.ip_client_occurrences (
 -- Name: ip_client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_client_occurrences_id_seq
+CREATE SEQUENCE public.ip_client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1026,7 +1026,7 @@ ALTER SEQUENCE public.ip_client_occurrences_id_seq OWNED BY public.ip_client_occ
 -- Name: ip_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_occurrence_statuses (
+CREATE TABLE public.ip_occurrence_statuses (
     id bigint NOT NULL
 );
 
@@ -1035,7 +1035,7 @@ CREATE UNLOGGED TABLE public.ip_occurrence_statuses (
 -- Name: ip_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_occurrence_statuses_id_seq
+CREATE SEQUENCE public.ip_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1054,7 +1054,7 @@ ALTER SEQUENCE public.ip_occurrence_statuses_id_seq OWNED BY public.ip_occurrenc
 -- Name: ip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_occurrences (
+CREATE TABLE public.ip_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -1073,7 +1073,7 @@ CREATE UNLOGGED TABLE public.ip_occurrences (
 -- Name: ip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_occurrences_id_seq
+CREATE SEQUENCE public.ip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1092,7 +1092,7 @@ ALTER SEQUENCE public.ip_occurrences_id_seq OWNED BY public.ip_occurrences.id;
 -- Name: ip_operator_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_operator_occurrences (
+CREATE TABLE public.ip_operator_occurrences (
     id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
@@ -1105,7 +1105,7 @@ CREATE UNLOGGED TABLE public.ip_operator_occurrences (
 -- Name: ip_operator_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_operator_occurrences_id_seq
+CREATE SEQUENCE public.ip_operator_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1124,7 +1124,7 @@ ALTER SEQUENCE public.ip_operator_occurrences_id_seq OWNED BY public.ip_operator
 -- Name: ip_telephone_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_telephone_occurrences (
+CREATE TABLE public.ip_telephone_occurrences (
     id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
@@ -1137,7 +1137,7 @@ CREATE UNLOGGED TABLE public.ip_telephone_occurrences (
 -- Name: ip_telephone_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_telephone_occurrences_id_seq
+CREATE SEQUENCE public.ip_telephone_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1156,7 +1156,7 @@ ALTER SEQUENCE public.ip_telephone_occurrences_id_seq OWNED BY public.ip_telepho
 -- Name: ip_visitor_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_visitor_occurrences (
+CREATE TABLE public.ip_visitor_occurrences (
     id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
     visitor_occurrence_id bigint NOT NULL,
@@ -1169,7 +1169,7 @@ CREATE UNLOGGED TABLE public.ip_visitor_occurrences (
 -- Name: ip_visitor_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_visitor_occurrences_id_seq
+CREATE SEQUENCE public.ip_visitor_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1188,7 +1188,7 @@ ALTER SEQUENCE public.ip_visitor_occurrences_id_seq OWNED BY public.ip_visitor_o
 -- Name: ip_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ip_zip_occurrences (
+CREATE TABLE public.ip_zip_occurrences (
     id bigint NOT NULL,
     ip_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -1201,7 +1201,7 @@ CREATE UNLOGGED TABLE public.ip_zip_occurrences (
 -- Name: ip_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.ip_zip_occurrences_id_seq
+CREATE SEQUENCE public.ip_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1220,7 +1220,7 @@ ALTER SEQUENCE public.ip_zip_occurrences_id_seq OWNED BY public.ip_zip_occurrenc
 -- Name: jwt_anomaly_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.jwt_anomaly_events (
+CREATE TABLE public.jwt_anomaly_events (
     id bigint NOT NULL,
     jwt_occurrence_id bigint NOT NULL,
     code character varying DEFAULT ''::character varying NOT NULL,
@@ -1243,7 +1243,7 @@ CREATE UNLOGGED TABLE public.jwt_anomaly_events (
 -- Name: jwt_anomaly_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.jwt_anomaly_events_id_seq
+CREATE SEQUENCE public.jwt_anomaly_events_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1262,7 +1262,7 @@ ALTER SEQUENCE public.jwt_anomaly_events_id_seq OWNED BY public.jwt_anomaly_even
 -- Name: jwt_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.jwt_occurrence_statuses (
+CREATE TABLE public.jwt_occurrence_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -1272,7 +1272,7 @@ CREATE UNLOGGED TABLE public.jwt_occurrence_statuses (
 -- Name: jwt_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.jwt_occurrence_statuses_id_seq
+CREATE SEQUENCE public.jwt_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1291,7 +1291,7 @@ ALTER SEQUENCE public.jwt_occurrence_statuses_id_seq OWNED BY public.jwt_occurre
 -- Name: jwt_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.jwt_occurrences (
+CREATE TABLE public.jwt_occurrences (
     id bigint NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
     memo character varying DEFAULT ''::character varying NOT NULL,
@@ -1310,7 +1310,7 @@ CREATE UNLOGGED TABLE public.jwt_occurrences (
 -- Name: jwt_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.jwt_occurrences_id_seq
+CREATE SEQUENCE public.jwt_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1329,7 +1329,7 @@ ALTER SEQUENCE public.jwt_occurrences_id_seq OWNED BY public.jwt_occurrences.id;
 -- Name: operator_client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_client_occurrences (
+CREATE TABLE public.operator_client_occurrences (
     id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
@@ -1342,7 +1342,7 @@ CREATE UNLOGGED TABLE public.operator_client_occurrences (
 -- Name: operator_client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_client_occurrences_id_seq
+CREATE SEQUENCE public.operator_client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1361,7 +1361,7 @@ ALTER SEQUENCE public.operator_client_occurrences_id_seq OWNED BY public.operato
 -- Name: operator_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_occurrence_statuses (
+CREATE TABLE public.operator_occurrence_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -1371,7 +1371,7 @@ CREATE UNLOGGED TABLE public.operator_occurrence_statuses (
 -- Name: operator_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_occurrence_statuses_id_seq
+CREATE SEQUENCE public.operator_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1390,7 +1390,7 @@ ALTER SEQUENCE public.operator_occurrence_statuses_id_seq OWNED BY public.operat
 -- Name: operator_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_occurrences (
+CREATE TABLE public.operator_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -1410,7 +1410,7 @@ CREATE UNLOGGED TABLE public.operator_occurrences (
 -- Name: operator_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_occurrences_id_seq
+CREATE SEQUENCE public.operator_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1429,7 +1429,7 @@ ALTER SEQUENCE public.operator_occurrences_id_seq OWNED BY public.operator_occur
 -- Name: operator_telephone_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_telephone_occurrences (
+CREATE TABLE public.operator_telephone_occurrences (
     id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
@@ -1442,7 +1442,7 @@ CREATE UNLOGGED TABLE public.operator_telephone_occurrences (
 -- Name: operator_telephone_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_telephone_occurrences_id_seq
+CREATE SEQUENCE public.operator_telephone_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1461,7 +1461,7 @@ ALTER SEQUENCE public.operator_telephone_occurrences_id_seq OWNED BY public.oper
 -- Name: operator_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.operator_zip_occurrences (
+CREATE TABLE public.operator_zip_occurrences (
     id bigint NOT NULL,
     staff_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -1474,7 +1474,7 @@ CREATE UNLOGGED TABLE public.operator_zip_occurrences (
 -- Name: operator_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.operator_zip_occurrences_id_seq
+CREATE SEQUENCE public.operator_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1493,7 +1493,7 @@ ALTER SEQUENCE public.operator_zip_occurrences_id_seq OWNED BY public.operator_z
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 
@@ -1502,7 +1502,7 @@ CREATE UNLOGGED TABLE public.schema_migrations (
 -- Name: telephone_client_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.telephone_client_occurrences (
+CREATE TABLE public.telephone_client_occurrences (
     id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
     user_occurrence_id bigint NOT NULL,
@@ -1515,7 +1515,7 @@ CREATE UNLOGGED TABLE public.telephone_client_occurrences (
 -- Name: telephone_client_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.telephone_client_occurrences_id_seq
+CREATE SEQUENCE public.telephone_client_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1534,7 +1534,7 @@ ALTER SEQUENCE public.telephone_client_occurrences_id_seq OWNED BY public.teleph
 -- Name: telephone_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.telephone_occurrence_statuses (
+CREATE TABLE public.telephone_occurrence_statuses (
     id bigint NOT NULL
 );
 
@@ -1543,7 +1543,7 @@ CREATE UNLOGGED TABLE public.telephone_occurrence_statuses (
 -- Name: telephone_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.telephone_occurrence_statuses_id_seq
+CREATE SEQUENCE public.telephone_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1562,7 +1562,7 @@ ALTER SEQUENCE public.telephone_occurrence_statuses_id_seq OWNED BY public.telep
 -- Name: telephone_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.telephone_occurrences (
+CREATE TABLE public.telephone_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -1581,7 +1581,7 @@ CREATE UNLOGGED TABLE public.telephone_occurrences (
 -- Name: telephone_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.telephone_occurrences_id_seq
+CREATE SEQUENCE public.telephone_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1600,7 +1600,7 @@ ALTER SEQUENCE public.telephone_occurrences_id_seq OWNED BY public.telephone_occ
 -- Name: telephone_zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.telephone_zip_occurrences (
+CREATE TABLE public.telephone_zip_occurrences (
     id bigint NOT NULL,
     telephone_occurrence_id bigint NOT NULL,
     zip_occurrence_id bigint NOT NULL,
@@ -1613,7 +1613,7 @@ CREATE UNLOGGED TABLE public.telephone_zip_occurrences (
 -- Name: telephone_zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.telephone_zip_occurrences_id_seq
+CREATE SEQUENCE public.telephone_zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1632,7 +1632,7 @@ ALTER SEQUENCE public.telephone_zip_occurrences_id_seq OWNED BY public.telephone
 -- Name: visitor_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_occurrence_statuses (
+CREATE TABLE public.visitor_occurrence_statuses (
     id bigint NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL
 );
@@ -1642,7 +1642,7 @@ CREATE UNLOGGED TABLE public.visitor_occurrence_statuses (
 -- Name: visitor_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_occurrence_statuses_id_seq
+CREATE SEQUENCE public.visitor_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1661,7 +1661,7 @@ ALTER SEQUENCE public.visitor_occurrence_statuses_id_seq OWNED BY public.visitor
 -- Name: visitor_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.visitor_occurrences (
+CREATE TABLE public.visitor_occurrences (
     id bigint NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
     context jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -1681,7 +1681,7 @@ CREATE UNLOGGED TABLE public.visitor_occurrences (
 -- Name: visitor_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.visitor_occurrences_id_seq
+CREATE SEQUENCE public.visitor_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1700,7 +1700,7 @@ ALTER SEQUENCE public.visitor_occurrences_id_seq OWNED BY public.visitor_occurre
 -- Name: zip_occurrence_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.zip_occurrence_statuses (
+CREATE TABLE public.zip_occurrence_statuses (
     id bigint NOT NULL
 );
 
@@ -1709,7 +1709,7 @@ CREATE UNLOGGED TABLE public.zip_occurrence_statuses (
 -- Name: zip_occurrence_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.zip_occurrence_statuses_id_seq
+CREATE SEQUENCE public.zip_occurrence_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1728,7 +1728,7 @@ ALTER SEQUENCE public.zip_occurrence_statuses_id_seq OWNED BY public.zip_occurre
 -- Name: zip_occurrences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.zip_occurrences (
+CREATE TABLE public.zip_occurrences (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     body character varying DEFAULT ''::character varying NOT NULL,
@@ -1746,7 +1746,7 @@ CREATE UNLOGGED TABLE public.zip_occurrences (
 -- Name: zip_occurrences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.zip_occurrences_id_seq
+CREATE SEQUENCE public.zip_occurrences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE

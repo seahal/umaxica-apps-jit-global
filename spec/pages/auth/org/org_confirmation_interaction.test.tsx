@@ -60,7 +60,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const turnstile = { site_key: "site", mode: "execute" as const, action: null, cdata: null };
+const turnstile = {
+  site_key: "site",
+  mode: "execute" as const,
+  action: null,
+  cdata: null,
+};
 
 describe("org passkey settings confirmation", () => {
   const indexProps = {
@@ -148,7 +153,6 @@ describe("org session limit confirmation", () => {
     last_used_label: "最終使用",
     no_sessions: "セッションがありません。",
     submit_label: "解除する",
-    back_link: { label: "もどる", href: "/sign/in" },
     cancel_logout_label: "キャンセルしてログアウト",
     cancel_logout_confirm: "キャンセルしますか？ログアウトされます。",
     sessions: [
@@ -180,6 +184,13 @@ describe("org session limit confirmation", () => {
     submitForm(1);
     answerConfirmation(true);
     expect(submitted).toHaveBeenCalledTimes(1);
+  });
+
+  // Authentication already succeeded, so the page carries no link back into the sign-in form.
+  it("renders no navigation link, leaving the cancellation as the only exit", () => {
+    mount(<OrgSessionLimitPage {...props} />);
+
+    expect(container.querySelectorAll("a")).toHaveLength(0);
   });
 
   it("shows the empty copy when the server named no sessions", () => {

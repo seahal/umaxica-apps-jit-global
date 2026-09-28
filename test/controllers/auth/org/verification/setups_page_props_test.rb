@@ -4,7 +4,7 @@
 require "test_helper"
 
 # The staff step-up setup page lists only the methods the operator has not
-# configured yet, and offers a way back only when the ceremony carried one. An
+# configured yet, and offers cancellation as its only exit. An
 # operator with every method configured is sent straight on rather than shown an
 # empty page.
 class AuthOrgVerificationSetupsPagePropsTest < ActiveSupport::TestCase

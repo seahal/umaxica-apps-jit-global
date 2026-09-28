@@ -25,7 +25,7 @@ class Auth::Com::Settings::Passkeys::OptionsController < ::Auth::Com::Applicatio
 
     respond_to do |format|
       format.html do
-        redirect_back_or_to(auth_com_settings_passkeys_path(ri: params[:ri]), status: :see_other)
+        redirect_to(auth_com_settings_passkeys_path(ri: params[:ri]), status: :see_other)
       end
       format.json { render json: { error: t("turnstile_error") }, status: :unprocessable_content }
     end

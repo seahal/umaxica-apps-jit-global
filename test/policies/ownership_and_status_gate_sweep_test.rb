@@ -27,11 +27,12 @@ class OwnershipAndStatusGateSweepTest < ActiveSupport::TestCase
     assert_not as_client.show?
     assert_not as_client.create?
 
-    as_operator = EnforcementCasePolicy.new(Object.new, user: operators(:one))
+    # Being an operator is necessary but not sufficient: with no capability grant, every rule denies.
+    as_operator = EnforcementCasePolicy.new(AppEnforcementCase.new, user: operators(:one))
 
-    assert_predicate as_operator, :index?
-    assert_predicate as_operator, :show?
-    assert_predicate as_operator, :create?
+    assert_not as_operator.index?
+    assert_not as_operator.show?
+    assert_not as_operator.create?
   end
 
   # A checkpoint may only be shown, and only completed, while the cycle is

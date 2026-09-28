@@ -178,13 +178,6 @@ class ClientPolicyTest < ActiveSupport::TestCase
     assert_equal policy.send(:update?), policy.send(:edit?)
   end
 
-  def test_purge_sessions_is_operator_only
-    staff = operators(:one)
-
-    assert_predicate ClientPolicy.new(MockRecord.new, user: staff), :purge_sessions?
-    assert_not ClientPolicy.new(MockRecord.new, user: clients(:one)).purge_sessions?
-  end
-
   def test_relation_scope_filters_by_actor_type
     relation = Class.new do
       attr_reader :calls

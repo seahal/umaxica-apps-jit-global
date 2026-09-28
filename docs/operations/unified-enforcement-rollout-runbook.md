@@ -98,9 +98,9 @@ Run after secret provisioning and migration, before considering that environment
 ## Known remaining scope (not blocking this rollout, tracked for later work)
 
 - No Google/Apple Identifier Effect trigger (D20, deferred to post-cutover).
-- No fine-grained realm-scoped permission grant matrix for operators (D13) — `EnforcementCasePolicy`
-  currently authorizes on `Operator` alone, with no per-realm grant distinction, because this
-  repository has no existing operator RBAC system to extend.
+- Realm-scoped operator permissions (D13) are implemented as operator capability grants
+  (`adr/operator-capability-authorization.md`, 2026-09-26): `EnforcementCasePolicy` checks the
+  realm's read, apply, approve, release, and review_appeal capabilities; the org realm has none.
 - 14 of the ~16 planned per-table triggers remain unbuilt (Phase 8 note in the plan's Progress Log):
   `*_telephones`, `*_passkeys`, `*_secret_credentials` across all three realms,
   `client_totp_credentials`, `operator_entra_identities`, and hard-delete protection on `visitors`

@@ -35,7 +35,10 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
     )
     digest = EnforcementIdentifierDigest.for_email(realm: "app", value: "app_attach_blocked@example.com")
     the_case.identifier_effects.build(**digest, attachment_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference("ClientEmail.count") do
       post base_app_identity_emails_registration_url(ri: "jp", host: host),
@@ -60,7 +63,10 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
     )
     digest = EnforcementIdentifierDigest.for_telephone(realm: "app", value: "+15558675301")
     the_case.identifier_effects.build(**digest, attachment_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference("ClientTelephone.count") do
       post base_app_identity_telephones_registration_url(ri: "jp", host: host),
@@ -85,7 +91,10 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
     )
     digest = EnforcementIdentifierDigest.for_email(realm: "com", value: "com_attach_blocked@example.com")
     the_case.identifier_effects.build(**digest, attachment_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference("VisitorEmail.count") do
       post base_com_identity_emails_registration_url(ri: "jp", host: host),
@@ -110,7 +119,10 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
     )
     digest = EnforcementIdentifierDigest.for_telephone(realm: "com", value: "+15558675302")
     the_case.identifier_effects.build(**digest, attachment_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference("VisitorTelephone.count") do
       post base_com_identity_telephones_registration_url(ri: "jp", host: host),
@@ -136,7 +148,10 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
     )
     digest = EnforcementIdentifierDigest.for_email(realm: "org", value: "org_attach_blocked@example.com")
     the_case.identifier_effects.build(**digest, attachment_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference("OperatorEmail.count") do
       post base_org_identity_emails_registration_url(ri: "jp", host: host),
@@ -162,7 +177,10 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
     )
     digest = EnforcementIdentifierDigest.for_telephone(realm: "org", value: "+15558675303")
     the_case.identifier_effects.build(**digest, attachment_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference("OperatorTelephone.count") do
       post base_org_identity_telephones_registration_url(ri: "jp", host: host),

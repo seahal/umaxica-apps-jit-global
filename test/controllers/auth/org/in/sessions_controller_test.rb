@@ -72,6 +72,21 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_equal active_token, OperatorToken.find_from_signed_ref(rendered_ref)
   end
 
+  # Authentication already succeeded and a restricted session exists, so the sign-in form is not a
+  # prior stage of this ceremony. The page ends the ceremony only through the DELETE cancellation.
+  test "show with restricted session offers cancellation and no back link to sign-in" do
+    create_active_session(@staff)
+    token = create_restricted_session(@staff)
+    headers = as_staff_headers_with_token(@staff, token, host: @host)
+
+    get auth_org_sign_in_session_url(ri: "jp"), headers: headers
+
+    assert_response :success
+    assert_not inertia_props.key?("back_link")
+    assert_equal I18n.t("session_limit.edit.cancel_logout"), inertia_props.fetch("cancel_logout_label")
+    assert_equal auth_org_sign_in_session_path(ri: "jp"), inertia_props.fetch("form_action")
+  end
+
   test "show with active session returns forbidden" do
     active_token = create_active_session(@staff)
     headers = as_staff_headers_with_token(@staff, active_token, host: @host)

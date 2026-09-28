@@ -19,7 +19,7 @@ class EnforcementCaseApplyOrderingTest < ActiveSupport::TestCase
     # find_by!, and presence is all the model validates about that column.
     the_case = blocking_case_for(client, operator_public_id: "operator-that-does-not-exist")
 
-    assert_raises(ActiveRecord::RecordNotFound) { EnforcementCaseApplyOperation.call(enforcement_case: the_case) }
+    assert_raises(ActiveRecord::RecordNotFound) { EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: the_case.applied_by_operator_public_id) }
 
     the_case.reload
 
@@ -34,9 +34,15 @@ class EnforcementCaseApplyOrderingTest < ActiveSupport::TestCase
     operator = operators(:one)
 
     first = blocking_case_for(client, operator_public_id: operator.public_id)
-    EnforcementCaseApplyOperation.call(enforcement_case: first)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: first,
+      actor_operator_public_id: first.applied_by_operator_public_id,
+    )
     second = blocking_case_for(client, operator_public_id: operator.public_id)
-    EnforcementCaseApplyOperation.call(enforcement_case: second)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: second,
+      actor_operator_public_id: second.applied_by_operator_public_id,
+    )
 
     assert_predicate client.reload, :admin_locked?
 

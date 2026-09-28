@@ -67,7 +67,45 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     assert_response :success
     assert_empty inertia_props.fetch("methods")
     assert_predicate inertia_props.fetch("no_methods_notice"), :present?
-    assert_predicate inertia_props.fetch("back_link"), :present?
+    assert_not inertia_props.key?("back_link")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+  end
+
+  test "destroy ends the pending MFA ceremony and returns to the sign-in entry point" do
+    establish_pending_mfa!
+    cycle = VisitorSignInFlow.where(principal_id: @visitor.id).order(:id).last
+
+    assert_predicate cycle, :sign_in_mfa_pending?
+
+    assert_no_difference -> { VisitorToken.where(visitor_id: @visitor.id).count } do
+      delete auth_com_sign_in_challenge_path(ri: "jp")
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_predicate cycle.reload, :sign_in_failed?
+    assert_nil session[:pending_mfa]
+    assert_nil session[:mfa_user_id]
+    assert_nil session[:com_sign_in_flow_locator]
+  end
+
+  test "a cancelled MFA challenge cannot be resumed" do
+    establish_pending_mfa!
+    delete auth_com_sign_in_challenge_path(ri: "jp")
+
+    get new_auth_com_sign_in_challenge_passkey_path(ri: "jp")
+
+    assert_response :see_other
+    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+  end
+
+  test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do
+    assert_no_difference -> { VisitorToken.count } do
+      delete auth_com_sign_in_challenge_path(ri: "jp")
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_com_sign_in_path(ri: "jp")
   end
 
   private

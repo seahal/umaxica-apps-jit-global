@@ -135,18 +135,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
   end
 
-  test "org MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_org_sign_in_challenge_passkey_url(ri: "jp", host: host),
-           params: { challenge_id: "missing" }, as: :json
-    end
-
-    assert_response :too_many_requests
-  end
-
   test "app MFA TOTP challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
@@ -356,7 +344,6 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   {
     "app" => [:auth_app_sign_in_challenge_passkey_url, "PUBLIC_AUTH_SERVICE_URL"],
     "com" => [:auth_com_sign_in_challenge_passkey_url, "PUBLIC_AUTH_CORPORATE_URL"],
-    "org" => [:auth_org_sign_in_challenge_passkey_url, "PUBLIC_AUTH_STAFF_URL"],
   }.each do |surface, (helper, host_env)|
     test "#{surface} MFA passkey challenge answers 429 with the sustained hint once the 15-minute allowance is spent" do
       host = ENV.fetch(host_env)

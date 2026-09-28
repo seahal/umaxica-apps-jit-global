@@ -140,7 +140,8 @@ scope(module: :auth, as: :auth) do
           resource :guard, only: :show
           resource :check, only: :show
 
-          resource :challenge, only: :show
+          # `destroy` cancels the pending second-factor ceremony.
+          resource :challenge, only: %i(show destroy)
           namespace :challenge do
             resource :totp, only: %i(new create)
             resource :passkey, only: %i(new create)
@@ -207,6 +208,12 @@ scope(module: :auth, as: :auth) do
       # Settings and credential management.
       resource :settings, only: :show
       namespace :settings do
+        # Enrolment of a new authenticator is its own lifecycle: POST starts it with a fresh secret,
+        # DELETE ends it. Declared before `resources :totps` so `/settings/totps/enrollment` is not
+        # read as a credential id.
+        namespace :totps do
+          resource :enrollment, only: %i(create destroy)
+        end
         resources :totps, only: %i(index new create edit update destroy)
 
         resources :passkeys do
@@ -342,7 +349,8 @@ scope(module: :auth, as: :auth) do
           resource :guard, only: :show
           resource :check, only: :show
 
-          resource :challenge, only: :show
+          # `destroy` cancels the pending second-factor ceremony.
+          resource :challenge, only: %i(show destroy)
 
           namespace :challenge do
             resource :passkey, only: %i(new create)
@@ -496,12 +504,8 @@ scope(module: :auth, as: :auth) do
 
           resource :guard, only: :show
           resource :check, only: :show
-
-          resource :challenge, only: :show
-
-          namespace :challenge do
-            resource :passkey, only: %i(new create)
-          end
+          # No second-factor challenge: every org sign-in completes as a passkey sign-in, which
+          # bypasses MFA, so no org state reaches MFA_PENDING.
         end
       end
 

@@ -77,6 +77,26 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_equal ClientStatus::NOTHING, existing_user.status_id
   end
 
+  test "a duplicate identity insert during the Google callback redirects to sign-in without a session" do
+    setup_google_mock_auth(uid: "race_google_#{SecureRandom.hex(4)}")
+    state = start_social_auth_flow(provider: "google", intent: "login")
+    # A concurrent callback for the same provider subject wins the unique index first; the
+    # persistence layer then surfaces RecordNotUnique to this request.
+    racing_adapter = Object.new
+    racing_adapter.define_singleton_method(:call) { |**| raise ActiveRecord::RecordNotUnique, "duplicate identity" }
+
+    ExternalAuthentication::ProviderAdapterFactory.stub(:build, racing_adapter) do
+      get auth_app_social_google_callback_url(ri: "jp"),
+          params: { state: state },
+          headers: browser_headers.merge(@callback_headers)
+    end
+
+    assert_response :redirect
+    assert_equal I18n.t("errors.social_auth.identity_conflict"), flash[:alert]
+    assert_predicate cookies[AuthenticationBase::ACCESS_COOKIE_KEY].to_s, :empty?
+    assert_predicate cookies[AuthenticationBase::REFRESH_COOKIE_KEY].to_s, :empty?
+  end
+
   test "Google login with existing identity completes through acme dashboard" do
     existing_uid = "existing_google_welcome_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(

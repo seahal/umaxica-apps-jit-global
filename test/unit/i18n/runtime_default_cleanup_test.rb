@@ -25,16 +25,6 @@ class I18nRuntimeDefaultCleanupTest < ActiveSupport::TestCase
     sign.app.verification.errors.no_passkey
     sign.org.in.back
     sign.org.in.session.restricted_notice
-    sign.org.in.mfa.title
-    sign.org.in.mfa.description
-    sign.org.in.mfa.verification_failed
-    sign.org.in.mfa.no_methods_available
-    sign.org.in.mfa.methods.passkey
-    sign.org.in.mfa.passkey.title
-    sign.org.in.mfa.passkey.description
-    sign.org.in.mfa.passkey.authenticate
-    sign.org.in.mfa.passkey.back
-    sign.org.in.mfa.passkey.success
     sign.org.verification.errors.no_passkey
     sign.org.settings.google.show.disable
     sign.org.settings.sessions.revoke.others_button

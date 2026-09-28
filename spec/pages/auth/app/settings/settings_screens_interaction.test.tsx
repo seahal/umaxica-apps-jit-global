@@ -264,6 +264,7 @@ describe("totp settings interaction", () => {
         title="認証アプリを追加"
         description="認証アプリを登録します"
         back_link={{ label: "もどる", href: "/settings/totps?ri=jp" }}
+        start={null}
         qr_code_image="data:image/png;base64,AAAA"
         qr_fallback="QRコードを読み取れない場合"
         form={{
@@ -273,13 +274,18 @@ describe("totp settings interaction", () => {
           title_placeholder: "iPhone",
           title_hint: "わかりやすい名前",
           title: null,
+          enrollment_id: "enrollment-1",
           first_token_label: "確認コード",
           first_token_placeholder: "123456",
           first_token_help: "アプリに表示されるコード",
           first_token_delivery_help: "コードはアプリに表示されます",
           submit_label: "登録",
         }}
-        cancel_link={{ label: "キャンセル", href: "/settings/totps?ri=jp" }}
+        cancel={{
+          label: "キャンセル",
+          action: "/settings/totps/enrollment?ri=jp",
+          method: "delete",
+        }}
         turnstile={turnstile}
         error_header={null}
         error_messages={[]}
@@ -298,7 +304,11 @@ describe("totp settings interaction", () => {
     expect(transform).toHaveBeenCalled();
     const totpNewTransformer = present(transform.mock.calls[0]?.[0], "a transform callback");
     expect(totpNewTransformer({ title: "iPhone", first_token: "123456" })).toEqual({
-      user_totp_credential: { title: "iPhone", first_token: "123456" },
+      user_totp_credential: {
+        title: "iPhone",
+        first_token: "123456",
+        enrollment_id: "enrollment-1",
+      },
       "cf-turnstile-response": "",
     });
     expect(post).toHaveBeenCalledWith("/settings/totps?ri=jp");

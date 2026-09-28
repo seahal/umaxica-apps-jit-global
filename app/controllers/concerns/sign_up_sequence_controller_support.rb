@@ -56,11 +56,16 @@ module SignUpSequenceControllerSupport
     end
   end
 
+  # Answers a rejected sign-up transition. A successful transition is never rendered as a body: every
+  # sign-up definition ends with birthdate, so clearing it always finalizes, and reaching here with a
+  # success is a broken invariant rather than a response to send.
   def render_sign_up_result(result)
+    if %i(ok advanced completed sign_in_handoff_accepted).include?(result.status)
+      raise ArgumentError, "sign-up transition #{result.status} has no response body; it must redirect"
+    end
+
     status =
       case result.status
-      when :ok, :advanced, :completed, :sign_in_handoff_accepted
-        :ok
       when :blocked, :unauthorized
         :forbidden
       when :expired
@@ -69,7 +74,34 @@ module SignUpSequenceControllerSupport
         :unprocessable_content
       end
 
-    render plain: result.status.to_s, status: status
+    # The state-machine classification is internal; it is logged, and the public body is fixed copy.
+    Rails.logger.info(JitLogEvent.format("sign.signup.transition_rejected", status: result.status.to_s))
+    render plain: sign_up_rejection_message(status), status: status
+  end
+
+  # Public contract for a rejected birthdate: each validation reason the actor can correct maps to
+  # a fixed message key, so changing the model's own error wording never changes the response. Any
+  # other reason is logged and answered with the generic message.
+  SIGN_UP_BIRTHDATE_PUBLIC_ERRORS = {
+    birthdate_format: "sign.shared.birthdate.errors.format",
+    too_long: "sign.shared.birthdate.errors.format",
+    birthdate_before_today: "sign.shared.birthdate.errors.not_before_today",
+  }.freeze
+
+  def sign_up_birthdate_rejection_message(actor)
+    reasons = actor.errors.details.fetch(:birthdate, []).map { |detail| detail.fetch(:error) }
+    key = reasons.filter_map { |reason| SIGN_UP_BIRTHDATE_PUBLIC_ERRORS[reason] }.first
+    return I18n.t(key) if key
+
+    Rails.logger.info(
+      JitLogEvent.format("sign.signup.birthdate_rejected", attributes: actor.errors.attribute_names.map(&:to_s)),
+    )
+    I18n.t("errors.messages.invalid_request")
+  end
+
+  def sign_up_rejection_message(http_status)
+    key = (http_status == :forbidden) ? "errors.messages.not_authorized" : "errors.messages.invalid_request"
+    I18n.t(key)
   end
 
   def render_sign_up_checkpoint
@@ -111,7 +143,7 @@ module SignUpSequenceControllerSupport
 
     actor.birthdate = sign_up_birthdate_param
     unless actor.save
-      render plain: actor.errors.full_messages.to_sentence, status: :unprocessable_content
+      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
       return
     end
 
@@ -530,7 +562,7 @@ module SignUpSequenceControllerSupport
     elsif sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
       redirect_to(sign_in_result.redirect_to)
     else
-      render plain: sign_in_result.message.presence || sign_in_result.status.to_s,
+      render plain: sign_in_result.message.presence || I18n.t("errors.messages.invalid_request"),
              status: sign_in_result.response_status
     end
   end

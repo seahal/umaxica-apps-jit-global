@@ -123,6 +123,7 @@ class BranchCoverageBatch37ControllerArmsTest < ActiveSupport::TestCase
     enforcement_case.define_singleton_method(:appeal) { nil }
     controller.instance_variable_set(:@enforcement_case, enforcement_case)
     controller.define_singleton_method(:authorize!) { |*_a, **_k| true }
+    controller.define_singleton_method(:require_enforcement_step_up!) { true }
     controller.define_singleton_method(:params) { ActionController::Parameters.new(resolution_code: "uphold") }
 
     assert_raises(ActiveRecord::RecordNotFound) { controller.create }

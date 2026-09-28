@@ -9,6 +9,9 @@ import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import { PASSKEY_MESSAGES, authenticationErrorMessage } from "@/features/auth/passkeys/messages";
 import { useCeremonyMessages } from "@/features/auth/passkeys/useCeremonyMessages";
 import { getAssertion, passkeysSupported } from "@/features/auth/passkeys/webauthn";
@@ -29,6 +32,7 @@ export type StepUpPasskeyScreenProps = {
     submit_label: string;
   };
   back_link: SignInLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function StepUpPasskeyScreen({
@@ -36,6 +40,7 @@ export default function StepUpPasskeyScreen({
   description,
   form,
   back_link: backLink,
+  cancel,
 }: StepUpPasskeyScreenProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [credentialJson, setCredentialJson] = useState("");
@@ -127,6 +132,9 @@ export default function StepUpPasskeyScreen({
           {backLink.label}
         </a>
       </p>
+
+      {/* Back returns to method selection; this ends the whole sign-in ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

@@ -49,7 +49,7 @@ class EnforcementCaseEndOperation
     end
 
     release_principal_access_effect!
-    enforcement_case.write_audit_event_once!(audit_event_type(committed_end_reason))
+    enforcement_case.write_audit_event_once!(audit_event_type(committed_end_reason), **audit_actor)
 
     true
   end
@@ -61,13 +61,18 @@ class EnforcementCaseEndOperation
     return false if enforcement_case.ended_at.blank?
 
     release_principal_access_effect!
-    enforcement_case.write_audit_event_once!(audit_event_type(enforcement_case.end_reason))
+    enforcement_case.write_audit_event_once!(audit_event_type(enforcement_case.end_reason), **audit_actor)
     true
   end
 
   private
 
   attr_reader :enforcement_case, :reason, :ended_by_operator_public_id
+
+  # The operator who ended the Case; nil when no operator did (expiry, principal verification).
+  def audit_actor
+    { actor_operator_public_id: enforcement_case.ended_by_operator_public_id }
+  end
 
   def audit_event_type(end_reason)
     (end_reason == "expired") ? "expired" : "ended"

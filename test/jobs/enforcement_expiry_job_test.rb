@@ -19,7 +19,10 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
       principal_public_id: client.public_id,
       applied_by_operator_public_id: operator.public_id,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     EnforcementExpiryJob.perform_now
 
@@ -49,7 +52,10 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
       access_blocking: true,
       effective_at: 2.days.ago,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     EnforcementExpiryJob.perform_now
     client.reload
@@ -72,7 +78,10 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
       principal_public_id: client.public_id,
       applied_by_operator_public_id: operator.public_id,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     EnforcementExpiryJob.perform_now
 

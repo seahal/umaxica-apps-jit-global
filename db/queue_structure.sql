@@ -18,7 +18,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -30,7 +30,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 
@@ -39,7 +39,7 @@ CREATE UNLOGGED TABLE public.schema_migrations (
 -- Name: solid_queue_batch_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_batch_executions (
+CREATE TABLE public.solid_queue_batch_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     batch_id bigint NOT NULL,
@@ -51,7 +51,7 @@ CREATE UNLOGGED TABLE public.solid_queue_batch_executions (
 -- Name: solid_queue_batch_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_batch_executions_id_seq
+CREATE SEQUENCE public.solid_queue_batch_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -70,7 +70,7 @@ ALTER SEQUENCE public.solid_queue_batch_executions_id_seq OWNED BY public.solid_
 -- Name: solid_queue_batches; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_batches (
+CREATE TABLE public.solid_queue_batches (
     id bigint NOT NULL,
     active_job_batch_id character varying,
     description character varying,
@@ -93,7 +93,7 @@ CREATE UNLOGGED TABLE public.solid_queue_batches (
 -- Name: solid_queue_batches_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_batches_id_seq
+CREATE SEQUENCE public.solid_queue_batches_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -112,7 +112,7 @@ ALTER SEQUENCE public.solid_queue_batches_id_seq OWNED BY public.solid_queue_bat
 -- Name: solid_queue_blocked_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_blocked_executions (
+CREATE TABLE public.solid_queue_blocked_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     queue_name character varying NOT NULL,
@@ -127,7 +127,7 @@ CREATE UNLOGGED TABLE public.solid_queue_blocked_executions (
 -- Name: solid_queue_blocked_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_blocked_executions_id_seq
+CREATE SEQUENCE public.solid_queue_blocked_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -146,7 +146,7 @@ ALTER SEQUENCE public.solid_queue_blocked_executions_id_seq OWNED BY public.soli
 -- Name: solid_queue_claimed_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_claimed_executions (
+CREATE TABLE public.solid_queue_claimed_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     process_id bigint,
@@ -158,7 +158,7 @@ CREATE UNLOGGED TABLE public.solid_queue_claimed_executions (
 -- Name: solid_queue_claimed_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_claimed_executions_id_seq
+CREATE SEQUENCE public.solid_queue_claimed_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -177,7 +177,7 @@ ALTER SEQUENCE public.solid_queue_claimed_executions_id_seq OWNED BY public.soli
 -- Name: solid_queue_failed_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_failed_executions (
+CREATE TABLE public.solid_queue_failed_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     error text,
@@ -189,7 +189,7 @@ CREATE UNLOGGED TABLE public.solid_queue_failed_executions (
 -- Name: solid_queue_failed_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_failed_executions_id_seq
+CREATE SEQUENCE public.solid_queue_failed_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -208,7 +208,7 @@ ALTER SEQUENCE public.solid_queue_failed_executions_id_seq OWNED BY public.solid
 -- Name: solid_queue_jobs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_jobs (
+CREATE TABLE public.solid_queue_jobs (
     id bigint NOT NULL,
     queue_name character varying NOT NULL,
     class_name character varying NOT NULL,
@@ -228,7 +228,7 @@ CREATE UNLOGGED TABLE public.solid_queue_jobs (
 -- Name: solid_queue_jobs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_jobs_id_seq
+CREATE SEQUENCE public.solid_queue_jobs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -247,7 +247,7 @@ ALTER SEQUENCE public.solid_queue_jobs_id_seq OWNED BY public.solid_queue_jobs.i
 -- Name: solid_queue_pauses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_pauses (
+CREATE TABLE public.solid_queue_pauses (
     id bigint NOT NULL,
     queue_name character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL
@@ -258,7 +258,7 @@ CREATE UNLOGGED TABLE public.solid_queue_pauses (
 -- Name: solid_queue_pauses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_pauses_id_seq
+CREATE SEQUENCE public.solid_queue_pauses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -277,7 +277,7 @@ ALTER SEQUENCE public.solid_queue_pauses_id_seq OWNED BY public.solid_queue_paus
 -- Name: solid_queue_processes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_processes (
+CREATE TABLE public.solid_queue_processes (
     id bigint NOT NULL,
     kind character varying NOT NULL,
     last_heartbeat_at timestamp(6) with time zone NOT NULL,
@@ -294,7 +294,7 @@ CREATE UNLOGGED TABLE public.solid_queue_processes (
 -- Name: solid_queue_processes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_processes_id_seq
+CREATE SEQUENCE public.solid_queue_processes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -313,7 +313,7 @@ ALTER SEQUENCE public.solid_queue_processes_id_seq OWNED BY public.solid_queue_p
 -- Name: solid_queue_ready_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_ready_executions (
+CREATE TABLE public.solid_queue_ready_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     queue_name character varying NOT NULL,
@@ -326,7 +326,7 @@ CREATE UNLOGGED TABLE public.solid_queue_ready_executions (
 -- Name: solid_queue_ready_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_ready_executions_id_seq
+CREATE SEQUENCE public.solid_queue_ready_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -345,7 +345,7 @@ ALTER SEQUENCE public.solid_queue_ready_executions_id_seq OWNED BY public.solid_
 -- Name: solid_queue_recurring_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_recurring_executions (
+CREATE TABLE public.solid_queue_recurring_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     task_key character varying NOT NULL,
@@ -358,7 +358,7 @@ CREATE UNLOGGED TABLE public.solid_queue_recurring_executions (
 -- Name: solid_queue_recurring_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_recurring_executions_id_seq
+CREATE SEQUENCE public.solid_queue_recurring_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -377,7 +377,7 @@ ALTER SEQUENCE public.solid_queue_recurring_executions_id_seq OWNED BY public.so
 -- Name: solid_queue_recurring_tasks; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_recurring_tasks (
+CREATE TABLE public.solid_queue_recurring_tasks (
     id bigint NOT NULL,
     key character varying NOT NULL,
     schedule character varying NOT NULL,
@@ -397,7 +397,7 @@ CREATE UNLOGGED TABLE public.solid_queue_recurring_tasks (
 -- Name: solid_queue_recurring_tasks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_recurring_tasks_id_seq
+CREATE SEQUENCE public.solid_queue_recurring_tasks_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -416,7 +416,7 @@ ALTER SEQUENCE public.solid_queue_recurring_tasks_id_seq OWNED BY public.solid_q
 -- Name: solid_queue_scheduled_executions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_scheduled_executions (
+CREATE TABLE public.solid_queue_scheduled_executions (
     id bigint NOT NULL,
     job_id bigint NOT NULL,
     queue_name character varying NOT NULL,
@@ -430,7 +430,7 @@ CREATE UNLOGGED TABLE public.solid_queue_scheduled_executions (
 -- Name: solid_queue_scheduled_executions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_scheduled_executions_id_seq
+CREATE SEQUENCE public.solid_queue_scheduled_executions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -449,7 +449,7 @@ ALTER SEQUENCE public.solid_queue_scheduled_executions_id_seq OWNED BY public.so
 -- Name: solid_queue_semaphores; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.solid_queue_semaphores (
+CREATE TABLE public.solid_queue_semaphores (
     id bigint NOT NULL,
     key character varying NOT NULL,
     value integer DEFAULT 1 NOT NULL,
@@ -463,7 +463,7 @@ CREATE UNLOGGED TABLE public.solid_queue_semaphores (
 -- Name: solid_queue_semaphores_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.solid_queue_semaphores_id_seq
+CREATE SEQUENCE public.solid_queue_semaphores_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE

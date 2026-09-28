@@ -47,6 +47,60 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
     assert_equal ClientSignUpFlowStatus::COMPLETED, completed.reload.status_id
   end
 
+  test "logs a failed expiry and still expires the other overdue tickets" do
+    now = Time.current.change(usec: 0)
+    failing = create_flow(ClientSignUpFlow, now: now, expires_at: now - 1.second)
+    other = create_flow(VisitorSignUpFlow, now: now, expires_at: now - 1.second)
+    real_call = SignUpTermination.method(:call)
+    logged = []
+
+    SignUpTermination.stub(
+      :call, ->(cycle:, **kwargs) {
+               raise ActiveRecord::StatementInvalid, "ticket database unavailable" if cycle.id == failing.id && cycle.is_a?(ClientSignUpFlow)
+
+               real_call.call(cycle: cycle, **kwargs)
+             },
+    ) do
+      Rails.logger.stub(:error, ->(message) { logged << message }) do
+        travel_to now do
+          SignUpExpiryJob.perform_now
+        end
+      end
+    end
+
+    assert_predicate failing.reload, :sign_up_in_progress?
+    assert_equal VisitorSignUpFlowStatus::EXPIRED, other.reload.status_id
+    assert logged.any? { |line| line.include?("sign_up.expiry.failed") && line.include?(failing.public_id) }
+  end
+
+  test "lets a deadlock escape the per-ticket rescue so the job is retried" do
+    now = Time.current.change(usec: 0)
+    create_flow(ClientSignUpFlow, now: now, expires_at: now - 1.second)
+
+    SignUpTermination.stub(:call, ->(**) { raise ActiveRecord::Deadlocked, "deadlock detected" }) do
+      travel_to now do
+        assert_enqueued_with(job: SignUpExpiryJob) { SignUpExpiryJob.perform_now }
+      end
+    end
+  end
+
+  test "logs a ticket the termination left unexpired" do
+    now = Time.current.change(usec: 0)
+    ticket = create_flow(ClientSignUpFlow, now: now, expires_at: now - 1.second)
+    skipped = Struct.new(:status, :ticket).new(:unchanged, nil)
+    logged = []
+
+    SignUpTermination.stub(:call, skipped) do
+      Rails.logger.stub(:warn, ->(message) { logged << message }) do
+        travel_to now do
+          SignUpExpiryJob.perform_now
+        end
+      end
+    end
+
+    assert logged.any? { |line| line.include?("sign_up.expiry.skipped") && line.include?(ticket.public_id) }
+  end
+
   test "uses the retention queue" do
     assert_equal "retention", SignUpExpiryJob.queue_name
   end

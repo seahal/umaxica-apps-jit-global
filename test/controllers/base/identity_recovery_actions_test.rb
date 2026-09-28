@@ -30,7 +30,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**_args| true }
     OtpAdapter.stub(:for, adapter) do
@@ -77,7 +80,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**_args| true }
     OtpAdapter.stub(:for, adapter) do
@@ -123,7 +129,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**_args| true }
     OtpAdapter.stub(:for, adapter) do
@@ -157,7 +166,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: visitor.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**_args| true }
     OtpAdapter.stub(:for, adapter) do
@@ -198,7 +210,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: visitor.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
     adapter = Object.new
     adapter.define_singleton_method(:deliver) { |**_args| true }
     OtpAdapter.stub(:for, adapter) do

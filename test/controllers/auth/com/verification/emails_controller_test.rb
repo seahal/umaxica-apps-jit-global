@@ -152,6 +152,12 @@ class Auth::Com::Verification::EmailsControllerTest < ActionDispatch::Integratio
 
     assert_response :success
     assert_equal "auth/com/verification/emails/edit", inertia_component
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_com_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
   end
 
   test "update re-renders the code entry page when the submitted code is rejected" do
@@ -177,6 +183,103 @@ class Auth::Com::Verification::EmailsControllerTest < ActionDispatch::Integratio
 
     assert_response :unprocessable_content
     assert_equal "auth/com/verification/emails/edit", inertia_component
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "update accepts the delivered code without stubbing the verification" do
+    return_to = "/settings/emails?ri=jp"
+    delivered = []
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**kwargs| delivered << kwargs.fetch(:otp_code) }
+
+    # The authentication harness sends its access cookie as a raw Cookie header, which would replace
+    # the Rails session that holds the OTP nonce and digest. The access cookie goes into the
+    # integration cookie jar instead, so the session survives between requests.
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = @headers["Cookie"].delete_prefix("#{AuthenticationBase::ACCESS_COOKIE_KEY}=")
+    session_headers = @headers.except("Cookie", "HTTP_COOKIE")
+
+    StepUpAvailableMethods.stub(:call, [:email_otp]) do
+      OtpAdapter.stub(:for, adapter) do
+        pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: @token.public_id)
+        get auth_com_verification_url(
+          scope: "settings_email", pt: pt, ri: "jp", step_up_ceremony_grant: step_up_grant(return_to),
+        ), headers: session_headers
+        get new_auth_com_verification_email_url(ri: "jp"), headers: session_headers
+        nonce = response.location[%r{/verification/emails/([^/?]+)/edit}, 1]
+
+        patch auth_com_verification_email_url(nonce, ri: "jp"),
+              params: { verification: { code: delivered.last } }, headers: session_headers
+      end
+    end
+
+    assert_equal 1, delivered.size
+    assert_response :success
+    assert_includes response.body, "step-up-completion-form"
+  end
+
+  test "update rejects a six-digit code that does not match the delivered one" do
+    return_to = "/settings/emails?ri=jp"
+    delivered = []
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**kwargs| delivered << kwargs.fetch(:otp_code) }
+
+    # The authentication harness sends its access cookie as a raw Cookie header, which would replace
+    # the Rails session that holds the OTP nonce and digest. The access cookie goes into the
+    # integration cookie jar instead, so the session survives between requests.
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = @headers["Cookie"].delete_prefix("#{AuthenticationBase::ACCESS_COOKIE_KEY}=")
+    session_headers = @headers.except("Cookie", "HTTP_COOKIE")
+
+    StepUpAvailableMethods.stub(:call, [:email_otp]) do
+      OtpAdapter.stub(:for, adapter) do
+        pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: @token.public_id)
+        get auth_com_verification_url(
+          scope: "settings_email", pt: pt, ri: "jp", step_up_ceremony_grant: step_up_grant(return_to),
+        ), headers: session_headers
+        get new_auth_com_verification_email_url(ri: "jp"), headers: session_headers
+        nonce = response.location[%r{/verification/emails/([^/?]+)/edit}, 1]
+        wrong_code = ((delivered.last.to_i + 1) % 1_000_000).to_s.rjust(6, "0")
+
+        patch auth_com_verification_email_url(nonce, ri: "jp"),
+              params: { verification: { code: wrong_code } }, headers: session_headers
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "auth/com/verification/emails/edit", inertia_component
+    assert_includes response.body, I18n.t("sign.app.verification.errors.incorrect_code").delete("。")
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "update rejects a code that is not exactly six digits before comparing it" do
+    return_to = "/settings/emails?ri=jp"
+    adapter = Object.new
+    adapter.define_singleton_method(:deliver) { |**_kwargs| true }
+
+    # The authentication harness sends its access cookie as a raw Cookie header, which would replace
+    # the Rails session that holds the OTP nonce and digest. The access cookie goes into the
+    # integration cookie jar instead, so the session survives between requests.
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = @headers["Cookie"].delete_prefix("#{AuthenticationBase::ACCESS_COOKIE_KEY}=")
+    session_headers = @headers.except("Cookie", "HTTP_COOKIE")
+
+    StepUpAvailableMethods.stub(:call, [:email_otp]) do
+      OtpAdapter.stub(:for, adapter) do
+        pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: @token.public_id)
+        get auth_com_verification_url(
+          scope: "settings_email", pt: pt, ri: "jp", step_up_ceremony_grant: step_up_grant(return_to),
+        ), headers: session_headers
+        get new_auth_com_verification_email_url(ri: "jp"), headers: session_headers
+        nonce = response.location[%r{/verification/emails/([^/?]+)/edit}, 1]
+
+        %w(12345 1234567 12a456).each do |code|
+          patch auth_com_verification_email_url(nonce, ri: "jp"),
+                params: { verification: { code: code } }, headers: session_headers
+
+          assert_response :unprocessable_content, "expected #{code.inspect} to be rejected"
+          assert_includes response.body, I18n.t("sign.app.verification.errors.invalid_code").delete("。")
+        end
+      end
+    end
+
     assert_nil @token.reload.last_step_up_at
   end
 

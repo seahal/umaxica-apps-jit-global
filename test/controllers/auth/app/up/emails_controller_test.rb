@@ -1750,7 +1750,10 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     )
     digest = EnforcementIdentifierDigest.for_email(realm: "app", value: "enforcement_blocked@example.com")
     the_case.identifier_effects.build(**digest, registration_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_enqueued_emails 0 do
       post auth_app_sign_up_email_url(ri: "jp"),

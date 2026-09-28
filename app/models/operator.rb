@@ -173,6 +173,8 @@ class Operator < OrgPrincipalRecord
   has_many :bureau_administration_grants, dependent: :restrict_with_error, inverse_of: :operator
   has_many :bureau_delegation_grants, dependent: :restrict_with_error, inverse_of: :operator
   has_many :bureau_view_grants, dependent: :restrict_with_error, inverse_of: :operator
+  has_many :capability_grants, class_name: "OperatorCapabilityGrant", dependent: :restrict_with_error,
+                               inverse_of: :operator
   has_one :core_org_operator_bridge,
           dependent: :destroy,
           inverse_of: :operator
@@ -197,6 +199,28 @@ class Operator < OrgPrincipalRecord
 
   def user?
     false
+  end
+
+  public
+
+  # adr/operator-capability-authorization.md: an operator whose access is locked, whose withdrawal
+  # has started, who is deactivated, or who is past retention holds no capability, whatever grants
+  # remain on record. Grants are not revoked by these transitions, so this check is what stops them.
+  def capability_eligible?(now = Time.current)
+    access_enabled? && withdrawal_started_at.nil? && withdrawn_at.nil? && deactivated_at.nil? &&
+      accessible?(now) && LOGIN_BLOCKED_STATUS_IDS.exclude?(status_id)
+  end
+
+  # The single capability check every org administrative policy uses. Unknown identifiers raise:
+  # they are programming errors, and treating them as "not granted" would hide a typo that
+  # silently closes (or, after a later edit, opens) an operation.
+  def capability?(capability, now = Time.current)
+    unless OperatorCapabilityGrant::CAPABILITIES.include?(capability)
+      raise ArgumentError, "unknown operator capability: #{capability.inspect}"
+    end
+    return false unless persisted? && capability_eligible?(now)
+
+    capability_grants.in_force(now).exists?(capability: capability)
   end
 
   def self.generate_public_id

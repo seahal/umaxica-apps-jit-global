@@ -85,6 +85,12 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
 
     assert_response :unprocessable_content
     assert_equal "auth/app/verification/emails/new", inertia_component
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
     assert_includes inertia_props.fetch("errors"),
                     I18n.t("sign.app.verification.errors.email_not_verified")
   end

@@ -211,9 +211,47 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     get "/api/v0/session", headers: json_headers
 
     assert_response :unauthorized
+    assert_cookie_deleted(OidcRpBrowserCredentialContract::ACCESS_COOKIE)
     body = response.parsed_body
 
     assert_equal "urn:umaxica:problem:authentication-required", body.fetch("type")
+  end
+
+  # adr/invalid-browser-credential-recovery.md: the Core browser JSON boundary keeps its problem
+  # response for every refused RP access cookie, deletes the cookie, and does not reveal which check
+  # failed (malformed value, audience binding, missing or inactive principal).
+  test "refused RP access cookies share one problem response and never name the internal reason" do
+    missing = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    missing_token = oidc_access_token_for(missing)
+    missing.delete
+    inactive = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    inactive_token = oidc_access_token_for(inactive)
+    inactive.update_columns(deactivated_at: Time.current, discard_at: Time.current)
+    cases = {
+      "invalid_access_token" => "malformed",
+      "binding" => oidc_access_token_for(clients(:one), audiences: ["palm-api"]),
+      "record_not_found" => missing_token,
+      "inactive_resource" => inactive_token,
+    }
+
+    observations =
+      cases.map do |reason, token|
+        get(
+          "/api/v0/session",
+          headers: json_headers.merge("Cookie" => "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{token}"),
+        )
+
+        assert_response :unauthorized, reason
+        assert_equal "application/problem+json", response.media_type
+        assert_cookie_deleted(OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+        %w(invalid_access_token record_not_found inactive_resource).each do |internal|
+          assert_not_includes response.body, internal
+        end
+        body = response.parsed_body.except("request_id", "instance")
+        [response.status, body, response.headers.to_h.except("x-request-id", "set-cookie", "date").keys.sort]
+      end
+
+    assert_equal 1, observations.uniq.size
   end
 
   test "a legacy root Browser Session cookie is not accepted as an RP credential" do

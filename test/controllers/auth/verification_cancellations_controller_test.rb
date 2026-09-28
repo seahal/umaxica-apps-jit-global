@@ -109,6 +109,53 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     assert_equal auth_org_settings_path(ri: "jp"), URI.parse(response.location).request_uri
     assert_nil token.reload.step_up_session
   end
+
+  # The destination is fixed by the server-held ceremony origin: neither a posted return_to nor the
+  # Referer can steer it.
+  test "app cancellation ignores a posted return_to and the referer" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    user = clients(:one)
+    ensure_user_token_reference_records!
+    active_token = ClientToken.create!(
+      user: user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+    )
+    headers = as_user_headers(user, host: host, session_public_id: active_token.public_id)
+    token = ClientToken.find_by!(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
+    return_to = base_app_identity_emails_path(ri: "jp")
+    grant = signed_step_up_grant_for(
+      actor: user, token: token, scope: "settings_email", return_to: return_to, surface: "app",
+    )
+    get auth_app_verification_url(
+      scope: "settings_email",
+      pt: signed_step_up_pt_for(return_to, surface: "app", session_nonce: token.public_id),
+      ri: "jp",
+      step_up_ceremony_grant: grant,
+    ),
+        headers: headers
+
+    post auth_app_verification_cancellation_url(ri: "jp"),
+         params: { return_to: "/sign/in/challenge" },
+         headers: headers.merge("Referer" => "http://#{host}/settings/passkeys")
+
+    assert_response :see_other
+    assert_equal auth_app_settings_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_nil token.reload.step_up_session
+  end
+
+  test "step-up cancellation is not reachable by GET" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/verification/cancellation",
+        method: :get,
+      )
+    end
+  end
   private
 
   def bearer_headers(token, host: nil, headers: {})

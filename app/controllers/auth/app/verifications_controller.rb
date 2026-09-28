@@ -25,6 +25,7 @@ class Auth::App::VerificationsController < ::Auth::App::Verification::BaseContro
       methods: verification_entry_methods,
       no_methods_notice: @available_methods.blank? ? t("views.sign.app.verifications.show.no_methods") : nil,
       notice: flash[:notice].presence,
+      cancel: step_up_cancellation_props,
     }
   end
 

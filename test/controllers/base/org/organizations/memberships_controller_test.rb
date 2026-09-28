@@ -22,49 +22,47 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
     assert_response :redirect
   end
 
-  test "index returns empty json" do
+  test "index lists the bureau's real memberships" do
     get base_org_organization_memberships_url(@organization_public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@staff, host: @host), as: :json
+        headers: as_staff_headers(@staff, host: @host),
+        as: :json
 
     assert_response :success
-    assert_equal [], response.parsed_body
+    rows = response.parsed_body.fetch("memberships")
+
+    assert_equal [@membership.id], rows.map { |row| row.fetch("id") }
+    assert_equal @membership.agent.public_id, rows.first.fetch("agent_public_id")
+    assert_nil response.parsed_body.fetch("next_page")
   end
 
-  test "new renders plain text" do
-    get new_base_org_organization_membership_url(@organization_public_id, ri: "jp", host: @host),
-        headers: as_staff_headers(@staff, host: @host)
+  test "a malformed page number is a bad request, not an empty page" do
+    get base_org_organization_memberships_url(@organization_public_id, page: "0", ri: "jp", host: @host),
+        headers: as_staff_headers(@staff, host: @host),
+        as: :json
 
-    assert_response :success
-    assert_equal "New Membership", response.body
+    assert_response :bad_request
   end
 
-  test "edit renders plain text" do
-    get edit_base_org_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
-        headers: as_staff_headers(@staff, host: @host)
-
-    assert_response :success
-    assert_equal "Edit Membership", response.body
-  end
-
-  test "create returns unprocessable content" do
-    post base_org_organization_memberships_url(@organization_public_id, ri: "jp", host: @host),
-         headers: as_staff_headers(@staff, host: @host)
-
-    assert_response :unprocessable_content
-  end
-
-  test "update returns unprocessable content" do
-    patch base_org_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
-          headers: as_staff_headers(@staff, host: @host)
-
-    assert_response :unprocessable_content
-  end
-
-  test "destroy returns no content" do
-    delete base_org_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
+  # Who may change org memberships is not yet decided, so no change endpoint is routed. Removing a
+  # membership must never reach the Operator, and the Operator row is untouched here.
+  test "membership changes are not routed on org" do
+    assert_no_difference -> { AgentMembership.count } do
+      post base_org_organization_memberships_url(@organization_public_id, ri: "jp", host: @host),
            headers: as_staff_headers(@staff, host: @host)
 
-    assert_response :no_content
+      assert_response :not_found
+
+      delete base_org_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
+             headers: as_staff_headers(@staff, host: @host)
+
+      assert_response :not_found
+
+      patch base_org_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
+            headers: as_staff_headers(@staff, host: @host)
+
+      assert_response :not_found
+    end
+    assert_predicate Operator.find(@staff.id), :persisted?
   end
 
   test "member of one org cannot access another org membership collection" do
@@ -164,12 +162,14 @@ end
 # helper definitions in this file so every "logged in" request carries a valid
 # access token cookie for the correct actor and surface.
 class Base::Org::Organizations::MembershipsControllerTest
-  test "show returns empty json for a membership the actor may read" do
+  test "show returns the membership the actor may read" do
     get base_org_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
-        headers: as_staff_headers(@staff, host: @host), as: :json
+        headers: as_staff_headers(@staff, host: @host),
+        as: :json
 
     assert_response :success
-    assert_empty response.parsed_body
+    assert_equal @membership.id, response.parsed_body.fetch("id")
+    assert_equal @membership.bureau_id, AgentMembership.find(response.parsed_body.fetch("id")).bureau_id
   end
 
   private
@@ -292,8 +292,10 @@ class Base::Org::Organizations::MembershipsControllerTest
     )
     token_public_id = session_public_id.presence || token.public_id
     access_token = jwt_access_token_for(
-      staff, host: host, session_public_id: token_public_id,
-             resource_type: "operator",
+      staff,
+      host: host,
+      session_public_id: token_public_id,
+      resource_type: "operator",
     )
     set_access_cookie(access_token)
     base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
@@ -320,8 +322,10 @@ class Base::Org::Organizations::MembershipsControllerTest
     )
     token_public_id = session_public_id.presence || token.public_id
     access_token = jwt_access_token_for(
-      visitor, host: host, session_public_id: token_public_id,
-               resource_type: "visitor",
+      visitor,
+      host: host,
+      session_public_id: token_public_id,
+      resource_type: "visitor",
     )
     set_access_cookie(access_token)
     base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")

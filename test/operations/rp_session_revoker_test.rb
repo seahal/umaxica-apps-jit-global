@@ -106,4 +106,64 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     assert_predicate @session_b.reload, :revoked?
     assert_predicate other_session.reload, :revoked?
   end
+
+  test "browser_session scope revokes a visitor session's RP Sessions and the visitor token" do
+    visitor_root = VisitorToken.create!(visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE))
+    visitor_session = VisitorRpSession.create!(
+      visitor_token: visitor_root,
+      oidc_client_id: "core-com",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+
+    result = RpSessionRevoker.call(scope: :browser_session, record: visitor_root)
+
+    assert_equal 1, result.revoked_count
+    assert_predicate visitor_session.reload, :revoked?
+    assert_predicate visitor_root.reload, :revoked?
+  end
+
+  test "browser_session scope revokes an operator session's RP Sessions and the operator token" do
+    operator_root = OperatorToken.create!(staff_id: Operator.create!(status_id: OperatorStatus::ACTIVE).id)
+    operator_session = OperatorRpSession.create!(
+      operator_token: operator_root,
+      oidc_client_id: "core-org",
+      oidc_scope: "openid profile",
+      refresh_token_expires_at: 1.hour.from_now,
+    )
+
+    result = RpSessionRevoker.call(scope: :browser_session, record: operator_root)
+
+    assert_equal 1, result.revoked_count
+    assert_predicate operator_session.reload, :revoked?
+    assert_predicate operator_root.reload, :revoked?
+  end
+
+  test "browser_session scope rejects a record that is not a Base Browser Session" do
+    error =
+      assert_raises(ArgumentError) do
+        RpSessionRevoker.call(scope: :browser_session, record: @session_a)
+      end
+
+    assert_includes error.message, "ClientRpSession"
+    assert_not @session_a.reload.revoked?
+  end
+
+  test "identity scope rejects a record that is not enumerable" do
+    assert_raises(ArgumentError) do
+      RpSessionRevoker.call(scope: :identity, record: @root)
+    end
+
+    assert_not @session_a.reload.revoked?
+  end
+
+  test "rejects an unsupported revoke scope" do
+    error =
+      assert_raises(ArgumentError) do
+        RpSessionRevoker.call(scope: :organization, record: @root)
+      end
+
+    assert_includes error.message, ":organization"
+    assert_not @session_a.reload.revoked?
+  end
 end

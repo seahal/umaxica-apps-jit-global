@@ -61,6 +61,12 @@ module Base
 
       private
 
+      # The sign-in/sign-up start POST only issues an admission; it needs no preference authority,
+      # so a stale preference credential must not refuse it.
+      def preference_entry_recovery_action?
+        action_name == "create"
+      end
+
       def render_authenticated_home
         return unless require_selected_actor_context_for_root!
 

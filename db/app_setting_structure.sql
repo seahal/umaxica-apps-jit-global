@@ -46,7 +46,7 @@ SET default_table_access_method = heap;
 -- Name: app_preference_adult_content_gate_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_adult_content_gate_options (
+CREATE TABLE public.app_preference_adult_content_gate_options (
     id bigint NOT NULL
 );
 
@@ -55,7 +55,7 @@ CREATE UNLOGGED TABLE public.app_preference_adult_content_gate_options (
 -- Name: app_preference_adult_content_gate_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_adult_content_gate_options_id_seq
+CREATE SEQUENCE public.app_preference_adult_content_gate_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -74,7 +74,7 @@ ALTER SEQUENCE public.app_preference_adult_content_gate_options_id_seq OWNED BY 
 -- Name: app_preference_adult_content_gates; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_adult_content_gates (
+CREATE TABLE public.app_preference_adult_content_gates (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -87,7 +87,7 @@ CREATE UNLOGGED TABLE public.app_preference_adult_content_gates (
 -- Name: app_preference_adult_content_gates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_adult_content_gates_id_seq
+CREATE SEQUENCE public.app_preference_adult_content_gates_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -106,7 +106,7 @@ ALTER SEQUENCE public.app_preference_adult_content_gates_id_seq OWNED BY public.
 -- Name: app_preference_binding_methods; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_binding_methods (
+CREATE TABLE public.app_preference_binding_methods (
     id bigint NOT NULL
 );
 
@@ -115,7 +115,7 @@ CREATE UNLOGGED TABLE public.app_preference_binding_methods (
 -- Name: app_preference_binding_methods_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_binding_methods_id_seq
+CREATE SEQUENCE public.app_preference_binding_methods_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -134,7 +134,7 @@ ALTER SEQUENCE public.app_preference_binding_methods_id_seq OWNED BY public.app_
 -- Name: app_preference_cookies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_cookies (
+CREATE TABLE public.app_preference_cookies (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     consent_version uuid,
@@ -152,7 +152,7 @@ CREATE UNLOGGED TABLE public.app_preference_cookies (
 -- Name: app_preference_cookies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_cookies_id_seq
+CREATE SEQUENCE public.app_preference_cookies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -171,7 +171,7 @@ ALTER SEQUENCE public.app_preference_cookies_id_seq OWNED BY public.app_preferen
 -- Name: app_preference_currencies; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_currencies (
+CREATE TABLE public.app_preference_currencies (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -184,7 +184,7 @@ CREATE UNLOGGED TABLE public.app_preference_currencies (
 -- Name: app_preference_currencies_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_currencies_id_seq
+CREATE SEQUENCE public.app_preference_currencies_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -203,7 +203,7 @@ ALTER SEQUENCE public.app_preference_currencies_id_seq OWNED BY public.app_prefe
 -- Name: app_preference_currency_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_currency_options (
+CREATE TABLE public.app_preference_currency_options (
     id bigint NOT NULL
 );
 
@@ -212,7 +212,7 @@ CREATE UNLOGGED TABLE public.app_preference_currency_options (
 -- Name: app_preference_currency_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_currency_options_id_seq
+CREATE SEQUENCE public.app_preference_currency_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -231,7 +231,7 @@ ALTER SEQUENCE public.app_preference_currency_options_id_seq OWNED BY public.app
 -- Name: app_preference_date_format_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_date_format_options (
+CREATE TABLE public.app_preference_date_format_options (
     id bigint NOT NULL
 );
 
@@ -240,7 +240,7 @@ CREATE UNLOGGED TABLE public.app_preference_date_format_options (
 -- Name: app_preference_date_format_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_date_format_options_id_seq
+CREATE SEQUENCE public.app_preference_date_format_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -259,7 +259,7 @@ ALTER SEQUENCE public.app_preference_date_format_options_id_seq OWNED BY public.
 -- Name: app_preference_date_formats; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_date_formats (
+CREATE TABLE public.app_preference_date_formats (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -272,7 +272,7 @@ CREATE UNLOGGED TABLE public.app_preference_date_formats (
 -- Name: app_preference_date_formats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_date_formats_id_seq
+CREATE SEQUENCE public.app_preference_date_formats_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -291,7 +291,7 @@ ALTER SEQUENCE public.app_preference_date_formats_id_seq OWNED BY public.app_pre
 -- Name: app_preference_dbsc_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_dbsc_statuses (
+CREATE TABLE public.app_preference_dbsc_statuses (
     id bigint NOT NULL
 );
 
@@ -300,7 +300,7 @@ CREATE UNLOGGED TABLE public.app_preference_dbsc_statuses (
 -- Name: app_preference_dbsc_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_dbsc_statuses_id_seq
+CREATE SEQUENCE public.app_preference_dbsc_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -319,7 +319,7 @@ ALTER SEQUENCE public.app_preference_dbsc_statuses_id_seq OWNED BY public.app_pr
 -- Name: app_preference_densities; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_densities (
+CREATE TABLE public.app_preference_densities (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -332,7 +332,7 @@ CREATE UNLOGGED TABLE public.app_preference_densities (
 -- Name: app_preference_densities_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_densities_id_seq
+CREATE SEQUENCE public.app_preference_densities_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -351,7 +351,7 @@ ALTER SEQUENCE public.app_preference_densities_id_seq OWNED BY public.app_prefer
 -- Name: app_preference_density_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_density_options (
+CREATE TABLE public.app_preference_density_options (
     id bigint NOT NULL
 );
 
@@ -360,7 +360,7 @@ CREATE UNLOGGED TABLE public.app_preference_density_options (
 -- Name: app_preference_density_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_density_options_id_seq
+CREATE SEQUENCE public.app_preference_density_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -379,7 +379,7 @@ ALTER SEQUENCE public.app_preference_density_options_id_seq OWNED BY public.app_
 -- Name: app_preference_language_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_language_options (
+CREATE TABLE public.app_preference_language_options (
     id bigint NOT NULL
 );
 
@@ -388,7 +388,7 @@ CREATE UNLOGGED TABLE public.app_preference_language_options (
 -- Name: app_preference_language_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_language_options_id_seq
+CREATE SEQUENCE public.app_preference_language_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -407,7 +407,7 @@ ALTER SEQUENCE public.app_preference_language_options_id_seq OWNED BY public.app
 -- Name: app_preference_languages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_languages (
+CREATE TABLE public.app_preference_languages (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -420,7 +420,7 @@ CREATE UNLOGGED TABLE public.app_preference_languages (
 -- Name: app_preference_languages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_languages_id_seq
+CREATE SEQUENCE public.app_preference_languages_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -439,7 +439,7 @@ ALTER SEQUENCE public.app_preference_languages_id_seq OWNED BY public.app_prefer
 -- Name: app_preference_motion_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_motion_options (
+CREATE TABLE public.app_preference_motion_options (
     id bigint NOT NULL
 );
 
@@ -448,7 +448,7 @@ CREATE UNLOGGED TABLE public.app_preference_motion_options (
 -- Name: app_preference_motion_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_motion_options_id_seq
+CREATE SEQUENCE public.app_preference_motion_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -467,7 +467,7 @@ ALTER SEQUENCE public.app_preference_motion_options_id_seq OWNED BY public.app_p
 -- Name: app_preference_motions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_motions (
+CREATE TABLE public.app_preference_motions (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -480,7 +480,7 @@ CREATE UNLOGGED TABLE public.app_preference_motions (
 -- Name: app_preference_motions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_motions_id_seq
+CREATE SEQUENCE public.app_preference_motions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -499,7 +499,7 @@ ALTER SEQUENCE public.app_preference_motions_id_seq OWNED BY public.app_preferen
 -- Name: app_preference_page_size_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_page_size_options (
+CREATE TABLE public.app_preference_page_size_options (
     id bigint NOT NULL
 );
 
@@ -508,7 +508,7 @@ CREATE UNLOGGED TABLE public.app_preference_page_size_options (
 -- Name: app_preference_page_size_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_page_size_options_id_seq
+CREATE SEQUENCE public.app_preference_page_size_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -527,7 +527,7 @@ ALTER SEQUENCE public.app_preference_page_size_options_id_seq OWNED BY public.ap
 -- Name: app_preference_page_sizes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_page_sizes (
+CREATE TABLE public.app_preference_page_sizes (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -540,7 +540,7 @@ CREATE UNLOGGED TABLE public.app_preference_page_sizes (
 -- Name: app_preference_page_sizes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_page_sizes_id_seq
+CREATE SEQUENCE public.app_preference_page_sizes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -559,7 +559,7 @@ ALTER SEQUENCE public.app_preference_page_sizes_id_seq OWNED BY public.app_prefe
 -- Name: app_preference_region_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_region_options (
+CREATE TABLE public.app_preference_region_options (
     id bigint NOT NULL
 );
 
@@ -568,7 +568,7 @@ CREATE UNLOGGED TABLE public.app_preference_region_options (
 -- Name: app_preference_region_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_region_options_id_seq
+CREATE SEQUENCE public.app_preference_region_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -587,7 +587,7 @@ ALTER SEQUENCE public.app_preference_region_options_id_seq OWNED BY public.app_p
 -- Name: app_preference_regions; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_regions (
+CREATE TABLE public.app_preference_regions (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -600,7 +600,7 @@ CREATE UNLOGGED TABLE public.app_preference_regions (
 -- Name: app_preference_regions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_regions_id_seq
+CREATE SEQUENCE public.app_preference_regions_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -619,7 +619,7 @@ ALTER SEQUENCE public.app_preference_regions_id_seq OWNED BY public.app_preferen
 -- Name: app_preference_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_statuses (
+CREATE TABLE public.app_preference_statuses (
     id bigint NOT NULL
 );
 
@@ -628,7 +628,7 @@ CREATE UNLOGGED TABLE public.app_preference_statuses (
 -- Name: app_preference_statuses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_statuses_id_seq
+CREATE SEQUENCE public.app_preference_statuses_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -647,7 +647,7 @@ ALTER SEQUENCE public.app_preference_statuses_id_seq OWNED BY public.app_prefere
 -- Name: app_preference_theme_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_theme_options (
+CREATE TABLE public.app_preference_theme_options (
     id bigint NOT NULL
 );
 
@@ -656,7 +656,7 @@ CREATE UNLOGGED TABLE public.app_preference_theme_options (
 -- Name: app_preference_theme_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_theme_options_id_seq
+CREATE SEQUENCE public.app_preference_theme_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -675,7 +675,7 @@ ALTER SEQUENCE public.app_preference_theme_options_id_seq OWNED BY public.app_pr
 -- Name: app_preference_themes; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_themes (
+CREATE TABLE public.app_preference_themes (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -688,7 +688,7 @@ CREATE UNLOGGED TABLE public.app_preference_themes (
 -- Name: app_preference_themes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_themes_id_seq
+CREATE SEQUENCE public.app_preference_themes_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -707,7 +707,7 @@ ALTER SEQUENCE public.app_preference_themes_id_seq OWNED BY public.app_preferenc
 -- Name: app_preference_time_format_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_time_format_options (
+CREATE TABLE public.app_preference_time_format_options (
     id bigint NOT NULL
 );
 
@@ -716,7 +716,7 @@ CREATE UNLOGGED TABLE public.app_preference_time_format_options (
 -- Name: app_preference_time_format_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_time_format_options_id_seq
+CREATE SEQUENCE public.app_preference_time_format_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -735,7 +735,7 @@ ALTER SEQUENCE public.app_preference_time_format_options_id_seq OWNED BY public.
 -- Name: app_preference_time_formats; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_time_formats (
+CREATE TABLE public.app_preference_time_formats (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -748,7 +748,7 @@ CREATE UNLOGGED TABLE public.app_preference_time_formats (
 -- Name: app_preference_time_formats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_time_formats_id_seq
+CREATE SEQUENCE public.app_preference_time_formats_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -767,7 +767,7 @@ ALTER SEQUENCE public.app_preference_time_formats_id_seq OWNED BY public.app_pre
 -- Name: app_preference_timezone_options; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_timezone_options (
+CREATE TABLE public.app_preference_timezone_options (
     id bigint NOT NULL
 );
 
@@ -776,7 +776,7 @@ CREATE UNLOGGED TABLE public.app_preference_timezone_options (
 -- Name: app_preference_timezone_options_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_timezone_options_id_seq
+CREATE SEQUENCE public.app_preference_timezone_options_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -795,7 +795,7 @@ ALTER SEQUENCE public.app_preference_timezone_options_id_seq OWNED BY public.app
 -- Name: app_preference_timezones; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preference_timezones (
+CREATE TABLE public.app_preference_timezones (
     id bigint NOT NULL,
     preference_id bigint NOT NULL,
     option_id bigint NOT NULL,
@@ -808,7 +808,7 @@ CREATE UNLOGGED TABLE public.app_preference_timezones (
 -- Name: app_preference_timezones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preference_timezones_id_seq
+CREATE SEQUENCE public.app_preference_timezones_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -827,7 +827,7 @@ ALTER SEQUENCE public.app_preference_timezones_id_seq OWNED BY public.app_prefer
 -- Name: app_preferences; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.app_preferences (
+CREATE TABLE public.app_preferences (
     id bigint NOT NULL,
     binding_method_id bigint DEFAULT 0 NOT NULL,
     dbsc_challenge text,
@@ -853,7 +853,7 @@ CREATE UNLOGGED TABLE public.app_preferences (
 -- Name: app_preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.app_preferences_id_seq
+CREATE SEQUENCE public.app_preferences_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -872,7 +872,7 @@ ALTER SEQUENCE public.app_preferences_id_seq OWNED BY public.app_preferences.id;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -884,7 +884,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 

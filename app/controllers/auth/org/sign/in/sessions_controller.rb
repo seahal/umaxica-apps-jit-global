@@ -128,7 +128,6 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
       last_used_label: t("session_limit.edit.last_used"),
       no_sessions: t("session_limit.edit.no_sessions"),
       submit_label: t("session_limit.edit.submit"),
-      back_link: { label: t("session_limit.edit.back"), href: auth_org_sign_in_path },
       cancel_logout_label: t("session_limit.edit.cancel_logout"),
       cancel_logout_confirm: t("session_limit.edit.cancel_logout_confirm"),
       sessions: Array(@active_sessions).map { |token| serialize_session(token) },

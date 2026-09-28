@@ -150,8 +150,6 @@ module CommonRedirect
     nil
   end
 
-  alias safe_return_to_path safe_return_path
-
   private :safe_return_path
 
   def allowed_return_hosts(allowed_hosts)

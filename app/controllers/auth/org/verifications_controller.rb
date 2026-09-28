@@ -25,6 +25,7 @@ class Auth::Org::VerificationsController < ::Auth::Org::Verification::BaseContro
       section_title: t("sign.org.verification.new.title"),
       section_description: t("sign.org.verification.new.description"),
       notice: flash[:notice].presence,
+      cancel: step_up_cancellation_props,
       no_methods: (t("views.sign.org.verifications.show.no_methods") if methods.blank?),
       methods: if methods.include?(:passkey)
                  [{

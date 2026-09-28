@@ -8,7 +8,6 @@ module SignVerificationCancellation
     acme_completion_state_present = acme_step_up_completion_state?
     csrf_token = acme_step_up_completion_csrf_token
     scope = current_step_up_session&.scope
-    return_to = current_step_up_session&.return_to
     cancel_local_step_up_state!
 
     if acme_completion_state_present
@@ -19,15 +18,10 @@ module SignVerificationCancellation
           csrf_token: csrf_token,
           ri: params[:ri],
           scope: scope,
-          return_to: return_to,
         },
       )
     else
-      safe_redirect_to(
-        verification_cancellation_fallback_path,
-        fallback: verification_cancellation_fallback_path,
-        status: :see_other,
-      )
+      redirect_to(verification_cancellation_destination_path, status: :see_other)
     end
   end
 
@@ -58,7 +52,11 @@ module SignVerificationCancellation
     end
   end
 
-  def verification_cancellation_fallback_path
-    raise NotImplementedError, "#{self.class} must define #verification_cancellation_fallback_path"
+  # Where an Auth-initiated Step-Up lands when cancelled: a fixed Auth path of the surface. A
+  # Base-initiated one is handed to Base's fixed cancellation endpoint above instead. Neither takes a
+  # destination from the request, and the success continuation (the step-up session's return_to) is
+  # never used for cancellation.
+  def verification_cancellation_destination_path
+    raise NotImplementedError, "#{self.class} must define #verification_cancellation_destination_path"
   end
 end

@@ -30,10 +30,6 @@ class ClientPolicy < ApplicationPolicy
     (owner? && user.is_a?(Client)) || (user.is_a?(Operator) && operator?)
   end
 
-  def purge_sessions?
-    user.is_a?(Operator)
-  end
-
   relation_scope do |relation|
     if user.is_a?(Operator) && operator_or_manager?
       # Operator managers see all users

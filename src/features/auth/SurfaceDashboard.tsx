@@ -23,6 +23,8 @@ export type DashboardSection = {
   heading: string;
   current_identity?: {
     display_name: string;
+    /** Server-derived, same-origin image of the selected Avatar; absent when none exists. */
+    avatar_image?: { src: string } | null;
   };
   items?: DashboardItem[];
   groups?: DashboardGroup[];
@@ -84,9 +86,18 @@ export default function SurfaceDashboard({
           heading={section.heading}
         >
           {section.current_identity ? (
-            <p className="mb-2 text-sm font-medium text-fg">
-              {section.current_identity.display_name}
-            </p>
+            <div className="mb-2 flex items-center gap-2">
+              {section.current_identity.avatar_image ? (
+                <img
+                  src={section.current_identity.avatar_image.src}
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="size-8 rounded-full object-cover"
+                />
+              ) : null}
+              <p className="text-sm font-medium text-fg">{section.current_identity.display_name}</p>
+            </div>
           ) : null}
           {section.groups?.map((group) => (
             <div

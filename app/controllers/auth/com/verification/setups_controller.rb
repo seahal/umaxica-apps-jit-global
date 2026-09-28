@@ -14,7 +14,6 @@ module Auth
         def new
           authorize!(current_visitor, to: :show?)
           @pt = params[:pt].to_s.presence
-          @pt_destination = setup_pt_path(@pt, root_path: auth_com_settings_path(ri: params[:ri]))
           @missing_methods = %i(email_otp passkey) - configured_step_up_methods
 
           if @missing_methods.empty?
@@ -35,15 +34,13 @@ module Auth
           {
             title: t("sign.app.verification.setup.title"),
             description: t("sign.app.verification.setup.description"),
-            back_link: verification_setup_back_link,
+            # Setup is shown only when no Step-Up method exists, so no earlier Step-Up state exists to go
+            # back to, and the success continuation (`pt`) is not a Back. The only exit is cancellation.
+            cancel: { label: t("actions.cancel"),
+                      action: auth_com_verification_cancellation_path(ri: params[:ri]),
+                      method: "post", },
             methods: verification_setup_methods,
           }
-        end
-
-        def verification_setup_back_link
-          return nil if @pt_destination.blank?
-
-          { key: "back", label: t("actions.back"), href: @pt_destination }
         end
 
         def verification_setup_methods

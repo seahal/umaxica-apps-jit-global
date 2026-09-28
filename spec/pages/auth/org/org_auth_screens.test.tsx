@@ -11,7 +11,6 @@ import OrgEntraSettingsEdit from "@/pages/auth/org/settings/entras/edit";
 import OrgEntraSettingsShow from "@/pages/auth/org/settings/entras/show";
 import OrgPasskeySettingsEdit from "@/pages/auth/org/settings/passkeys/edit";
 import OrgPasskeySettingsNew from "@/pages/auth/org/settings/passkeys/new";
-import OrgMfaPasskeyPage from "@/pages/auth/org/sign/in/challenge/passkeys/new";
 import OrgEmergencyPasskeySignInPage from "@/pages/auth/org/sign/in/emergency/passkeys/new";
 import OrgPasskeySignInPage from "@/pages/auth/org/sign/in/passkeys/new";
 import OrgSignInEntry from "@/pages/auth/org/sign/ins/show";
@@ -23,6 +22,12 @@ import OrgVerificationSetup from "@/pages/auth/org/verification/setups/new";
 import OrgVerificationEntry from "@/pages/auth/org/verifications/show";
 
 import { mount } from "../../../support/react";
+
+const STEP_UP_CANCEL = {
+  label: "キャンセル",
+  action: "/verification/cancellation",
+  method: "post" as const,
+};
 
 vi.mock("@/features/auth/passkeys/PasskeyAuthenticationPanel", () => ({
   default: ({ submit_label: submitLabel }: { submit_label: string }) => (
@@ -124,8 +129,9 @@ describe("OrgSignInEntry", () => {
       screen.container.querySelector<HTMLInputElement>('input[name="authenticity_token"]')?.value,
     ).toBe("csrf-value");
     expect(
-      screen.container.querySelector<HTMLInputElement>(".social-provider-button--entra")?.value,
-    ).toBe("Entra ID でログイン");
+      screen.container.querySelector<HTMLButtonElement>(".social-provider-button--entra")
+        ?.textContent,
+    ).toContain("Entra ID でログイン");
     expect(screen.container.querySelector('a[href="/org/secret"]')?.textContent).toContain(
       "パスワードでログイン",
     );
@@ -245,6 +251,7 @@ describe("OrgEntraSettingsShow", () => {
 
 describe("OrgVerificationEntry", () => {
   const props = {
+    cancel: STEP_UP_CANCEL,
     title: "本人確認",
     section_title: "確認方法",
     section_description: "いずれかを選んでください",
@@ -284,7 +291,7 @@ describe("OrgVerificationSetup", () => {
       <OrgVerificationSetup
         title="確認方法の設定"
         description="まず方法を登録してください"
-        back_link={BACK}
+        cancel={STEP_UP_CANCEL}
         methods={[{ key: "passkey", label: "パスキーを登録", href: "/org/settings/passkeys/new" }]}
       />,
     );
@@ -294,17 +301,21 @@ describe("OrgVerificationSetup", () => {
     ).toContain("パスキーを登録");
   });
 
-  it("renders without an up link when the server sends none", () => {
+  it("renders no up link, only the cancellation", () => {
     const screen = mount(
       <OrgVerificationSetup
         title="確認方法の設定"
         description="まず方法を登録してください"
-        back_link={null}
+        cancel={STEP_UP_CANCEL}
         methods={[]}
       />,
     );
 
     expect(screen.text("h1")).toBe("確認方法の設定");
+    expect(screen.container.querySelectorAll("a")).toHaveLength(0);
+    expect(screen.container.querySelector("form")?.getAttribute("action")).toBe(
+      "/verification/cancellation",
+    );
   });
 });
 
@@ -413,25 +424,6 @@ describe("Org passkey ceremony pages", () => {
     expect(screen.container.textContent).toContain("パスキーでログイン");
   });
 
-  it("renders the second-factor passkey form", () => {
-    const screen = mount(
-      <OrgMfaPasskeyPage
-        title="パスキーで確認"
-        description="登録済みのパスキー"
-        form={{
-          action: "/org/sign/in/challenge/passkey",
-          param_scope: "mfa_passkey_form",
-          challenge_id: "challenge-1",
-          request_options: { challenge: "abc" },
-          submit_label: "認証する",
-        }}
-        back_link={BACK}
-      />,
-    );
-
-    expect(screen.container.textContent).toContain("認証する");
-  });
-
   it("renders passkey registration", () => {
     const screen = mount(
       <OrgPasskeySettingsNew
@@ -487,6 +479,7 @@ describe("Org passkey ceremony pages", () => {
           submit_label: "認証する",
         }}
         back_link={BACK}
+        cancel={STEP_UP_CANCEL}
       />,
     );
 
@@ -508,6 +501,7 @@ describe("Org passkey ceremony pages", () => {
           submit_label: "認証する",
         }}
         back_link={BACK}
+        cancel={STEP_UP_CANCEL}
       />,
     );
 

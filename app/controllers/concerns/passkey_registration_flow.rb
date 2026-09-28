@@ -199,8 +199,21 @@ module PasskeyRegistrationFlow
     }, status: :created
   end
 
+  # Public contract for a rejected passkey record, in the JSON shape the registration panel reads.
+  # The limit is actionable and gets its own message; any other validation reason is logged and
+  # answered as a failed registration. The validator's own wording is never the response.
   def render_passkey_persist_failed(record)
-    render json: { error: record.errors.full_messages.to_sentence }, status: :unprocessable_content
+    if record.errors.details.fetch(:base, []).any? { |detail| detail.fetch(:error) == :too_many }
+      return render json: { error: I18n.t("errors.webauthn.passkey_limit_reached") }, status: :unprocessable_content
+    end
+
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "#{passkey_registration_log_prefix}.persist_rejected",
+        attributes: record.errors.attribute_names.map(&:to_s),
+      ),
+    )
+    render json: { error: I18n.t("errors.webauthn.verification_failed") }, status: :unprocessable_content
   end
 
   # Initial-value policy: the user's own label wins; otherwise the resolved

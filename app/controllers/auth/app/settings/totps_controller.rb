@@ -44,9 +44,10 @@ module Auth
             )
           end
 
+          # Display only: the secret belongs to an enrolment started by POST, never to this GET.
           @totp = ClientTotpCredential.new
-          start_totp_ceremony!(_surface: "app", _actor: current_client, _session_ref: current_session_public_id)
-          generate_totp_session
+          @totp_enrollment = active_totp_enrollment
+          @png = generate_qrcode(@totp_enrollment.fetch("private_key")) if @totp_enrollment
           render_inertia_page(props: new_page_props)
         end
 
@@ -58,14 +59,13 @@ module Auth
 
         def create
           authorize!(ClientTotpCredential, to: :create?)
-          initialize_totp
-
-          if @totp.private_key.blank?
-            redirect_to(
-              new_auth_app_settings_totp_path,
-            )
-            return
+          @totp_enrollment = active_totp_enrollment
+          # A page from a cancelled, expired or replaced enrolment cannot confirm the current one.
+          unless totp_enrollment_matches?(@totp_enrollment, submitted_totp_enrollment_id)
+            return render plain: t("errors.messages.invalid_request"), status: :conflict
           end
+
+          initialize_totp
 
           unless cloudflare_turnstile_stealth_validation["success"]
             @totp.errors.add(:base, t("turnstile_error"))
@@ -89,7 +89,7 @@ module Auth
 
         def initialize_totp
           @totp = ClientTotpCredential.new(totp_params)
-          @totp.private_key = session[:private_key]
+          @totp.private_key = @totp_enrollment.fetch("private_key")
           @totp.user = current_client
           @totp.user_totp_credential_status_id = ClientTotpCredentialStatus::ACTIVE
         end
@@ -104,8 +104,7 @@ module Auth
             title: @totp.title,
             last_otp_at: last_otp_at_time,
           )
-          session[:private_key] = nil
-          reset_totp_ceremony_session!
+          end_totp_enrollment!
 
           redirect_to(
             bootstrap_return_path(
@@ -234,9 +233,13 @@ module Auth
               label: t("sign.app.settings.show.back"),
               href: auth_app_settings_totps_path(ri: params[:ri]),
             },
-            # The provisioning QR code is the same image the enrolment page already displayed; the
-            # shared secret itself never leaves the session.
-            qr_code_image: "data:image/png;base64,#{Base64.strict_encode64(@png.to_s)}",
+            # Without an active enrolment the page offers only the explicit start. With one, the QR
+            # code is rendered from that enrolment's secret; the secret itself never leaves the session.
+            start: @totp_enrollment ? nil : {
+              action: auth_app_settings_totps_enrollment_path(ri: params[:ri]),
+              label: t("sign.app.settings.totp.index.new_link"),
+            },
+            qr_code_image: @totp_enrollment ? "data:image/png;base64,#{Base64.strict_encode64(@png.to_s)}" : nil,
             qr_fallback: t("views.sign.app.settings.totps.new.qr_fallback"),
             form: {
               action: auth_app_settings_totps_path(ri: params[:ri]),
@@ -245,16 +248,18 @@ module Auth
               title_placeholder: t("messages.totp_title_placeholder"),
               title_hint: t("sign.app.settings.totp.new.title_hint"),
               title: @totp.title,
+              enrollment_id: @totp_enrollment&.fetch("id"),
               first_token_label: t("views.sign.app.settings.totps.new.first_token_label"),
               first_token_placeholder: t("views.sign.app.settings.totps.new.first_token_placeholder"),
               first_token_help: t("views.sign.app.settings.totps.new.first_token_help"),
               first_token_delivery_help: t("views.sign.app.settings.totps.new.first_token_delivery_help"),
               submit_label: t("views.sign.app.settings.totps.new.submit"),
             },
-            cancel_link: {
+            cancel: @totp_enrollment ? {
               label: t("actions.cancel"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
-            },
+              action: auth_app_settings_totps_enrollment_path(ri: params[:ri]),
+              method: "delete",
+            } : nil,
             turnstile: turnstile_stealth_props,
             error_header: totp_error_header(model: true),
             error_messages: @totp.errors.full_messages,
@@ -306,11 +311,6 @@ module Auth
           @totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
         end
 
-        def generate_totp_session
-          session[:private_key] ||= ROTP::Base32.random_base32
-          @png = generate_qrcode(session[:private_key])
-        end
-
         def render_totp_qrcode(private_key)
           @png = generate_qrcode(private_key)
         end
@@ -330,6 +330,10 @@ module Auth
 
         def account_id
           current_client.client_emails.first&.address || current_client.public_id
+        end
+
+        def submitted_totp_enrollment_id
+          params.dig(:user_totp_credential, :enrollment_id)
         end
 
         def totp_params

@@ -263,6 +263,7 @@ describe("totp challenge form", () => {
     form_errors: [],
     turnstile: { ...turnstile, mode: "execute" as const },
     back_link: backLink,
+    cancel: { label: "キャンセル", action: "/sign/in/challenge", method: "delete" as const },
   };
 
   it("renders the code field without a delivered-code autocomplete", () => {
@@ -297,6 +298,15 @@ describe("totp challenge form", () => {
     expect(markup).toContain('value="client-totp-a"');
     expect(markup).toContain('value="client-totp-b"');
     expect(markup).not.toContain('name="totp_challenge_form[credential_id]"');
+  });
+
+  // Back steps to method selection (a link); Cancel ends the ceremony (a DELETE form).
+  it("keeps back to method selection separate from cancelling the ceremony", () => {
+    const markup = renderToStaticMarkup(<TotpChallengeForm {...props} />);
+
+    expect(markup).toContain(`href="${backLink.href}"`);
+    expect(markup).toMatch(/<form[^>]*action="\/sign\/in\/challenge" method="post"/u);
+    expect(markup).toContain('name="_method" value="delete"');
   });
 
   it("shows the verification failure the server returned", () => {
@@ -353,6 +363,7 @@ describe("step-up passkey screen", () => {
           submit_label: "認証する",
         }}
         back_link={backLink}
+        cancel={{ label: "キャンセル", action: "/sign/in/challenge", method: "delete" }}
       />,
     );
 

@@ -31,10 +31,7 @@ module StepUpScopeCatalog
     # "social_link" scope or operator Google linking can never satisfy step-up.
     "social_link" => %r{\A/settings/google(?:\z|[?#])},
     "social_unlink" => %r{\A/?(?:social/|settings/google(?:\z|[?#]))},
-    "session_revoke_all" => %r{
-      \A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions|
-         /support/(?:clients|visitors|operators)/\d+/sessions/(?:purge|emergency_revoke))
-    }x,
+    "session_revoke_all" => %r{\A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions)},
     "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)},
     "settings_email" => %r{\A(?:/settings/emails|/identity/emails)},
     "settings_telephone" => %r{\A(?:/settings/telephones|/identity/telephones)},
@@ -46,5 +43,18 @@ module StepUpScopeCatalog
     "avatar_transfer_request" => %r{\A/avatar_ownership_transfers(?:\z|[?#])},
     "avatar_transfer_accept" => %r{\A/avatar_ownership_transfers/[^/?#]+/accept(?:\z|[?#])},
     "avatar_transfer_cancel" => %r{\A/avatar_ownership_transfers/[^/?#]+/cancel(?:\z|[?#])},
+    # adr/operator-capability-authorization.md: administrative scopes. Each is reachable only from
+    # its own confirmation page, and every one of those pages authorizes the operator's capability
+    # before it asks for Step-Up, so cataloguing a scope opens nothing to an ungranted operator. The
+    # org enforcement realm is deliberately absent.
+    "support_session_revoke" => %r{\A/support/(?:clients|visitors)/[0-9A-Za-z_-]{1,64}/revocations/new(?:\z|[?#])},
+    "enforcement_case_apply" => %r{\A/support/(?:app|com)/enforcement_cases/new(?:\z|[?#])},
+    "enforcement_case_approve" =>
+      %r{\A/support/(?:app|com)/enforcement_cases/[0-9A-Za-z_-]{1,64}/approval/new(?:\z|[?#])},
+    "enforcement_case_release" =>
+      %r{\A/support/(?:app|com)/enforcement_cases/[0-9A-Za-z_-]{1,64}/release/new(?:\z|[?#])},
+    "enforcement_case_review_appeal" =>
+      %r{\A/support/(?:app|com)/enforcement_cases/[0-9A-Za-z_-]{1,64}/appeal_review/new(?:\z|[?#])},
+    "operator_capability" => %r{\A/iam/grants/(?:new|[0-9A-Za-z_-]{1,64}/revocation/new)(?:\z|[?#])},
   }.freeze
 end

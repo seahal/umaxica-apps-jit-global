@@ -488,6 +488,39 @@ describe("AvatarForm", () => {
     expect(post).toHaveBeenCalledTimes(2);
     expect(element.textContent).toContain("Name has too many visible characters.");
   });
+
+  it.each([
+    ["an empty value", "", "Name is required."],
+    ["a whitespace-only value", " 　 ", "Name is required."],
+    ["a leading space", " Ada", "Name contains unsupported characters."],
+    ["a trailing space", "Ada ", "Name contains unsupported characters."],
+    ["a lone surrogate", "Ada\uD800", "Name contains unsupported characters."],
+    ["a control character", "A\u0007da", "Name contains unsupported characters."],
+    ["a bidirectional override", "A‮da", "Name contains unsupported characters."],
+  ])("rejects %s before submitting", (_label, value, message) => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    act(() => {
+      descriptor.call(moniker, value);
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).not.toHaveBeenCalled();
+    expect(element.textContent).toContain(message);
+  });
 });
 
 describe("SignInLimitationShow", () => {

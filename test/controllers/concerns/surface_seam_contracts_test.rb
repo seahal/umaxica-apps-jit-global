@@ -54,7 +54,6 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
       [:render_passkey_restricted_success, {}], [:passkey_checkpoint_redirect_url],
       [:passkey_default_redirect_url],
     ],
-    SessionLimitPendingGuard => [[:pending_session_limit_redirect_path]],
     SignRequiresRecoveryPasscodes => [
       [:recovery_passcode_requirement_actor], [:recovery_passcode_requirement_credential_class],
       [:recovery_passcode_setup_url],

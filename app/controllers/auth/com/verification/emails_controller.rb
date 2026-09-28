@@ -125,6 +125,7 @@ module Auth
               pt: pt,
               submit_label: t("sign.app.verification.new.methods.email_otp"),
             },
+            cancel: step_up_cancellation_props,
             back: {
               label: t("sign.app.verification.edit.back"),
               href: auth_com_verification_path(ri: params[:ri], scope: scope, pt: pt),
@@ -158,6 +159,7 @@ module Auth
               csrf_token: form_authenticity_token,
               label: t("otp.resend.button"),
             },
+            cancel: step_up_cancellation_props,
             back: {
               label: t("sign.app.verification.edit.back"),
               href: auth_com_verification_path(

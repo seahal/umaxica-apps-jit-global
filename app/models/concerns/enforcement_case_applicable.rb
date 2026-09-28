@@ -146,7 +146,12 @@ module EnforcementCaseApplicable
     update!(sessions_revoked_at: Time.current)
   end
 
-  def write_audit_event!(event_type)
+  # `actor_operator_public_id` is the operator who performed this event: the operator who ran the
+  # apply for `applied`, the approver for `approved`, the ending operator for `ended`, the reviewer
+  # for an appeal decision. It is required and has no default; `nil` is passed explicitly only for
+  # events no operator performed (expiry, a principal's own appeal or verification, job
+  # reconciliation). It is not the Case's applied_by/approved_by attribution.
+  def write_audit_event!(event_type, actor_operator_public_id:)
     ChronicleRecord.connected_to(role: :writing) do
       EnforcementEvent.create!(
         realm: self.class.realm,
@@ -154,7 +159,7 @@ module EnforcementCaseApplicable
         principal_public_id: principal_public_id,
         event_type: event_type,
         reason_code: reason_code,
-        operator_public_id: applied_by_operator_public_id,
+        operator_public_id: actor_operator_public_id,
         break_glass: break_glass,
         ticket_id: ticket_id,
         occurred_at: Time.current,
@@ -170,14 +175,14 @@ module EnforcementCaseApplicable
   # the event commit but before `audited_at` is updated from creating another
   # event on the next retry. A process crash between the check and insert is
   # still covered by the existing documented Chronicle durability limit.
-  def write_audit_event_once!(event_type)
+  def write_audit_event_once!(event_type, actor_operator_public_id:)
     with_lock do
       if audit_event_recorded?(event_type)
         update!(audited_at: Time.current) if audited_at.blank?
         return false
       end
 
-      write_audit_event!(event_type)
+      write_audit_event!(event_type, actor_operator_public_id: actor_operator_public_id)
       true
     end
   end

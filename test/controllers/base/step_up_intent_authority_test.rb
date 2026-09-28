@@ -280,6 +280,36 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
   end
 
+  # The cancellation destination is Base's own entry point, resolved on the server. The posted
+  # return_to (which Auth used to fill with the success continuation) is not an authority, whatever
+  # it contains.
+  test "app base cancellation ignores every posted return_to" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    token = create_client_token!(user)
+    [
+      base_app_identity_emails_path(ri: "jp"),
+      "https://evil.example/steal",
+      "//evil.example/steal",
+      "/%2F%2Fevil.example",
+      "/identity\x00/emails",
+      "/\\evil.example",
+    ].each do |return_to|
+      issue_step_up_grant!(
+        surface: "app", actor_ref: user.public_id, session_ref: token.public_id,
+        scope: "settings_email", methods: ["passkey"], return_to: base_app_identity_emails_path(ri: "jp"),
+      )
+
+      post base_app_verification_cancellation_url(ri: "jp", host: host),
+           headers: app_session_headers(host, token, user).merge("Referer" => "https://#{host}/identity/emails"),
+           params: { scope: "settings_email", return_to: return_to }
+
+      assert_response :see_other
+      assert_equal base_app_root_path(ri: "jp"), URI.parse(response.location).request_uri, return_to
+      assert_equal host, URI.parse(response.location).host
+    end
+  end
+
   test "app base completion rejects wrong session result" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
@@ -418,6 +448,23 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  test "com base cancellation ignores a posted return_to" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    visitor = create_verified_visitor_with_email(email_address: "cancel-dest-#{SecureRandom.hex(4)}@example.com")
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    issue_step_up_grant!(
+      surface: "com", actor_ref: visitor.public_id, session_ref: token.public_id,
+      scope: "settings_email", methods: ["passkey"], return_to: base_com_identity_emails_path(ri: "jp"),
+    )
+
+    post base_com_verification_cancellation_url(ri: "jp", host: host),
+         headers: com_session_headers(host, token, visitor),
+         params: { scope: "settings_email", return_to: base_com_identity_emails_path(ri: "jp") }
+
+    assert_response :see_other
+    assert_equal base_com_root_path(ri: "jp"), URI.parse(response.location).request_uri
+  end
+
   test "com base cancellation closes pending transaction and clears freshness" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
     visitor = create_verified_visitor_with_email(email_address: "visitor-cancel-#{SecureRandom.hex(4)}@example.com")
@@ -438,6 +485,23 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_predicate issuance.transaction.reload, :canceled?
     assert_nil token.reload.last_step_up_at
+  end
+
+  test "org base cancellation ignores a posted return_to" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    operator = operators(:one)
+    token = operator_tokens(:one)
+    issue_step_up_grant!(
+      surface: "org", actor_ref: operator.public_id, session_ref: token.public_id,
+      scope: "settings_email", methods: ["passkey"], return_to: base_org_identity_emails_path(ri: "jp"),
+    )
+
+    post base_org_verification_cancellation_url(ri: "jp", host: host),
+         headers: org_session_headers(host, token, operator),
+         params: { scope: "settings_email", return_to: base_org_identity_emails_path(ri: "jp") }
+
+    assert_response :see_other
+    assert_equal base_org_root_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
   test "org base cancellation closes pending transaction and clears freshness" do

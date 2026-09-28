@@ -66,6 +66,44 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     end
   end
 
+  # A Base-initiated Step-Up is cancelled by handing off to Base's fixed cancellation endpoint. The
+  # handoff carries no destination: the success continuation is not sent as a return_to.
+  test "cancelling a Base-initiated step-up hands off without a return_to" do
+    # The Base-initiated state lives in the session cookie, so the cookie jar must use the Auth host.
+    host! @headers.fetch("Host")
+    grant = IdentityStepUpCeremonyGrantIssuer.issue!(
+      surface: "app",
+      actor_ref: @user.public_id,
+      session_ref: @token.public_id,
+      required_scope: "settings_email",
+      required_aal: "aal2",
+      allowed_methods: %i(passkey),
+      return_to: @step_up_return_to,
+      expires_at: 15.minutes.from_now,
+    ).grant
+
+    StepUpAvailableMethods.stub(:call, [:passkey]) do
+      get auth_app_verification_path(
+        scope: "settings_email", pt: @step_up_pt, ri: "jp", step_up_ceremony_grant: grant,
+        step_up_completion_csrf: "base-csrf",
+      ), headers: @headers
+    end
+
+    assert_response :success
+
+    StepUpAvailableMethods.stub(:call, [:passkey]) do
+      post auth_app_verification_cancellation_path(ri: "jp"),
+           params: { return_to: "/sign/in/challenge", pt: @step_up_pt },
+           headers: @headers
+    end
+
+    assert_response :success
+    assert_includes response.body, base_app_verification_cancellation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
+    assert_not_includes response.body, 'name="return_to"'
+    assert_not_includes response.body, @step_up_return_to
+    assert_nil @token.reload.step_up_session
+  end
+
   test "new renders the passkey step-up page with a bound challenge" do
     grant = IdentityStepUpCeremonyGrantIssuer.issue!(
       surface: "app",
@@ -95,6 +133,15 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     assert_response :success
     assert_equal "auth/app/verification/passkeys/new", inertia_component
     assert_predicate inertia_props.fetch("form").fetch("challenge_id"), :present?
+    # Back returns to method selection; Cancel ends the whole Step-Up ceremony.
+    assert_equal auth_app_verification_path(ri: "jp", scope: "settings_email", pt: @step_up_pt),
+                 inertia_props.fetch("back").fetch("href")
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
   end
 
   test "a rejected assertion re-renders the passkey step-up page without granting freshness" do

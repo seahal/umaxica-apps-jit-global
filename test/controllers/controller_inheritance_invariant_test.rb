@@ -26,9 +26,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
 
     # Sign::Org::Sign::Up::* inheriting from Sign::Org::Sign::Up::* base controllers.
 
-    # Sign-out completion and emergency revocation controllers currently share
-    # the reviewed protocol implementations until those flows are flattened.
-    "app/controllers/base/org/support/visitors/sessions/emergency_revocations_controller.rb",
   ].to_set.freeze
 
   # Controllers that are themselves allowed to be base classes
@@ -72,7 +69,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/com/sign/up/guard/telephones_controller.rb
     app/controllers/auth/com/sign/up/telephones_controller.rb
     app/controllers/auth/com/verification/emails_controller.rb
-    app/controllers/auth/org/sign/in/challenges_controller.rb
     app/controllers/auth/org/sign/in/guards_controller.rb
     app/controllers/auth/org/sign/in/passkeys_controller.rb
     app/controllers/auth/org/sign/in/sessions_controller.rb
@@ -84,7 +80,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb
     app/controllers/auth/app/sign/in/challenge/totps_controller.rb
     app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb
-    app/controllers/auth/org/sign/in/challenge/passkeys_controller.rb
   ).to_set.freeze
 
   # Patterns that are always forbidden regardless of allowlist status.

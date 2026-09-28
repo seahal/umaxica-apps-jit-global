@@ -17,8 +17,11 @@ class EnforcementCaseApplyOperation
     new(...).call
   end
 
-  def initialize(enforcement_case:)
+  # `actor_operator_public_id` is the operator running this apply (the opener on the direct path,
+  # the approver on the approval path); it is recorded on the `applied` event.
+  def initialize(enforcement_case:, actor_operator_public_id:)
     @enforcement_case = enforcement_case
+    @actor_operator_public_id = actor_operator_public_id
   end
 
   def call
@@ -31,17 +34,26 @@ class EnforcementCaseApplyOperation
             "Case #{enforcement_case.public_id} requires approval before it can be applied"
     end
 
+    # A failure here rolls the transaction back: nothing was decided or performed, so the Case keeps
+    # its committed state (draft or pending_approval) and the error propagates unchanged.
     enforcement_case.class.transaction do
       enforcement_case.close_superseded_effects!
       enforcement_case.state = "active"
       enforcement_case.save!
     end
 
+    perform_committed_side_effects!
+    true
+  end
+
+  private
+
+  # The decision is committed; a failure from here marks the Case failed for reconciliation.
+  def perform_committed_side_effects!
     perform_principal_access_effect!
     enforcement_case.revoke_method_sessions!
-    enforcement_case.write_audit_event_once!("applied")
-
-    true
+    write_approval_event!
+    enforcement_case.write_audit_event_once!("applied", actor_operator_public_id: actor_operator_public_id)
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
     # rubocop:disable Rails/SkipsModelValidations
     enforcement_case.update_column(:state, "failed") if enforcement_case.persisted?
@@ -49,9 +61,16 @@ class EnforcementCaseApplyOperation
     raise e
   end
 
-  private
+  attr_reader :enforcement_case, :actor_operator_public_id
 
-  attr_reader :enforcement_case
+  # An approved Case records who approved it before it records the apply. Both writes are
+  # write-once, so EnforcementReconciliationJob can repeat them after an audit delivery failure.
+  def write_approval_event!
+    approver = enforcement_case.approved_by_operator_public_id
+    return if approver.blank?
+
+    enforcement_case.write_audit_event_once!("approved", actor_operator_public_id: approver)
+  end
 
   def perform_principal_access_effect!
     effect = enforcement_case.principal_effect

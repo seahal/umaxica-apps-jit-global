@@ -308,6 +308,7 @@ describe("totp settings screens", () => {
         title="認証アプリを追加"
         description="認証アプリを登録します"
         back_link={{ label: "もどる", href: "/settings/totps?ri=jp" }}
+        start={null}
         qr_code_image="data:image/png;base64,AAAA"
         qr_fallback="QRコードを読み取れない場合"
         form={{
@@ -317,13 +318,18 @@ describe("totp settings screens", () => {
           title_placeholder: "iPhone",
           title_hint: "わかりやすい名前",
           title: null,
+          enrollment_id: "enrollment-1",
           first_token_label: "確認コード",
           first_token_placeholder: "123456",
           first_token_help: "アプリに表示されるコード",
           first_token_delivery_help: "コードはアプリに表示されます",
           submit_label: "登録",
         }}
-        cancel_link={{ label: "キャンセル", href: "/settings/totps?ri=jp" }}
+        cancel={{
+          label: "キャンセル",
+          action: "/settings/totps/enrollment?ri=jp",
+          method: "delete",
+        }}
         turnstile={turnstile}
         error_header={null}
         error_messages={[]}
@@ -336,12 +342,89 @@ describe("totp settings screens", () => {
     expect(html).toMatch(/type="submit"[^>]*>登録<|value="登録"/u);
   });
 
+  // Without an active enrolment the page only offers the explicit POST that starts one: no QR code,
+  // no secret, no cancellation.
+  it("offers only the enrolment start when no enrolment is active", () => {
+    const html = renderToStaticMarkup(
+      <TotpsNew
+        title="認証アプリを追加"
+        description="認証アプリを登録します"
+        back_link={{ label: "もどる", href: "/settings/totps?ri=jp" }}
+        start={{ action: "/settings/totps/enrollment?ri=jp", label: "認証アプリを追加" }}
+        qr_code_image={null}
+        qr_fallback="QRコードを読み取れない場合"
+        form={{
+          action: "/settings/totps?ri=jp",
+          scope: "user_totp_credential",
+          title_label: "名前",
+          title_placeholder: "iPhone",
+          title_hint: "わかりやすい名前",
+          title: null,
+          enrollment_id: null,
+          first_token_label: "確認コード",
+          first_token_placeholder: "123456",
+          first_token_help: "アプリに表示されるコード",
+          first_token_delivery_help: "コードはアプリに表示されます",
+          submit_label: "登録",
+        }}
+        cancel={null}
+        turnstile={turnstile}
+        error_header={null}
+        error_messages={[]}
+      />,
+    );
+
+    expect(html).toMatch(/<form[^>]*action="\/settings\/totps\/enrollment\?ri=jp" method="post"/u);
+    expect(html).not.toContain("data:image/png");
+    expect(html).not.toContain('name="_method"');
+  });
+
+  it("cancels an active enrolment with a DELETE form, not a link", () => {
+    const html = renderToStaticMarkup(
+      <TotpsNew
+        title="認証アプリを追加"
+        description="認証アプリを登録します"
+        back_link={{ label: "もどる", href: "/settings/totps?ri=jp" }}
+        start={null}
+        qr_code_image="data:image/png;base64,AAAA"
+        qr_fallback="QRコードを読み取れない場合"
+        form={{
+          action: "/settings/totps?ri=jp",
+          scope: "user_totp_credential",
+          title_label: "名前",
+          title_placeholder: "iPhone",
+          title_hint: "わかりやすい名前",
+          title: null,
+          enrollment_id: "enrollment-1",
+          first_token_label: "確認コード",
+          first_token_placeholder: "123456",
+          first_token_help: "アプリに表示されるコード",
+          first_token_delivery_help: "コードはアプリに表示されます",
+          submit_label: "登録",
+        }}
+        cancel={{
+          label: "キャンセル",
+          action: "/settings/totps/enrollment?ri=jp",
+          method: "delete",
+        }}
+        turnstile={turnstile}
+        error_header={null}
+        error_messages={[]}
+      />,
+    );
+
+    expect(html).toMatch(/<form[^>]*action="\/settings\/totps\/enrollment\?ri=jp" method="post"/u);
+    expect(html).toContain('name="_method" value="delete"');
+    expect(html).not.toContain('href="/settings/totps/enrollment');
+  });
+
   it("repeats the enrolment errors the server produced", () => {
     const html = renderToStaticMarkup(
       <TotpsNew
         title="認証アプリを追加"
         description="認証アプリを登録します"
         back_link={{ label: "もどる", href: "/settings/totps?ri=jp" }}
+        start={null}
         qr_code_image="data:image/png;base64,AAAA"
         qr_fallback="QRコードを読み取れない場合"
         form={{
@@ -351,13 +434,18 @@ describe("totp settings screens", () => {
           title_placeholder: "iPhone",
           title_hint: "わかりやすい名前",
           title: "iPhone",
+          enrollment_id: "enrollment-1",
           first_token_label: "確認コード",
           first_token_placeholder: "123456",
           first_token_help: "アプリに表示されるコード",
           first_token_delivery_help: "コードはアプリに表示されます",
           submit_label: "登録",
         }}
-        cancel_link={{ label: "キャンセル", href: "/settings/totps?ri=jp" }}
+        cancel={{
+          label: "キャンセル",
+          action: "/settings/totps/enrollment?ri=jp",
+          method: "delete",
+        }}
         turnstile={turnstile}
         error_header="1件のエラー"
         error_messages={["確認コードが正しくありません"]}

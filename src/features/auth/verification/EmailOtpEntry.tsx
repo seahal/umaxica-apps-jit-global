@@ -7,6 +7,9 @@ import Button from "@/components/ui/Button";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 
 import type { VerificationFormBase, VerificationLink } from "./types";
 import VerificationFormFields from "./VerificationFormFields";
@@ -31,6 +34,7 @@ export type EmailOtpEntryProps = {
   form: EmailOtpEntryForm;
   resend: EmailOtpEntryResend;
   back: VerificationLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function EmailOtpEntry({
@@ -41,6 +45,7 @@ export default function EmailOtpEntry({
   form,
   resend,
   back,
+  cancel,
 }: EmailOtpEntryProps) {
   return (
     <Page
@@ -92,6 +97,8 @@ export default function EmailOtpEntry({
           {resend.label}
         </Button>
       </form>
+      {/* Back returns to method selection; this ends the whole Step-Up ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

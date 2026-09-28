@@ -28,15 +28,16 @@ class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::Integratio
     }
   end
 
-  test "new shows a back link above registration methods when pt is present" do
+  test "new offers registration methods and cancellation, never a back link" do
     pt = Base64.urlsafe_encode64(auth_org_settings_passkeys_path(ri: "jp"))
 
     get new_auth_org_verification_setup_url(ri: "jp", pt: pt), headers: @headers
 
     assert_response :success
     assert_equal "auth/org/verification/setups/new", inertia_component
-    # The back link, when there is one, points at the pt destination, not at the settings root.
-    assert_not_equal auth_org_settings_path(ri: "jp"), inertia_props["back_link"]&.fetch("href")
+    # No earlier Step-Up state exists, so there is no Back; the only exit is cancellation.
+    assert_not inertia_props.key?("back_link")
+    assert_equal auth_org_verification_cancellation_path(ri: "jp"), inertia_props.fetch("cancel").fetch("action")
     assert_not_empty inertia_props.fetch("methods")
   end
 end

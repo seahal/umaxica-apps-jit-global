@@ -244,4 +244,99 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     )
     raw
   end
+
+  test "every operation reports Valkey unavailability as Unavailable" do
+    down = Object.new
+    down.define_singleton_method(:key) { |digest| "down:#{digest}" }
+    down.define_singleton_method(:call) { |*| raise Redis::CannotConnectError, "connection refused" }
+    store = Valkey::AuthState::AuthorizationCodeStore.new(connection: down)
+
+    {
+      "issue" => -> {
+        store.issue!(
+          client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub", code_challenge: "c",
+          code_challenge_method: "S256", resource_type: "client",
+        )
+      },
+      "read" => -> { store.read("code") },
+      "consume" => -> { store.consume!(raw_code: "code", expected: {}) },
+      "link" => -> { store.link_family!(raw_code: "code", rp_session_ref: "rp") },
+      "replay mark" => -> { store.mark_replay!(raw_code: "code") },
+    }.each do |operation, action|
+      error = assert_raises(Umaxica::Valkey::Unavailable, operation) { action.call }
+
+      assert_includes error.message, operation
+    end
+  end
+
+  test "issue refuses a key that already exists instead of overwriting it" do
+    taken = Object.new
+    taken.define_singleton_method(:key) { |digest| "taken:#{digest}" }
+    taken.define_singleton_method(:call) { |*| nil }
+    store = Valkey::AuthState::AuthorizationCodeStore.new(connection: taken)
+
+    assert_raises(Umaxica::Valkey::OperationError) do
+      store.issue!(
+        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub", code_challenge: "c",
+        code_challenge_method: "S256", resource_type: "client",
+      )
+    end
+  end
+
+  test "issue rejects a non-S256 code challenge method" do
+    assert_raises(ArgumentError) do
+      @store.issue!(
+        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub", code_challenge: "c",
+        code_challenge_method: "plain", resource_type: "client",
+      )
+    end
+  end
+
+  test "a blank code has no storage key" do
+    assert_raises(ArgumentError) { @store.storage_key("") }
+  end
+
+  test "reading a stored value that is not the expected payload fails as a serialization error" do
+    {
+      "corrupt" => "{not json",
+      "not an object" => "[1]",
+      "version mismatch" => JSON.generate({ "version" => -1, "state" => "issued" }),
+      "state invalid" => JSON.generate(
+        { "version" => Valkey::AuthState::AuthorizationCodeStore::VERSION,
+          "state" => "bogus", },
+      ),
+      "unknown fields" => JSON.generate(
+        {
+          "version" => Valkey::AuthState::AuthorizationCodeStore::VERSION, "state" => "issued", "extra" => "x",
+        },
+      ),
+    }.each do |label, stored|
+      raw = "stored-#{SecureRandom.hex(4)}"
+      @connection.call("SET", @store.storage_key(raw), stored)
+
+      assert_raises(Umaxica::Valkey::SerializationError, label) { @store.read(raw) }
+    end
+  end
+
+  test "an unexpected script reply fails closed for consume, link and replay mark" do
+    odd = Object.new
+    odd.define_singleton_method(:key) { |digest| "odd:#{digest}" }
+    odd.define_singleton_method(:call) { |*| ["surprise", nil] }
+    store = Valkey::AuthState::AuthorizationCodeStore.new(connection: odd)
+
+    assert_raises(Umaxica::Valkey::OperationError) { store.consume!(raw_code: "code", expected: {}) }
+    assert_raises(Umaxica::Valkey::OperationError) { store.link_family!(raw_code: "code", rp_session_ref: "rp") }
+    assert_raises(Umaxica::Valkey::OperationError) { store.mark_replay!(raw_code: "code") }
+  end
+
+  test "a non-array script reply is treated as a corrupt payload" do
+    broken = Object.new
+    broken.define_singleton_method(:key) { |digest| "broken:#{digest}" }
+    broken.define_singleton_method(:call) { |*| "OK" }
+    store = Valkey::AuthState::AuthorizationCodeStore.new(connection: broken)
+
+    assert_raises(Umaxica::Valkey::SerializationError) { store.consume!(raw_code: "code", expected: {}) }
+    assert_raises(Umaxica::Valkey::SerializationError) { store.link_family!(raw_code: "code", rp_session_ref: "rp") }
+    assert_raises(Umaxica::Valkey::SerializationError) { store.mark_replay!(raw_code: "code") }
+  end
 end

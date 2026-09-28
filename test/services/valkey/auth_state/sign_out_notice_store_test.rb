@@ -116,4 +116,24 @@ class ValkeyAuthStateSignOutNoticeStoreTest < ActiveSupport::TestCase
       store.issue!(payload: { actor_ref: "client:7", face: "app", state: "ready" })
     end
   end
+
+  test "reads and consumes report Valkey unavailability as Unavailable" do
+    down = Object.new
+    down.define_singleton_method(:key) { |digest| "down:#{digest}" }
+    down.define_singleton_method(:call) { |*| raise Redis::CannotConnectError, "connection refused" }
+    store = Valkey::AuthState::SignOutNoticeStore.new(connection: down)
+
+    assert_raises(Umaxica::Valkey::Unavailable) do
+      store.issue!(payload: { actor_ref: "client:1", face: "app", state: "ready" })
+    end
+    assert_raises(Umaxica::Valkey::Unavailable) { store.read(raw_id: "notice") }
+    assert_raises(Umaxica::Valkey::Unavailable) { store.consume(raw_id: "notice") }
+  end
+
+  test "a stored notice without an expiry is reported as corrupt" do
+    raw_id = "stored-#{SecureRandom.hex(4)}"
+    @connection.call("SET", @store.storage_key(raw_id), JSON.generate({ "state" => "ready" }))
+
+    assert_raises(Umaxica::Valkey::SerializationError) { @store.read(raw_id: raw_id) }
+  end
 end

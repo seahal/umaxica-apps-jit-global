@@ -19,6 +19,12 @@ class Auth::Org::VerificationsControllerTest < ActionDispatch::IntegrationTest
     get auth_org_verification_url(ri: "jp"), headers: @headers
 
     assert_response :success
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_org_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      inertia_props.fetch("cancel"),
+    )
   end
 
   test "show with scope and return_to params" do

@@ -76,6 +76,22 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
 
+  # The Referer is client-controlled; a failed challenge always returns to the passkey list.
+  test "a failed turnstile challenge ignores the referer and returns to the passkey list" do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+
+    post(
+      auth_app_settings_passkeys_options_path(ri: "jp"),
+      headers: @headers.merge("Referer" => "http://#{host}/sign/in/challenge"),
+    )
+
+    assert_response :see_other
+    assert_redirected_to auth_app_settings_passkeys_path(ri: "jp")
+  ensure
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+  end
+
   test "options refuses a failed stealth challenge for a document request" do
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => false }
@@ -301,6 +317,50 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "ok", response.parsed_body.fetch("status")
     assert_equal auth_app_settings_passkeys_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")),
                  response.parsed_body.fetch("redirect_url")
+  end
+
+  # A persistence rejection is answered in the JSON shape the registration panel reads, with a
+  # public message per reason: the limit is actionable, the validator's own wording is not the
+  # contract.
+  test "verification at the passkey limit answers the public limit message as JSON" do
+    post auth_app_settings_passkeys_options_path(ri: "jp"), headers: @headers
+    challenge_id = response.parsed_body["challenge_id"]
+    (ClientPasskey::MAX_PASSKEYS_PER_USER - @user.client_passkeys.count).times do |index|
+      ClientPasskey.create!(
+        user: @user, webauthn_id: "limit-#{index}-#{SecureRandom.hex(4)}", external_id: SecureRandom.uuid,
+        public_key: "key", description: "limit #{index}", sign_count: 0, status_id: ClientPasskeyStatus::ACTIVE,
+      )
+    end
+    registration_context = Struct.new(
+      :webauthn_id, :sign_count, :aaguid, :transports,
+      :backup_eligible, :backup_state, :authenticator_attachment,
+    ).new("limit_webauthn_id", 1)
+    credential = Object.new
+    credential.define_singleton_method(:id) { "limit_webauthn_id" }
+    credential.define_singleton_method(:public_key) { "limit_public_key" }
+    credential.define_singleton_method(:sign_count) { 1 }
+    credential.define_singleton_method(:verify) { |*_args| true }
+
+    Webauthn::RegistrationVerifier.stub(:verify!, registration_context) do
+      WebAuthn::Credential.stub(:from_create, credential) do
+        assert_no_difference("ClientPasskey.count") do
+          post auth_app_settings_passkeys_verification_path(ri: "jp"),
+               params: {
+                 challenge_id: challenge_id,
+                 credential: {
+                   id: "limit_webauthn_id", response: { clientDataJSON: "e30=", attestationObject: "e30=" },
+                 },
+                 description: "Over the limit",
+               },
+               headers: @headers
+        end
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "application/json", response.media_type
+    assert_equal I18n.t("errors.webauthn.passkey_limit_reached", raise: true), response.parsed_body.fetch("error")
+    assert_not_includes response.body, "exceeds maximum"
   end
 
   test "verification rejects duplicate webauthn_id" do

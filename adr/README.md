@@ -28,6 +28,13 @@ Current identity authority decision:
   sole IdP/AS, Auth is ceremony-only, seven first-party RPs (`core-*`/`side-*`/`edit-org`), opaque
   handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.
 
+Current browser credential recovery decision:
+
+- `adr/invalid-browser-credential-recovery.md` — **current** contract for refused auth and
+  preference browser credentials: credential rejection and lifecycle ends are detached, system
+  failures raise, and stale preference reads never delete a newer generation. Supersedes
+  `adr/preference-credential-entry-recovery.md`, which is retained for history.
+
 Current backend transport decision:
 
 - `adr/backend-transport-tls-enforcement.md` — production Rails PostgreSQL requires `verify-full`
@@ -90,6 +97,7 @@ Superseded IdP/RP-centered ADRs:
 - `adr/cookie-domain-scope-by-surface.md`
 - `adr/preference-soft-bubble-doctrine.md`
 - `adr/preference-setting-configurator-url-boundaries.md`
+- `adr/preference-scope-and-browser-persistent-state-separation.md`
 
 Current API design decisions:
 

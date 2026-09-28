@@ -773,6 +773,18 @@ Realm-scoped permission grants (see Realm isolation): `enforcement.view`,
 `enforcement.end`, `enforcement.approve`, `enforcement.break_glass_release`,
 `enforcement.review_appeal`, `enforcement.link_principal`, each namespaced per realm.
 
+### Amendment (2026-09-26): implemented authorization
+
+The realm-scoped permissions above are implemented as the fixed capability catalog in
+`adr/operator-capability-authorization.md`, a subset of this list: read, apply, approve, release,
+and review_appeal per realm (app and com). The org realm has no capability, so every org-realm Case
+rule denies. Reading no longer requires Step-Up; each mutation requires its own scope after the
+capability check. `break_glass_approved_by_operator_public_id` is no longer accepted from the
+request, a break-glass request on create is refused, and a permanent ban or `break_glass_only` Case
+is not released through the console until the break-glass second-approver flow exists. Operator
+release reasons are limited to `revoked` and `corrected`; `enforcement_events.operator_public_id`
+now names the operator who performed each event.
+
 ## Operator safety
 
 Operator self-action denial and approval separation are CHECK constraints, not only policy (see

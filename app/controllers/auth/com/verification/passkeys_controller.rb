@@ -40,6 +40,7 @@ module Auth
               request_options: passkey_request_options_payload,
               submit_label: t("sign.app.verification.edit.authenticate_with_passkey"),
             },
+            cancel: step_up_cancellation_props,
             back: {
               label: t("sign.app.verification.edit.back"),
               href: auth_com_verification_path(ri: params[:ri], scope: scope, pt: pt),

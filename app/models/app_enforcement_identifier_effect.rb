@@ -62,6 +62,9 @@ class AppEnforcementIdentifierEffect < AppPrincipalRecord
   validates :lookup_digest, presence: true
   validates :key_version, :digest_version, :normalization_version, presence: true
   validates :effective_at, presence: true
+  # The columns are NOT NULL; a blank or unparseable flag is refused as invalid input instead of
+  # reaching the database as a constraint violation.
+  validates :registration_blocked, :attachment_blocked, :recovery_blocked, inclusion: { in: [true, false] }
   # D9: Identifier Effect is only attachable to permanent_ban and cooldown Cases,
   # and is never auto-created by a method-only freeze.
   validate :kind_permits_identifier_effect

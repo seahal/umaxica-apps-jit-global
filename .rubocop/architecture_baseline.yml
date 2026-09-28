@@ -18,7 +18,6 @@ Umaxica/NoConcernInclusionHooks:
   app/controllers/concerns/oidc_rp_logout_launcher.rb: 1
   app/controllers/concerns/preference_core.rb: 1
   app/controllers/concerns/publishing_management_cell.rb: 1
-  app/controllers/concerns/session_limit_pending_guard.rb: 1
   app/controllers/concerns/sign_oidc_logout.rb: 1
   app/controllers/concerns/sign_org_emergency_passkey_ceremony.rb: 1
   app/controllers/concerns/sign_org_normal_passkey_ceremony.rb: 1
@@ -157,7 +156,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/app/settings_controller.rb: 1
   app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb: 2
   app/controllers/auth/app/sign/in/challenge/totps_controller.rb: 3
-  app/controllers/auth/app/sign/in/challenges_controller.rb: 1
   app/controllers/auth/app/sign/in/check/cancellations_controller.rb: 3
   app/controllers/auth/app/sign/in/checks_controller.rb: 1
   app/controllers/auth/app/sign/in/emails_controller.rb: 4
@@ -165,7 +163,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/app/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/app/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/app/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/app/sign/in/session/cancellations_controller.rb: 1
   app/controllers/auth/app/sign/in/sessions_controller.rb: 3
   app/controllers/auth/app/sign/ins_controller.rb: 1
   app/controllers/auth/app/sign/outs_controller.rb: 4
@@ -206,7 +203,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/com/settings/removals_controller.rb: 1
   app/controllers/auth/com/settings_controller.rb: 1
   app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb: 2
-  app/controllers/auth/com/sign/in/challenges_controller.rb: 1
   app/controllers/auth/com/sign/in/check/cancellations_controller.rb: 3
   app/controllers/auth/com/sign/in/checks_controller.rb: 1
   app/controllers/auth/com/sign/in/emails_controller.rb: 5
@@ -214,7 +210,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/com/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/com/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/com/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/com/sign/in/session/cancellations_controller.rb: 1
   app/controllers/auth/com/sign/in/sessions_controller.rb: 3
   app/controllers/auth/com/sign/ins_controller.rb: 1
   app/controllers/auth/com/sign/outs_controller.rb: 4
@@ -255,8 +250,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/org/settings/passkeys_controller.rb: 7
   app/controllers/auth/org/settings/removals_controller.rb: 1
   app/controllers/auth/org/settings_controller.rb: 1
-  app/controllers/auth/org/sign/in/challenge/passkeys_controller.rb: 2
-  app/controllers/auth/org/sign/in/challenges_controller.rb: 1
   app/controllers/auth/org/sign/in/check/cancellations_controller.rb: 3
   app/controllers/auth/org/sign/in/checks_controller.rb: 1
   app/controllers/auth/org/sign/in/emergency/passkey/options_controller.rb: 1
@@ -266,7 +259,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/org/sign/in/passkey/options_controller.rb: 1
   app/controllers/auth/org/sign/in/passkey/verifications_controller.rb: 1
   app/controllers/auth/org/sign/in/passkeys_controller.rb: 1
-  app/controllers/auth/org/sign/in/session/cancellations_controller.rb: 1
   app/controllers/auth/org/sign/in/sessions_controller.rb: 3
   app/controllers/auth/org/sign/ins_controller.rb: 1
   app/controllers/auth/org/sign/outs_controller.rb: 4
@@ -447,11 +439,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/org/robots_controller.rb: 1
   app/controllers/base/org/selectors_controller.rb: 2
   app/controllers/base/org/sitemaps_controller.rb: 1
-  app/controllers/base/org/support/enforcement_cases/appeal_reviews_controller.rb: 1
-  app/controllers/base/org/support/enforcement_cases/approvals_controller.rb: 1
-  app/controllers/base/org/support/enforcement_cases/releases_controller.rb: 1
-  app/controllers/base/org/support/enforcement_cases_controller.rb: 3
-  app/controllers/base/org/support/visitors/sessions/emergency_revocations_controller.rb: 1
   app/controllers/base/org/support_controller.rb: 1
   app/controllers/base/org/switchers_controller.rb: 2
   app/controllers/base/org/system_controller.rb: 1
@@ -481,7 +468,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/concerns/authentication_token_service.rb: 11
   app/controllers/concerns/authentication_visitor.rb: 8
   app/controllers/concerns/base_oauth_token_endpoint.rb: 1
-  app/controllers/concerns/base_org_support_account_session_revocation.rb: 3
   app/controllers/concerns/base_preference_screen_dispatch.rb: 2
   app/controllers/concerns/common_redirect.rb: 2
   app/controllers/concerns/enforcement_identifier_gate.rb: 6
@@ -816,7 +802,6 @@ Umaxica/ExplicitMethodVisibility:
   app/jobs/step_up_ceremony_transaction_purge_job.rb: 1
   app/jobs/telephone_ceremony_transaction_purge_job.rb: 1
   app/jobs/totp_ceremony_transaction_purge_job.rb: 1
-  app/jobs/user_withdrawal_finalize_job.rb: 1
   app/lib/dbsc_proof_verifier.rb: 3
   app/lib/dpop_proof_verifier.rb: 1
   app/lib/external_authentication/apple_client_secret_provider_port.rb: 1
@@ -1246,8 +1231,6 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/operator_withdrawal_policy.rb: 1
   app/policies/org_preference_policy.rb: 1
   app/policies/org_registration_policy.rb: 5
-  app/policies/org_staff_policy.rb: 2
-  app/policies/organization_membership_policy.rb: 8
   app/policies/organization_policy.rb: 1
   app/policies/publishing_entry_policy.rb: 5
   app/policies/sign_in/cycle_policy.rb: 13

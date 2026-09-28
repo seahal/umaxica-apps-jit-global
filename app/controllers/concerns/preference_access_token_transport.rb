@@ -14,6 +14,9 @@ module PreferenceAccessTokenTransport
     # reproduces the same payload, so short-circuit. Cookies are request input
     # and do not change within a request.
     return true if @preference_payload.is_a?(Hash)
+    # A detached credential stays detached for the whole request: re-scanning the cookies would
+    # resurrect the payload that the refusal just dropped.
+    return false if preference_credential_detached?
 
     token = matching_access_token_value
     return false if token.blank?
@@ -97,7 +100,7 @@ module PreferenceAccessTokenTransport
 
   def matching_access_token_value
     access_token_cookie_names.lazy.filter_map do |cookie_name|
-      token = cookies[cookie_name].to_s.presence
+      token = BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
       next if token.blank?
 
       payload = decode_matching_access_token(token)
@@ -118,7 +121,7 @@ module PreferenceAccessTokenTransport
 
   def ensure_preference_access_token_audience_for_write!
     access_token_cookie_names.each do |cookie_name|
-      token = cookies[cookie_name].to_s.presence
+      token = BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
       next if token.blank?
 
       PreferenceToken.decode(

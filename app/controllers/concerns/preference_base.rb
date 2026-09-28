@@ -88,7 +88,9 @@ module PreferenceBase
     source = color_theme_preference_source
     theme = normalize_theme(public_option_cookie_value(source, THEME_COOKIE_KEY, :theme))
 
-    if preference_state_write_request?
+    # Display defaults used after detaching a credential are not the visitor's settings, so they
+    # must not overwrite the public option cookies.
+    if preference_state_write_request? && !preference_credential_detached?
       write_preference_cookie(THEME_COOKIE_KEY, theme)
       write_public_option_cookies(source)
     end
@@ -295,21 +297,18 @@ module PreferenceBase
       return @preferences = preference_class.new
     end
 
+    # A credential refused earlier in this request keeps its refusal: creating a fresh record here
+    # would turn an invalid credential into a successful write. Callers treat nil as a failed
+    # preference operation.
+    return if preference_refresh_failed? || preference_credential_detached?
+
     load_access_token_preference_record!
     return @preferences if @preferences.present?
 
     preference, = load_preference_record_from_refresh_token!(create_if_missing: true)
-    if preference.present?
-      @preferences = preference
-      return @preferences
-    end
-    return create_new_preference_record! unless @preference_refresh_failed
+    return if preference_refresh_failed?
 
-    @preference_refresh_failed = false
-    @refresh_token_value = nil
-    @refresh_presented_digest = nil
-    @refresh_public_id = nil
-    create_new_preference_record!
+    @preferences = preference
   end
 
   def create_audit_log(event_id:, context:, expires_at: nil)
@@ -747,7 +746,7 @@ module PreferenceBase
     end
 
     dbsc_cookie = preference_dbsc_cookie_names.lazy.filter_map { |cookie_name|
-      cookies[cookie_name].to_s.presence
+      BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
     }.first
     if dbsc_cookie.blank?
       @preference_refresh_binding_reason = "missing_bound_cookie"
@@ -766,6 +765,7 @@ module PreferenceBase
     clear_preference_auth_cookies!
     @preference_refresh_failed = true
     @preference_refresh_binding_denied = true
+    @preference_credential_failure = :binding_denied
 
     Rails.logger.warn(
       JitLogEvent.format(
@@ -779,6 +779,8 @@ module PreferenceBase
   def handle_preference_refresh_failed(preference, refresh_public_id)
     clear_preference_auth_cookies!
     @preference_refresh_failed = true
+    @preference_credential_failure ||=
+      classify_refresh_credential_failure(preference, refresh_public_id, @refresh_presented_digest)
 
     Rails.logger.warn(
       JitLogEvent.format(
@@ -836,6 +838,7 @@ module PreferenceBase
 
     clear_preference_auth_cookies!
     @preference_refresh_failed = true
+    @preference_credential_failure = :replay_detected
 
     Rails.logger.info(
       JitLogEvent.format(

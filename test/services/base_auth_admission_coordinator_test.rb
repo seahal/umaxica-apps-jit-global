@@ -27,6 +27,70 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
+  test "local entry consume returns the payload once for the issuing surface" do
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_in")
+
+    payload = BaseAuthAdmissionCoordinator.consume_local_entry!(
+      raw_code: issuance.code,
+      surface: "com",
+      expected_intent: "sign_in",
+    )
+
+    assert_equal issuance.reference, payload.fetch("subject_ref")
+    assert_equal "visitor", payload.fetch("actor_type")
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.consume_local_entry!(
+        raw_code: issuance.code,
+        surface: "com",
+        expected_intent: "sign_in",
+      )
+    end
+  end
+
+  test "local entry consume denies a code issued for another surface" do
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_in")
+
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.consume_local_entry!(
+        raw_code: issuance.code,
+        surface: "app",
+        expected_intent: "sign_in",
+      )
+    end
+  end
+
+  test "local entry consume denies a code issued for another intent" do
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_up")
+
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.consume_local_entry!(
+        raw_code: issuance.code,
+        surface: "com",
+        expected_intent: "sign_in",
+      )
+    end
+  end
+
+  test "local entry consume denies an unknown code" do
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.consume_local_entry!(
+        raw_code: "never-issued",
+        surface: "com",
+        expected_intent: "sign_in",
+      )
+    end
+  end
+
+  test "local entry consume rejects an unsupported intent" do
+    assert_raises(ArgumentError) do
+      BaseAuthAdmissionCoordinator.consume_local_entry!(
+        raw_code: "never-issued",
+        surface: "com",
+        expected_intent: "withdrawal",
+      )
+    end
+  end
+
   test "result issuance returns only an opaque body token" do
     transaction = issue_transaction!
     OidcAuthorizationTransactionCoordinator.register_result!(

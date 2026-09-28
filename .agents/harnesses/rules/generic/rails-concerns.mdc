@@ -38,3 +38,15 @@ Every method needs an explicit `public`, `protected` or `private` declaration; R
 public default is not accepted. Keep concern methods private by default. Expose a public method only
 when the including class or an external caller needs a stable public contract, and make that
 boundary intentional.
+
+## Contract with the including class
+
+A concern states the methods it needs from its includer by fixed name in its header comment, and
+calls them directly. It never probes with `respond_to?` and falls back to other behavior. Keep HTTP
+concerns (input validation, audit attributes, response shaping) apart from model concerns
+(invariants, state transitions); one concern does not do both. A concern shared across the `app`,
+`com`, and `org` surfaces must not switch behavior on surface flags.
+
+For authorization-bearing controllers, the concrete controller names the target class, how the
+record is loaded, the policy and rule passed to `authorize!`, the Step-Up scope, and the operation it
+calls. A concern may shape the page or validate input around those calls; it does not make them.

@@ -61,6 +61,12 @@ module Base
 
       private
 
+      # The sign-in/sign-up start POST only issues an admission; it needs no preference authority,
+      # so a stale preference credential must not refuse it.
+      def preference_entry_recovery_action?
+        action_name == "create"
+      end
+
       def render_authenticated_home
         return unless require_selected_actor_context_for_root!
 
@@ -101,7 +107,15 @@ module Base
         display_name = persona.moniker
         raise "selected app Persona has no display name" if display_name.blank?
 
-        { display_name: display_name }
+        { display_name: display_name, avatar_image: dashboard_avatar_image }
+      end
+
+      # The app surface requires an Avatar; one without a stored image uses the static default.
+      def dashboard_avatar_image
+        avatar = switcher.selected_avatar || raise(RuntimeError, "selected app context has no Avatar")
+        version = avatar.image ? avatar.image_cache_key : "default"
+
+        { src: base_app_dashboard_avatar_image_path(v: version) }
       end
 
       def switcher

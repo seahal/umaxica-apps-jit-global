@@ -26,10 +26,6 @@ class Auth::App::Settings::Passkeys::VerificationsController < ::Auth::App::Appl
 
   def passkey_registration_log_prefix = "sign.webauthn.registration"
 
-  def render_passkey_persist_failed(record)
-    render plain: record.errors.full_messages.join("\n"), status: :unprocessable_content
-  end
-
   def render_verification_success(passkey)
     render json: {
       status: "ok",

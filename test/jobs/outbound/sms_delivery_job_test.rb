@@ -27,6 +27,53 @@ module Outbound
       assert called
     end
 
+    test "a legacy encrypted-body payload is still delivered during rollout" do
+      delivered = []
+
+      OutboundSms.stub(:deliver_now, ->(**payload) { delivered << payload }) do
+        SmsDeliveryJob.perform_now(
+          to: "+819012345678",
+          title: "Verification",
+          encrypted_body: OutboundSensitivePayload.encrypt_sms_body("Your code is 123456"),
+        )
+      end
+
+      assert_equal [{ to: "+819012345678", title: "Verification", body: "Your code is 123456" }], delivered
+    end
+
+    test "a legacy encrypted-body payload without a recipient is discarded and reported" do
+      reported = []
+
+      OutboundSms.stub(:deliver_now, ->(**) { flunk("must not deliver") }) do
+        ActiveSupport.error_reporter.stub(:report, ->(error, **) { reported << error }) do
+          SmsDeliveryJob.perform_now(
+            to: "",
+            title: "Verification",
+            encrypted_body: OutboundSensitivePayload.encrypt_sms_body("Your code is 123456"),
+          )
+        end
+      end
+
+      assert_equal ["Incomplete legacy SMS job payload"], reported.map(&:message)
+    end
+
+    test "an envelope mixed with legacy fields is discarded and reported" do
+      reported = []
+
+      OutboundSms.stub(:deliver_now, ->(**) { flunk("must not deliver") }) do
+        ActiveSupport.error_reporter.stub(:report, ->(error, **) { reported << error }) do
+          SmsDeliveryJob.perform_now(
+            encrypted_payload: OutboundSensitivePayload.encrypt_sms_delivery(
+              to: "+819012345678", title: "Verification", body: "Your code is 123456",
+            ),
+            to: "+819000000000",
+          )
+        end
+      end
+
+      assert_equal ["Mixed SMS job payload formats are not accepted"], reported.map(&:message)
+    end
+
     test "queue name is default" do
       assert_equal "default", SmsDeliveryJob.queue_name
     end

@@ -408,6 +408,17 @@ class Auth::Com::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_redirected_to auth_com_settings_passkeys_path(ri: "jp")
   end
 
+  # The Referer is client-controlled; a failed challenge always returns to the passkey list.
+  test "a failed turnstile challenge ignores the referer and returns to the passkey list" do
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+
+    post auth_com_settings_passkeys_options_path(ri: "jp"),
+         headers: @headers.merge(@origin_headers).merge("Referer" => "http://#{host}/sign/in/challenge")
+
+    assert_response :see_other
+    assert_redirected_to auth_com_settings_passkeys_path(ri: "jp")
+  end
+
   private
 
   def headers_for_visitor_token(token, scope:, step_up_at: Time.current)

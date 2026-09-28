@@ -33,8 +33,6 @@ module SignDbscRegistrationEndpoint
     refresh_plain = cookies[AuthenticationBase::REFRESH_COOKIE_KEY].to_s
     refresh_public_id, = token_class.parse_refresh_token(refresh_plain)
     find_refresh_token_record(refresh_public_id)
-  rescue StandardError
-    nil
   end
 
   def handle_registration

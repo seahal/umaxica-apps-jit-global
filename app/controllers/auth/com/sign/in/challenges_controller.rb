@@ -13,11 +13,22 @@ module Auth
 
           before_action :ensure_pending_mfa!
 
+          public
+
           def show
             @mfa_user = pending_mfa_user
             @can_use_passkey = @mfa_user&.visitor_passkeys&.exists?(status_id: VisitorPasskeyStatus::ACTIVE)
 
             render inertia: true, props: mfa_challenge_props
+          end
+
+          # Cancel: ends the second-factor ceremony rather than stepping back to the sign-in form.
+          def destroy
+            cancel_pending_mfa!
+            redirect_to(
+              auth_com_sign_in_path(ri: params[:ri].presence || current_region_identifier),
+              status: :see_other,
+            )
           end
 
           private
@@ -28,7 +39,9 @@ module Auth
               description: t("sign.app.in.mfa.description"),
               methods: mfa_challenge_methods,
               no_methods_notice: @can_use_passkey ? nil : t("sign.app.in.mfa.no_methods_available"),
-              back_link: mfa_challenge_back_link,
+              cancel: { label: t("actions.cancel"),
+                        action: auth_com_sign_in_challenge_path(ri: params[:ri]),
+                        method: "delete", },
             }
           end
 
@@ -42,16 +55,6 @@ module Auth
                 href: new_auth_com_sign_in_challenge_passkey_path,
               },
             ]
-          end
-
-          def mfa_challenge_back_link
-            return nil if @can_use_passkey
-
-            {
-              key: "back",
-              label: t("sign.app.authentication.new.back"),
-              href: auth_com_sign_in_path,
-            }
           end
 
           def ensure_pending_mfa!

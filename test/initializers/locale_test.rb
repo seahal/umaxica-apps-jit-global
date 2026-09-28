@@ -312,6 +312,8 @@ class LocaleInitializerTest < ActiveSupport::TestCase
     %w(
       config/locales/jp/en.yml
       config/locales/jp/ja.yml
+      config/locales/org_admin/en.yml
+      config/locales/org_admin/ja.yml
       config/locales/us/en.yml
       config/locales/us/ja.yml
     ).map { |path| Rails.root.join(path).to_s }.sort

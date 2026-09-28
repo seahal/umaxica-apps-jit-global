@@ -330,6 +330,117 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     end
   end
 
+  test "fails closed when the jwks fetcher returns something other than a json object" do
+    token = sign_return_token
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { [@public_jwk] },
+      now: @now,
+    )
+
+    assert_equal "jwks_unavailable", result.error
+  end
+
+  test "default fetcher verifies against jwks served over https" do
+    token = sign_return_token
+    response = Struct.new(:success?, :body).new(true, { "keys" => [@public_jwk] }.to_json)
+    connection = Object.new
+    connection.define_singleton_method(:get) { |_uri| response }
+
+    result =
+      with_env("JUMP_GATEWAY_JWKS_URL" => JWKS_URL) do
+        OutboundHttp::Connection.stub(:build, connection) do
+          JumpRtReturnVerifier.call(
+            token: token,
+            request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+            request_base_url: "https://www.umaxica.app",
+            now: @now,
+          )
+        end
+      end
+
+    assert_predicate result, :success?
+  end
+
+  test "default fetcher fails closed on a non-success jwks response" do
+    token = sign_return_token
+    response = Struct.new(:success?, :body).new(false, { "keys" => [@public_jwk] }.to_json)
+    connection = Object.new
+    connection.define_singleton_method(:get) { |_uri| response }
+
+    result =
+      with_env("JUMP_GATEWAY_JWKS_URL" => JWKS_URL) do
+        OutboundHttp::Connection.stub(:build, connection) do
+          JumpRtReturnVerifier.call(
+            token: token,
+            request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+            request_base_url: "https://www.umaxica.app",
+            now: @now,
+          )
+        end
+      end
+
+    assert_equal "jwks_unavailable", result.error
+  end
+
+  test "default fetcher accepts a jwks body at the size limit and rejects one byte above it" do
+    token = sign_return_token
+    jwks_json = { "keys" => [@public_jwk] }.to_json
+    at_limit = jwks_json + (" " * (JumpRtReturnVerifier::MAX_JWKS_BYTES - jwks_json.bytesize))
+    results =
+      [at_limit, "#{at_limit} "].map do |body|
+        Rails.cache.clear
+        response = Struct.new(:success?, :body).new(true, body)
+        connection = Object.new
+        connection.define_singleton_method(:get) { |_uri| response }
+        with_env("JUMP_GATEWAY_JWKS_URL" => JWKS_URL) do
+          OutboundHttp::Connection.stub(:build, connection) do
+            JumpRtReturnVerifier.call(
+              token: token,
+              request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+              request_base_url: "https://www.umaxica.app",
+              now: @now,
+            )
+          end
+        end
+      end
+
+    assert_predicate results.first, :success?
+    assert_equal "jwks_unavailable", results.last.error
+  end
+
+  test "treats a one-time token as replayed when the jti store raises" do
+    token = sign_return_token(jti: "store-down-jti", rpl: "once")
+    failing_consume = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "down" }
+
+    result = SecurityConsumedJti.stub(:consume!, failing_consume) { verify(token) }
+
+    assert_equal "replayed", result.error
+  end
+
+  test "accepts http claimed urls in the local environment" do
+    token = sign_return_token(aud: "http://www.umaxica.app", url: "http://www.umaxica.app/path?ok=1")
+
+    # The source allowlist is a separate check with its own tests; it is held open here so the
+    # result isolates the local-environment http allowance in the url comparison.
+    result =
+      JumpRtReturnPolicy.stub(:allowed_source?, true) do
+        JumpRtReturnVerifier.call(
+          token: token,
+          request_url: "http://www.umaxica.app/path?ok=1&rt=#{token}",
+          request_base_url: "http://www.umaxica.app",
+          fetcher: -> { { "keys" => [@public_jwk] } },
+          now: @now,
+        )
+      end
+
+    assert_predicate Rails.env, :local?
+    assert_predicate result, :success?
+  end
+
   private
 
   def verify(token)

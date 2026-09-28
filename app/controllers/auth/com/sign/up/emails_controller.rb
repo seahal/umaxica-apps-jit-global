@@ -213,10 +213,11 @@ module Auth
               turnstile: turnstile_visible_props(challenge_id: SecureRandom.uuid),
               error_heading: nil,
               errors: sign_up_email_errors,
-              return_link: {
-                label: t("sign.app.registration.email.edit.return_page"),
-                href: auth_com_sign_up_path(ri: params[:ri]),
-              },
+              # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
+              # ends the sign-up through the existing DELETE cancellation.
+              cancel: { label: t("actions.cancel"),
+                        action: auth_com_sign_up_check_email_otp_path(ri: params[:ri]),
+                        method: "delete", },
             }
           end
 

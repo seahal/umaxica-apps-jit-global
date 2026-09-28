@@ -130,6 +130,50 @@ describe("SignOutConfirmation", () => {
 
     expect(markup).not.toContain("logout_challenge");
   });
+
+  it("offers only the back link when the server sent no form", () => {
+    const markup = renderToStaticMarkup(
+      <SignOutConfirmation
+        title="Sign out"
+        active={false}
+        description="You are already signed out."
+        form={null}
+        back_link={{ label: "Back", href: "/identity" }}
+      />,
+    );
+
+    expect(markup).not.toContain("<form");
+    expect(markup).toContain('href="/identity"');
+    expect(markup).toContain("Back");
+  });
+
+  it("refuses a page that carries both return links", () => {
+    const props = {
+      title: "Sign out",
+      active: true,
+      description: "You will need to sign in again.",
+      form: null,
+      back_link: { label: "Back", href: "/identity" },
+      home_link: { label: "Home", href: "/" },
+    } as unknown as Parameters<typeof SignOutConfirmation>[0];
+
+    expect(() => renderToStaticMarkup(<SignOutConfirmation {...props} />)).toThrow(
+      "A sign-out page must provide one return link",
+    );
+  });
+
+  it("refuses a page that carries no return link", () => {
+    const props = {
+      title: "Sign out",
+      active: true,
+      description: "You will need to sign in again.",
+      form: null,
+    } as unknown as Parameters<typeof SignOutConfirmation>[0];
+
+    expect(() => renderToStaticMarkup(<SignOutConfirmation {...props} />)).toThrow(
+      "A sign-out return link is required",
+    );
+  });
 });
 
 describe("base/app and base/com page modules", () => {

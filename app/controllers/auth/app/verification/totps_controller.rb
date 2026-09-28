@@ -63,6 +63,7 @@ class Auth::App::Verification::TotpsController < ::Auth::App::Verification::Base
         submit_label: t("sign.app.verification.edit.submit"),
       },
       turnstile: turnstile_stealth_props,
+      cancel: step_up_cancellation_props,
       back: {
         label: t("sign.app.verification.edit.back"),
         href: auth_app_verification_path(ri: params[:ri], scope: scope, pt: pt),

@@ -5,7 +5,6 @@
 // to the OmniAuth request phase with a 307. The button wording and shape are constrained by
 // docs/reference/third-party-sign-in-button-requirements.md.
 import Page from "@/components/ui/Page";
-import TextLink from "@/components/ui/TextLink";
 import { csrfToken } from "@/lib/csrf";
 
 type SignInMethod = {
@@ -27,6 +26,26 @@ export type OrgSignInEntryProps = {
   registration_link: SignInLink | null;
   back_to_root: SignInLink;
 };
+
+// Entra is a form submit and Emergency Access is a link, but both are sign-in methods of equal
+// standing, so they share one row style: a bordered row with a trailing arrow.
+const methodRowClassName = `flex w-full cursor-pointer items-center justify-between gap-3
+  rounded-lg border border-line bg-surface px-4 py-3 text-left text-sm font-medium text-fg
+  hover:bg-surface-muted`;
+
+function MethodRowContent({ label }: { label: string }) {
+  return (
+    <>
+      <span>{label}</span>
+      <span
+        aria-hidden="true"
+        className="text-fg-muted"
+      >
+        &rarr;
+      </span>
+    </>
+  );
+}
 
 export default function OrgSignInEntry({
   title,
@@ -58,37 +77,40 @@ export default function OrgSignInEntry({
                   value={csrfToken()}
                   readOnly
                 />
-                <input
+                <button
                   type="submit"
-                  className={`social-provider-button social-provider-button--${method.key}`}
-                  value={method.label}
-                />
+                  className={`social-provider-button social-provider-button--${method.key}
+                    ${methodRowClassName}`}
+                >
+                  <MethodRowContent label={method.label} />
+                </button>
               </form>
             </li>
           ) : (
             <li key={method.key}>
               <a
                 href={method.href}
-                className="flex items-center justify-between gap-3 rounded-lg border border-line
-                  bg-surface px-4 py-3 text-sm font-medium text-fg hover:bg-surface-muted"
+                className={methodRowClassName}
               >
-                <span>{method.label}</span>
-                <span
-                  aria-hidden="true"
-                  className="text-fg-muted"
-                >
-                  &rarr;
-                </span>
+                <MethodRowContent label={method.label} />
               </a>
             </li>
           ),
         )}
       </ul>
 
+      {/* Sign-up is a different ceremony, not another sign-in method: it sits below a divider as
+          a centred secondary action so it cannot be mistaken for one of the rows above. */}
       {registrationLink ? (
-        <p className="text-sm">
-          <TextLink href={registrationLink.href}>{registrationLink.label}</TextLink>
-        </p>
+        <div className="mt-6 border-t border-line pt-6">
+          <a
+            href={registrationLink.href}
+            className="flex w-full items-center justify-center rounded-lg border border-dashed
+              border-line px-4 py-2 text-sm text-fg-muted hover:bg-surface-muted hover:text-fg"
+          >
+            {registrationLink.label}
+          </a>
+        </div>
       ) : null}
     </Page>
   );

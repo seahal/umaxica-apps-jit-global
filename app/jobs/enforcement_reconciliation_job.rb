@@ -39,7 +39,17 @@ class EnforcementReconciliationJob < ApplicationJob
 
   def reconcile!(enforcement_case)
     enforcement_case.revoke_method_sessions! if enforcement_case.sessions_revoked_at.blank?
-    enforcement_case.write_audit_event_once!("revocation_reconciled") if enforcement_case.audited_at.blank?
+    # Decided once: writing the approval event below sets audited_at itself. The approval event
+    # names the approver; the reconciliation event was performed by this job, not an operator.
+    audit_pending = enforcement_case.audited_at.blank?
+    return unless audit_pending
+
+    if enforcement_case.approved_by_operator_public_id.present?
+      enforcement_case.write_audit_event_once!(
+        "approved", actor_operator_public_id: enforcement_case.approved_by_operator_public_id,
+      )
+    end
+    enforcement_case.write_audit_event_once!("revocation_reconciled", actor_operator_public_id: nil)
   rescue StandardError => e
     log_failure(enforcement_case.public_id, e)
   end
@@ -74,7 +84,9 @@ class EnforcementReconciliationJob < ApplicationJob
       end
     end
 
-    enforcement_case.write_audit_event_once!("appeal_#{appeal.state}")
+    enforcement_case.write_audit_event_once!(
+      "appeal_#{appeal.state}", actor_operator_public_id: appeal.reviewer_operator_public_id,
+    )
   rescue StandardError => e
     log_failure(appeal.public_id, e)
   end

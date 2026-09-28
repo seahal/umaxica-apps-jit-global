@@ -18,7 +18,7 @@ SET default_table_access_method = heap;
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.ar_internal_metadata (
+CREATE TABLE public.ar_internal_metadata (
     key character varying NOT NULL,
     value character varying,
     created_at timestamp(6) with time zone NOT NULL,
@@ -30,7 +30,7 @@ CREATE UNLOGGED TABLE public.ar_internal_metadata (
 -- Name: blazer_checks; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.blazer_checks (
+CREATE TABLE public.blazer_checks (
     id bigint NOT NULL,
     creator_id bigint,
     query_id bigint,
@@ -50,7 +50,7 @@ CREATE UNLOGGED TABLE public.blazer_checks (
 -- Name: blazer_checks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.blazer_checks_id_seq
+CREATE SEQUENCE public.blazer_checks_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -69,7 +69,7 @@ ALTER SEQUENCE public.blazer_checks_id_seq OWNED BY public.blazer_checks.id;
 -- Name: blazer_dashboard_queries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.blazer_dashboard_queries (
+CREATE TABLE public.blazer_dashboard_queries (
     id bigint NOT NULL,
     dashboard_id bigint,
     query_id bigint,
@@ -83,7 +83,7 @@ CREATE UNLOGGED TABLE public.blazer_dashboard_queries (
 -- Name: blazer_dashboard_queries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.blazer_dashboard_queries_id_seq
+CREATE SEQUENCE public.blazer_dashboard_queries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -102,7 +102,7 @@ ALTER SEQUENCE public.blazer_dashboard_queries_id_seq OWNED BY public.blazer_das
 -- Name: blazer_dashboards; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.blazer_dashboards (
+CREATE TABLE public.blazer_dashboards (
     id bigint NOT NULL,
     creator_id bigint,
     name character varying,
@@ -115,7 +115,7 @@ CREATE UNLOGGED TABLE public.blazer_dashboards (
 -- Name: blazer_dashboards_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.blazer_dashboards_id_seq
+CREATE SEQUENCE public.blazer_dashboards_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -134,7 +134,7 @@ ALTER SEQUENCE public.blazer_dashboards_id_seq OWNED BY public.blazer_dashboards
 -- Name: blazer_queries; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.blazer_queries (
+CREATE TABLE public.blazer_queries (
     id bigint NOT NULL,
     creator_id bigint,
     name character varying,
@@ -151,7 +151,7 @@ CREATE UNLOGGED TABLE public.blazer_queries (
 -- Name: blazer_queries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.blazer_queries_id_seq
+CREATE SEQUENCE public.blazer_queries_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -170,7 +170,7 @@ ALTER SEQUENCE public.blazer_queries_id_seq OWNED BY public.blazer_queries.id;
 -- Name: flipper_features; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.flipper_features (
+CREATE TABLE public.flipper_features (
     id bigint NOT NULL,
     key character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -182,7 +182,7 @@ CREATE UNLOGGED TABLE public.flipper_features (
 -- Name: flipper_features_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.flipper_features_id_seq
+CREATE SEQUENCE public.flipper_features_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -201,7 +201,7 @@ ALTER SEQUENCE public.flipper_features_id_seq OWNED BY public.flipper_features.i
 -- Name: flipper_gates; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.flipper_gates (
+CREATE TABLE public.flipper_gates (
     id bigint NOT NULL,
     feature_key character varying NOT NULL,
     key character varying NOT NULL,
@@ -215,7 +215,7 @@ CREATE UNLOGGED TABLE public.flipper_gates (
 -- Name: flipper_gates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED SEQUENCE public.flipper_gates_id_seq
+CREATE SEQUENCE public.flipper_gates_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -234,7 +234,7 @@ ALTER SEQUENCE public.flipper_gates_id_seq OWNED BY public.flipper_gates.id;
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE UNLOGGED TABLE public.schema_migrations (
+CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
 

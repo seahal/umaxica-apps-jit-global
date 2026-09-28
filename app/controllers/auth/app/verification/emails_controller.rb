@@ -107,6 +107,7 @@ class Auth::App::Verification::EmailsController < ::Auth::App::Verification::Bas
         pt: pt,
         submit_label: t("sign.app.verification.new.methods.email_otp"),
       },
+      cancel: step_up_cancellation_props,
       back: {
         label: t("sign.app.verification.edit.back"),
         href: auth_app_verification_path(ri: params[:ri], scope: scope, pt: pt),
@@ -140,6 +141,7 @@ class Auth::App::Verification::EmailsController < ::Auth::App::Verification::Bas
         csrf_token: form_authenticity_token,
         label: t("otp.resend.button"),
       },
+      cancel: step_up_cancellation_props,
       back: {
         label: t("sign.app.verification.edit.back"),
         href: auth_app_verification_path(

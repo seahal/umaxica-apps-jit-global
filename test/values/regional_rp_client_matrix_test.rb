@@ -123,6 +123,44 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
     end
   end
 
+  test "rejects an unapproved client for URI binding and JWT namespace" do
+    assert_raises(ArgumentError) { RegionalRpClientMatrix.uri_binding_for("attacker-client") }
+    assert_raises(ArgumentError) { RegionalRpClientMatrix.jwt_namespace_for("attacker-client") }
+  end
+
+  test "an unapproved client is not an exact cell" do
+    assert_not RegionalRpClientMatrix.accepts_exact_cell?(
+      client_id: "core-app-jp", surface: "core", face: "app", region: "attacker",
+    )
+  end
+
+  test "rejects canonical host sources that carry a path, a query, or an unsupported scheme" do
+    {
+      "a path" => "https://edit.example.test/admin",
+      "a query" => "https://edit.example.test/?next=1",
+      "a fragment" => "https://edit.example.test/#top",
+      "an unsupported scheme" => "ftp://edit.example.test",
+      "an unparsable value" => "https://exa mple.test",
+    }.each do |label, value|
+      error =
+        assert_raises(RegionalRpClientMatrix::MissingCanonicalHost, label) do
+          with_env("PUBLIC_EDIT_STAFF_URL" => value) do
+            RegionalRpClientMatrix.uri_binding_for("edit-org")
+          end
+        end
+
+      assert_equal "invalid canonical host source", error.message, label
+    end
+  end
+
+  test "has no canonical Edit host when the source is blank" do
+    assert_raises(RegionalRpClientMatrix::MissingCanonicalHost) do
+      with_env("PUBLIC_EDIT_STAFF_URL" => "") do
+        RegionalRpClientMatrix.uri_binding_for("edit-org")
+      end
+    end
+  end
+
   test "rejects credentials embedded in a canonical host source" do
     error =
       assert_raises(RegionalRpClientMatrix::MissingCanonicalHost) do

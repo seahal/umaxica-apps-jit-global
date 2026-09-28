@@ -6,7 +6,7 @@ module BaseStepUpCancellation
 
   private
 
-  def cancel_step_up_ceremony!(surface:, actor:, token:, fallback:)
+  def cancel_step_up_ceremony!(surface:, actor:, token:, destination:)
     now = Time.current
     transaction = latest_pending_step_up_transaction(surface:, actor:, token:, now:)
     transaction&.cancel!(canceled_at: now)
@@ -20,11 +20,10 @@ module BaseStepUpCancellation
       ),
     )
 
-    safe_redirect_to(
-      safe_internal_path(params[:return_to]) || fallback,
-      fallback: fallback,
-      status: :see_other,
-    )
+    # The cancellation destination is this surface's Base entry point, resolved here. A posted
+    # return_to is not an authority: it was the success continuation (the page the Step-Up guards),
+    # and returning there would only start the ceremony again.
+    redirect_to(destination, status: :see_other)
   end
 
   def latest_pending_step_up_transaction(surface:, actor:, token:, now:)

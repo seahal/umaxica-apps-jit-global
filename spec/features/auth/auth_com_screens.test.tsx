@@ -132,7 +132,7 @@ describe("MfaChallengeChoice", () => {
         description="続けます。"
         methods={[{ key: "passkey", label: "パスキー", href: "/sign/in/challenge/passkey/new" }]}
         no_methods_notice={null}
-        back_link={null}
+        cancel={{ label: "キャンセル", action: "/sign/in/challenge", method: "delete" }}
       />,
     );
 
@@ -140,49 +140,43 @@ describe("MfaChallengeChoice", () => {
     expect(markup).toMatch(/<a href="\/sign\/in\/challenge\/passkey\/new"[\s\S]*?>パスキー</u);
   });
 
-  it("falls back to the notice and the way back when no factor is available", () => {
+  // The first factor is already consumed, so the only way out is cancelling the ceremony: a DELETE
+  // form, never a link back to the sign-in form.
+  it("leaves cancellation as the only exit when no factor is available", () => {
     const markup = renderToStaticMarkup(
       <MfaChallengeChoice
         title="二段階認証"
         description="続けます。"
         methods={[]}
         no_methods_notice="利用できる方法がありません"
-        back_link={{ key: "back", label: "もどる", href: "/sign/in" }}
+        cancel={{ label: "キャンセル", action: "/sign/in/challenge", method: "delete" }}
       />,
     );
 
     expect(markup).toContain("利用できる方法がありません");
-    expect(markup).toMatch(/<a href="\/sign\/in"[^>]*>もどる<\/a>/u);
+    expect(markup).not.toContain("<a ");
+    expect(markup).toMatch(/<form[^>]*action="\/sign\/in\/challenge" method="post"/u);
+    expect(markup).toContain('name="_method" value="delete"');
+    expect(markup).toContain("キャンセル");
   });
 });
 
 describe("VerificationSetup", () => {
-  it("offers only the missing methods, with the back link when there is one", () => {
+  // No earlier step-up state exists, so the screen has no Back; cancelling is its only exit.
+  it("offers only the missing methods and cancellation, never a back link", () => {
     const markup = renderToStaticMarkup(
       <VerificationSetup
         title="本人確認の設定"
         description="方法を追加します。"
-        back_link={{ key: "back", label: "もどる", href: "/settings" }}
+        cancel={{ label: "キャンセル", action: "/verification/cancellation?ri=jp", method: "post" }}
         methods={[{ key: "passkey", label: "パスキー", href: "/settings/passkey/new" }]}
       />,
     );
 
-    expect(markup).toMatch(/<a href="\/settings"[^>]*>もどる<\/a>/u);
     // As above: the row carries a decorative arrow, so the label sits in a span.
     expect(markup).toMatch(/<a href="\/settings\/passkey\/new"[\s\S]*?>パスキー</u);
-  });
-
-  it("omits the back link when the ceremony carried no destination", () => {
-    const markup = renderToStaticMarkup(
-      <VerificationSetup
-        title="本人確認の設定"
-        description="方法を追加します。"
-        back_link={null}
-        methods={[]}
-      />,
-    );
-
-    expect(markup).not.toContain("もどる");
+    expect(markup).toMatch(/<form[^>]*action="\/verification\/cancellation\?ri=jp" method="post"/u);
+    expect(markup).not.toContain('href="/settings"');
   });
 });
 

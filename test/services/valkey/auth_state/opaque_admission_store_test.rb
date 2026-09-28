@@ -161,4 +161,49 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
 
     assert_predicate accepted, :success?
   end
+
+  test "every operation reports Valkey unavailability as Unavailable" do
+    down = Object.new
+    down.define_singleton_method(:key) { |suffix| "down:#{suffix}" }
+    down.define_singleton_method(:call) { |*| raise Redis::CannotConnectError, "connection refused" }
+    store = Valkey::AuthState::OpaqueAdmissionStore.new(connection: down)
+
+    assert_raises(Umaxica::Valkey::Unavailable) do
+      store.issue!(purpose: "authentication_result", actor_type: "client", surface: "app")
+    end
+    assert_raises(Umaxica::Valkey::Unavailable) { store.read("code") }
+    assert_raises(Umaxica::Valkey::Unavailable) { store.consume!(purpose: "authentication_result", raw_code: "code") }
+    assert_raises(Umaxica::Valkey::Unavailable) { store.consume_reference!(reference: "ref") }
+  end
+
+  test "a stored admission that is not JSON is reported as corrupt" do
+    raw = "stored-#{SecureRandom.hex(4)}"
+    digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose: "authentication_result", raw_code: raw)
+    @connection.call("SET", @connection.key("admission:authentication_result:#{digest}"), "{not json")
+
+    assert_raises(Umaxica::Valkey::SerializationError) { @store.read(raw) }
+  end
+
+  test "an unexpected consume reply fails closed as a corrupt payload" do
+    odd = Object.new
+    odd.define_singleton_method(:key) { |suffix| "odd:#{suffix}" }
+    odd.define_singleton_method(:call) { |*| ["surprise", nil] }
+    store = Valkey::AuthState::OpaqueAdmissionStore.new(connection: odd)
+
+    assert_raises(Umaxica::Valkey::SerializationError) do
+      store.consume!(purpose: "authentication_result", raw_code: "code")
+    end
+    assert_raises(Umaxica::Valkey::SerializationError) { store.consume_reference!(reference: "ref") }
+  end
+
+  test "binding expectations must be a hash" do
+    assert_raises(ArgumentError) do
+      @store.consume!(purpose: "authentication_result", raw_code: "code", expected: [["surface", "app"]])
+    end
+  end
+
+  test "the instance digest matches the class digest" do
+    assert_equal Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose: "p", raw_code: "c"),
+                 @store.digest_for(purpose: "p", raw_code: "c")
+  end
 end

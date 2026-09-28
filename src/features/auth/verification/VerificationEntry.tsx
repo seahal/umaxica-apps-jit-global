@@ -1,6 +1,9 @@
 import Card from "@/components/ui/Card";
 import NavList from "@/components/ui/NavList";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 
 // The entry screen of the step-up verification ceremony: pick a second factor.
 //
@@ -17,6 +20,7 @@ export type VerificationEntryProps = {
   methods: VerificationMethodLink[];
   no_methods_notice: string | null;
   notice: string | null;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function VerificationEntry({
@@ -26,6 +30,7 @@ export default function VerificationEntry({
   methods,
   no_methods_notice: noMethodsNotice,
   notice,
+  cancel,
 }: VerificationEntryProps) {
   return (
     <Page title={heading}>
@@ -53,6 +58,8 @@ export default function VerificationEntry({
           <NavList items={methods} />
         )}
       </Card>
+      {/* Ends the whole Step-Up ceremony; the server decides where the actor lands. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

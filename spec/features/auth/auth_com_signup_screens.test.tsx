@@ -1,6 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+const STEP_UP_CANCEL = {
+  label: "キャンセル",
+  action: "/verification/cancellation?ri=jp",
+  method: "post" as const,
+};
+
 // The com sign-up, checkpoint and step-up screens the surface resolves from
 // `src/pages/auth/com`. Every string and every URL arrives finished from the server, so the
 // assertions are about what the page draws from its props, not about how it computes anything.
@@ -144,7 +150,11 @@ describe("auth/com sign-up OTP screens", () => {
     error_heading: null,
     errors: [],
     turnstile: otpTurnstile,
-    return_link: { label: "登録方法に戻る", href: "/sign/up?ri=jp" },
+    cancel: {
+      label: "キャンセル",
+      action: "/sign/up/check/email/otp?ri=jp",
+      method: "delete" as const,
+    },
   };
 
   it("patches the OTP endpoint and never carries the code itself", () => {
@@ -158,7 +168,15 @@ describe("auth/com sign-up OTP screens", () => {
     expect(markup).toContain('data-turnstile-challenge-id="challenge-1"');
     expect(markup).toContain('name="cf-turnstile-response"');
     expect(markup).toContain("届かない場合は再送してください");
-    expect(markup).toMatch(/<a href="\/sign\/up\?ri=jp"[^>]*>登録方法に戻る<\/a>/u);
+  });
+
+  // Once a code has been sent, /sign/up is not a step back; the page ends the sign-up with a DELETE.
+  it("offers cancellation as a DELETE form and no link back to /sign/up", () => {
+    const html = renderToStaticMarkup(<ComSignUpEmailEdit {...otpProps} />);
+
+    expect(html).toMatch(/<form[^>]*action="\/sign\/up\/check\/email\/otp\?ri=jp" method="post"/u);
+    expect(html).toContain('name="_method" value="delete"');
+    expect(html).not.toContain('href="/sign/up');
   });
 
   it("shows the telephone OTP errors the previous attempt produced", () => {
@@ -351,6 +369,7 @@ describe("auth/com step-up verification screens", () => {
           submit_label: "コードを送る",
         }}
         back={{ label: "戻る", href: "/verification?ri=jp" }}
+        cancel={STEP_UP_CANCEL}
       />,
     );
 
@@ -381,6 +400,7 @@ describe("auth/com step-up verification screens", () => {
           label: "再送",
         }}
         back={{ label: "戻る", href: "/verification?ri=jp" }}
+        cancel={STEP_UP_CANCEL}
       />,
     );
 
@@ -404,6 +424,7 @@ describe("auth/com step-up verification screens", () => {
           submit_label: "パスキーで認証",
         }}
         back={{ label: "戻る", href: "/verification?ri=jp" }}
+        cancel={STEP_UP_CANCEL}
       />,
     );
 

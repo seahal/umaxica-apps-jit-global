@@ -7,6 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // unsupported browser, missing challenge, cancelled assertion, success - are exercised here.
 import type { getAssertion as realGetAssertion } from "@/features/auth/passkeys/webauthn";
 
+const STEP_UP_CANCEL = {
+  label: "キャンセル",
+  action: "/verification/cancellation?ri=jp",
+  method: "post" as const,
+};
+
 // Typed from the real exports, so a mocked answer that does not match what the module promises is
 // a failure here rather than an `any` flowing into the component under test.
 const getAssertion = vi.fn<typeof realGetAssertion>();
@@ -37,6 +43,7 @@ const { default: PasskeyVerification } =
   await import("@/features/auth/verification/PasskeyVerification");
 
 const props = {
+  cancel: STEP_UP_CANCEL,
   title: "検証",
   heading: "検証",
   description: "パスキーで認証してください。",

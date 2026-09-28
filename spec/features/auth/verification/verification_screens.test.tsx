@@ -17,10 +17,17 @@ import AppSetupsNew from "@/pages/auth/app/verification/setups/new";
 import AppTotpsNew from "@/pages/auth/app/verification/totps/new";
 import AppVerificationsShow from "@/pages/auth/app/verifications/show";
 
+const STEP_UP_CANCEL = {
+  label: "キャンセル",
+  action: "/verification/cancellation?ri=jp",
+  method: "post" as const,
+};
+
 const back = { label: "戻る", href: "/verification?ri=jp" };
 
 describe("verification entry screen", () => {
   const props = {
+    cancel: STEP_UP_CANCEL,
     title: "検証",
     heading: "検証",
     section_title: "方法の選択",
@@ -39,6 +46,15 @@ describe("verification entry screen", () => {
     expect(html).toContain('href="/verification/passkey/new?ri=jp"');
     expect(html).toContain('href="/verification/email/new?ri=jp"');
     expect(html).toContain("方法の選択");
+  });
+
+  // Cancelling ends the Step-Up ceremony on the server: a POST form, never a link or history step.
+  it("offers cancellation as a POST to the cancellation endpoint", () => {
+    const html = renderToStaticMarkup(<VerificationEntry {...props} />);
+
+    expect(html).toMatch(/<form[^>]*action="\/verification\/cancellation\?ri=jp" method="post"/u);
+    expect(html).not.toContain('name="_method"');
+    expect(html).not.toContain('href="/verification/cancellation');
   });
 
   it("shows the notice instead of the methods when none is registered", () => {
@@ -66,26 +82,17 @@ describe("verification setup screen", () => {
     title: "認証方法の登録",
     heading: "認証方法の登録",
     description: "続行する前に登録してください。",
-    back: { label: "もどる", href: "/settings?ri=jp" },
+    cancel: STEP_UP_CANCEL,
     methods: [{ key: "passkey", label: "パスキーを登録", href: "/settings/passkey/new?ri=jp" }],
   };
 
-  it("lists the missing methods and the way back", () => {
+  // The success continuation is not a Back; cancelling the ceremony is the only exit.
+  it("lists the missing methods and offers cancellation, not a way back", () => {
     const html = renderToStaticMarkup(<VerificationSetup {...props} />);
 
     expect(html).toContain('href="/settings/passkey/new?ri=jp"');
-    expect(html).toContain("もどる");
-  });
-
-  it("omits the way back when the server sent none", () => {
-    const html = renderToStaticMarkup(
-      <VerificationSetup
-        {...props}
-        back={null}
-      />,
-    );
-
-    expect(html).not.toContain("もどる");
+    expect(html).toMatch(/<form[^>]*action="\/verification\/cancellation\?ri=jp" method="post"/u);
+    expect(html).not.toContain('href="/settings?ri=jp"');
   });
 
   it("is the component the auth/app page resolves", () => {
@@ -95,6 +102,7 @@ describe("verification setup screen", () => {
 
 describe("email one-time code request screen", () => {
   const props = {
+    cancel: STEP_UP_CANCEL,
     title: "検証",
     heading: "検証",
     description: "方法を選択してください。",
@@ -139,6 +147,7 @@ describe("email one-time code request screen", () => {
 
 describe("email one-time code entry screen", () => {
   const props = {
+    cancel: STEP_UP_CANCEL,
     title: "認証コード入力",
     heading: "認証コード入力",
     description: "入力いただいたメールアドレスに届きます。",
@@ -179,6 +188,7 @@ describe("email one-time code entry screen", () => {
 
 describe("authenticator code entry screen", () => {
   const props = {
+    cancel: STEP_UP_CANCEL,
     title: "認証コード入力",
     heading: "認証コード入力",
     description: "認証アプリに表示される6桁の認証コードを入力してください。",
@@ -237,6 +247,7 @@ describe("authenticator code entry screen", () => {
 
 describe("passkey verification screen", () => {
   const props = {
+    cancel: STEP_UP_CANCEL,
     title: "検証",
     heading: "検証",
     description: "パスキーで認証してください。",

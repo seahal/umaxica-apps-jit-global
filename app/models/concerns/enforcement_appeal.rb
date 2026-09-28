@@ -32,7 +32,8 @@ module EnforcementAppeal
 
   def submit!
     save!
-    enforcement_case.write_audit_event_once!("appeal_submitted")
+    # Submitted by the principal, not an operator.
+    enforcement_case.write_audit_event_once!("appeal_submitted", actor_operator_public_id: nil)
   end
 
   def resolve!(reviewer_operator_public_id:, resolution_code:)
@@ -61,7 +62,9 @@ module EnforcementAppeal
       enforcement_case: enforcement_case, reason: "appeal_approved",
       ended_by_operator_public_id: reviewer_operator_public_id,
     ) if resolution_code == "approved"
-    enforcement_case.write_audit_event_once!("appeal_#{resolution_code}")
+    enforcement_case.write_audit_event_once!(
+      "appeal_#{resolution_code}", actor_operator_public_id: reviewer_operator_public_id,
+    )
   end
 
   def redacted? = state == "redacted"

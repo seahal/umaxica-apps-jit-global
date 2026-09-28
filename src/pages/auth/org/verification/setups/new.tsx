@@ -1,28 +1,32 @@
-// The screen an operator reaches when step-up is required but no method is configured yet.
+// The screen an operator reaches when step-up is required but no method is configured yet. No
+// earlier step-up state exists, so there is no Back: the only exit is cancelling the ceremony.
 import NavList from "@/components/ui/NavList";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 
 export type OrgVerificationSetupProps = {
   title: string;
   description: string;
-  back_link: { label: string; href: string } | null;
+  cancel: CeremonyCancellationProps;
   methods: { key: string; label: string; href: string }[];
 };
 
 export default function OrgVerificationSetup({
   title,
   description,
-  back_link: backLink,
+  cancel,
   methods,
 }: OrgVerificationSetupProps) {
   return (
     <Page
       title={title}
       description={description}
-      up={backLink}
       width="narrow"
     >
       <NavList items={methods} />
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

@@ -158,24 +158,4 @@ class OperatorPolicyTest < ActiveSupport::TestCase
 
     assert_not policy.destroy?
   end
-
-  def test_purge_sessions_allows_operator
-    operator = Operator.new(id: 1)
-    policy = OperatorPolicy.new(Operator.new, user: operator)
-
-    assert_predicate policy, :purge_sessions?
-  end
-
-  def test_purge_sessions_denies_nil_user
-    policy = OperatorPolicy.new(Operator.new, user: nil)
-
-    assert_not policy.purge_sessions?
-  end
-
-  def test_purge_sessions_denies_non_operator_user
-    client = Client.new(id: 1)
-    policy = OperatorPolicy.new(Operator.new, user: client)
-
-    assert_not policy.purge_sessions?
-  end
 end

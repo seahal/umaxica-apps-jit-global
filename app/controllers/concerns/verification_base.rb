@@ -363,22 +363,6 @@ module VerificationBase
     end
   end
 
-  def decode_pt_path(encoded)
-    resolve_step_up_pt(encoded)
-  end
-
-  def setup_pt_path(encoded, root_path:)
-    path = decode_pt_path(encoded)
-    return nil if path.blank?
-
-    uri = URI.parse(path)
-    return root_path if uri.path.start_with?("/settings/") && uri.path != root_path
-
-    path
-  rescue URI::InvalidURIError
-    nil
-  end
-
   def existing_step_up_pt_path
     encoded = params[:pt].presence
     resolve_step_up_pt(encoded)

@@ -13,12 +13,20 @@ module Auth
 
           before_action :ensure_pending_mfa!
 
+          public
+
           def show
             @mfa_user = pending_mfa_user
             @can_use_totp = @mfa_user&.totp_enabled?
             @can_use_passkey = @mfa_user&.client_passkeys&.exists?(status_id: ClientPasskeyStatus::ACTIVE)
 
             render inertia: true, props: mfa_challenge_props
+          end
+
+          # Cancel: ends the second-factor ceremony rather than stepping back to the sign-in form.
+          def destroy
+            cancel_pending_mfa!
+            redirect_to(auth_app_sign_in_path, status: :see_other)
           end
 
           private
@@ -32,7 +40,7 @@ module Auth
               description: page_t("#{scope}.description"),
               methods: mfa_challenge_methods(scope),
               no_methods_notice: any_method ? nil : page_t("#{scope}.no_methods_available"),
-              back_link: any_method ? nil : mfa_challenge_back_link,
+              cancel: mfa_challenge_cancel,
             }
           end
 
@@ -55,12 +63,8 @@ module Auth
             methods
           end
 
-          def mfa_challenge_back_link
-            {
-              key: "back",
-              label: t("sign.app.authentication.new.back"),
-              href: auth_app_sign_in_path,
-            }
+          def mfa_challenge_cancel
+            { label: t("actions.cancel"), action: auth_app_sign_in_challenge_path, method: "delete" }
           end
 
           def ensure_pending_mfa!

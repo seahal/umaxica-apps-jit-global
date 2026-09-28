@@ -42,6 +42,9 @@ class OrgEnforcementIdentifierEffect < OrgPrincipalRecord
   validates :lookup_digest, presence: true
   validates :key_version, :digest_version, :normalization_version, presence: true
   validates :effective_at, presence: true
+  # The columns are NOT NULL; a blank or unparseable flag is refused as invalid input instead of
+  # reaching the database as a constraint violation.
+  validates :registration_blocked, :attachment_blocked, :recovery_blocked, inclusion: { in: [true, false] }
   validate :kind_permits_identifier_effect
 
   private

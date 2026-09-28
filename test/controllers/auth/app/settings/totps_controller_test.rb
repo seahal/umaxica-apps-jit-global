@@ -199,9 +199,156 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "should get new" do
+  # ===================================================================
+  # Enrollment lifecycle: GET new only displays; POST /settings/totps/enrollment starts an enrollment
+  # with a fresh secret; DELETE ends it; a successful first code consumes it.
+  # ===================================================================
+
+  test "GET new generates no secret and starts no enrollment" do
     with_prosopite_paused do
       get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+    end
+
+    assert_response :success
+    assert_nil session[:private_key]
+    assert_nil session[:totp_enrollment]
+    assert_nil inertia_props["qr_code_image"]
+    assert_equal auth_app_settings_totps_enrollment_path(ri: "jp"), inertia_props.fetch("start").fetch("action")
+  end
+
+  test "the cancel link of the old flow no longer leaves a reusable secret behind" do
+    with_prosopite_paused do
+      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      get auth_app_settings_totps_url(ri: "jp"), headers: @headers
+    end
+
+    assert_nil session[:private_key]
+    assert_nil session[:totp_enrollment]
+  end
+
+  test "starting an enrollment creates a secret that a refresh keeps" do
+    with_prosopite_paused do
+      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+    end
+
+    assert_response :see_other
+    assert_redirected_to new_auth_app_settings_totp_url(ri: "jp")
+
+    with_prosopite_paused { get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers }
+    first_image = inertia_props.fetch("qr_code_image")
+    enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
+
+    with_prosopite_paused { get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers }
+
+    assert_equal first_image, inertia_props.fetch("qr_code_image")
+    assert_equal enrollment_id, inertia_props.fetch("form").fetch("enrollment_id")
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_settings_totps_enrollment_path(ri: "jp"),
+        "method" => "delete", },
+      inertia_props.fetch("cancel"),
+    )
+  end
+
+  test "cancelling ends the enrollment and a new enrollment gets a new secret" do
+    with_prosopite_paused do
+      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+    end
+    first_image = inertia_props.fetch("qr_code_image")
+
+    with_prosopite_paused { delete auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers }
+
+    assert_response :see_other
+    assert_redirected_to auth_app_settings_totps_url(ri: "jp")
+    assert_nil session[:totp_enrollment]
+    assert_nil session[:private_key]
+    assert_nil session[:totp_ceremony]
+
+    with_prosopite_paused do
+      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+    end
+
+    assert_not_equal first_image, inertia_props.fetch("qr_code_image")
+  end
+
+  test "a code for a cancelled enrollment cannot be confirmed from a stale page" do
+    @user.client_totp_credentials.destroy_all
+    stale_secret = "JBSWY3DPEHPK3PXP"
+    ROTP::Base32.stub(:random_base32, stale_secret) do
+      with_prosopite_paused do
+        post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      end
+    end
+    stale_enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
+
+    with_prosopite_paused do
+      delete auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+    end
+
+    assert_no_difference("ClientTotpCredential.count") do
+      with_prosopite_paused do
+        post auth_app_settings_totps_url(ri: "jp"),
+             params: { user_totp_credential: { first_token: ROTP::TOTP.new(stale_secret).now,
+                                               enrollment_id: stale_enrollment_id, } },
+             headers: @headers
+      end
+    end
+
+    assert_response :conflict
+    assert_equal "text/plain", response.media_type
+    assert_nil response.location
+  end
+
+  test "a code posted after cancellation cannot be confirmed" do
+    @user.client_totp_credentials.destroy_all
+    secret = "JBSWY3DPEHPK3PXP"
+    ROTP::Base32.stub(:random_base32, secret) do
+      with_prosopite_paused do
+        post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
+        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      end
+    end
+    enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
+    with_prosopite_paused { delete auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers }
+
+    assert_no_difference("ClientTotpCredential.count") do
+      with_prosopite_paused do
+        post auth_app_settings_totps_url(ri: "jp"),
+             params: { user_totp_credential: { first_token: ROTP::TOTP.new(secret).now,
+                                               enrollment_id: enrollment_id, } },
+             headers: @headers
+      end
+    end
+
+    assert_response :conflict
+  end
+
+  test "enrollment endpoints are not reachable by GET" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/settings/totps/enrollment",
+        method: :get,
+      )
+    end
+  end
+
+  test "com and org hosts do not serve a TOTP enrollment" do
+    %w(PUBLIC_AUTH_CORPORATE_URL PUBLIC_AUTH_STAFF_URL).each do |key|
+      host = ENV.fetch(key)
+
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/settings/totps/enrollment", method: :post)
+      end
+    end
+  end
+
+  test "should get new" do
+    with_prosopite_paused do
+      open_totp_enrollment!(@headers)
     end
 
     assert_response :success
@@ -257,9 +404,26 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     ), response.body
   end
 
+  test "an enrollment cannot be started once the limit is reached" do
+    @user.client_totp_credentials.destroy_all
+    ClientTotpCredential::MAX_TOTP_SLOTS.times do |index|
+      ClientTotpCredential.create!(
+        user: @user,
+        private_key: ROTP::Base32.random_base32,
+        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+        title: "totp-#{index}",
+      )
+    end
+
+    with_prosopite_paused { post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers }
+
+    assert_response :unprocessable_content
+    assert_nil session[:totp_enrollment]
+  end
+
   test "new is available without recovery passcodes" do
     @user.client_totp_credentials.destroy_all
-    get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+    open_totp_enrollment!(@headers)
 
     assert_response :success
     assert_equal "text/html", response.media_type
@@ -269,14 +433,14 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     @user.client_totp_credentials.destroy_all
 
     with_mocked_totp do |secret_credential|
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      open_totp_enrollment!(@headers)
       freeze_time do
         token = ROTP::TOTP.new(secret_credential).now
 
         assert_difference("ClientTotpCredential.count", 1) do
           assert_no_difference("ClientSecretCredential.count") do
             post auth_app_settings_totps_url(ri: "jp"),
-                 params: { user_totp_credential: { first_token: token } },
+                 params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: token } },
                  headers: @headers
           end
         end
@@ -362,7 +526,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
     with_mocked_totp do |secret_credential|
       with_prosopite_paused do
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+        open_totp_enrollment!(@headers)
       end
 
       assert_response :success
@@ -380,7 +544,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
           assert_no_difference(-> { @user.reload.client_secret_credentials.count }) do
             with_prosopite_paused do
               post auth_app_settings_totps_url(ri: "jp"),
-                   params: { user_totp_credential: { first_token: token } },
+                   params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: token } },
                    headers: @headers
             end
           end
@@ -399,7 +563,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
     with_mocked_totp do |secret_credential|
       with_prosopite_paused do
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+        open_totp_enrollment!(@headers)
       end
 
       assert_response :success
@@ -410,7 +574,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         with_prosopite_paused do
           post auth_app_settings_totps_url(ri: "jp"),
                params: {
-                 user_totp_credential: { first_token: token, title: "New TOTP" },
+                 user_totp_credential: { enrollment_id: @enrollment_id, first_token: token, title: "New TOTP" },
                },
                headers: @headers
         end
@@ -428,7 +592,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
     with_mocked_totp do |secret_credential|
       with_prosopite_paused do
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+        open_totp_enrollment!(@headers)
       end
 
       freeze_time do
@@ -439,7 +603,9 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
           with_prosopite_paused do
             post auth_app_settings_totps_url(ri: "jp"),
                  params: {
-                   user_totp_credential: { first_token: pasted_token, title: "Pasted TOTP" },
+                   user_totp_credential: { enrollment_id: @enrollment_id,
+                                           first_token: pasted_token,
+                                           title: "Pasted TOTP", },
                  },
                  headers: @headers
           end
@@ -453,7 +619,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   test "should not create totp with invalid token" do
     with_prosopite_paused do
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      open_totp_enrollment!(@headers)
     end
 
     assert_response :success
@@ -462,7 +628,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       with_prosopite_paused do
         post auth_app_settings_totps_url(ri: "jp"),
-             params: { user_totp_credential: { first_token: "000000" } },
+             params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: "000000" } },
              headers: @headers
       end
     end
@@ -472,7 +638,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   test "should not create totp with empty token" do
     with_prosopite_paused do
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      open_totp_enrollment!(@headers)
     end
 
     assert_response :success
@@ -480,7 +646,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientTotpCredential.count") do
       with_prosopite_paused do
         post auth_app_settings_totps_url(ri: "jp"),
-             params: { user_totp_credential: { first_token: "", title: "" } },
+             params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: "", title: "" } },
              headers: @headers
       end
     end
@@ -494,7 +660,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "should not create totp when turnstile stealth fails" do
     with_mocked_totp do |secret_credential|
       with_prosopite_paused do
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+        open_totp_enrollment!(@headers)
       end
 
       assert_response :success
@@ -508,7 +674,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
           with_prosopite_paused do
             post auth_app_settings_totps_url(ri: "jp"),
                  params: {
-                   user_totp_credential: { first_token: token, title: "Blocked TOTP" },
+                   user_totp_credential: { enrollment_id: @enrollment_id, first_token: token, title: "Blocked TOTP" },
                  },
                  headers: @headers
           end
@@ -572,9 +738,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
     with_mocked_totp do |secret_credential|
       with_prosopite_paused do
-        get new_auth_app_settings_totp_url(
-          ri: "jp",
-        ), headers: headers
+        open_totp_enrollment!(headers)
       end
 
       assert_response :success
@@ -584,7 +748,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
         assert_difference("ClientTotpCredential.count", 1) do
           with_prosopite_paused do
             post auth_app_settings_totps_url(ri: "jp"),
-                 params: { user_totp_credential: { first_token: first_code } },
+                 params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: first_code } },
                  headers: headers
           end
         end
@@ -598,6 +762,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   private
 
   private
+
+  # Starts an enrolment the way the page does (POST), then shows it, keeping its id for the form.
+  def open_totp_enrollment!(headers)
+    post(auth_app_settings_totps_enrollment_url(ri: "jp"), headers: headers)
+    get(new_auth_app_settings_totp_url(ri: "jp"), headers: headers)
+    @enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
+  end
 
   def with_mocked_totp
     known_secret_credential = "JBSWY3DPEHPK3PXP"

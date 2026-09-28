@@ -74,14 +74,24 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     assert_match org_pattern, "/identity/secrets"
   end
 
-  test "org session revoke scope includes support session actions" do
-    pattern = StepUpScopeCatalog::ORG.fetch("session_revoke_all")
+  # Support revocation has its own scope, separate from the operator's own session revocation, and
+  # only for the app and com targets. The org enforcement realm has no catalogued scope.
+  test "org support revocation and enforcement scopes cover only their confirmation screens" do
+    own_sessions = StepUpScopeCatalog::ORG.fetch("session_revoke_all")
+    support = StepUpScopeCatalog::ORG.fetch("support_session_revoke")
 
-    assert_match pattern, "/support/clients/123/sessions/purge"
-    assert_match pattern, "/support/visitors/123/sessions/emergency_revoke"
-    assert_match pattern, "/support/operators/123/sessions/purge"
-    assert_no_match pattern, "/support/clients/abc/sessions/purge"
-    assert_no_match StepUpScopeCatalog::APP.fetch("session_revoke_all"), "/support/clients/123/sessions/purge"
+    assert_no_match own_sessions, "/support/clients/0123456789ABCDEF/revocations/new"
+    assert_match support, "/support/clients/0123456789ABCDEF/revocations/new"
+    assert_match support, "/support/visitors/0123456789ABCDEF/revocations/new?ri=jp"
+    assert_no_match support, "/support/operators/0123456789ABCDEF/revocations/new"
+    assert_no_match support, "/support/clients/0123456789ABCDEF/revocations/new/extra"
+    assert_match StepUpScopeCatalog::ORG.fetch("enforcement_case_approve"),
+                 "/support/com/enforcement_cases/abc/approval/new"
+    assert_no_match StepUpScopeCatalog::ORG.fetch("enforcement_case_approve"),
+                    "/support/org/enforcement_cases/abc/approval/new"
+    assert_match StepUpScopeCatalog::ORG.fetch("operator_capability"), "/iam/grants/new"
+    assert_not StepUpScopeCatalog::APP.key?("support_session_revoke")
+    assert_not StepUpScopeCatalog::COM.key?("enforcement_case_apply")
   end
 
   test "Avatar transfer Step-Up scopes are operation-specific and absent from com" do

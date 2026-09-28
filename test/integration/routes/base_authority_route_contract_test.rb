@@ -778,6 +778,29 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "base authority org membership routes are read-only" do
+    # Org memberships are read-only: changes are not routed until their authority is decided.
+    assert_recognizes(
+      { controller: "base/org/organizations/memberships",
+        action: "show",
+        organization_id: "example",
+        id: "member-example", },
+      { path: "http://#{BASE_ORG_HOST}/organizations/example/memberships/member-example",
+        method: :get,
+        organization_id: "example",
+        id: "member-example", },
+    )
+    assert_raises(Minitest::Assertion) do
+      assert_recognizes(
+        { controller: "base/org/organizations/memberships",
+          action: "destroy",
+          organization_id: "example",
+          id: "member-example", },
+        { path: "http://#{BASE_ORG_HOST}/organizations/example/memberships/member-example", method: :delete },
+      )
+    end
+  end
+
   test "base authority org route contract (continued)" do
     [
       { path: "/sso/authorize", method: :get },
@@ -902,17 +925,6 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
         { path: "http://#{BASE_ORG_HOST}#{opts[:path]}", method: :get, id: opts[:id] }.compact,
       )
     end
-
-    assert_recognizes(
-      { controller: "base/org/organizations/memberships",
-        action: "destroy",
-        organization_id: "example",
-        id: "member-example", },
-      { path: "http://#{BASE_ORG_HOST}/organizations/example/memberships/member-example",
-        method: :delete,
-        organization_id: "example",
-        id: "member-example", },
-    )
 
     {
       index: { path: "/accounts", method: :get },

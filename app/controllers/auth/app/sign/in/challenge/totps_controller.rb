@@ -144,6 +144,7 @@ module Auth
                 form_errors: @totp_form.errors.full_messages,
                 turnstile: turnstile_stealth_props,
                 back_link: { label: page_t("#{scope}.back"), href: auth_app_sign_in_challenge_path },
+                cancel: { label: t("actions.cancel"), action: auth_app_sign_in_challenge_path, method: "delete" },
               }
             end
 
