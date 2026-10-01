@@ -6,6 +6,7 @@ module Base
     class ApplicationController < ActionController::Base
       include ::FqdnAvailabilityGate
       include ::RateLimit
+      include ::DefaultNoStore
       include ::JumpRtReturnVerification
 
       include ::Session
@@ -32,6 +33,8 @@ module Base
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+
+      prepend_before_action :apply_default_no_store
 
       layout "base/com/application"
 

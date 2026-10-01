@@ -181,11 +181,16 @@ class FqdnAvailabilityGateTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The one exception is `DefaultNoStore#apply_default_no_store` on Global and Publishing policy
+  # roots (adr/global-and-publishing-default-no-store-policy.md). It only replaces the in-memory
+  # cache directives of the response, so it spends no rate-limit budget and touches no state, and
+  # running it first is what puts `no-store` on the 503 this gate renders.
   test "the gate is the very first before_action on every gated controller" do
     gated_controllers.each do |controller|
-      first = controller._process_action_callbacks.find { |callback| callback.kind == :before }&.filter
+      filters = controller._process_action_callbacks.select { |callback| callback.kind == :before }.map(&:filter)
+      filters = filters.drop(1) if filters.first == :apply_default_no_store
 
-      assert_equal :enforce_fqdn_availability!, first,
+      assert_equal :enforce_fqdn_availability!, filters.first,
                    "#{controller} must not run anything ahead of the availability switch"
     end
   end

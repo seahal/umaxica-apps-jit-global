@@ -7,12 +7,14 @@ module Base
       class TokensController < ActionController::API
         include ActionController::MimeResponds
         include ::RateLimit
+        include ::DefaultNoStore
         include BaseOauthEndpoint
         include BaseOauthTokenEndpoint
 
         AUTHENTICATION_MODE = :open
         OIDC_RESOURCE_TYPE = "client"
 
+        prepend_before_action :apply_default_no_store
         before_action :skip_oauth_session!
         after_action :set_oauth_cache_headers
         rate_limit(

@@ -21,6 +21,7 @@ module JumpRtSurface
       when /\ACore::/ then "CORE"
       when /\AWarp::/ then "WARP"
       when /\ABase::/ then "BASE"
+      when /\AEdit::/ then "EDIT"
       when /\APalm::/ then "PALM"
       end
     surface =

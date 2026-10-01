@@ -7,6 +7,7 @@ module Auth
       include ::FqdnAvailabilityGate
       include ::RateLimit
       include ::JumpRtReturnVerification
+      include ::DefaultNoStore
       include ::WebauthnSurfaceDeclarable
 
       webauthn_surface :com
@@ -29,6 +30,9 @@ module Auth
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+
+      prepend_before_action :apply_default_no_store
+
       AUTH_CEREMONY_SURFACE = "com"
 
       layout "auth/com/application"

@@ -298,6 +298,13 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_equal "SIDE_APP", warp_app.fetch(:jwt_namespace)
   end
 
+  test "Edit org uses its own Jump RT issuer published at the Edit origin" do
+    assert_equal "EDIT_ORG", JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::Info::Org::EntriesController")
+    assert_equal "EDIT_ORG", JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::Docs::App::EntriesController")
+    assert_equal "EDIT_ORG", JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::Docs::Com::EntriesController")
+    assert_equal "https://edit.umaxica.org", JumpRtSurface.issuer_origin("EDIT_ORG")
+  end
+
   test "normalizes unsupported issuer surface names by raising" do
     error =
       assert_raises(JumpRtConfigurationError) do

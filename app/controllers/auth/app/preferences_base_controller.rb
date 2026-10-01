@@ -12,6 +12,8 @@ module Auth
 
       prepend_before_action :redirect_localhost_preference_authority!
       ensure_fqdn_gate_first!
+      # Restores the inherited default no-store ahead of the gate (DefaultNoStore).
+      prepend_before_action :apply_default_no_store
       before_action :authorize_preference_write!, if: :preference_write_request?
 
       private

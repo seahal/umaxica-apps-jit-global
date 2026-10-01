@@ -35,6 +35,8 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
   before_action :require_authentication_or_gate
   prepend_before_action :render_expired_restricted_session_locked, only: :show
   ensure_fqdn_gate_first!
+  # Restores the inherited default no-store ahead of the gate (DefaultNoStore).
+  prepend_before_action :apply_default_no_store
 
   # Display active and restricted sessions for the user
   def show

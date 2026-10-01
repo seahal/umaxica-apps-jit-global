@@ -13,6 +13,8 @@ module Auth
 
           prepend_before_action :authenticate_sign_in_sequence_actor!
           ensure_fqdn_gate_first!
+          # Restores the inherited default no-store ahead of the gate (DefaultNoStore).
+          prepend_before_action :apply_default_no_store
           before_action :continue_checkpoint_sequence_without_content!
 
           def show = super

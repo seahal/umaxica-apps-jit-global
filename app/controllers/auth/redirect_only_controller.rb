@@ -4,8 +4,13 @@
 module Auth
   class RedirectOnlyController < ApplicationController
     include ::SignAcmeAuthorityRedirect
+    # Policy root for the Auth redirect-only controllers: the repository-wide ApplicationController
+    # it inherits is shared with mounted engines and carries no cache policy of its own.
+    include ::DefaultNoStore
 
     AUTHENTICATION_MODE = :open
+
+    prepend_before_action :apply_default_no_store
 
     # `using:` must be stated explicitly. Omitting it falls back to
     # config.load_defaults(8.2), which sets forgery_protection_verification_strategy

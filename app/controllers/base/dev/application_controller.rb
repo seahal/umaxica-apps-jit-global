@@ -6,6 +6,7 @@ module Base
     class ApplicationController < ActionController::Base
       include ::FqdnAvailabilityGate
       include ::RateLimit
+      include ::DefaultNoStore
 
       include ::Session
 
@@ -14,6 +15,9 @@ module Base
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+
+      prepend_before_action :apply_default_no_store
+
       helper_method :current_actor
       # Surface-wide default web request limit (defense-in-depth baseline).
       # RateLimit stays a side-effect-free helper; the limit and its numeric

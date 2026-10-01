@@ -16,7 +16,9 @@ Issuer surfaces:
 - `BASE_APP`, `BASE_COM`, `BASE_ORG`
 - `PALM_APP` — Palm publishes public JWKS at
   `https://palm-jp.umaxica.app/.well-known/jwks.json`.
-
+- `EDIT_ORG` — Edit publishes public JWKS at
+  `https://edit.umaxica.org/.well-known/jwks.json`. Namespace availability does not approve an
+  Edit edge in the current directed return policy; its RP completion remains a separate review.
 
 Issuer registration and permitted destinations are separate contracts. See
 [the directed handoff ADR](../../adr/jump-directed-rails-handoff-contract.md). Development issuance

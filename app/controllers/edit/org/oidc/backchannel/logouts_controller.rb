@@ -7,8 +7,11 @@ module Edit
       module Backchannel
         class LogoutsController < ActionController::API
           include ::OidcRpLogoutReceiver
+          include ::DefaultNoStore
 
           AUTHENTICATION_MODE = :bare
+
+          prepend_before_action :apply_default_no_store
 
           public
 

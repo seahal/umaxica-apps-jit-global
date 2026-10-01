@@ -20,9 +20,12 @@ module JitSecurityJwtRegistry
     WARP_APP WARP_COM WARP_ORG
     PALM_APP
     BASE_APP BASE_COM BASE_ORG
+    EDIT_ORG
   ).freeze
-  # Palm signs Jump RTs, while its native bearer API accepts Base-issued access tokens.
-  ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(PALM_APP)).freeze
+  # Surfaces whose controllers sign and verify access tokens under their own namespace. EDIT_ORG is
+  # a surface issuer only for Jump rt values (Edit publishes its JWKS for the Jump gateway); Edit
+  # access tokens keep resolving to AUTH_ORG, so EDIT_ORG must not appear here.
+  ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(EDIT_ORG PALM_APP)).freeze
   OIDC_CLIENT_NAMESPACES = %w(
     AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG

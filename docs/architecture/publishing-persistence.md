@@ -37,11 +37,20 @@ Each public and management controller declares `PUBLISHING_AUDIENCE`, `PUBLISHIN
 Public URLs: `GET /api/v0/entries`, `GET /api/v0/entries/:public_id`. Management URLs:
 `/publishing/{info,docs,news,help}/{app,com,org}/entries` on `edit.umaxica.org`.
 
+Public read controllers inherit the cache default from their surface-local `BareController` and opt
+in to public caching in `PublishingContentRendering`. Management controllers inherit `no-store` from
+`Edit::Org::ApplicationController` and never opt in. See `docs/reference/http-cache-policy.md`.
+
 The edit host is the staff Publishing management boundary. The Publishing database remains in this
 Rails application while the identity/operator contract is stabilized; this host move deliberately
 does not extract Publishing persistence or introduce cross-database associations.
 
 ## Edit landing navigation
+
+Anonymous Publishing management requests start Edit's OIDC flow. On a host that is not same-site
+with the Base authority (for example `edit.org.localhost`), the authorize redirect goes through the
+Jump gateway with an `EDIT_ORG` rt whose keys Edit publishes at `/.well-known/jwks.json`; see
+`docs/operations/jump-rt-key-rotation.md`.
 
 Edit's root uses its surface layout with the same typography, column width, and action styling as
 the Base landing. Anonymous visitors enter the existing authenticated Publishing dashboard through

@@ -9,8 +9,11 @@ module Auth
       class NotificationsController < ActionController::API
         include ActionController::MimeResponds
         include ::RateLimit
+        include ::DefaultNoStore
 
         AUTHENTICATION_MODE = :bare
+
+        prepend_before_action :apply_default_no_store
 
         MAXIMUM_BODY_BYTES = 32.kilobytes
 

@@ -225,11 +225,17 @@ endpoint two error formats.
 
 RFC 9110 §13 (conditional requests) and §5.2 / RFC 9111 (cache directives).
 
+- Global and Publishing controllers start from `Cache-Control: no-store`
+  (`adr/global-and-publishing-default-no-store-policy.md`). Caching is enabled only by the action
+  that owns the representation, through `fresh_when`, `stale?`, `expires_in`, `expires_now`, or
+  `http_cache_forever`. The current rules are in `docs/reference/http-cache-policy.md`.
 - Credential, session, and token endpoints set `Cache-Control: no-store`. This is already the
-  practice for token and bearer endpoints and is mandatory.
-- Read-only public content endpoints emit `ETag` and/or `Last-Modified` and answer `If-None-Match` /
-  `If-Modified-Since` with `304` (§13.1, §15.4.5). Published content carries a publication
-  timestamp, so unconditional re-transfer is avoidable.
+  practice for token and bearer endpoints and is mandatory; the default above does not replace an
+  endpoint's own contract.
+- Public content may be cacheable. A read-only public content endpoint that opts in emits `ETag`
+  and/or `Last-Modified` and answers `If-None-Match` / `If-Modified-Since` with `304` (§13.1,
+  §15.4.5). Published content carries a publication timestamp, so the Publishing entries API opts
+  in and unconditional re-transfer is avoidable.
 - A cacheable response whose body varies by authenticated subject requires `Vary` and `private`.
 
 ## Deprecation and sunset

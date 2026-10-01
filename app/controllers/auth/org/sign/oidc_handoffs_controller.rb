@@ -12,6 +12,8 @@ module Auth
         prepend_before_action :authenticate_oidc_result_actor!
         before_action :authorize_oidc_result_handoff!
         ensure_fqdn_gate_first!
+        # Restores the inherited default no-store ahead of the gate (DefaultNoStore).
+        prepend_before_action :apply_default_no_store
 
         private
 

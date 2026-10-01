@@ -128,6 +128,10 @@ equivalent API-only base that does not depend on:
 - preference cookies or preference writes;
 - OIDC callbacks.
 
+The surface-local `BareController` is the cache policy root: it declares `DefaultNoStore`, so every
+response starts as `Cache-Control: no-store`, and an action that serves cacheable public content opts
+in from the action (`docs/reference/http-cache-policy.md`). Public does not imply cacheable.
+
 `app` and `com` content reads are public by default. `org` content reads may become authenticated or
 org-scoped in the future, but that must reuse the existing authority boundary and must not make
 `docs`, `help`, or `news` a new identity, session, or authorization authority.

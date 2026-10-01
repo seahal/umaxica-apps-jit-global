@@ -1,5 +1,5 @@
 /*
- * Stylesheet for the xper com/org FQDNs.
+ * Stylesheet for the xper app/com/org FQDNs.
  *
  * Xper is an Importmap/Propshaft surface (config/frontend_stacks.yml, enforced by
  * test/security/invariants/xper_phase_zero_invariant_test.rb), so it cannot link the Vite/Tailwind
@@ -21,6 +21,9 @@
 }
 
 /* Edition identity, matching the per-TLD hue every Vite surface uses. */
+:root[data-edition="app"] {
+  --tint: #ef4444;
+}
 :root[data-edition="com"] {
   --tint: #6366f1;
 }

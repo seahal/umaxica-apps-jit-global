@@ -5,9 +5,10 @@ require "test_helper"
 
 # Authenticated pages must not outlive the session in a browser: an authenticated HTML or Inertia
 # response is `Cache-Control: no-store` (so neither the HTTP cache nor the back/forward cache keeps
-# it), and a response that ends a session tells Inertia to clear its encrypted history. Public
-# pages and JSON endpoints keep their existing cache behavior, and ordinary authenticated
-# navigation does not clear history.
+# it), and a response that ends a session tells Inertia to clear its encrypted history. Ordinary
+# authenticated navigation does not clear history. Base is a Global policy root, so public pages and
+# JSON endpoints that make no cache decision are `no-store` too, from `DefaultNoStore`
+# (adr/global-and-publishing-default-no-store-policy.md) rather than from the authenticated-page rule.
 class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
   setup do
     @host = configured_host(:base_service)
@@ -43,12 +44,12 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     assert_not inertia_page.fetch("clearHistory")
   end
 
-  test "a public HTML page keeps its cache behavior" do
+  test "an anonymous public HTML page carries the Global default no-store" do
     get edit_base_app_preference_cookie_url(ri: "jp", host: @host), headers: host_headers(@host)
 
     assert_response :success
     assert_equal "text/html", response.media_type
-    assert_not_includes response.headers["Cache-Control"].to_s, "no-store"
+    assert_equal "no-store", response.headers.fetch("Cache-Control")
   end
 
   test "an open page answered for a signed-in user is no-store" do
@@ -58,11 +59,11 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     assert_no_store
   end
 
-  test "an authenticated JSON response is left alone" do
+  test "an authenticated JSON response carries the Global default no-store" do
     get base_app_selector_url(ri: "jp", host: @host, format: :json), headers: as_user_headers(@user, host: @host)
 
     assert_equal "application/json", response.media_type
-    assert_not_includes response.headers["Cache-Control"].to_s, "no-store"
+    assert_equal "no-store", response.headers.fetch("Cache-Control")
   end
 
   test "signing out clears Inertia history on the signed-out page" do

@@ -335,6 +335,14 @@ Current outbound delivery decisions:
   reservation and the call-site entry point; its payload shape, result object, and job-argument
   encryption rule remain in force.
 
+Current HTTP cache policy decision:
+
+- `adr/global-and-publishing-default-no-store-policy.md` — Global and Publishing policy-root
+  controllers default to `Cache-Control: no-store` through an explicitly declared, prepended
+  `DefaultNoStore` callback; an action opts into caching only through Rails' `fresh_when`, `stale?`,
+  `expires_in`, `expires_now`, or `http_cache_forever`. Core, Palm, Warp, and Regional-owned roots
+  are outside the default. Current rules: `docs/reference/http-cache-policy.md`.
+
 Current CSRF decision:
 
 - `adr/csrf-protection-disabled-in-test-environment.md` — settled decision that `bin/rails test`

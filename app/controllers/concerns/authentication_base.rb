@@ -1618,8 +1618,7 @@ module AuthenticationBase
               access_token: access_token,
     )
     emit_actor_mismatch_event(result.payload) if result.failure_reason == :actor_mismatch
-    @current_session_public_id = result.session_public_id if result.resource.present? && result.session_public_id.present?
-    @current_token_public_id = result.token_public_id if result.resource.present? && result.token_public_id.present?
+    remember_authenticated_public_ids!(result)
 
     if result.resource.present?
       # ActorSupport#set_current_actor rebuilds Actor.authz later in the request and reads
@@ -1629,6 +1628,13 @@ module AuthenticationBase
     end
 
     result.resource
+  end
+
+  def remember_authenticated_public_ids!(result)
+    return if result.resource.blank?
+
+    @current_session_public_id = result.session_public_id if result.session_public_id.present?
+    @current_token_public_id = result.token_public_id if result.token_public_id.present?
   end
 
   def remember_authentication_resolution!(result, authorization_scheme:, access_token:)
@@ -1806,7 +1812,8 @@ module AuthenticationBase
   # authenticated when its action requires a session, or when an :open action answered a
   # signed-in request (it may then render signed-in content, as the Base root does). JSON and
   # other non-page responses, bare token-authenticated endpoints, and pages served anonymously
-  # keep their existing cache headers.
+  # are left to the controller's own policy: on Global and Publishing policy roots that is already
+  # `no-store` from `DefaultNoStore`; on Core and Warp it is the framework default.
   def apply_authenticated_page_cache_policy!
     return unless authenticated_page_response?
     return if response.headers["Cache-Control"].to_s.split(",").map(&:strip).include?("no-store")

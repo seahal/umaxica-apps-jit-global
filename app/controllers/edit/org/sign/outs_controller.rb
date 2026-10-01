@@ -11,6 +11,10 @@ module Edit
         include ::OidcRpLogoutLauncher
         include ::SignOutClearSiteData
 
+        # OidcRpLogoutLauncher prepends its own callback and re-runs ensure_fqdn_gate_first!; restore
+        # the inherited default no-store ahead of the gate (DefaultNoStore).
+        prepend_before_action :apply_default_no_store
+
         AUTHENTICATION_MODE = :open
         layout "edit/org/application"
 
