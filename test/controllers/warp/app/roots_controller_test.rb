@@ -5,6 +5,16 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Warp::App::RootsControllerTest < ActionDispatch::IntegrationTest
+  # Exercise the public exception representation used outside development.
+  setup do
+    @previous_detailed_exceptions = Rails.application.env_config["action_dispatch.show_detailed_exceptions"]
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = false
+  end
+
+  teardown do
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = @previous_detailed_exceptions
+  end
+
   fixtures :clients, :client_statuses
 
   setup do
@@ -17,7 +27,7 @@ class Warp::App::RootsControllerTest < ActionDispatch::IntegrationTest
   test "renders anonymous root" do
     host! @host
 
-    get warp_app_root_url(ri: "jp")
+    get "/"
 
     assert_response :success
     assert_equal "warp/app/roots/index", inertia_component
@@ -32,14 +42,93 @@ class Warp::App::RootsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "redirects signed-in client to dashboard" do
+  test "authenticated direct root request returns 404 without redirect" do
+    host! @host
+    get "/", headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+
+    assert_response :not_found
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_no_match(/signed-in landing/, response.body)
+  end
+
+  test "anonymous root is private and carries no dashboard content" do
+    host! @host
+
+    get warp_app_root_url(ri: "jp")
+
+    assert_response :success
+    assert_equal "warp/app/roots/index", inertia_component
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_not inertia_props.key?("sections")
+  end
+
+  test "root with an expired client session renders the anonymous root" do
+    @token.update!(discard_at: @token.created_at)
+    travel 1.second
     host! @host
 
     get warp_app_root_url(ri: "jp"), headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
 
-    assert_response :redirect
-    assert_redirected_to warp_app_dashboard_url(ri: "jp", host: @host)
+    assert_response :success
+    assert_equal "warp/app/roots/index", inertia_component
   end
+
+  test "root with a malformed bearer renders the anonymous root" do
+    host! @host
+
+    get warp_app_root_url(ri: "jp"), headers: bearer_headers("not-a-jwt", host: @host)
+
+    assert_response :success
+    assert_equal "warp/app/roots/index", inertia_component
+  end
+
+  test "root ignores unrelated query parameters when choosing the representation" do
+    host! @host
+
+    get warp_app_root_url(ri: "jp", signed_in: "1", dashboard: "1")
+
+    assert_response :success
+    assert_equal "warp/app/roots/index", inertia_component
+  end
+  test "invalid browser cookie partitions remain anonymous on literal Home and Dashboard" do
+    expired = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    expired.update!(discard_at: expired.created_at)
+    revoked = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    revoked.revoke!
+    session_ids = [
+      ["expired", expired.public_id],
+      ["revoked", revoked.public_id],
+      ["missing", "missing-session-0001"],
+    ]
+    credentials = []
+    session_ids.each do |label, session_id|
+      credential = AuthenticationToken.encode(
+        @user, host: @host, session_public_id: session_id, resource_type: "client",
+               jwt_issuer_id: "surface:WARP_APP",
+      )
+      credentials << [label, credential]
+    end
+    credentials << ["malformed", "not-a-jwt"]
+
+    credentials.each do |label, credential|
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
+      get "/", headers: { "Host" => @host }
+
+      assert_response :success, label
+      assert_nil response.location, label
+      assert_equal "warp/app/roots/index", inertia_component, label
+
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
+      get "/dashboard", headers: { "Host" => @host }
+
+      assert_response :not_found, label
+      assert_nil response.location, label
+      assert_equal Rails.public_path.join("404.html").read, response.body, label
+      assert_equal "private, no-store", response.headers["Cache-Control"], label
+    end
+  end
+
   private
 
   def bearer_headers(token, host: nil, headers: {})

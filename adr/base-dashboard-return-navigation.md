@@ -1,8 +1,11 @@
 # Base Dashboard Return Navigation
 
+> **Supersession (2026-09-28):** `/` is the canonical Dashboard entry on Base and Warp app/com/org;
+> `/dashboard` only redirects to `/`. See `adr/base-warp-canonical-root-dashboard.md`.
+
 ## Status
 
-Accepted
+Superseded (2026-09-28) by `adr/base-warp-canonical-root-dashboard.md`; accepted 2026-09-24
 
 ## Date
 

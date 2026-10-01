@@ -27,8 +27,7 @@ class Warp::Org::SettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal(
       [
-        ["Root", warp_org_root_path(ri: "jp")],
-        ["Dashboard", warp_org_dashboard_path(ri: "jp")],
+        ["Root", warp_org_dashboard_path(ri: "jp")],
         ["Sign out", new_warp_org_sign_out_path(ri: "jp")],
       ],
       inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },

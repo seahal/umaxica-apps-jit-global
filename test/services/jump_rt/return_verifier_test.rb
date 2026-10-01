@@ -30,7 +30,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
 
     assert_predicate result, :success?
     assert_equal "https://jump.umaxica.net", result.payload.fetch("iss")
-    assert_equal "https://log.umaxica.app", result.payload.fetch("src")
+    assert_equal "https://auth.umaxica.app", result.payload.fetch("src")
   end
 
   test "allows reusable return token jti by default" do
@@ -136,7 +136,13 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
   end
 
   test "rejects wrong source for destination origin" do
-    token = sign_return_token(src: "https://log.umaxica.com")
+    token = sign_return_token(src: "https://auth.umaxica.com")
+
+    assert_equal "invalid_claim", verify(token).error
+  end
+
+  test "rejects the retired logical ceremony issuer as source" do
+    token = sign_return_token(src: "https://log.umaxica.app")
 
     assert_equal "invalid_claim", verify(token).error
   end
@@ -472,7 +478,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       nbf: iat,
       exp: iat + 30,
       jti: "jump-return-jti",
-      src: "https://log.umaxica.app",
+      src: "https://auth.umaxica.app",
       dst: "internal",
       url: "https://www.umaxica.app/path?ok=1",
     }

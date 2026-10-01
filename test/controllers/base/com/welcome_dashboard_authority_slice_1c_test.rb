@@ -5,6 +5,16 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::IntegrationTest
+  # Exercise the public exception representation used outside development.
+  setup do
+    @previous_detailed_exceptions = Rails.application.env_config["action_dispatch.show_detailed_exceptions"]
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = false
+  end
+
+  teardown do
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = @previous_detailed_exceptions
+  end
+
   setup do
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
     @sign_host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
@@ -37,7 +47,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     token.update!(last_used_at: 10.minutes.ago)
     last_used_at = token.reload.last_used_at
 
-    get base_com_root_url(ri: "jp"), headers: session_headers(token)
+    get base_com_dashboard_url(ri: "jp"), headers: session_headers(token)
 
     assert_response :success
     assert_equal last_used_at, token.reload.last_used_at
@@ -64,17 +74,20 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     primary_hrefs = primary_links.map { |link| link.fetch("href") }
 
     assert_equal [
-      base_com_preference_path(ri: "jp"),
+      base_com_identity_path(ri: "jp"),
       base_com_switcher_path(ri: "jp"),
       new_base_com_sign_out_path(ri: "jp"),
     ], menu_links.map { |link| link.fetch("href") }
-    menu_links.each { |link| assert_not_includes primary_hrefs, link.fetch("href") }
+    # The dashboard "preference" link intentionally targets the identity page, which the menu also links to.
+    menu_links.reject { |link| link.fetch("href") == base_com_identity_path(ri: "jp") }.each do |link|
+      assert_not_includes primary_hrefs, link.fetch("href")
+    end
 
-    assert_includes hrefs, base_com_root_path(ri: "jp")
+    assert_includes hrefs, base_com_dashboard_path(ri: "jp")
     assert_equal base_com_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
     assert_equal base_com_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
     assert_includes hrefs, base_com_switcher_path(ri: "jp")
-    assert_equal base_com_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
+    assert_equal base_com_identity_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
     assert_equal base_com_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
     assert_not hrefs.any? { |href| href.match?(%r{/preference/(calendar|clock|currency)}) }
     assert_not hrefs.any? { |href| href.match?(%r{/identity/(emails|telephones|secrets|sessions)}) }
@@ -121,27 +134,80 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_match "selected com Persona has no display name", error.message
   end
 
-  test "named_dashboard_renders_for_the_authenticated_com_session" do
+  test "authenticated direct root request returns 404 without redirect" do
     token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
-    get base_com_dashboard_url(ri: "jp"), headers: session_headers(token)
+    get "/", headers: session_headers(token)
+
+    assert_response :not_found
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
+
+  test "anonymous direct root request renders Home" do
+    get "/", headers: host_headers(@host)
+
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_not inertia_props.key?("sections")
+  end
+
+  test "authenticated direct dashboard request renders Dashboard" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+
+    get "/dashboard", headers: session_headers(token)
 
     assert_response :success
     assert_equal "base/com/dashboards/show", inertia_component
-    labels = inertia_props.fetch("sections").first.fetch("items").map { |link| link.fetch("label") }
-
-    assert_equal %i(preference switcher logout).map { |key| dashboard_label(key) }, labels
+    assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "named_dashboard_returns_anonymous_com_visitors_to_the_homepage" do
-    get base_com_dashboard_url(ri: "jp"), headers: host_headers(@host)
+  test "anonymous direct dashboard request returns 404 without redirect" do
+    get "/dashboard", headers: host_headers(@host)
 
-    assert_response :see_other
-    assert_redirected_to base_com_root_path(ri: "jp")
+    assert_response :not_found
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "authenticated_preference_navigation_returns_to_the_named_com_dashboard" do
+  test "root_with_an_expired_com_session_renders_the_home" do
+    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    select_token!(surface: :com, principal: @visitor, token: token)
+    token.update!(discard_at: token.created_at)
+    travel 1.second
+
+    get base_com_root_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
+  end
+
+  test "root_with_a_credential_for_a_missing_com_session_record_renders_the_home" do
+    get base_com_root_url(ri: "jp"),
+        headers: as_visitor_headers(@visitor, host: @host, session_public_id: "missing-session-0001")
+
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
+  end
+
+  test "root_with_a_malformed_com_bearer_renders_the_home" do
+    get base_com_root_url(ri: "jp"), headers: bearer_headers("not-a-jwt", host: @host)
+
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
+  end
+
+  test "root_ignores_unrelated_query_parameters_for_the_com_representation" do
+    get base_com_root_url(ri: "jp", signed_in: "1", dashboard: "1"), headers: host_headers(@host)
+
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
+  end
+
+  test "authenticated_preference_navigation_returns_to_the_canonical_com_root" do
     token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
     token.update!(last_used_at: 10.minutes.ago)
@@ -165,14 +231,14 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_response :success
     assert_equal "base/com/identities/show", inertia_component
     assert_equal I18n.t("base.shared.identity.up_link", locale: :ja), inertia_props.dig("up_link", "label")
-    assert_equal base_com_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
+    assert_equal base_com_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "menu links preserve the full request context" do
     token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
-    get base_com_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
+    get base_com_dashboard_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
         headers: session_headers(token)
 
     menu_hrefs = inertia_props.fetch("sections").first.fetch("items").map { |item| item.fetch("href") }
@@ -225,6 +291,44 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     )
 
     assert_equal "base/com/welcomes", route.fetch(:controller)
+  end
+
+  test "invalid browser cookie partitions remain anonymous on literal Home and Dashboard" do
+    expired = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    expired.update!(discard_at: expired.created_at)
+    revoked = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    revoked.revoke!
+    session_ids = [
+      ["expired", expired.public_id],
+      ["revoked", revoked.public_id],
+      ["missing", "missing-session-0001"],
+    ]
+    credentials = []
+    session_ids.each do |label, session_id|
+      credential = AuthenticationToken.encode(
+        @visitor, host: @host, session_public_id: session_id, resource_type: "visitor",
+                  jwt_issuer_id: "surface:BASE_COM",
+      )
+      credentials << [label, credential]
+    end
+    credentials << ["malformed", "not-a-jwt"]
+
+    credentials.each do |label, credential|
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
+      get "/", headers: { "Host" => @host }
+
+      assert_response :success, label
+      assert_nil response.location, label
+      assert_equal "base/com/roots/index", inertia_component, label
+
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
+      get "/dashboard", headers: { "Host" => @host }
+
+      assert_response :not_found, label
+      assert_nil response.location, label
+      assert_equal Rails.public_path.join("404.html").read, response.body, label
+      assert_equal "private, no-store", response.headers["Cache-Control"], label
+    end
   end
 
   private

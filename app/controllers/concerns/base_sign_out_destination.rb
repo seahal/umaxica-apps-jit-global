@@ -12,12 +12,10 @@ module BaseSignOutDestination
 
   def finish_local_sign_out!
     if current_resource.present? || current_session_public_id.present?
-      prepare_sign_out_completion_notice!
       logout_current_session!(reason: "user_logout")
-      issue_sign_out_notice!
     end
 
-    redirect_to(sign_out_finished_path, status: :see_other)
+    redirect_to(sign_out_home_path, status: :see_other)
   end
 
   def sign_out_finished_path
@@ -53,7 +51,8 @@ module BaseSignOutDestination
     render_oidc_end_session_confirmation
   end
 
-  def sign_out_dashboard_path
+  # The authenticated sign-out confirmation returns to Dashboard.
+  def sign_out_root_path
     public_send(
       "#{sign_out_route_helper_prefix}_dashboard_path",
       **sign_out_route_params.slice(:ri).compact,
@@ -62,7 +61,7 @@ module BaseSignOutDestination
 
   def sign_out_return_link_props(back_to_dashboard:)
     if back_to_dashboard
-      { back_link: { label: t("actions.up"), href: sign_out_dashboard_path } }
+      { back_link: { label: t("actions.up"), href: sign_out_root_path } }
     else
       { home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path } }
     end

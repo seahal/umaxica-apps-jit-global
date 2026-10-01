@@ -9,7 +9,14 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   HostSet = Struct.new(:sign_service)
-  BootConfig = Struct.new(:hosts, :jump)
+  Origin =
+    Data.define(:host) do
+      def to_s = "https://#{host}"
+    end
+  BootConfig =
+    Struct.new(:hosts, :jump) do
+      def fetch(key) = public_send(key)
+    end
 
   setup do
     @private_key = OpenSSL::PKey::EC.generate("secp384r1")
@@ -110,7 +117,7 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   end
 
   test "uses environment configured ttl when ttl is omitted" do
-    hosts = HostSet.new(OpenStruct.new(host: "sign.example.test"))
+    hosts = HostSet.new(Origin.new(host: "sign.example.test"))
     boot_config = BootConfig.new(hosts, OpenStruct.new(ttl_seconds: 30, audience: "https://jump.umaxica.net"))
 
     with_env("JWT_SIGN_APP_ACTIVE_KID" => "sign-app-es384-test-a") do

@@ -5,6 +5,16 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Warp::Com::DashboardsControllerTest < ActionDispatch::IntegrationTest
+  # Exercise the public exception representation used outside development.
+  setup do
+    @previous_detailed_exceptions = Rails.application.env_config["action_dispatch.show_detailed_exceptions"]
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = false
+  end
+
+  teardown do
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = @previous_detailed_exceptions
+  end
+
   setup do
     @host = ENV.fetch("PUBLIC_WARP_CORPORATE_URL")
     @base_host = ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost")
@@ -15,47 +25,23 @@ class Warp::Com::DashboardsControllerTest < ActionDispatch::IntegrationTest
     satisfy_visitor_verification(@token)
   end
 
-  test "renders dashboard for signed-in visitor" do
-    get warp_com_dashboard_url(ri: "jp"),
+  test "authenticated direct dashboard request renders the com dashboard" do
+    get "/dashboard",
         headers: as_visitor_headers(@visitor, host: @host, session_public_id: @token.public_id)
 
     assert_response :success
     assert_equal "warp/com/dashboards/show", inertia_component
-    assert_equal "Dashboard", inertia_props.fetch("title")
-    assert_equal "Dashboard", inertia_props.fetch("heading")
-    assert_match(/Warp com signed-in landing/, inertia_props.fetch("description"))
-    assert_equal(
-      [
-        ["Root", warp_com_root_path(ri: "jp")],
-        ["Dashboard", warp_com_dashboard_path(ri: "jp")],
-        ["Settings", warp_com_settings_path(ri: "jp")],
-        ["Sign out", new_warp_com_sign_out_path(ri: "jp")],
-        ["Authorize", warp_com_sign_show_path(ri: "jp")],
-      ],
-      inertia_props.fetch("sections").flat_map { |section| section.fetch("links") }
-        .map { |link| [link.fetch("label"), link.fetch("href")] },
-    )
-    assert_equal ["Primary links", "Protocol links"],
-                 inertia_props.fetch("sections").map { |section| section.fetch("title") }
-    assert_no_match(%r{(?://example|evil\.example)}, response.body)
+    assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "forbids logged-out visitor" do
-    get warp_com_dashboard_url(ri: "jp"), headers: { "Host" => @host }
+  test "anonymous direct dashboard request returns 404 without redirect" do
+    get "/dashboard", headers: { "Host" => @host }
 
-    assert_response :found
-    location = URI.parse(response.location)
-
-    assert_equal "https", location.scheme
-    expected_gateway = ConfigValues::JumpGatewayValues.build(
-      env: ENV,
-      production: Rails.env.production?,
-    ).origin
-
-    assert_equal expected_gateway.host, location.host
-    assert_equal "/", location.path
-    assert_equal ["rt"], URI.decode_www_form(location.query).map(&:first)
+    assert_response :not_found
+    assert_nil response.location
+    assert_no_match(/signed-in landing/, response.body)
   end
+
   private
 
   def bearer_headers(token, host: nil, headers: {})

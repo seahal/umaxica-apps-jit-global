@@ -38,25 +38,44 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       verified_at: 1.minute.ago,
       discard_at: 10.minutes.from_now,
     )
+    ClientStepUpSession.create!(
+      user_token: current_token,
+      scope: "settings_mfa",
+      return_to: "/identity/mfa/challenge",
+      status: "VERIFIED",
+      method: "totp",
+      verified_at: 1.minute.ago,
+      discard_at: 10.minutes.from_now,
+    )
+    step_up_selects = []
+    subscriber =
+      lambda do |_name, _start, _finish, _id, payload|
+        sql = payload[:sql].to_s
+        step_up_selects << sql if sql.match?(/\ASELECT .*FROM "client_step_up_sessions"/)
+      end
 
-    assert_difference -> {
-      ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
-    }, 1 do
-      result = CredentialSecurityTransition.call(
-        actor: actor,
-        current_session: current_token,
-        reason: :mfa_disabled,
-        affected_surface: "app",
-      )
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      assert_difference -> {
+        ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).count
+      }, 1 do
+        result = CredentialSecurityTransition.call(
+          actor: actor,
+          current_session: current_token,
+          reason: :mfa_disabled,
+          affected_surface: "app",
+        )
 
-      assert_equal 1, result.revoked_session_count
-      assert_equal 2, result.revoked_step_up_count
+        assert_equal 1, result.revoked_session_count
+        assert_equal 2, result.revoked_step_up_count
+      end
     end
+    assert_equal 1, step_up_selects.length
 
     assert_predicate current_token.reload, :currently_usable?
     assert_predicate other_token.reload, :revoked?
     assert_nil current_token.last_step_up_at
     assert_nil other_token.last_step_up_at
+    assert_operator current_token.step_up_session.reload.discard_at, :<=, Time.current
     assert_operator other_token.step_up_session.reload.discard_at, :<=, Time.current
 
     audit = ClientChronicle.where(event_id: ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION).order(:created_at).last

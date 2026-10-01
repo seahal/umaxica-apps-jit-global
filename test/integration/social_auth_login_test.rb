@@ -184,7 +184,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: browser_headers
 
     assert_predicate selected_session.reload, :revoked?
-    assert_redirected_to base_app_root_url(
+    assert_redirected_to base_app_dashboard_url(
       ri: "jp",
       host: ENV.fetch(
         "PRIVATE_BASE_SERVICE_URL", "www.app.localhost",

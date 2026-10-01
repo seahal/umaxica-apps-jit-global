@@ -512,6 +512,43 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_not_predicate issuance.transaction.reload, :consumed?
   end
 
+  test "acme app session-limit limitation cancel from an inertia visit leaves the app via inertia location" do
+    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    ClientToken.where(user_id: user.id).delete_all
+    issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
+    resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
+      actor: user,
+      oidc_transaction: issuance.transaction,
+    )
+
+    host! acme_host
+    delete acme_app_sign_in_limitation_path,
+           params: { resolution_challenge: resolution.challenge },
+           headers: browser_headers.merge("X-Inertia" => "true")
+
+    assert_response :conflict
+    location = URI.parse(response.headers["X-Inertia-Location"])
+
+    assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}").host, location.host
+    assert_nil response.headers["Location"]
+    assert_predicate resolution.transaction.reload, :cancelled?
+  end
+
+  test "acme app session-limit limitation cancel of a social resolution from an inertia visit leaves the app" do
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    social_token = Rails.application.message_verifier(:social_session_limit_limitation).generate(
+      { "actor_ref" => clients(:one).public_id, "session_ref" => nil, "expires_at" => 10.minutes.from_now.iso8601 },
+    )
+
+    delete acme_app_sign_in_limitation_path,
+           params: { social_resolution: social_token },
+           headers: browser_headers.merge("X-Inertia" => "true")
+
+    assert_response :conflict
+    assert_predicate response.headers["X-Inertia-Location"], :present?
+  end
+
   test "app com and org authorization endpoints are exposed at Acme oauth authorize" do
     SURFACES.each do |surface|
       open_session do |session|

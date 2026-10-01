@@ -7,6 +7,7 @@ module Base
       module Emails
         class RegistrationsController < BaseController
           include ::SurfaceInertiaPage
+          include ::TurnstilePageProps
           include CloudflareTurnstile
           include CommonRedirect
           include CommonOtp
@@ -51,13 +52,14 @@ module Base
           def email_registration_new_props
             {
               title: "Add an email address",
-              back_link: { label: t("sign.app.settings.show.back"), href: preference_return_url },
-              cancel_link: { label: "Cancel", href: preference_return_url },
+              back_link: { label: t("sign.app.settings.show.back"), href: emails_return_url },
+              cancel_link: { label: "Cancel", href: emails_return_url },
               form: {
                 action: base_app_identity_emails_registration_path,
                 address_label: t("activerecord.attributes.user_email.address"),
                 address: @user_email&.address.to_s,
                 submit_label: "Submit",
+                turnstile: turnstile_stealth_props,
                 promotional: {
                   checked: @user_email&.promotional.present?,
                   label: t("sign.app.settings.email.edit.promotional_label"),
@@ -77,7 +79,7 @@ module Base
             {
               title: "Verify your email address",
               description: t("base.app.identity.emails.registrations.edit.description"),
-              cancel_link: { label: "Cancel", href: preference_return_url },
+              cancel_link: { label: "Cancel", href: emails_return_url },
               form: {
                 action: base_app_identity_emails_registration_path,
                 code_label: "Verification code",
@@ -85,6 +87,7 @@ module Base
                 delivery_help: t("base.app.identity.emails.registrations.edit.delivery_help"),
                 submit_label: "Verify",
                 verification_token: @verification_token.presence,
+                turnstile: turnstile_stealth_props,
               },
               resend: {
                 label: t("otp.resend.button"),
@@ -94,13 +97,15 @@ module Base
             }
           end
 
-          def preference_return_url
-            base_app_preference_url(
+          def emails_return_url
+            base_app_identity_emails_url(
               ri: params[:ri],
               host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
               protocol: request.protocol,
             )
           end
+
+          def email_registration_turnstile_validation = cloudflare_turnstile_stealth_validation
 
           def authorize_email_registration! = authorize!(ClientEmail, to: :create?)
 

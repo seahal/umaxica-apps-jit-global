@@ -11,6 +11,35 @@ class Auth::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
     host! @host
   end
 
+  # The Jump gateway refuses an internal rt whose destination origin equals its issuer
+  # (`jump_reject reason=invalid_dst`, adr/secure-jump-link-redirector.md), so the sign-in hand-off
+  # from an Auth protected page must leave the Auth origin for the Base admission entry.
+  test "anonymous sign settings hands off cross-origin to the base admission entry" do
+    auth_host = configured_host(:sign_corporate)
+    base_host = configured_host(:base_corporate)
+    issued = nil
+
+    host! auth_host
+    JumpRtIssuer.stub(:call, ->(**args) { issued = args; "signed-jump-token" }) do
+      RedirectsJumpGatewayUrl.stub(
+        :call,
+        ->(_token) { RedirectsTargetResult.ok(kind: :external, source: :test, value: issued.fetch(:url)) },
+      ) do
+        get auth_com_settings_url(ri: "jp")
+      end
+    end
+
+    uri = URI.parse(issued.fetch(:url))
+
+    assert_equal "SIGN_COM", issued.fetch(:namespace)
+    assert_equal "internal", issued.fetch(:dst)
+    assert_equal "https", uri.scheme
+    assert_equal base_host, uri.host
+    assert_not_equal auth_host, uri.host
+    assert_equal "/", uri.path
+    assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(uri.query.to_s))
+  end
+
   test "verified visitor without a telephone can enter settings and reach Base identity" do
     visitor = create_verified_visitor_with_email(email_address: "com-settings-no-telephone@example.com")
 

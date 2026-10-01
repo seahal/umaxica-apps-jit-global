@@ -7,6 +7,8 @@ import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
 import TextLink from "@/components/ui/TextLink";
+import type { TurnstileProps } from "@/features/identity/types";
+import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 import type { IdentityLink } from "@/types/identity";
 
 type VerificationForm = {
@@ -15,6 +17,7 @@ type VerificationForm = {
   code_placeholder: string;
   delivery_help: string;
   submit_label: string;
+  turnstile: TurnstileProps;
   verification_token: string | null;
 };
 
@@ -36,6 +39,7 @@ export default function EmailRegistrationEdit({
   errors,
 }: Props) {
   const [passCode, setPassCode] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [processing, setProcessing] = useState(false);
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
@@ -47,6 +51,7 @@ export default function EmailRegistrationEdit({
           pass_code: passCode,
           ...(form.verification_token ? { token: form.verification_token } : {}),
         },
+        "cf-turnstile-response": turnstileToken,
       },
       {
         onStart: () => setProcessing(true),
@@ -80,6 +85,14 @@ export default function EmailRegistrationEdit({
             description={form.delivery_help}
             value={passCode}
             onChange={setPassCode}
+          />
+
+          <TurnstileWidget
+            site_key={form.turnstile.site_key}
+            mode={form.turnstile.mode}
+            action={form.turnstile.action}
+            cdata={form.turnstile.cdata}
+            onToken={setTurnstileToken}
           />
 
           <div className="flex flex-wrap items-center gap-3">

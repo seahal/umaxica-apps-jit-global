@@ -21,7 +21,7 @@ module Security
     DOCUMENT_PATH = Rails.root.join("docs/security/public-entrypoints.md")
     DOCUMENTED_CATEGORY_IDS = %w(
       PUBLIC_ROOTS
-      PUBLIC_BASE_DASHBOARD
+      PUBLIC_DASHBOARD
       PUBLIC_LOCAL_AUTH_ADMISSION
       PUBLIC_LOBBY
       PUBLIC_HEALTH
@@ -174,7 +174,7 @@ module Security
 
     def documented_public_content?(entry)
       public_root?(entry) ||
-        public_base_dashboard?(entry) ||
+        public_legacy_dashboard?(entry) ||
         public_local_auth_admission?(entry) ||
         public_lobby?(entry) ||
         public_health?(entry) ||
@@ -222,10 +222,10 @@ module Security
 
     def public_root?(entry) = get?(entry) && entry.path == "/"
 
-    def public_base_dashboard?(entry)
+    def public_legacy_dashboard?(entry)
       get?(entry) && entry.path == "/dashboard" &&
         entry.action == "show" &&
-        entry.controller_path.match?(%r{\Abase/(app|com|org)/(dashboards|roots)\z})
+        entry.controller_path.match?(%r{\A(?:base/(app|com|org)/roots|warp/(app|com|org)/dashboards)\z})
     end
 
     def public_local_auth_admission?(entry)

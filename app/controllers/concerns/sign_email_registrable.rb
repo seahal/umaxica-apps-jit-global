@@ -199,13 +199,17 @@ module SignEmailRegistrable
   end
 
   def ensure_turnstile!(email_address, confirm_policy)
-    turnstile_result = cloudflare_turnstile_validation
+    turnstile_result = email_registration_turnstile_validation
     return true if turnstile_result["success"]
 
     @user_email = ClientEmail.new(raw_address: email_address, confirm_policy: confirm_policy)
     @user_email.errors.add(:base, t("sign.app.registration.email.create.turnstile_validation_failed"))
     false
   end
+
+  # Sign-up draws the visible widget; a host whose form draws the stealth widget overrides this so
+  # the token is verified against the secret that matches the site key it was issued for.
+  def email_registration_turnstile_validation = cloudflare_turnstile_validation
 
   def build_user_email(email_address, confirm_policy, email_preferences = {})
     email_preferences = email_preferences.to_unsafe_h if email_preferences.respond_to?(:to_unsafe_h)

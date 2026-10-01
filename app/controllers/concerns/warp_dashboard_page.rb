@@ -24,8 +24,7 @@ module WarpDashboardPage
         {
           title: "Primary links",
           links: [
-            { label: "Root", href: warp_dashboard_url_for(surface, "warp_%{surface}_root_path") },
-            { label: "Dashboard", href: warp_dashboard_url_for(surface, "warp_%{surface}_dashboard_path") },
+            { label: "Root", href: warp_dashboard_url_for(surface, "warp_%{surface}_dashboard_path") },
             { label: "Settings", href: warp_dashboard_url_for(surface, "warp_%{surface}_settings_path") },
             { label: "Sign out", href: warp_dashboard_url_for(surface, "new_warp_%{surface}_sign_out_path") },
           ],

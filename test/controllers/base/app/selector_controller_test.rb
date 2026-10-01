@@ -60,7 +60,7 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     get base_app_selector_url(host: @host, ri: "jp"),
         headers: as_user_headers(@user, host: @host, session_public_id: @token.public_id)
 
-    assert_redirected_to base_app_root_path(ri: "jp")
+    assert_redirected_to base_app_dashboard_path(ri: "jp")
     assert_predicate @token.reload, :selected_actor_context?
   end
 

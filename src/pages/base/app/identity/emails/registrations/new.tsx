@@ -8,6 +8,8 @@ import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
 import TextLink from "@/components/ui/TextLink";
+import type { TurnstileProps } from "@/features/identity/types";
+import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 import type { IdentityLink, IdentityPreferenceField } from "@/types/identity";
 
 type RegistrationForm = {
@@ -15,6 +17,7 @@ type RegistrationForm = {
   address_label: string;
   address: string;
   submit_label: string;
+  turnstile: TurnstileProps;
   promotional: IdentityPreferenceField;
   notifiable: IdentityPreferenceField;
 };
@@ -37,6 +40,7 @@ export default function EmailRegistrationNew({
   const [address, setAddress] = useState(form.address);
   const [promotional, setPromotional] = useState(form.promotional.checked);
   const [notifiable, setNotifiable] = useState(form.notifiable.checked);
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [processing, setProcessing] = useState(false);
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
@@ -51,6 +55,7 @@ export default function EmailRegistrationNew({
           /* v8 ignore next -- both checkbox states are exercised; v8 still flags one arm */
           notifiable: notifiable ? "1" : "0",
         },
+        "cf-turnstile-response": turnstileToken,
       },
       {
         onStart: () => setProcessing(true),
@@ -106,6 +111,14 @@ export default function EmailRegistrationNew({
               <p className="pl-6 text-xs text-fg-muted">{form.notifiable.description}</p>
             </div>
           </div>
+
+          <TurnstileWidget
+            site_key={form.turnstile.site_key}
+            mode={form.turnstile.mode}
+            action={form.turnstile.action}
+            cdata={form.turnstile.cdata}
+            onToken={setTurnstileToken}
+          />
 
           <Button
             type="submit"

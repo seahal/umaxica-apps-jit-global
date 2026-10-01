@@ -228,6 +228,7 @@ describe("identity email registration screens", () => {
       address_label: "Address",
       address: "",
       submit_label: "Submit",
+      turnstile: { site_key: "site", mode: "execute" as const, action: null, cdata: null },
       promotional: { checked: false, label: "Promotional", description: "Offers." },
       notifiable: { checked: true, label: "Notifiable", description: "Notices." },
     },
@@ -267,6 +268,7 @@ describe("identity email registration screens", () => {
       delivery_help: "It expires soon.",
       submit_label: "Verify",
       verification_token: "tok_1",
+      turnstile: { site_key: "site", mode: "execute" as const, action: null, cdata: null },
     },
     resend: { label: "Resend", url: "/identity/emails/registration/redelivery" },
   };

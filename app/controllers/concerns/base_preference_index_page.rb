@@ -50,9 +50,9 @@ module BasePreferenceIndexPage
     }
   end
 
+  # The authenticated Preference index returns to Dashboard.
   def preference_index_return_path
-    destination = logged_in? ? :dashboard : :root
-    public_send("#{preference_route_authority}_#{preference_surface_key}_#{destination}_path")
+    public_send("#{preference_route_authority}_#{preference_surface_key}_dashboard_path")
   end
 
   def preference_index_screen_helper_name(screen)

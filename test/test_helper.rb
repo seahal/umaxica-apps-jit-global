@@ -152,13 +152,16 @@ module AuthenticationHarness
 
   # Auth-owned pages use the local ceremony entry when the request is already on Auth. It must
   # not manufacture an OIDC RP authorization request or a cross-surface client binding.
-  def assert_auth_local_sign_in_redirect(location, surface:)
+  # A protected Auth page hands sign-in off to the Base admission entry of its surface, never to the
+  # Auth origin's own /sign/in: the Jump gateway refuses a same-origin internal rt.
+  def assert_base_admission_entry_redirect(location, surface:)
     target = jump_rt_url_from_location_for_test(location)
     uri = URI.parse(target)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    base_host_key = { app: :base_service, com: :base_corporate, org: :base_staff }.fetch(surface)
 
-    assert_equal auth_host_for_test_surface(surface, local: true), uri.host
-    assert_equal public_send(:"auth_#{surface}_sign_in_path"), uri.path
+    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).public_send(base_host_key).host, uri.host
+    assert_equal "/", uri.path
     assert_nil query["client_id"]
     assert_nil query["screen_hint"]
   end

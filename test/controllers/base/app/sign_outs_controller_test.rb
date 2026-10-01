@@ -60,7 +60,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "post sign out revokes the current session and completes on the base lobby" do
+  test "successful sign out redirects to anonymous Home and clears history" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
@@ -68,70 +68,30 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_predicate token.reload, :revoked?
-
-    # Completion is surface-local PRG onto the unauthenticated entry: the browser must not be
-    # handed to another host, and the one-time notice must not travel in the URL.
-    location = URI.parse(response.location)
-
-    assert_equal @host, location.host
-    assert_equal base_app_sign_out_path(ri: "jp"), location.request_uri
+    assert_equal base_app_root_path(ri: "jp"), URI.parse(response.location).request_uri
 
     get response.location
 
     assert_response :success
-    assert_equal "base/app/sign_outs/edit", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("notice").fetch("title")
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
-    assert_not inertia_props.fetch("active")
-    assert_nil inertia_props["form"]
+    assert_equal "base/app/roots/index", inertia_component
+    assert inertia_page.fetch("clearHistory")
 
-    get base_app_sign_out_url(host: @host, ri: "jp")
+    get base_app_dashboard_url(host: @host, ri: "jp"), headers: session_headers(token)
 
-    assert_response :success
-    assert_nil inertia_props["notice"]
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_response :not_found
+    assert_nil response.location
   end
 
-  # `encrypt_history` keeps this tab's history entries encrypted, but the key that decrypts them
-  # lives in the same tab's sessionStorage, so it survives sign-out on its own. `clearHistory` is
-  # what drops the key, and without it Back after signing out restores the privileged page.
-  test "the page rendered after sign out tells the client to drop its history key" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-
-    post base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
-    get response.location
-
-    assert_response :success
-    assert inertia_page.fetch("clearHistory"),
-           "the /sign/out page after sign-out must carry clearHistory so Back cannot restore a signed-in page"
-  end
-
-  # The flag is consumed by the render that follows sign-out. A later page must not keep clearing
-  # history, which would discard the signed-out visitor's ordinary navigation state.
-  test "clear history is not repeated on the page after the sign-out completion" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-
-    post base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
-    get response.location
-    get base_app_sign_out_url(host: @host, ri: "jp")
-
-    assert_response :success
-    assert_not inertia_page.fetch("clearHistory")
-  end
-
-  test "post sign out without a resolved session completes on /sign/out" do
+  test "sign out without a resolved session returns to Home" do
     post base_app_sign_out_url(host: @host, ri: "jp")
 
     assert_response :see_other
-    assert_equal base_app_sign_out_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal base_app_root_path(ri: "jp"), URI.parse(response.location).request_uri
 
     get response.location
 
     assert_response :success
-    assert_equal "base/app/sign_outs/edit", inertia_component
-    assert_nil inertia_props["notice"]
+    assert_equal "base/app/roots/index", inertia_component
   end
 
   test "the retired sign out completion route is not recognized" do

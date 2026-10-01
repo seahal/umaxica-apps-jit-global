@@ -66,7 +66,7 @@ class Base::App::SwitchersControllerTest < ActionDispatch::IntegrationTest
       session_public_id: @token.public_id,
     ), params: candidate.fetch(:public)
 
-    assert_redirected_to base_app_root_path(ri: "jp")
+    assert_redirected_to base_app_dashboard_path(ri: "jp")
     assert_predicate @token.reload, :selected_actor_context?
   end
 

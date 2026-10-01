@@ -27,7 +27,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   # Warp renders its sign-out pages through Inertia, so the completion page clears the encrypted
   # Inertia history itself; the Clear-Site-Data response used by the ERB surfaces is not needed
   # here and would also unregister Warp's offline service worker.
-  test "sign-out completion is an Inertia page that clears history" do
+  test "sign-out completion redirects to Home and clears history there" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
@@ -37,9 +37,12 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     get warp_app_sign_out_url(ri: "jp", state: state)
 
+    assert_response :see_other
+    assert_equal warp_app_root_path(ri: "jp"), URI.parse(response.location).request_uri
+    get response.location
+
     assert_response :success
-    assert_equal "warp/app/sign/outs/complete", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_equal "warp/app/roots/index", inertia_component
     assert inertia_page.fetch("clearHistory")
     assert_nil response.headers["Clear-Site-Data"]
   end

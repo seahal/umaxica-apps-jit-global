@@ -53,20 +53,22 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
 
-  test "does not regionally redirect an unknown region" do
+  test "renders Home for an unknown region without redirect" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get base_app_root_url(ri: "xx")
 
-    assert_response :found
-    assert_equal base_app_root_url(ri: "jp"), response.location
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "does not regionally redirect a missing region" do
+  test "renders Home for a missing region without redirect" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     get "/"
 
-    assert_response :found
-    assert_equal base_app_root_url(ri: "jp"), response.location
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/app/roots/index", inertia_component
   end
 
   test "renders the control-plane root when extra preference params are supplied" do
@@ -77,31 +79,20 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "a logged in request stays on the control-plane root instead of a public regional host" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    user = clients(:one)
+  test "authenticated regional Home returns 404 without redirect" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    get base_app_root_url(ri: "jp"), headers: as_user_headers(clients(:one), host: host)
 
-    get base_app_root_url(ri: "jp"),
-        headers: as_user_headers(user, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"))
-
-    assert_not_equal 301, response.status
-    assert_not_equal "https://jp.umaxica.app/", response.location
-    assert_includes [200, 302, 303], response.status
+    assert_response :not_found
+    assert_nil response.location
   end
 
-  test "a logged in request without a region normalizes the region then stays on the control-plane host" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    user = clients(:one)
+  test "authenticated Home without region returns 404 without redirect" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    get "/", headers: as_user_headers(clients(:one), host: host)
 
-    get "/", headers: as_user_headers(user, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"))
-
-    assert_response :found
-    assert_equal base_app_root_url(ri: "jp"), response.location
-
-    follow_redirect!
-
-    assert_not_equal "https://jp.umaxica.app/", response.location
-    assert_includes [200, 302, 303], response.status
+    assert_response :not_found
+    assert_nil response.location
   end
   private
 

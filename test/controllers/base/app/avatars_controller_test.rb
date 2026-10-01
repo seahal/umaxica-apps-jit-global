@@ -36,7 +36,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Create Avatar", inertia_props.dig("create_action", "label")
     assert_equal I18n.t("base.shared.dashboard.links.dashboard", locale: :ja),
                  inertia_props.dig("up_link", "label")
-    assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
+    assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "avatar list loads current monikers in one association query" do

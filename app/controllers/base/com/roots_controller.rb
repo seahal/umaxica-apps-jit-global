@@ -13,20 +13,23 @@ module Base
 
       def index
         response.headers["Cache-Control"] = "private, no-store"
-        return render_authenticated_home if logged_in?
+        raise ActiveRecord::RecordNotFound if logged_in?
 
-        render inertia: true, props: root_landing_props
+        render inertia: true, props: root_landing_props,
+               clear_history: session.delete(:inertia_clear_history) == true
       end
 
       def show
         response.headers["Cache-Control"] = "private, no-store"
-        return redirect_to(base_com_root_path(ri: params[:ri]), status: :see_other) unless logged_in?
+        raise ActiveRecord::RecordNotFound unless logged_in?
+        return unless require_selected_actor_context_for_dashboard!
 
-        render_authenticated_home
+        authorize!(current_visitor, to: :show?)
+        render inertia: "base/com/dashboards/show", props: dashboard_page_props
       end
 
       def create
-        return redirect_to(base_com_root_path(ri: params[:ri]), status: :see_other) if logged_in?
+        return redirect_to(base_com_dashboard_path(ri: params[:ri]), status: :see_other) if logged_in?
 
         intent = params[:intent].to_s
         return render plain: "invalid authentication intent", status: :bad_request unless %w(sign_in
@@ -61,20 +64,20 @@ module Base
 
       private
 
+      # Home/Dashboard resolve regional context without redirecting a direct request.
+      def set_region
+        return super unless (request.get? || request.head?) && %w(index show).include?(action_name)
+
+        params[:ri] = normalized_param_ri.presence || get_region
+      end
+
       # The sign-in/sign-up start POST only issues an admission; it needs no preference authority,
       # so a stale preference credential must not refuse it.
       def preference_entry_recovery_action?
         action_name == "create"
       end
 
-      def render_authenticated_home
-        return unless require_selected_actor_context_for_root!
-
-        authorize!(current_visitor, to: :show?)
-        render inertia: "base/com/dashboards/show", props: dashboard_page_props
-      end
-
-      def require_selected_actor_context_for_root!
+      def require_selected_actor_context_for_dashboard!
         return true if Actor.selection.selected?
 
         if request.format.json?
@@ -119,7 +122,7 @@ module Base
 
       def menu_links
         [
-          { label: t("base.shared.dashboard.links.preference"), href: base_com_preference_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.preference"), href: base_com_identity_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.switcher"), href: base_com_switcher_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.logout"), href: new_base_com_sign_out_path(ri: params[:ri]) },
         ]
@@ -127,7 +130,7 @@ module Base
 
       def primary_links
         [
-          { label: t("base.shared.dashboard.links.root"), href: base_com_root_path(ri: params[:ri]) },
+          { label: t("base.shared.dashboard.links.root"), href: base_com_dashboard_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.account"), href: base_com_accounts_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.organization"), href: base_com_organizations_path(ri: params[:ri]) },
           { label: t("base.shared.dashboard.links.identity"), href: base_com_identity_path(ri: params[:ri]) },

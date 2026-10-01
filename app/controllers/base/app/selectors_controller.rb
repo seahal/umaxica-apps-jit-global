@@ -15,7 +15,7 @@ module Base
         return redirect_to(base_app_switcher_path(ri: params[:ri])) if current_session&.selected_actor_context?
 
         result = prepare_selector
-        return redirect_to(base_app_root_path(ri: params[:ri])) if result.fetch(:status).to_s == "selected"
+        return redirect_to(base_app_dashboard_path(ri: params[:ri])) if result.fetch(:status).to_s == "selected"
 
         render json: result, status: :unprocessable_content
       end

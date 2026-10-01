@@ -46,7 +46,7 @@ class CredentialSecurityTransition
 
     revoked_sessions = 0
     revoked_step_up = 0
-    tokens = token_relation.to_a
+    tokens = revoke_step_up ? token_relation.includes(:step_up_session).to_a : token_relation.to_a
 
     tokens.each do |token|
       next if keep_current_session?(token)

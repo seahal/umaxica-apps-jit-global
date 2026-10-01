@@ -19,6 +19,11 @@ module Warp
 
         private
 
+        def consume_oidc_pt
+          destination = super
+          destination == "/" ? warp_org_dashboard_path(ri: params[:ri]) : destination
+        end
+
         def oidc_rp_credentials_only?
           true
         end

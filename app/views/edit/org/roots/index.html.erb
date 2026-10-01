@@ -1,21 +1,27 @@
-<!doctype html>
-<html lang="en" data-theme="light" data-edition="org">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>UMAXICA Edit</title>
-    <meta name="description" content="UMAXICA staff Publishing management surface">
-    <%= vite_stylesheet_tag "~/styles/surfaces/edit_org.css", nonce: true %>
-  </head>
-  <body>
-    <main class="grid min-h-screen place-items-center p-8">
-      <section aria-labelledby="edit-title" class="w-full max-w-2xl">
-        <p class="mb-2 text-sm font-semibold tracking-wide text-fg-muted uppercase">Publishing</p>
-        <h1 id="edit-title" class="mb-4 text-4xl leading-none font-bold text-fg sm:text-5xl">UMAXICA Edit</h1>
-        <p class="text-lg text-fg-muted">
-          Staff Publishing management for info, docs, news, and help.
-        </p>
-      </section>
-    </main>
-  </body>
-</html>
+<% page_title("UMAXICA Edit") %>
+<section aria-labelledby="edit-title" class="flex flex-col gap-10 py-8 sm:py-16">
+  <div class="flex w-full flex-col gap-6">
+    <header class="flex flex-col gap-4">
+      <h1 id="edit-title" class="text-4xl font-semibold tracking-tight text-balance text-fg sm:text-5xl">UMAXICA Edit</h1>
+      <p class="max-w-prose text-lg text-pretty text-fg-muted">
+        Staff Publishing management for info, docs, news, and help.
+      </p>
+    </header>
+
+    <nav aria-label="Authentication">
+      <ul class="flex flex-wrap items-center gap-4">
+        <li>
+          <%= link_to logged_in? ? "Publishing" : "Sign in", edit_org_dashboard_path(ri: params[:ri]),
+                class: "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors bg-accent text-accent-fg hover:bg-accent-hover active:opacity-90" %>
+        </li>
+        <% unless logged_in? %>
+          <li>
+            <%# Registration starts at Base's CSRF-protected admission form. %>
+            <%= link_to "Sign up", base_org_root_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), ri: params[:ri]),
+                  class: "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors bg-accent text-accent-fg hover:bg-accent-hover active:opacity-90" %>
+          </li>
+        <% end %>
+      </ul>
+    </nav>
+  </div>
+</section>

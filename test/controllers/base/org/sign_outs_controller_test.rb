@@ -48,7 +48,7 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "post sign out revokes the current session and completes on /sign/out" do
+  test "successful sign out redirects to anonymous Home and clears history" do
     token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
@@ -56,30 +56,30 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_predicate token.reload, :revoked?
+    assert_equal base_org_root_path(ri: "jp"), URI.parse(response.location).request_uri
 
-    get jump_rt_url_from_location(response.location)
-
-    assert_response :success
-    assert_equal "base/org/sign_outs/edit", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("notice").fetch("title")
-    assert_not inertia_props.fetch("active")
-    assert_nil inertia_props["form"]
-
-    get base_org_sign_out_url(host: @host, ri: "jp")
+    get response.location
 
     assert_response :success
-    assert_nil inertia_props["notice"]
+    assert_equal "base/org/roots/index", inertia_component
+    assert inertia_page.fetch("clearHistory")
+
+    get base_org_dashboard_url(host: @host, ri: "jp"), headers: session_headers(token)
+
+    assert_response :not_found
+    assert_nil response.location
   end
 
-  test "post sign out without a resolved session completes on /sign/out" do
+  test "sign out without a resolved session returns to Home" do
     post base_org_sign_out_url(host: @host, ri: "jp")
 
     assert_response :see_other
-    get jump_rt_url_from_location(response.location)
+    assert_equal base_org_root_path(ri: "jp"), URI.parse(response.location).request_uri
+
+    get response.location
 
     assert_response :success
-    assert_equal "base/org/sign_outs/edit", inertia_component
-    assert_nil inertia_props["notice"]
+    assert_equal "base/org/roots/index", inertia_component
   end
 
   private

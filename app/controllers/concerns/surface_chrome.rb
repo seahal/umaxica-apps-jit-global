@@ -122,9 +122,11 @@ module SurfaceChrome
   end
 
   def chrome_brand
+    family = chrome_configuration.fetch(:family)
+    destination = %w(base warp).include?(family) && chrome_logged_in? ? "dashboard" : "root"
     {
       name: ENV.fetch("BRAND_NAME"),
-      href: chrome_url("#{chrome_configuration.fetch(:family)}_#{chrome_route_surface}_root_path"),
+      href: chrome_url("#{family}_#{chrome_route_surface}_#{destination}_path"),
     }
   end
 
@@ -159,7 +161,7 @@ module SurfaceChrome
     if chrome_logged_in?
       links << {
         label: chrome_t("sign.#{surface}.preferences.footer.dashboard"),
-        href: chrome_url("base_#{surface}_root_url", base_options),
+        href: chrome_url("base_#{surface}_dashboard_url", base_options),
       }
     end
 
@@ -197,9 +199,19 @@ module SurfaceChrome
     # symbols. Passing the strings through as extra options duplicated `ri` on the href, which
     # is how the settings control pointed at a query the destination does not read as one value.
     options = request.query_parameters.slice(*PREFERENCE_QUERY_KEYS).symbolize_keys
-    # An auth surface renders on the sign host while cookie preferences are edited on the base
-    # authority host, so the link has to be absolute across that boundary.
-    options = options.merge(host: base_authority_host) if chrome_configuration.fetch(:footer_navigation)
+    # Cookie preferences belong to Base even when the banner renders on another host.
+    host =
+      if chrome_configuration.fetch(:footer_navigation)
+        base_authority_host
+      else
+        case surface
+        when "app" then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+        when "com" then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+        when "org" then ENV.fetch("PUBLIC_BASE_STAFF_URL")
+        else raise ArgumentError, "unsupported cookie preference surface: #{surface.inspect}"
+        end
+      end
+    options = options.merge(host: host)
 
     chrome_url("edit_base_#{surface}_preference_cookie_url", options)
   end

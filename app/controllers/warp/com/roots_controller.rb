@@ -4,17 +4,26 @@
 module Warp
   module Com
     class RootsController < Warp::Com::ApplicationController
-      include ::SurfaceInertiaPage
+      include ::WarpDashboardPage
 
       AUTHENTICATION_MODE = :open
 
-      def index
-        redirect_to(warp_com_dashboard_path(ri: params[:ri])) and return if logged_in?
+      public
 
-        render inertia: true, props: root_landing_props
+      def index
+        response.headers["Cache-Control"] = "private, no-store"
+        raise ActiveRecord::RecordNotFound if logged_in?
+
+        render inertia: true, props: root_landing_props,
+               clear_history: session.delete(:inertia_clear_history) == true
       end
 
       private
+
+      # Home/Dashboard resolve regional context without redirecting a direct request.
+      def set_region
+        params[:ri] = normalized_param_ri.presence || get_region
+      end
 
       def root_landing_props
         {

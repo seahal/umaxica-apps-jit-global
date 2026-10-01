@@ -35,6 +35,30 @@ fail closed. Rails must not hold the Jump gateway private key.
 This Rails app must not expose `jump_*` route helpers, DB-backed `JumpLink` models, or
 `JumpLinkable` lifecycle behavior.
 
+### Jump rt issuing origin (2026-09-28)
+
+Three identifiers must not be conflated:
+
+- **Logical ceremony issuer** — the `iss` of ceremony contracts (social, email, telephone,
+  secret-credential, and similar), `https://log.umaxica.{app,com,org}` for the Auth surfaces. It
+  names a trust domain and publishes no JWKS.
+- **JWKS publication origin** — the origin whose `/.well-known/jwks.json` publishes a namespace's
+  signing keys. For `SIGN_APP`, `SIGN_COM`, and `SIGN_ORG` that is the Auth host of the surface.
+- **Jump rt issuing origin** — the `iss` of a Jump rt. Because the gateway verifies against the
+  issuing surface JWKS, it must equal the JWKS publication origin of the key that signed the rt.
+
+`JumpRtSurface.issuer_origin` owns the Jump rt issuing origin. For `SIGN_*` it reads the Auth hosts
+(`sign_service`, `sign_corporate`, `sign_staff`) from the boot host registry, never from the request;
+every other namespace's registry surface issuer already equals its JWKS publication origin. The
+logical ceremony issuer in `JitSecurityJwtRegistry::SURFACE_ISSUER_ORIGINS` is unchanged.
+
+The return side follows the same contract: `JumpRtReturnPolicy` accepts the Jump rt issuing origin
+as the return `src`, not the logical ceremony issuer. The retired `log.umaxica.*` sources are not
+accepted, since no Rails-issued rt carries them.
+
+Observed gateway behavior (black-box, 2026-09-28): the gateway refuses an rt whose `url` origin
+equals its `iss` (`x-jump-error: invalid_request`); it mediates cross-origin navigations only.
+
 ## Consequences
 
 - The old `/?to=:public_id` DB-backed JumpLink flow is retired.

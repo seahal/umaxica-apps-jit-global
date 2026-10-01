@@ -147,7 +147,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     get auth_app_sign_up_url(format: :html, ri: "jp"), headers: as_user_headers(user, host: host)
 
     assert_response :redirect
-    assert_redirected_to base_app_root_url(
+    assert_redirected_to base_app_dashboard_url(
       ri: "jp",
       host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", Rails.configuration.x.boot_config.fetch(:hosts).base_service.host),
     )

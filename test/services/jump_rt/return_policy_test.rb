@@ -62,7 +62,7 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
   test "allowed_source returns true for valid source matching destination" do
     assert JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://www.umaxica.app",
-      source: "https://log.umaxica.app",
+      source: "https://auth.umaxica.app",
     )
   end
 
@@ -76,7 +76,7 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
   test "allowed_source returns false when destination origin is unknown" do
     assert_not JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://unknown.example.com",
-      source: "https://log.umaxica.app",
+      source: "https://auth.umaxica.app",
     )
   end
 
@@ -88,33 +88,46 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
     assert_equal 80, JumpRtReturnPolicy.default_port_for("http")
   end
 
-  test "allowed_sources includes hardcoded production origins" do
+  test "allowed_sources lists the auth jump rt issuing origin for the base destination" do
     sources = JumpRtReturnPolicy.allowed_sources
 
     assert_includes sources.keys, "https://www.umaxica.app"
-    assert_includes sources["https://www.umaxica.app"], "https://log.umaxica.app"
+    assert_includes sources["https://www.umaxica.app"], "https://auth.umaxica.app"
   end
 
   test "core destinations allow matching idp sources" do
     assert JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://www.jp.umaxica.app",
-      source: "https://log.umaxica.app",
+      source: "https://auth.umaxica.app",
     )
     assert JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://www.jp.umaxica.com",
-      source: "https://log.umaxica.com",
+      source: "https://auth.umaxica.com",
     )
     assert JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://www.jp.umaxica.org",
-      source: "https://log.umaxica.org",
+      source: "https://auth.umaxica.org",
     )
   end
 
   test "core destinations reject cross surface idp sources" do
     assert_not JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://www.jp.umaxica.app",
-      source: "https://log.umaxica.org",
+      source: "https://auth.umaxica.org",
     )
+  end
+
+  test "retired logical ceremony issuer is not a jump return source" do
+    %w(app com org).each do |tld|
+      assert_not JumpRtReturnPolicy.allowed_source?(
+        destination_origin: "https://www.umaxica.#{tld}",
+        source: "https://log.umaxica.#{tld}",
+      ), tld
+      assert_not JumpRtReturnPolicy.allowed_source?(
+        destination_origin: "https://www.jp.umaxica.#{tld}",
+        source: "https://log.umaxica.#{tld}",
+      ), tld
+    end
   end
 
   def with_env(values)

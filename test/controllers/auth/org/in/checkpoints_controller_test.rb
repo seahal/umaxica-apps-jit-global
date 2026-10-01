@@ -14,11 +14,11 @@ class Auth::Org::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
     OperatorSignInFlowStatus.ensure_defaults!
   end
 
-  test "show without login returns to the local Auth ceremony entry" do
+  test "show without login hands off to the Base admission entry" do
     get auth_org_sign_in_check_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :redirect
-    assert_auth_local_sign_in_redirect(response.location, surface: :org)
+    assert_base_admission_entry_redirect(response.location, surface: :org)
   end
 
   test "show without sign in sequence is rejected" do

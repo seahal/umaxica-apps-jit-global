@@ -5,6 +5,16 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::IntegrationTest
+  # Exercise the public exception representation used outside development.
+  setup do
+    @previous_detailed_exceptions = Rails.application.env_config["action_dispatch.show_detailed_exceptions"]
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = false
+  end
+
+  teardown do
+    Rails.application.env_config["action_dispatch.show_detailed_exceptions"] = @previous_detailed_exceptions
+  end
+
   fixtures :clients, :client_statuses
 
   setup do
@@ -36,7 +46,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     token.update!(last_used_at: 10.minutes.ago)
     last_used_at = token.reload.last_used_at
 
-    get base_app_root_url(ri: "jp"), headers: session_headers(token)
+    get base_app_dashboard_url(ri: "jp"), headers: session_headers(token)
 
     assert_response :success
     assert_equal last_used_at, token.reload.last_used_at
@@ -67,19 +77,22 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     primary_hrefs = primary_links.map { |link| link.fetch("href") }
 
     assert_equal [
-      base_app_preference_path(ri: "jp"),
+      base_app_identity_path(ri: "jp"),
       base_app_switcher_path(ri: "jp"),
       new_base_app_sign_out_path(ri: "jp"),
     ], menu_links.map { |link| link.fetch("href") }
-    menu_links.each { |link| assert_not_includes primary_hrefs, link.fetch("href") }
+    # The dashboard "preference" link intentionally targets the identity page, which the menu also links to.
+    menu_links.reject { |link| link.fetch("href") == base_app_identity_path(ri: "jp") }.each do |link|
+      assert_not_includes primary_hrefs, link.fetch("href")
+    end
 
-    assert_includes hrefs, base_app_root_path(ri: "jp")
+    assert_includes hrefs, base_app_dashboard_path(ri: "jp")
     assert_equal base_app_accounts_path(ri: "jp"), labelled.fetch(dashboard_label(:account))
     assert_equal base_app_organizations_path(ri: "jp"), labelled.fetch(dashboard_label(:organization))
     assert_equal base_app_avatars_path(ri: "jp"), labelled.fetch(dashboard_label(:avatar))
     assert_equal base_app_switcher_path(ri: "jp"), labelled.fetch(dashboard_label(:switcher))
     assert_equal base_app_identity_path(ri: "jp"), labelled.fetch(dashboard_label(:identity))
-    assert_equal base_app_preference_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
+    assert_equal base_app_identity_path(ri: "jp"), labelled.fetch(dashboard_label(:preference))
     assert_equal base_app_billings_path(ri: "jp"), labelled.fetch(dashboard_label(:billings))
     assert_equal base_app_groups_path(ri: "jp"), labelled.fetch(dashboard_label(:groups))
     assert_equal base_app_pwa_offline_path(ri: "jp"), labelled.fetch(dashboard_label(:offline))
@@ -134,27 +147,80 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_match "selected app Persona has no display name", error.message
   end
 
-  test "named_dashboard_renders_for_the_authenticated_app_session" do
+  test "authenticated direct root request returns 404 without redirect" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
 
-    get base_app_dashboard_url(ri: "jp"), headers: session_headers(token)
+    get "/", headers: session_headers(token)
+
+    assert_response :not_found
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
+
+  test "anonymous direct root request renders Home" do
+    get "/", headers: host_headers(@host)
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_not inertia_props.key?("sections")
+  end
+
+  test "authenticated direct dashboard request renders Dashboard" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+
+    get "/dashboard", headers: session_headers(token)
 
     assert_response :success
     assert_equal "base/app/dashboards/show", inertia_component
-    labels = inertia_props.fetch("sections").first.fetch("items").map { |link| link.fetch("label") }
-
-    assert_equal %i(preference switcher logout).map { |key| dashboard_label(key) }, labels
+    assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "named_dashboard_returns_anonymous_app_visitors_to_the_homepage" do
-    get base_app_dashboard_url(ri: "jp"), headers: host_headers(@host)
+  test "anonymous direct dashboard request returns 404 without redirect" do
+    get "/dashboard", headers: host_headers(@host)
 
-    assert_response :see_other
-    assert_redirected_to base_app_root_path(ri: "jp")
+    assert_response :not_found
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "authenticated_preference_navigation_returns_to_the_named_app_dashboard" do
+  test "root_with_an_expired_app_session_renders_the_home" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    select_token!(surface: :app, principal: @user, token: token)
+    token.update!(discard_at: token.created_at)
+    travel 1.second
+
+    get base_app_root_url(ri: "jp"), headers: session_headers(token)
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+  end
+
+  test "root_with_a_credential_for_a_missing_app_session_record_renders_the_home" do
+    get base_app_root_url(ri: "jp"),
+        headers: as_user_headers(@user, host: @host, session_public_id: "missing-session-0001")
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+  end
+
+  test "root_with_a_malformed_app_bearer_renders_the_home" do
+    get base_app_root_url(ri: "jp"), headers: bearer_headers("not-a-jwt", host: @host)
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+  end
+
+  test "root_ignores_unrelated_query_parameters_for_the_app_representation" do
+    get base_app_root_url(ri: "jp", signed_in: "1", dashboard: "1"), headers: host_headers(@host)
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+  end
+
+  test "authenticated_preference_navigation_returns_to_the_canonical_app_root" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
     token.update!(last_used_at: 10.minutes.ago)
@@ -173,7 +239,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
 
-    get base_app_root_url(ri: "jp"), headers: session_headers(token)
+    get base_app_dashboard_url(ri: "jp"), headers: session_headers(token)
 
     labelled =
       inertia_props.fetch("sections")
@@ -188,7 +254,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: @user, token: token)
 
-    get base_app_root_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
+    get base_app_dashboard_url(ri: "jp", ct: "dr", lx: "en", tz: "asia/tokyo"),
         headers: session_headers(token)
 
     menu_hrefs = inertia_props.fetch("sections").first.fetch("items").map { |item| item.fetch("href") }
@@ -211,7 +277,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_response :success
     assert_equal "base/app/identities/show", inertia_component
     assert_equal I18n.t("base.shared.identity.up_link", locale: :ja), inertia_props.dig("up_link", "label")
-    assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
+    assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "identity_show_links_to_identity_pages" do
@@ -260,6 +326,44 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     get base_app_welcome_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :redirect
+  end
+
+  test "invalid browser cookie partitions remain anonymous on literal Home and Dashboard" do
+    expired = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    expired.update!(discard_at: expired.created_at)
+    revoked = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    revoked.revoke!
+    session_ids = [
+      ["expired", expired.public_id],
+      ["revoked", revoked.public_id],
+      ["missing", "missing-session-0001"],
+    ]
+    credentials = []
+    session_ids.each do |label, session_id|
+      credential = AuthenticationToken.encode(
+        @user, host: @host, session_public_id: session_id, resource_type: "client",
+               jwt_issuer_id: "surface:BASE_APP",
+      )
+      credentials << [label, credential]
+    end
+    credentials << ["malformed", "not-a-jwt"]
+
+    credentials.each do |label, credential|
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
+      get "/", headers: { "Host" => @host }
+
+      assert_response :success, label
+      assert_nil response.location, label
+      assert_equal "base/app/roots/index", inertia_component, label
+
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
+      get "/dashboard", headers: { "Host" => @host }
+
+      assert_response :not_found, label
+      assert_nil response.location, label
+      assert_equal Rails.public_path.join("404.html").read, response.body, label
+      assert_equal "private, no-store", response.headers["Cache-Control"], label
+    end
   end
 
   private

@@ -57,12 +57,24 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     assert_nil session[:email_registration_public_id]
   end
 
-  test "new links back to the public preference page" do
+  test "new links back and cancel to the email index" do
     get new_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
 
     assert_response :success
-    assert_equal base_app_preference_url(ri: "jp", host: @host, protocol: request.protocol),
-                 inertia_props.dig("back_link", "href")
+    expected = base_app_identity_emails_url(ri: "jp", host: @host, protocol: request.protocol)
+
+    assert_equal expected, inertia_props.dig("back_link", "href")
+    assert_equal expected, inertia_props.dig("cancel_link", "href")
+  end
+
+  test "new ships the stealth Turnstile configuration that create verifies" do
+    get new_base_app_identity_emails_registration_url(ri: "jp", host: @host), headers: @headers
+
+    assert_response :success
+    turnstile = inertia_props.dig("form", "turnstile")
+
+    assert_equal Rails.app.creds.option(:CLOUDFLARE_TURNSTILE_SITE_STEALTH_KEY), turnstile["site_key"]
+    assert_equal "execute", turnstile["mode"]
   end
 
   test "edit redirects back to new when no registration is in progress" do
@@ -93,6 +105,23 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
     assert_equal @user.id, registered.user_id
     assert_equal ClientEmailStatus::UNVERIFIED, registered.user_email_status_id
+  end
+
+  test "create verifies the Turnstile token against the stealth secret the form's site key belongs to" do
+    modes = []
+    verify =
+      lambda do |**arguments|
+        modes << arguments[:mode]
+        { "success" => true }
+      end
+
+    TurnstileVerifierStub.stub(:verify, verify) do
+      post base_app_identity_emails_registration_url(ri: "jp", host: @host),
+           params: { user_email: { raw_address: "app_email_reg_stealth@example.com" } }, headers: @headers
+    end
+
+    assert_response :redirect
+    assert_equal [:stealth], modes
   end
 
   test "edit renders the verification step while the registration session is valid" do

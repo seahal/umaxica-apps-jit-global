@@ -184,7 +184,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_not_equal "evil.example", uri.host
     assert_includes [nil, host], uri.host
-    assert_equal base_app_root_path(ri: "jp"), uri.request_uri
+    assert_equal base_app_dashboard_path(ri: "jp"), uri.request_uri
     assert_equal "settings_email", token.reload.last_step_up_scope
   end
 
@@ -305,7 +305,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
            params: { scope: "settings_email", return_to: return_to }
 
       assert_response :see_other
-      assert_equal base_app_root_path(ri: "jp"), URI.parse(response.location).request_uri, return_to
+      assert_equal base_app_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri, return_to
       assert_equal host, URI.parse(response.location).host
     end
   end
@@ -462,7 +462,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
          params: { scope: "settings_email", return_to: base_com_identity_emails_path(ri: "jp") }
 
     assert_response :see_other
-    assert_equal base_com_root_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal base_com_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
   test "com base cancellation closes pending transaction and clears freshness" do
@@ -501,7 +501,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
          params: { scope: "settings_email", return_to: base_org_identity_emails_path(ri: "jp") }
 
     assert_response :see_other
-    assert_equal base_org_root_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal base_org_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
   test "org base cancellation closes pending transaction and clears freshness" do

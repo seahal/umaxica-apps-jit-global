@@ -94,7 +94,7 @@ module Auth
 
         def redirect_logged_in_direct_entry!
           redirect_to(
-            base_app_root_url(ri: current_region_identifier, host: base_authority_host),
+            base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host),
             allow_other_host: true,
           )
         end

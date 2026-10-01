@@ -179,7 +179,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
          headers: host_headers(@host)
 
     assert_response :redirect
-    assert_auth_local_sign_in_redirect(response.location, surface: :app)
+    assert_base_admission_entry_redirect(response.location, surface: :app)
     assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
   end
 
@@ -202,7 +202,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
          headers: host_headers(@host)
 
     assert_response :redirect
-    assert_auth_local_sign_in_redirect(response.location, surface: :app)
+    assert_base_admission_entry_redirect(response.location, surface: :app)
     assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
   end
 
@@ -260,7 +260,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
          headers: { "Host" => @host }
 
     assert_response :redirect
-    assert_auth_local_sign_in_redirect(response.location, surface: :app)
+    assert_base_admission_entry_redirect(response.location, surface: :app)
   end
 
   test "link intent rejects resource-level step up without token-bound step up" do

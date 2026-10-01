@@ -32,20 +32,22 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
 
-  test "does not regionally redirect an unknown region" do
+  test "renders Home for an unknown region without redirect" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     get base_org_root_url(ri: "xx")
 
-    assert_response :found
-    assert_equal base_org_root_url(ri: "jp"), response.location
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "does not regionally redirect a missing region" do
+  test "renders Home for a missing region without redirect" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     get "/"
 
-    assert_response :found
-    assert_equal base_org_root_url(ri: "jp"), response.location
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/org/roots/index", inertia_component
   end
 
   test "renders the control-plane root when extra preference params are supplied" do
@@ -56,7 +58,7 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "regional redirect takes precedence over the logged in dashboard redirect" do
+  test "authenticated Home returns 404 without redirect" do
     host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     staff = operators(:one)
 
@@ -65,7 +67,8 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
 
     assert_not_equal 301, response.status
     assert_not_equal "https://jp.umaxica.org/", response.location
-    assert_includes [200, 302, 303], response.status
+    assert_response :not_found
+    assert_nil response.location
   end
   private
 

@@ -40,3 +40,14 @@ Public URLs: `GET /api/v0/entries`, `GET /api/v0/entries/:public_id`. Management
 The edit host is the staff Publishing management boundary. The Publishing database remains in this
 Rails application while the identity/operator contract is stabilized; this host move deliberately
 does not extract Publishing persistence or introduce cross-database associations.
+
+## Edit landing navigation
+
+Edit's root uses its surface layout with the same typography, column width, and action styling as
+the Base landing. Anonymous visitors enter the existing authenticated Publishing dashboard through
+Sign in; its authentication boundary initiates Edit's OIDC flow. Sign up opens the Base org root,
+where the existing CSRF-protected registration admission form owns account creation. Signed-in
+operators see a Publishing dashboard link. The footer links to Base org preferences with an
+absolute URL, preserving regional context. Edit does not duplicate Base's identity or preference
+controllers. The root response uses `private, no-store` because its navigation depends on login
+state.

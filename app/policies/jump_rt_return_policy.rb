@@ -5,15 +5,15 @@ module JumpRtReturnPolicy
   module_function
 
   ALLOWED_SOURCES = {
-    "https://www.umaxica.app" => %w(https://log.umaxica.app https://www.umaxica.app),
-    "https://www.umaxica.com" => %w(https://log.umaxica.com https://www.umaxica.com),
-    "https://www.umaxica.org" => %w(https://log.umaxica.org https://www.umaxica.org),
+    "https://www.umaxica.app" => %w(https://auth.umaxica.app https://www.umaxica.app),
+    "https://www.umaxica.com" => %w(https://auth.umaxica.com https://www.umaxica.com),
+    "https://www.umaxica.org" => %w(https://auth.umaxica.org https://www.umaxica.org),
     "https://jpx.umaxica.app" => %w(https://jpx.umaxica.app),
     "https://jpx.umaxica.com" => %w(https://jpx.umaxica.com),
     "https://jpx.umaxica.org" => %w(https://jpx.umaxica.org),
-    "https://www.jp.umaxica.app" => %w(https://log.umaxica.app https://www.jp.umaxica.app),
-    "https://www.jp.umaxica.com" => %w(https://log.umaxica.com https://www.jp.umaxica.com),
-    "https://www.jp.umaxica.org" => %w(https://log.umaxica.org https://www.jp.umaxica.org),
+    "https://www.jp.umaxica.app" => %w(https://auth.umaxica.app https://www.jp.umaxica.app),
+    "https://www.jp.umaxica.com" => %w(https://auth.umaxica.com https://www.jp.umaxica.com),
+    "https://www.jp.umaxica.org" => %w(https://auth.umaxica.org https://www.jp.umaxica.org),
   }.freeze
 
   def allowed_source?(destination_origin:, source:)
@@ -52,22 +52,22 @@ module JumpRtReturnPolicy
   def env_base_and_core_sources(hosts)
     {
       normalize_origin(hosts.base_service.to_s) => env_sources(
-        destination_host: hosts.base_service.to_s, issuer_host: hosts.sign_service.to_s,
+        destination_host: hosts.base_service.host, issuer_host: hosts.sign_service.host,
       ),
       normalize_origin(hosts.base_corporate.to_s) => env_sources(
-        destination_host: hosts.base_corporate.to_s, issuer_host: hosts.sign_corporate.to_s,
+        destination_host: hosts.base_corporate.host, issuer_host: hosts.sign_corporate.host,
       ),
       normalize_origin(hosts.base_staff.to_s) => env_sources(
-        destination_host: hosts.base_staff.to_s, issuer_host: hosts.sign_staff.to_s,
+        destination_host: hosts.base_staff.host, issuer_host: hosts.sign_staff.host,
       ),
       normalize_origin(hosts.core_service.to_s) => env_sources(
-        destination_host: hosts.core_service.to_s, issuer_host: hosts.sign_service.to_s,
+        destination_host: hosts.core_service.host, issuer_host: hosts.sign_service.host,
       ),
       normalize_origin(hosts.core_corporate.to_s) => env_sources(
-        destination_host: hosts.core_corporate.to_s, issuer_host: hosts.sign_corporate.to_s,
+        destination_host: hosts.core_corporate.host, issuer_host: hosts.sign_corporate.host,
       ),
       normalize_origin(hosts.core_staff.to_s) => env_sources(
-        destination_host: hosts.core_staff.to_s, issuer_host: hosts.sign_staff.to_s,
+        destination_host: hosts.core_staff.host, issuer_host: hosts.sign_staff.host,
       ),
     }
   end

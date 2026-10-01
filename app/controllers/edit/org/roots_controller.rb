@@ -7,11 +7,11 @@ module Edit
       AUTHENTICATION_MODE = :open
 
       allow_browser versions: :modern
-      layout false
 
       public
 
       def index
+        response.headers["Cache-Control"] = "private, no-store"
       end
     end
   end

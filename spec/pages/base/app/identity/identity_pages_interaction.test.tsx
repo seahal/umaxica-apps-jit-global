@@ -20,6 +20,19 @@ vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: { errors: {} } }),
 }));
 
+// The challenge answers immediately so the submitted payload carries the issued token.
+vi.mock("@/lib/turnstile", () => ({
+  waitForTurnstileApi: () =>
+    Promise.resolve({
+      render: (_element: HTMLElement, options: { callback: (token: string) => void }) => {
+        options.callback("tok_turnstile");
+        return "widget";
+      },
+      execute: () => {},
+      remove: () => {},
+    }),
+}));
+
 const { default: EmailEdit } = await import("@/pages/base/app/identity/emails/edit");
 const { default: EmailRegistrationNew } =
   await import("@/pages/base/app/identity/emails/registrations/new");
@@ -52,6 +65,11 @@ const mount = (element: React.ReactElement) => {
   act(() => {
     root.render(element);
   });
+};
+
+// The widget loads the Turnstile API asynchronously; settle it before submitting.
+const flushTurnstile = async () => {
+  await act(async () => {});
 };
 
 const submitForm = (index = 0) => {
@@ -179,7 +197,7 @@ describe("email edit interaction", () => {
 });
 
 describe("email registration interaction", () => {
-  it("posts unchecked preferences as off", () => {
+  it("posts unchecked preferences as off", async () => {
     mount(
       <EmailRegistrationNew
         title="Add an email address"
@@ -190,24 +208,27 @@ describe("email registration interaction", () => {
           address_label: "Address",
           address: "",
           submit_label: "Submit",
+          turnstile: { site_key: "site", mode: "execute" as const, action: null, cdata: null },
           promotional: { checked: false, label: "Promotional", description: "Offers." },
           notifiable: { checked: false, label: "Notifiable", description: "Notices." },
         }}
         errors={[]}
       />,
     );
+    await flushTurnstile();
     submitForm();
 
     expect(post).toHaveBeenCalledWith(
       "/identity/emails/registration",
       {
         user_email: { address: "", promotional: "0", notifiable: "0" },
+        "cf-turnstile-response": "tok_turnstile",
       },
       expect.anything(),
     );
   });
 
-  it("posts the address and the preferences", () => {
+  it("posts the address and the preferences", async () => {
     mount(
       <EmailRegistrationNew
         title="Add an email address"
@@ -218,12 +239,14 @@ describe("email registration interaction", () => {
           address_label: "Address",
           address: "",
           submit_label: "Submit",
+          turnstile: { site_key: "site", mode: "execute" as const, action: null, cdata: null },
           promotional: { checked: false, label: "Promotional", description: "Offers." },
           notifiable: { checked: false, label: "Notifiable", description: "Notices." },
         }}
         errors={[]}
       />,
     );
+    await flushTurnstile();
     setInput("#user_email_address", "someone@example.com");
     toggleCheckbox("#user_email_promotional");
     submitForm();
@@ -232,6 +255,7 @@ describe("email registration interaction", () => {
       "/identity/emails/registration",
       {
         user_email: { address: "someone@example.com", promotional: "1", notifiable: "0" },
+        "cf-turnstile-response": "tok_turnstile",
       },
       expect.anything(),
     );
@@ -247,7 +271,7 @@ describe("email registration interaction", () => {
     errors: [],
   };
 
-  it("patches the code with the verification token", () => {
+  it("patches the code with the verification token", async () => {
     mount(
       <EmailRegistrationEdit
         {...editProps}
@@ -257,21 +281,26 @@ describe("email registration interaction", () => {
           code_placeholder: "123456",
           delivery_help: "It expires soon.",
           submit_label: "Verify",
+          turnstile: { site_key: "site", mode: "execute" as const, action: null, cdata: null },
           verification_token: "tok_1",
         }}
       />,
     );
+    await flushTurnstile();
     setInput("#user_email_pass_code", "123456");
     submitForm();
 
     expect(patch).toHaveBeenCalledWith(
       "/identity/emails/registration",
-      { user_email: { pass_code: "123456", token: "tok_1" } },
+      {
+        user_email: { pass_code: "123456", token: "tok_1" },
+        "cf-turnstile-response": "tok_turnstile",
+      },
       expect.anything(),
     );
   });
 
-  it("patches the code without a token and posts a redelivery", () => {
+  it("patches the code without a token and posts a redelivery", async () => {
     mount(
       <EmailRegistrationEdit
         {...editProps}
@@ -281,14 +310,16 @@ describe("email registration interaction", () => {
           code_placeholder: "123456",
           delivery_help: "It expires soon.",
           submit_label: "Verify",
+          turnstile: { site_key: "site", mode: "execute" as const, action: null, cdata: null },
           verification_token: null,
         }}
       />,
     );
+    await flushTurnstile();
     submitForm();
     expect(patch).toHaveBeenCalledWith(
       "/identity/emails/registration",
-      { user_email: { pass_code: "" } },
+      { user_email: { pass_code: "" }, "cf-turnstile-response": "tok_turnstile" },
       expect.anything(),
     );
 

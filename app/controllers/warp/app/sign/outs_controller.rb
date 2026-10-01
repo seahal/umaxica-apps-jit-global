@@ -47,6 +47,13 @@ module Warp
 
         private
 
+        def render_oidc_rp_logout_completion
+          return super unless @sign_out_notice
+
+          session[:inertia_clear_history] = true
+          redirect_to(warp_app_root_path(ri: params[:ri]), status: :see_other)
+        end
+
         def sign_out_confirmation_form_path
           sign_out_post_path
         end

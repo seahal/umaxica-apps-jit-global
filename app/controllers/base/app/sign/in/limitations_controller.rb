@@ -60,17 +60,7 @@ module Base
           def destroy
             return render_invalid_resolution unless resolution_loaded?
 
-            if social_resolution?
-              return redirect_to(
-                auth_app_sign_in_url(
-                  host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                ),
-                allow_other_host: cross_host_redirect_allowed?,
-                status: :see_other,
-              )
-            end
-
-            @resolution.cancel!
+            @resolution.cancel! unless social_resolution?
             redirect_to(
               auth_app_sign_in_url(
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
@@ -78,6 +68,9 @@ module Base
               allow_other_host: cross_host_redirect_allowed?,
               status: :see_other,
             )
+            # The cancel button issues an Inertia visit, and sign-in lives on the Auth host, so a
+            # plain 303 would be followed by fetch cross-origin and the page would never change.
+            convert_redirect_to_inertia_location!
           end
 
           private
@@ -226,7 +219,7 @@ module Base
               return render_invalid_resolution unless login_result[:status] == :success
             end
 
-            redirect_to(base_app_root_path(ri: params[:ri]), status: :see_other)
+            redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
           end
 
           def resume_authorization_after_resolution

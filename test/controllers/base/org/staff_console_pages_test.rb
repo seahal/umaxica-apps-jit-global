@@ -144,7 +144,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
   end
 
   test "the dashboard shows Administration only for consoles the operator is granted" do
-    get base_org_root_url(ri: "jp", host: @host), headers: @headers
+    get base_org_dashboard_url(ri: "jp", host: @host), headers: @headers
 
     assert_response :ok
     headings = inertia_props.fetch("sections").map { |section| section.fetch("heading") }
@@ -160,7 +160,7 @@ class Base::Org::StaffConsolePagesTest < ActionDispatch::IntegrationTest
       expires_at: 1.day.from_now,
     )
 
-    get base_org_root_url(ri: "jp", host: @host), headers: @headers
+    get base_org_dashboard_url(ri: "jp", host: @host), headers: @headers
     administration =
       inertia_props.fetch("sections").find do |section|
         section.fetch("heading") == I18n.t("base.org.admin.dashboard.administration")

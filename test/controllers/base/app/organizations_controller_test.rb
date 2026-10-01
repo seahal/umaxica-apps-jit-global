@@ -21,7 +21,7 @@ class Base::App::OrganizationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Organizations", inertia_props.fetch("title")
     assert_equal "organizations", inertia_props.fetch("body")
     assert_equal I18n.t("actions.up", locale: :ja), inertia_props.dig("up_link", "label")
-    assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("up_link", "href")
+    assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
     assert_equal "Create Organization", inertia_props.dig("create_action", "label")
   end
 

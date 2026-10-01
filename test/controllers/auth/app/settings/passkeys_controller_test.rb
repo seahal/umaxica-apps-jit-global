@@ -59,7 +59,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
          headers: browser_headers.merge("X-CSRF-Token" => "test_csrf_token")
 
     assert_response :redirect
-    assert_auth_local_sign_in_redirect(response.location, surface: :app)
+    assert_base_admission_entry_redirect(response.location, surface: :app)
   end
 
   # A failed stealth challenge must not mint registration options: the browser

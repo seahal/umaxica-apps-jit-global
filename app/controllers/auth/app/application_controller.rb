@@ -108,7 +108,7 @@ module Auth
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
         complete_auth_ceremony_session!
-        base_app_root_url(ri: current_region_identifier, host: base_authority_host)
+        base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host)
       end
 
       def after_login_allows_other_host?
@@ -132,6 +132,18 @@ module Auth
 
       def acme_authority_host
         base_authority_host
+      end
+
+      # A protected Auth page hands sign-in off to the Base admission entry, which issues the
+      # admission back into Auth. The Auth origin's own /sign/in is never the target: the Jump
+      # gateway refuses an internal rt whose destination origin equals its issuer
+      # (adr/secure-jump-link-redirector.md). The Base origin comes from the boot host registry.
+      def sign_in_url_with_pt(_return_to)
+        base_app_root_url(
+          ri: params[:ri],
+          host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
+          protocol: "https",
+        )
       end
 
       def base_authority_host
