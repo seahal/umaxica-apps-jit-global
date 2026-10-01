@@ -1647,8 +1647,20 @@ module AuthenticationBase
     return unless AUTH_ACCESS_DETACHABLE_FAILURES.key?(result.failure_reason)
 
     log_auth_credential_rejection("access_cookie", result.failure_reason)
+    register_refused_credential_deletions!
     clear_auth_cookies!
     @current_authentication_credentials_present = false
+  end
+
+  # A later boundary check may still raise (Home/Dashboard 404). Registering the confirmed deletion
+  # lets CredentialDeletionFinalizer complete it on the exception response; like the cookie jar, it
+  # covers only cookies the request carried.
+  def register_refused_credential_deletions!
+    [ACCESS_COOKIE_KEY, REFRESH_COOKIE_KEY, DBSC_COOKIE_KEY].each do |name|
+      next unless request.cookies.key?(name)
+
+      CredentialDeletionFinalizer.register(request.env, name, cookie_deletion_options)
+    end
   end
 
   def log_auth_credential_rejection(kind, reason)

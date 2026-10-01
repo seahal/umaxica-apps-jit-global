@@ -37,7 +37,7 @@ class PreferenceLogoutDowngradeTest < ActionDispatch::IntegrationTest
          headers: { "X-TEST-CURRENT-USER" => user.id.to_s, "X-TEST-SESSION-PUBLIC-ID" => token.public_id }
 
     assert_response :see_other
-    assert_equal "/sign/out", URI.parse(response.location).path
+    assert_equal "/", URI.parse(response.location).path
     assert_equal "dr", cookies[PreferenceBase::THEME_COOKIE_KEY],
                  "guest-safe display preference must survive logout (contract: keep-values)"
   end
@@ -55,11 +55,11 @@ class PreferenceLogoutDowngradeTest < ActionDispatch::IntegrationTest
     preference = AppPreference.order(:created_at).last
     theme_option_id_before = preference.app_preference_theme.option_id
 
-    # No resolved session: sign-out is a no-op that redirects to the one-shot sign-out page.
+    # No resolved session: sign-out is a no-op that redirects to Home.
     post base_app_sign_out_url
 
     assert_response :see_other
-    assert_equal "/sign/out", URI.parse(response.location).path
+    assert_equal "/", URI.parse(response.location).path
 
     preference.reload
 

@@ -903,6 +903,34 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     )
   end
 
+  test "app placeholder entrypoints are read-only and app-only" do
+    { "emergency" => "emergencies", "device" => "devices" }.each do |resource, controller|
+      assert_recognizes(
+        { controller: "auth/app/sign/in/#{controller}", action: "show" },
+        { path: "http://#{SIGN_APP_HOST}/sign/in/#{resource}", method: :get },
+      )
+      %i(post put patch delete).each do |verb|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{SIGN_APP_HOST}/sign/in/#{resource}", method: verb)
+        end
+      end
+      [SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{host}/sign/in/#{resource}", method: :get)
+        end
+      end
+    end
+    [SIGN_APP_HOST, SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
+      %w(/sign/in/secret /sign/in/emergency/credential).each do |path|
+        %i(get post put patch delete).each do |verb|
+          assert_raises(ActionController::RoutingError) do
+            Rails.application.routes.recognize_path("http://#{host}#{path}", method: verb)
+          end
+        end
+      end
+    end
+  end
+
   test "auth negative route contract" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(

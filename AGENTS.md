@@ -61,6 +61,8 @@ the remaining entries matching the task.
   `generic/no-workflow-drift.mdc`, `generic/no-silent-fallback.mdc`,
   `docs/architecture/controller-lifecycle.md`
 - User-facing notices, alerts, or feedback: `generic/no-flash-messages.mdc`
+- Translation keys, locale bundles under `config/locales/`, or `t`/`I18n.t` calls:
+  `docs/architecture/i18n.md`, `adr/i18n-explicit-translation-keys.md`
 - Google, Apple, or Microsoft Entra ID sign-in buttons and provider branding:
   `docs/reference/third-party-sign-in-button-requirements.md`
 - External technical sources: `generic/source-policy.mdc`

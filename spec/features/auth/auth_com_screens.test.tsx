@@ -85,6 +85,18 @@ describe("AuthMethodChoice", () => {
     links: [{ key: "registration", label: "登録", href: "/sign/up" }],
   };
 
+  it("appends text-only Cancel on com sign-up", () => {
+    const markup = renderToStaticMarkup(
+      <AuthMethodChoice
+        {...props}
+        cancel_label="Cancel"
+      />,
+    );
+    expect(markup).toMatch(/<p[^>]*>Cancel<\/p><\/div>$/u);
+    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu) ?? [];
+    expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
+  });
+
   it("lists the methods and the trailing links the server resolved", () => {
     const markup = renderToStaticMarkup(<AuthMethodChoice {...props} />);
 

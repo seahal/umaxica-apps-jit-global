@@ -146,6 +146,9 @@ services:
       frontend:
         aliases:
           - core-workers-vpc.internal
+          - xper.app.localhost
+          - xper.com.localhost
+          - xper.org.localhost
           - base.app.localhost
           - base.com.localhost
           - base.org.localhost
@@ -168,9 +171,9 @@ services:
           - news.com.localhost
           - news.org.localhost
           - palm.app.localhost
-          - wide.app.localhost
-          - wide.com.localhost
-          - wide.org.localhost
+          - warp.app.localhost
+          - warp.com.localhost
+          - warp.org.localhost
           - edge.app.localhost
           - edge.com.localhost
           - edge.org.localhost

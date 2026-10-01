@@ -86,6 +86,59 @@ describe("sign-in method choice", () => {
     registration_link: { key: "registration", label: "Need an account", href: "/sign/up?ri=jp" },
   };
 
+  it("renders app methods, native providers, separator, registration and text-only cancel in order", () => {
+    const markup = renderToStaticMarkup(
+      <SignInMethodChoice
+        {...props}
+        methods={[
+          { key: "email", label: "Email", href: "/sign/in/email/new" },
+          { key: "passkey", label: "Passkey", href: "/sign/in/passkey/new" },
+          { key: "emergency", label: "Emergency", href: "/sign/in/emergency" },
+          { key: "device", label: "Device", href: "/sign/in/device" },
+        ]}
+        social_providers={props.social_providers.slice(0, 2)}
+        cancel_label="Cancel"
+      />,
+    );
+    expect(markup).toMatch(
+      />Email<.*>Passkey<.*>Emergency<.*>Device<.*action="\/social\/google\/session\?ri=jp".*action="\/social\/apple\/session\?ri=jp".*<hr[^>]*>.*>Need an account<.*<p[^>]*>Cancel<\/p>/su,
+    );
+    expect(markup).toMatch(/<p[^>]*>Cancel<\/p>/u);
+    const interactiveElements = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu) ?? [];
+    expect(interactiveElements.some((element) => element.includes("Cancel"))).toBe(false);
+    expect(markup.match(/<form[^>]*method="post"/gu)).toHaveLength(2);
+    expect(markup.match(/name="authenticity_token" value="csrf-value"/gu)).toHaveLength(2);
+  });
+
+  it("appends text-only Cancel on com without app methods or a provider separator", () => {
+    const markup = renderToStaticMarkup(
+      <SignInMethodChoice
+        {...props}
+        social_providers={[]}
+        cancel_label="Cancel"
+      />,
+    );
+    expect(markup).toMatch(/<p[^>]*>Cancel<\/p><\/div>$/u);
+    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu) ?? [];
+    expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
+    expect(markup).not.toContain("<hr");
+    expect(markup).not.toContain("/sign/in/emergency");
+    expect(markup).not.toContain("/sign/in/device");
+  });
+
+  it("omits optional Cancel and app-only methods and separator", () => {
+    const markup = renderToStaticMarkup(
+      <SignInMethodChoice
+        {...props}
+        social_providers={[]}
+      />,
+    );
+    expect(markup).not.toContain("<hr");
+    expect(markup).not.toContain("Cancel");
+    expect(markup).not.toContain("/sign/in/emergency");
+    expect(markup).not.toContain("/sign/in/device");
+  });
+
   it("lists every method the server offered", () => {
     const markup = renderToStaticMarkup(<SignInMethodChoice {...props} />);
 

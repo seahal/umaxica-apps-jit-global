@@ -5,6 +5,11 @@
 > do not imply sign-side authority. Do not use this document to reintroduce sign-side sessions,
 > refresh, preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
 
+> **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
+> vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
+> `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
+> `adr/idp-flow-lifecycle-vocabulary.md`; it is not implemented yet.
+
 This document records the sign-up routing sequence for the `app` and `com` sign surfaces, and the
 operator acquisition/lifecycle routing sequence for `org`. The `app` telephone and `com` telephone
 flows are now driven by `ClientSignUpFlow` / `VisitorSignUpFlow` tickets and `SignUpStateMachine`;

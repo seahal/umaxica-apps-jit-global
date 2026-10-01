@@ -17,6 +17,9 @@ class RevisionEndpointTest < ActionDispatch::IntegrationTest
   HTML_MARKER = /<!doctype|<html/i
 
   SURFACES = [
+    { host: "xper.app.localhost", realm: "xper", surface: "app" },
+    { host: "xper.com.localhost", realm: "xper", surface: "com" },
+    { host: "xper.org.localhost", realm: "xper", surface: "org" },
     { host: ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost"), realm: "auth", surface: "app" },
     { host: ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost"), realm: "auth", surface: "com" },
     { host: ENV.fetch("PRIVATE_AUTH_STAFF_URL", "sign.org.localhost"), realm: "auth", surface: "org" },

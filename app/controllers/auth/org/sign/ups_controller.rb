@@ -61,8 +61,8 @@ module Auth
                               href: auth_org_sign_in_path(pt: signed_pt_param, ri: region),
                             }
                           end,
-            back_to_root: {
-              label: t("sign.org.ups.new.back_to_root"),
+            cancel_link: {
+              label: t("actions.cancel"),
               href: auth_org_root_path,
             },
           }
@@ -77,7 +77,7 @@ module Auth
             suspended_notice: t("errors.messages.sign_up_suspended"),
             recruit: nil,
             sign_in_link: nil,
-            back_to_root: nil,
+            cancel_link: nil,
           }
         end
       end

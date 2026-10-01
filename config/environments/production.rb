@@ -157,6 +157,9 @@ Rails.application.configure do
   # Rails host authorization matches against the bare hostname from the Host header,
   # so use OriginValue#host (e.g. "www.umaxica.app") - not #to_s which is a full origin.
   config.hosts = [
+    boot_hosts.xper_service.host,
+    boot_hosts.xper_corporate.host,
+    boot_hosts.xper_staff.host,
     boot_hosts.base_service.host,
     boot_hosts.base_corporate.host,
     boot_hosts.base_staff.host,

@@ -31,6 +31,7 @@ module Auth
             title: page_t("#{scope}.page_title"),
             description: page_t("#{scope}.description"),
             methods: method_selection_links(scope),
+            cancel_label: t("actions.cancel"),
             social_providers: [google_provider_button(scope), apple_provider_button(scope)],
             registration_link: {
               key: "registration",
@@ -48,6 +49,12 @@ module Auth
             { key: "passkey",
               label: page_t("#{scope}.links.passkey"),
               href: new_auth_app_sign_in_passkey_path(pt: pt), },
+            { key: "emergency",
+              label: page_t("sign.app.authentication.new.links.emergency"),
+              href: auth_app_sign_in_emergency_path(pt: pt), },
+            { key: "device",
+              label: page_t("sign.app.authentication.new.links.device"),
+              href: auth_app_sign_in_device_path(pt: pt), },
           ]
         end
 

@@ -14,6 +14,9 @@ module Concerns
       .reject { |f| f.include?("/sign/com/") }
       .reject { |f| f.include?("/jump/") }
       .reject { |f| f.include?("/palm/") }
+      # Xper Phase 0 owns static landing pages without actor/session lifecycle.
+      # Its edge protections and isolation are covered by XperBootstrapTest.
+      .reject { |f| f.include?("/xper/") }
       .sort
     CONTROLLER_FILES =
       ALL_CONTROLLER_FILES.index_with do |file|

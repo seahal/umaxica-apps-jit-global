@@ -141,6 +141,9 @@ class SignRouteHostTest < ActionDispatch::IntegrationTest
       news_service: OpenStruct.new(host: "news.app.localhost"),
       news_corporate: OpenStruct.new(host: "news.com.localhost"),
       news_staff: OpenStruct.new(host: "news.org.localhost"),
+      xper_service: OpenStruct.new(host: ENV.fetch("PUBLIC_XPER_SERVICE_URL", "umaxica.app")),
+      xper_corporate: OpenStruct.new(host: ENV.fetch("PUBLIC_XPER_CORPORATE_URL", "umaxica.com")),
+      xper_staff: OpenStruct.new(host: ENV.fetch("PUBLIC_XPER_STAFF_URL", "umaxica.org")),
     }
   end
 end

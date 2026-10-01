@@ -38,6 +38,7 @@ module Auth
 
           {
             title: t("sign.com.authentication.new.page_title"),
+            cancel_label: t("actions.cancel"),
             description: t("sign.com.authentication.new.description"),
             methods: sign_in_method_links(pt),
             social_providers: [],

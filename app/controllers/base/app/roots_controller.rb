@@ -150,7 +150,7 @@ module Base
 
       def root_landing_props
         {
-          title: "Base App",
+          title: nil,
           heading: "Base App",
           description: t("landing.thin_endpoint"),
           sign_in: local_entry_props("Sign in", "sign_in"),

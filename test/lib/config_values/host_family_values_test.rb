@@ -57,6 +57,8 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal 3, values.base_origins.size
     assert_equal [values.base_service, values.base_corporate, values.base_staff], values.base_origins
 
+    assert_equal [values.xper_service, values.xper_corporate, values.xper_staff], values.xper_origins
+
     assert_equal 3, values.warp_origins.size
     assert_equal [values.warp_service, values.warp_corporate, values.warp_staff], values.warp_origins
 
@@ -80,6 +82,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
+      "PUBLIC_XPER_SERVICE_URL" => "umaxica.app",
+      "PUBLIC_XPER_CORPORATE_URL" => "umaxica.com",
+      "PUBLIC_XPER_STAFF_URL" => "umaxica.org",
       "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
       "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
       "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",
@@ -103,6 +108,19 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
 
     assert_equal "https://base.example.test", values.acme_service.to_s
     assert_equal "https://sign-org.example.test", values.sign_staff.to_s
+    assert_equal "https://umaxica.app", values.xper_service.to_s
+    assert_equal "https://umaxica.com", values.xper_corporate.to_s
+    assert_equal "https://umaxica.org", values.xper_staff.to_s
+    %w(PUBLIC_XPER_SERVICE_URL PUBLIC_XPER_CORPORATE_URL PUBLIC_XPER_STAFF_URL).each do |key|
+      missing = env.except(key)
+      error = assert_raises(KeyError) { ConfigValues::HostFamilyValues.build(env: missing, production: true) }
+
+      assert_includes error.message, key
+      [nil, ""].each do |empty|
+        assert_raises(ArgumentError) { ConfigValues::HostFamilyValues.build(env: env.merge(key => empty), production: true) }
+      end
+    end
+
     assert_equal "https://warp.example.test", values.warp_service.to_s
     assert_equal "https://info-org.example.test", values.info_staff.to_s
     assert_equal "https://guid.example.test", values.guid_service.to_s
@@ -249,6 +267,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
+      "PUBLIC_XPER_SERVICE_URL" => "umaxica.app",
+      "PUBLIC_XPER_CORPORATE_URL" => "umaxica.com",
+      "PUBLIC_XPER_STAFF_URL" => "umaxica.org",
       "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
       "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
       "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",

@@ -5,15 +5,13 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SurfaceRootsControllerTest < ActionDispatch::IntegrationTest
-  # Public www hosts share Base Root. A missing region still normalizes; a recognized region
-  # stays on the control-plane home.
-  test "acme app root normalizes the region then renders the control-plane home" do
+  # Public www hosts share Base Root. Home resolves a missing region in place without redirecting
+  # (adr/home-dashboard-authentication-boundary.md).
+  test "acme app root without a region renders the control-plane home without redirect" do
     get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost") }
 
-    assert_response :found
-    follow_redirect!
-
     assert_response :success
+    assert_nil response.location
     assert_equal "base/app/roots/index", inertia_component
   end
 
@@ -24,17 +22,15 @@ class SurfaceRootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "acme com root normalizes the region then renders the control-plane home" do
+  test "acme com root without a region renders the control-plane home without redirect" do
     get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost") }
-    follow_redirect! if response.redirect? && response.status == 302
 
     assert_response :success
     assert_equal "base/com/roots/index", inertia_component
   end
 
-  test "acme org root normalizes the region then renders the control-plane home" do
+  test "acme org root without a region renders the control-plane home without redirect" do
     get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost") }
-    follow_redirect! if response.redirect? && response.status == 302
 
     assert_response :success
     assert_equal "base/org/roots/index", inertia_component

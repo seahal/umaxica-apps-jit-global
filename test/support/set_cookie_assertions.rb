@@ -21,6 +21,11 @@ module SetCookieAssertions
     end
   end
 
+  def set_cookie_names
+    Array(response.headers["set-cookie"]).flat_map { |header| header.to_s.split("\n") }
+      .map { |line| line.split("=", 2).first }
+  end
+
   def host_only_set_cookie(name)
     entries = set_cookie_entries(name).reject { |entry| entry.key?(:domain) }
 

@@ -62,6 +62,8 @@ module Auth
         assert_response :success
         assert_equal "auth/com/sign_ins/new", inertia_component
         assert_empty inertia_props.fetch("social_providers")
+        assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+        assert_equal %w(email passkey), inertia_props.fetch("methods").map { |method| method.fetch("key") }
       end
 
       test "does not show temporary google signin button when legacy flag is set" do

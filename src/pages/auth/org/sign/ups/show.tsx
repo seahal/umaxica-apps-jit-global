@@ -18,7 +18,7 @@ export type OrgSignUpEntryProps = {
   suspended_notice: string | null;
   recruit: { prompt: string; label: string; href: string } | null;
   sign_in_link: SignUpLink | null;
-  back_to_root: SignUpLink | null;
+  cancel_link: SignUpLink | null;
 };
 
 export default function OrgSignUpEntry({
@@ -27,7 +27,7 @@ export default function OrgSignUpEntry({
   suspended_notice: suspendedNotice,
   recruit,
   sign_in_link: signInLink,
-  back_to_root: backToRoot,
+  cancel_link: cancelLink,
 }: OrgSignUpEntryProps) {
   if (suspendedNotice) {
     return (
@@ -47,7 +47,6 @@ export default function OrgSignUpEntry({
     <Page
       title={title}
       {...(description === null ? {} : { description })}
-      {...(backToRoot === null ? {} : { up: backToRoot })}
       width="narrow"
     >
       {recruit ? (
@@ -66,6 +65,16 @@ export default function OrgSignUpEntry({
             tone="muted"
           >
             {signInLink.label}
+          </TextLink>
+        </p>
+      ) : null}
+      {cancelLink ? (
+        <p className="text-sm">
+          <TextLink
+            href={cancelLink.href}
+            tone="muted"
+          >
+            {cancelLink.label}
           </TextLink>
         </p>
       ) : null}

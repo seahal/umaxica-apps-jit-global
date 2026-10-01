@@ -39,6 +39,9 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Warp::App::BareController,
     Warp::Com::BareController,
     Warp::Org::BareController,
+    Xper::App::BareController,
+    Xper::Com::BareController,
+    Xper::Org::BareController,
   ].freeze
 
   APPLICATION_CONTROLLERS = [
@@ -57,6 +60,9 @@ class ControllerBaseInheritanceTest < ActiveSupport::TestCase
     Warp::App::ApplicationController,
     Warp::Com::ApplicationController,
     Warp::Org::ApplicationController,
+    Xper::App::ApplicationController,
+    Xper::Com::ApplicationController,
+    Xper::Org::ApplicationController,
   ].freeze
 
   test "bare controllers inherit directly from ActionController base" do

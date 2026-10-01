@@ -728,7 +728,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/warp/app/api/v0/revisions_controller.rb: 1
   app/controllers/warp/app/application_controller.rb: 4
   app/controllers/warp/app/csp_violation_reports_controller.rb: 1
-  app/controllers/warp/app/dashboards_controller.rb: 1
   app/controllers/warp/app/health/livenesses_controller.rb: 1
   app/controllers/warp/app/health/readinesses_controller.rb: 1
   app/controllers/warp/app/health/startups_controller.rb: 1
@@ -736,7 +735,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/warp/app/mcps_controller.rb: 1
   app/controllers/warp/app/revisions_controller.rb: 1
   app/controllers/warp/app/robots_controller.rb: 1
-  app/controllers/warp/app/roots_controller.rb: 1
   app/controllers/warp/app/settings_controller.rb: 1
   app/controllers/warp/app/sign/outs_controller.rb: 4
   app/controllers/warp/app/sitemaps_controller.rb: 1
@@ -744,7 +742,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/warp/com/api/v0/revisions_controller.rb: 1
   app/controllers/warp/com/application_controller.rb: 4
   app/controllers/warp/com/csp_violation_reports_controller.rb: 1
-  app/controllers/warp/com/dashboards_controller.rb: 1
   app/controllers/warp/com/health/livenesses_controller.rb: 1
   app/controllers/warp/com/health/readinesses_controller.rb: 1
   app/controllers/warp/com/health/startups_controller.rb: 1
@@ -752,7 +749,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/warp/com/mcps_controller.rb: 1
   app/controllers/warp/com/revisions_controller.rb: 1
   app/controllers/warp/com/robots_controller.rb: 1
-  app/controllers/warp/com/roots_controller.rb: 1
   app/controllers/warp/com/settings_controller.rb: 1
   app/controllers/warp/com/sign/outs_controller.rb: 4
   app/controllers/warp/com/sitemaps_controller.rb: 1
@@ -760,7 +756,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/warp/org/api/v0/revisions_controller.rb: 1
   app/controllers/warp/org/application_controller.rb: 4
   app/controllers/warp/org/csp_violation_reports_controller.rb: 1
-  app/controllers/warp/org/dashboards_controller.rb: 1
   app/controllers/warp/org/health/livenesses_controller.rb: 1
   app/controllers/warp/org/health/readinesses_controller.rb: 1
   app/controllers/warp/org/health/startups_controller.rb: 1
@@ -768,7 +763,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/warp/org/mcps_controller.rb: 1
   app/controllers/warp/org/revisions_controller.rb: 1
   app/controllers/warp/org/robots_controller.rb: 1
-  app/controllers/warp/org/roots_controller.rb: 1
   app/controllers/warp/org/settings_controller.rb: 1
   app/controllers/warp/org/sign/outs_controller.rb: 4
   app/controllers/warp/org/sitemaps_controller.rb: 1

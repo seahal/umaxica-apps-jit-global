@@ -3,19 +3,21 @@
 
 require "test_helper"
 
-# Control-plane Base Root is the authenticated home. Auth Root is a public ceremony-service
-# entry. A missing region still normalizes first; a recognized region stays on the host.
+# Base Root is the anonymous Home. Auth Root is a public ceremony-service entry. Base Home
+# resolves a missing or unrecognized region in place without redirecting
+# (adr/home-dashboard-authentication-boundary.md).
 class SurfaceRootLandingTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  test "base app root without a region is normalized to the default region" do
+  test "base app root without a region renders Home without redirect" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
     get base_app_root_url(host: host), headers: { "Host" => host }
 
-    assert_response :redirect
-    assert_match(/\Ahttp:\/\/#{Regexp.escape(host)}\/\?ri=/, response.location)
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/app/roots/index", inertia_component
   end
 
   test "base app root with a region renders the control-plane home" do
@@ -48,14 +50,15 @@ class SurfaceRootLandingTest < ActionDispatch::IntegrationTest
     assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "base app root leaves an unrecognized region to region normalization rather than redirecting" do
+  test "base app root with an unrecognized region renders Home without redirect" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
 
     get base_app_root_url(ri: "zz", host: host), headers: { "Host" => host }
 
-    assert_response :redirect
-    assert_not_equal RegionalRootUrlRegistry.url_for(surface: :app, region: "jp"), response.location
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/app/roots/index", inertia_component
   end
 
   test "auth app root with a region renders the ceremony-service entry" do

@@ -26,7 +26,8 @@ module Security
         ]
         paths = [
           ["/", :success],
-          ["/dashboard", :see_other],
+          # Anonymous Dashboard is 404 (adr/home-dashboard-authentication-boundary.md).
+          ["/dashboard", :not_found],
           ["/preference", :success],
           ["/preference/region/edit", :success],
           ["/preference/theme/edit", :success],

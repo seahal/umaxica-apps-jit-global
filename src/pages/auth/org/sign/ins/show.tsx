@@ -24,7 +24,7 @@ export type OrgSignInEntryProps = {
   description: string;
   methods: SignInMethod[];
   registration_link: SignInLink | null;
-  back_to_root: SignInLink;
+  cancel_label?: string;
 };
 
 // Entra is a form submit and Emergency Access is a link, but both are sign-in methods of equal
@@ -52,13 +52,12 @@ export default function OrgSignInEntry({
   description,
   methods,
   registration_link: registrationLink,
-  back_to_root: backToRoot,
+  cancel_label: cancelLabel,
 }: OrgSignInEntryProps) {
   return (
     <Page
       title={title}
       description={description}
-      up={backToRoot}
     >
       <ul className="flex flex-col gap-3">
         {methods.map((method) =>
@@ -112,6 +111,7 @@ export default function OrgSignInEntry({
           </a>
         </div>
       ) : null}
+      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
     </Page>
   );
 }

@@ -44,6 +44,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_nil inertia_props["sign_in_link"]
+    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_link").fetch("label")
+    assert_equal auth_org_root_path(ri: "jp"), inertia_props.fetch("cancel_link").fetch("href")
+    assert_not inertia_props.key?("back_to_root")
   end
 
   test "valid login challenge renders local ceremony" do

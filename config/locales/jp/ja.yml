@@ -1387,6 +1387,154 @@ ja:
       roots:
         message: Thin landing endpoint.
     org:
+      admin:
+        dashboard:
+          administration: "管理"
+        context:
+          operator: "操作中のオペレーター"
+          realm: "対象レルム"
+        pagination:
+          previous: "前のページ"
+          next: "次のページ"
+        search:
+          public_id: "公開 ID（完全一致）"
+          operator_public_id: "オペレーター公開 ID（完全一致）"
+          principal_public_id: "対象の公開 ID（完全一致）"
+          submit: "検索"
+        values:
+          none: "なし"
+          bootstrap: "ブートストラップ手順"
+        results:
+          succeeded: "完了"
+          failed: "失敗"
+          incomplete: "未確認"
+          recovery_required: "監査の復旧が必要"
+          failed_notice: "操作は失敗しました。完了扱いにはしていません。"
+          incomplete_notice: "この操作の監査記録が完了していません。再実行する前に対象の現在の状態を確認してください。"
+        errors:
+          reason_code: "理由コードを一覧から選んでください。"
+          ticket_id: "チケット ID は英数字・ピリオド・ハイフン・アンダースコアで 64 文字以内です。"
+          operation_id: "この確認画面は無効です。開き直してください。"
+          conflict: "記録済みの操作または対象の現在の状態と競合しています。再読み込みして対象を確認してください。"
+          audit_unavailable: "監査記録を書き込めなかったため、操作を開始していません。"
+          operator: "有効な既存オペレーターの公開 ID を入力してください。"
+          self_grant: "自分自身には権限を付与できません。"
+          capability: "権限を一覧から選んでください。"
+          duration: "有効期間を一覧から選んでください。"
+          last_holder: "この権限を有効に保持する最後の付与のため、失効できません。"
+          break_glass_required: "このケースの解除には第二承認者を伴う break-glass が必要ですが、コンソールでは提供していません。"
+          release_reason: "解除理由を一覧から選んでください。"
+        fields:
+          public_id: "公開 ID"
+          access_state: "アクセス状態"
+          created_at: "作成日時"
+          active_sessions: "有効なセッション数"
+          reason_code: "理由コード"
+          ticket_id: "チケット ID"
+          operation_id: "操作 ID"
+          result: "結果"
+          target: "対象"
+          performed_by: "実行者"
+          occurred_at: "発生日時"
+          revoked_count: "失効したセッション数"
+          grant_id: "付与 ID"
+          operator: "オペレーター"
+          capability: "権限"
+          state: "状態"
+          origin: "付与経路"
+          granted_by: "付与者"
+          starts_at: "開始"
+          expires_at: "期限"
+          expires_at_iso: "期限（ISO 8601、任意）"
+          revoked_at: "失効日時"
+          revoked_by: "失効者"
+          duration_days: "有効期間（日）"
+          case_id: "ケース ID"
+          principal: "対象"
+          kind: "種別"
+          duration_mode: "期間モード"
+          visibility: "可視性"
+          release_mode: "解除モード"
+          access_blocking: "アクセスを停止する"
+          in_force: "有効"
+          applied_by: "適用者"
+          approved_by: "承認者"
+          effective_at: "発効日時"
+          ended_at: "終了日時"
+          end_reason: "終了理由"
+          audited_at: "監査記録日時"
+          resolution_code: "判断"
+        support:
+          title: "サポート"
+          description: "app／com レルムのアカウントサポート。"
+          areas: "機能"
+          clients: "app のクライアント"
+          visitors: "com のビジター"
+          enforcement_app: "app の措置ケース"
+          enforcement_com: "com の措置ケース"
+        clients:
+          title: "app のクライアント"
+          show_title: "app クライアント %{public_id}"
+          empty: "該当するクライアントはありません。"
+        visitors:
+          title: "com のビジター"
+          show_title: "com ビジター %{public_id}"
+          empty: "該当するビジターはありません。"
+        revocations:
+          action: "全セッションを失効"
+          new_title: "全セッションを失効"
+          show_title: "セッション失効の結果"
+          effect: "このアカウントの現在のセッションをすべて終了します。アカウントは停止されず、再度サインインできます。"
+          acknowledgement: "対象アカウントと理由を確認しました。"
+          submit: "セッションを失効"
+        enforcement:
+          title: "措置ケース"
+          show_title: "措置ケース %{public_id}"
+          empty: "該当する措置ケースはありません。"
+          new_action: "措置ケースを開始"
+          new_title: "措置ケースを開始"
+          apply_effect: "ケースは直ちに適用されます。種別により承認が必要な場合は承認待ちになります。"
+          apply_acknowledgement: "対象・種別・理由を確認しました。"
+          apply_submit: "ケースを開始"
+          approve_action: "承認"
+          approve_title: "措置ケースを承認"
+          approve_effect: "承認すると、ここで選んだ効果でケースを適用します。"
+          approve_acknowledgement: "ケースを開始したオペレーターとは独立に確認しました。"
+          approve_submit: "承認して適用"
+          release_action: "解除"
+          release_title: "措置ケースを解除"
+          release_effect: "ほかに対象を停止しているケースがない場合に限りアクセスが再開します。以前のセッションは復活しません。"
+          release_acknowledgement: "解除する理由を確認しました。"
+          release_submit: "ケースを解除"
+          appeal_review_action: "異議申立てを審査"
+          appeal_review_title: "異議申立ての審査"
+          appeal_review_effect: "申立てを認めるとケースは終了します。退けるとケースは有効なままです。"
+          appeal_review_acknowledgement: "ケースを開始・承認したオペレーターとは独立に審査しました。"
+          appeal_review_submit: "判断を記録"
+          convergence_pending: "このケースは有効ですが、副作用または監査イベントの完了を待っています。"
+        iam:
+          title: "IAM"
+          description: "オペレーターへの権限付与。"
+          areas: "機能"
+        grants:
+          title: "権限付与"
+          show_title: "付与 %{public_id}"
+          empty: "該当する付与はありません。"
+          new_action: "権限を付与"
+          new_title: "権限を付与"
+          effect: "付与が期限切れまたは失効するまで、このオペレーターはこの権限を 1 つ得ます。"
+          acknowledgement: "このオペレーターの職務にこの権限が必要であることを確認しました。"
+          submit: "付与"
+          revoke_action: "失効"
+          revoke_title: "付与を失効"
+          revoke_effect: "以降にこのオペレーターが開始する操作は、ほかの付与がない限り拒否されます。"
+          revoke_acknowledgement: "この付与を終了すべきことを確認しました。"
+          revoke_submit: "付与を失効"
+          states:
+            in_force: "有効"
+            pending: "開始前"
+            expired: "期限切れ"
+            revoked: "失効済み"
       avatars:
         none_selected: この組織コンテキストでは Avatar が選択されていません。
       identity:
@@ -3049,6 +3197,10 @@ ja:
   sign:
     app:
       authentication:
+        emergency:
+          placeholder: 緊急アクセスはまだ実装されていません。
+        device:
+          placeholder: 別の端末でのサインインはまだ実装されていません。
         email:
           create:
             cooldown: しばらくしてから再度お試しください。
@@ -3077,6 +3229,8 @@ ja:
           back_to_root: もどる
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
+            emergency: 緊急アクセス
+            device: 別の端末でサインイン
             apple: Appleで続行
             email: メールアドレス
             google: Googleで続行

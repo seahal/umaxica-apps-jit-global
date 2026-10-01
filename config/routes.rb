@@ -8,6 +8,9 @@ Rails.application.routes.draw do
   # Auth owns the credential gateway for sign-in/sign-up ceremonies.
   draw :auth
 
+  # Xper bootstraps the independent Experience surface.
+  draw :xper
+
   # Info owns public informational content.
   draw :info
 

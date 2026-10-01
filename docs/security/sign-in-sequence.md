@@ -11,6 +11,11 @@
 > migration record. They are not a description of the current Rails authority boundary. For the
 > active result contract, use the current section immediately below and the Base/Auth ADR.
 
+> **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
+> vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
+> `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
+> `adr/idp-flow-lifecycle-vocabulary.md`; it is not implemented yet.
+
 ## Current Rails result contract
 
 Auth owns credential ceremony continuity and authentication evidence only. Base owns the OIDC
@@ -215,3 +220,4 @@ access tokens, refresh tokens, JWKS authority, and downstream token issuance.
 - `docs/security/ceremony-grant-result.md`
 - `docs/security/session-token-authority.md`
 - `docs/security/redirect-vs-ceremony-result.md`
+- `docs/security/idp-flow-lifecycle.md`

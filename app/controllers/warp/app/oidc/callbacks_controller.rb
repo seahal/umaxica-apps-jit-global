@@ -21,7 +21,7 @@ module Warp
 
         def consume_oidc_pt
           destination = super
-          destination == "/" ? warp_app_dashboard_path(ri: params[:ri]) : destination
+          (destination == "/") ? warp_app_dashboard_path(ri: params[:ri]) : destination
         end
 
         def oidc_rp_credentials_only?

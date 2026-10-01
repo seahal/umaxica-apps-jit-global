@@ -3,6 +3,9 @@
 version: 1
 stacks:
   importmap:
+    - xper/app/application
+    - xper/com/application
+    - xper/org/application
     - auth/app/application
     - auth/com/application
     - auth/org/application

@@ -5,6 +5,8 @@ title: Com Sign-Out State Machine
 %% Deprecated by Identity Authority inversion.
 %% logout is acme/www session mutation; /sign/out is redirect-only if retained.
 
+%% Current runtime vocabulary. Future canonical lifecycle terminology is defined in
+%% docs/security/idp-flow-lifecycle.md and is not implemented yet.
 stateDiagram-v2
   [*] --> REQUESTED: authenticated sign-out submitted
 

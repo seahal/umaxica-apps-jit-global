@@ -50,6 +50,7 @@ module Auth
 
           {
             title: t("sign.app.registration.new.page_title"),
+            cancel_label: t("actions.cancel"),
             description: nil,
             suspended_notice: suspended ? t("errors.messages.sign_up_suspended") : nil,
             methods: suspended ? [] : sign_up_method_links(entry_params),

@@ -51,6 +51,7 @@ module Auth
 
           {
             title: t("sign.org.authentication.new.page_title"),
+            cancel_label: t("actions.cancel"),
             description: t("sign.org.authentication.new.description"),
             methods: [
               {
@@ -75,10 +76,6 @@ module Auth
                                    href: auth_org_sign_up_path(pt: pt, ri: region),
                                  }
                                end,
-            back_to_root: {
-              label: t("sign.org.authentication.new.back_to_root"),
-              href: auth_org_root_url(host: ENV.fetch("PRIVATE_BASE_STAFF_URL")),
-            },
           }
         end
       end

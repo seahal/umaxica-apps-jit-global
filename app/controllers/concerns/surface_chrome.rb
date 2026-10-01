@@ -123,7 +123,7 @@ module SurfaceChrome
 
   def chrome_brand
     family = chrome_configuration.fetch(:family)
-    destination = %w(base warp).include?(family) && chrome_logged_in? ? "dashboard" : "root"
+    destination = (%w(base warp).include?(family) && chrome_logged_in?) ? "dashboard" : "root"
     {
       name: ENV.fetch("BRAND_NAME"),
       href: chrome_url("#{family}_#{chrome_route_surface}_#{destination}_path"),

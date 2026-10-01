@@ -56,6 +56,7 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
     # The four entry points the page offers: two contact methods and two providers.
     assert_equal 4, inertia_props.fetch("methods").size + inertia_props.fetch("social_providers").size
+    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
   end
 
   test "shows telephone registration link" do

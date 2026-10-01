@@ -10,6 +10,9 @@ class LayoutTitleContractTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   CANONICAL_LAYOUTS = {
+    "app/views/layouts/xper/app/application.html.erb" => "APP",
+    "app/views/layouts/xper/com/application.html.erb" => "COM",
+    "app/views/layouts/xper/org/application.html.erb" => "ORG",
     "app/views/layouts/auth/app/application.html.erb" => "APP",
     "app/views/layouts/auth/com/application.html.erb" => "COM",
     "app/views/layouts/auth/org/application.html.erb" => "ORG",

@@ -546,8 +546,8 @@ test data.
 5. The result is AAL1. Do not conflate this Credential with existing one-time RecoveryPasscodes:
    RecoveryPasscodes may remain app/com under their own contract. Keep org emergency Passkey flow
    separate.
-6. Keep `/sign/in/emergency/credential` inactive until a committed durable claim is bound to a
-   trusted, same-operation proof that the app RP session commit succeeded. Auth success, a redirect,
+6. Reserve `GET /sign/in/emergency` as a read-only placeholder; keep Emergency sign-in behavior
+   inactive until a committed durable claim is bound to a trusted, same-operation proof that the app RP session commit succeeded. Auth success, a redirect,
    client callback, process lock, or Valkey claim is not that proof. Unknown outcomes remain claimed
    and fail closed; retries may reconcile only the same durably identified operation.
 7. Inventory and logically revoke/discard existing legacy App `LOGIN` rows using existing retention

@@ -1,0 +1,216 @@
+/*
+ * Stylesheet for the xper com/org FQDNs.
+ *
+ * Xper is an Importmap/Propshaft surface (config/frontend_stacks.yml, enforced by
+ * test/security/invariants/xper_phase_zero_invariant_test.rb), so it cannot link the Vite/Tailwind
+ * surface stylesheets. This file restates the token approach of src/styles/theme.css in plain CSS:
+ * one `--tint` per edition, with the canvas mixed from it so light and dark cannot drift apart.
+ *
+ * Phase 0 has no preference lifecycle, so the theme follows `prefers-color-scheme` only and never
+ * reads the `ct` cookie.
+ */
+:root {
+  --tint: #71717a;
+  --font: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+  --canvas: color-mix(in oklab, #fff 88%, var(--tint));
+  --surface: #fff;
+  --fg: #18181b;
+  --fg-muted: #52525b;
+  --line: #e4e4e7;
+  --glow: color-mix(in oklab, var(--tint) 35%, transparent);
+}
+
+/* Edition identity, matching the per-TLD hue every Vite surface uses. */
+:root[data-edition="com"] {
+  --tint: #6366f1;
+}
+:root[data-edition="org"] {
+  --tint: #22c55e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: color-mix(in oklab, #09090b 92%, var(--tint));
+    --surface: #18181b;
+    --fg: #f4f4f5;
+    --fg-muted: #a1a1aa;
+    --line: #3f3f46;
+    --glow: color-mix(in oklab, var(--tint) 25%, transparent);
+  }
+}
+
+body.xper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(60rem 30rem at 50% -10rem, var(--glow), transparent 70%),
+    linear-gradient(color-mix(in oklab, var(--line) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--line) 45%, transparent) 1px, transparent 1px);
+  background-size: auto, 3rem 3rem, 3rem 3rem;
+  background-position: top center, center, center;
+  color: var(--fg);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.xper-shell {
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  box-sizing: border-box;
+}
+@media (min-width: 640px) {
+  .xper-shell {
+    padding-inline: 1.5rem;
+  }
+}
+
+.xper-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--line);
+  background-color: color-mix(in oklab, var(--surface) 80%, transparent);
+  backdrop-filter: blur(12px);
+}
+.xper-header .xper-shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.875rem;
+}
+.xper-brand {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.xper-brand-sub {
+  font-weight: 400;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  letter-spacing: 0.04em;
+}
+.xper-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--tint) 45%, var(--line));
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--tint) 12%, var(--surface));
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.xper-badge::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background-color: var(--tint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--tint) 25%, transparent);
+}
+
+.xper-main {
+  flex-grow: 1;
+  display: grid;
+  align-items: center;
+  padding-block: 4rem;
+}
+
+.xper-hero {
+  animation: xper-fade-in-up 0.5s ease-out both;
+}
+.xper-eyebrow {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--tint) 70%, var(--fg));
+}
+.xper-title {
+  margin: 0;
+  font-size: clamp(2.75rem, 9vw, 5.5rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  background-image: linear-gradient(120deg, var(--fg) 30%, var(--tint));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.xper-lead {
+  max-width: 36rem;
+  margin: 1.5rem 0 0;
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+.xper-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+  margin-top: 3rem;
+}
+.xper-card {
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background-color: color-mix(in oklab, var(--surface) 85%, transparent);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px var(--glow);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.xper-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--tint) 50%, var(--line));
+}
+.xper-card p {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.xper-footer {
+  border-top: 1px solid var(--line);
+}
+.xper-footer .xper-shell {
+  padding-block: 1.5rem;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+}
+
+@keyframes xper-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xper-hero {
+    animation: none;
+  }
+  .xper-card {
+    transition: none;
+  }
+  .xper-card:hover {
+    transform: none;
+  }
+}

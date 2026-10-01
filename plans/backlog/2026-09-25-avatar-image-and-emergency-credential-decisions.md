@@ -60,7 +60,7 @@ identity". It requires approval of the new routes and of the static default imag
 | --- | --- | --- |
 | A. Operation record co-located with the session | In `app_zenith`: lock the credential row and mark it `claimed` with a new `operation_id`. In one `app_ticket` transaction: insert the RP session and an `emergency_sign_in_operations(operation_id UNIQUE, credential_ref)` row. Then consume the credential in `app_zenith` only if that operation row exists; a retry with the same `operation_id` reconciles by checking the operation row | The operation row is the trusted, same-transaction proof of the session commit. It adds one small table to `app_ticket` (a migration needing approval). A crash between the steps leaves the credential `claimed`, which fails closed and is reconciled by `operation_id`. |
 | B. Move the Credential to `app_ticket` | Store the temporary credential alongside RP sessions so claim, session, and consume share one transaction | The strongest guarantee, but it moves an identity-owned credential into the ticket database, conflicting with the current principal-ownership boundary (`adr/identity-authority-boundary.md`). It needs an ADR change. |
-| C. Keep the endpoint disabled | Leave `/sign/in/emergency/credential` inactive, as now | No risk, but no feature. |
+| C. Keep the endpoint disabled | Keep Emergency sign-in behavior inactive; `/sign/in/emergency` reserves only a read-only placeholder | No risk, but no feature. |
 
 ### Recommendation
 

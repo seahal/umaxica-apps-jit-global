@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-edition="com">
+<head>
+  <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (COM)", separator: "—", reverse: true %>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <%= stylesheet_link_tag "application", nonce: true %>
+  <%= stylesheet_link_tag "xper", nonce: true %>
+  <%= javascript_importmap_tags %>
+</head>
+<body class="xper">
+  <header class="xper-header">
+    <div class="xper-shell">
+      <p class="xper-brand">
+        <%= ENV.fetch("BRAND_NAME").upcase %>
+        <span class="xper-brand-sub">(com)</span>
+      </p>
+      <p class="xper-badge">Phase 0</p>
+    </div>
+  </header>
+
+  <main id="main" class="xper-main">
+    <div class="xper-shell">
+      <%= yield %>
+    </div>
+  </main>
+
+  <footer class="xper-footer">
+    <div class="xper-shell">
+      <p>© <%= Time.zone.today.year %> <%= ENV.fetch("BRAND_NAME") %></p>
+    </div>
+  </footer>
+</body>
+</html>

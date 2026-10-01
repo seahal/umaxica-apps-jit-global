@@ -40,7 +40,8 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
     headers = as_visitor_headers(visitor, host: host)
     get base_com_root_path, headers: headers
 
-    assert_response :redirect
+    # Home 404s for an authenticated session (adr/home-dashboard-authentication-boundary.md).
+    assert_response :not_found
 
     assert_nil visitor.reload.visitor_preference
 

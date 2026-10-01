@@ -25,6 +25,7 @@ export type SignUpMethodChoiceProps = {
   methods: SignUpMethodLink[];
   social_providers: SignUpSocialProvider[];
   links: SignUpMethodLink[];
+  cancel_label?: string;
 };
 
 const METHOD_LINK =
@@ -37,6 +38,7 @@ export default function SignUpMethodChoice({
   methods,
   social_providers: socialProviders,
   links,
+  cancel_label: cancelLabel,
 }: SignUpMethodChoiceProps) {
   if (suspendedNotice) {
     return (
@@ -102,6 +104,7 @@ export default function SignUpMethodChoice({
           </a>
         </p>
       ))}
+      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
     </section>
   );
 }

@@ -11,6 +11,9 @@ require_relative "../../lib/object_storage_boundary"
 
 class HostAuthorizationContractTest < Minitest::Test
   PRIVATE_ORIGIN_HOSTS = %w(
+    xper.app.localhost:3000
+    xper.com.localhost:3000
+    xper.org.localhost:3000
     auth.app.localhost:3000
     auth.com.localhost:3000
     auth.org.localhost:3000
@@ -32,6 +35,9 @@ class HostAuthorizationContractTest < Minitest::Test
   # is published through Cloudflare Tunnel behind Cloudflare Access, and cloudflared leaves
   # `Host` unmodified, so development Host Authorization must accept both families.
   BROWSER_FACING_SITE_HOSTS = %w(
+    umaxica.app
+    umaxica.com
+    umaxica.org
     auth.umaxica.app
     auth.umaxica.com
     auth.umaxica.org

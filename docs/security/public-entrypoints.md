@@ -61,3 +61,12 @@ updating this document and the test together.
 Routes not covered above must require authentication or fail closed. In code, that means the route
 must resolve to `:private` or `:deny_all`, and its concrete controller/action must declare that
 classification locally.
+
+## Experience bootstrap
+
+Xper app/com/org Phase 0 uses the existing `PUBLIC_ROOTS`, `PUBLIC_HEALTH`,
+`PUBLIC_REVISION`, `PUBLIC_CSP_REPORTS`, and `PUBLIC_ROBOTS_SITEMAPS` categories.
+Its concrete controllers declare `AUTHENTICATION_MODE = :bare`; each surface independently
+owns its host-constrained routes. Xper has no credential, preference, Experience API, PWA,
+or offline entrypoint. FQDN availability remains fail closed, with the existing text-health
+probe exemption. See [the bootstrap decision](../../adr/xper-phase-zero-bootstrap.md).

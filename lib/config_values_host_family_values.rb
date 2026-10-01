@@ -15,6 +15,9 @@ module ConfigValues
       :base_service,
       :base_corporate,
       :base_staff,
+      :xper_service,
+      :xper_corporate,
+      :xper_staff,
       :warp_service,
       :warp_corporate,
       :warp_staff,
@@ -54,6 +57,10 @@ module ConfigValues
 
       def auth_origins
         [auth_service, auth_corporate, auth_staff]
+      end
+
+      def xper_origins
+        [xper_service, xper_corporate, xper_staff]
       end
 
       def warp_origins
@@ -141,6 +148,15 @@ class << ConfigValues::HostFamilyValues
 
   def host_family_secondary_origins(env:, production:)
     {
+      xper_service: origin(
+        env, "PUBLIC_XPER_SERVICE_URL", development_host(production, "umaxica.app"), production: production,
+      ),
+      xper_corporate: origin(
+        env, "PUBLIC_XPER_CORPORATE_URL", development_host(production, "umaxica.com"), production: production,
+      ),
+      xper_staff: origin(
+        env, "PUBLIC_XPER_STAFF_URL", development_host(production, "umaxica.org"), production: production,
+      ),
       warp_service: origin(
         env, warp_key(env, "SERVICE"), development_host(production, "www-jp.umaxica.app"), production: production,
       ),

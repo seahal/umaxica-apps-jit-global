@@ -43,21 +43,38 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       assert_no_set_cookie(ACCESS)
     end
 
-    test "#{surface}: a malformed access cookie on a protected page takes the same redirect as no cookie" do
+    # Anonymous Dashboard is 404 with no sign-in redirect (adr/home-dashboard-authentication-boundary.md).
+    test "#{surface}: a malformed access cookie on a protected page gets the same 404 as no cookie" do
       host! ENV.fetch(config[:host_env])
       get "/dashboard?ri=jp"
 
-      assert_response :redirect
-      anonymous = URI.parse(response.location)
+      assert_response :not_found
 
       cookies[ACCESS] = "malformed"
       get "/dashboard?ri=jp"
 
-      assert_response :redirect
-      recovered = URI.parse(response.location)
-
-      assert_equal [anonymous.host, anonymous.path], [recovered.host, recovered.path]
+      assert_response :not_found
+      assert_nil response.location
       assert_cookie_deleted(ACCESS)
+      # Only the registered credential deletion reaches the 404; no other cookie is committed.
+      assert_equal [ACCESS], set_cookie_names
+    end
+
+    test "#{surface}: a HEAD with a malformed access cookie on a protected page detaches it on the 404" do
+      host! ENV.fetch(config[:host_env])
+      cookies[ACCESS] = "malformed"
+      head "/dashboard?ri=jp"
+
+      assert_response :not_found
+      assert_cookie_deleted(ACCESS)
+    end
+
+    test "#{surface}: a protected page 404 without an access cookie emits no Set-Cookie" do
+      host! ENV.fetch(config[:host_env])
+      get "/dashboard?ri=jp"
+
+      assert_response :not_found
+      assert_empty set_cookie_names
     end
 
     test "#{surface}: an access cookie naming a session that does not exist is detached" do
@@ -90,7 +107,8 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       token = surface_token(surface, resource)
       cookies[ACCESS] = jwt_access_token_for(resource, host: host, session_public_id: token.public_id)
 
-      get "/?ri=jp"
+      # Home 404s for a member, so the kept credential is observed on the authenticated Dashboard.
+      get "/dashboard?ri=jp"
 
       assert_operator response.status, :<, 400
       assert_no_set_cookie(ACCESS)
@@ -168,7 +186,8 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
       )
       travel_to(expires_at + AuthenticationJwtConfiguration.leeway_seconds.seconds + offset.seconds)
 
-      get "/?ri=jp"
+      # A kept credential reaches Dashboard; a detached one falls back to anonymous Home.
+      get(detached ? "/?ri=jp" : "/dashboard?ri=jp")
 
       assert_operator response.status, :<, 400
       detached ? assert_cookie_deleted(ACCESS) : assert_no_set_cookie(ACCESS)
@@ -238,7 +257,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     assert(set_cookie_entries(ACCESS).none? { |entry| entry.key?(:domain) }, "the deletion must stay host-only")
 
     host! com_host
-    get "/?ri=jp", headers: { "Cookie" => "#{ACCESS}=#{com_access}" }
+    get "/dashboard?ri=jp", headers: { "Cookie" => "#{ACCESS}=#{com_access}" }
 
     assert_operator response.status, :<, 400
     assert_no_set_cookie(ACCESS)

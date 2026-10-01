@@ -73,6 +73,16 @@ the refresh endpoint deletes the auth cookies with the `401 invalid_refresh_toke
 every reason. Transparent refresh stays disabled on GET, so an HTML navigation never consumes the
 refresh or DBSC cookie. Refresh reuse detection and family revocation are unchanged.
 
+A confirmed access-cookie detachment survives a later boundary refusal. When the request then ends
+in an exception response (for example the Home/Dashboard 404 of
+`adr/home-dashboard-authentication-boundary.md`), the exception renderer replaces the controller
+response and the cookie jar is never written. `CredentialDeletionFinalizer`, a Rack middleware
+outside the exception renderers, appends only the deletions registered after a
+`credential_rejection` or `lifecycle` refusal, and only for a cookie that has no Set-Cookie in the
+final response. It never flushes the cookie jar: issuance, rotation, session extension, and
+preference cookies prepared by a failed request are not committed by an exception response. System
+failures, JSON responses, and Preference refusals register nothing.
+
 The Core browser JSON boundary answers every refused RP access cookie with the same
 `authentication-required` problem document and deletes its RP cookie pair with the RP cookie
 contract's deletion options.

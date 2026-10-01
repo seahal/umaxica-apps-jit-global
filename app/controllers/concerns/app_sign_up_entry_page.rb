@@ -22,6 +22,7 @@ module AppSignUpEntryPage
   def sign_up_entry_page_props(suspended_notice: nil)
     {
       title: t("sign.app.registration.new.page_title"),
+      cancel_label: t("actions.cancel"),
       suspended_notice: suspended_notice,
       methods: suspended_notice ? [] : sign_up_entry_methods,
       social_providers: suspended_notice ? [] : sign_up_entry_social_providers,

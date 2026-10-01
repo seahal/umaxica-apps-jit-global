@@ -81,6 +81,15 @@ module FqdnAvailabilityRegistry
     swagger: lambda { |_hosts|
       [ENV["PUBLIC_SWAGGER_URL"], ENV["PRIVATE_SWAGGER_URL"], "swagger.core.dev.localhost"]
     },
+    xper_service: lambda { |hosts|
+      [hosts.xper_service.host, ENV["PRIVATE_XPER_SERVICE_URL"], "xper.app.localhost"]
+    },
+    xper_corporate: lambda { |hosts|
+      [hosts.xper_corporate.host, ENV["PRIVATE_XPER_CORPORATE_URL"], "xper.com.localhost"]
+    },
+    xper_staff: lambda { |hosts|
+      [hosts.xper_staff.host, ENV["PRIVATE_XPER_STAFF_URL"], "xper.org.localhost"]
+    },
     warp_service: ->(hosts) { [hosts.warp_service.host, "warp.app.localhost"] },
     warp_corporate: ->(hosts) { [hosts.warp_corporate.host, "warp.com.localhost"] },
     warp_staff: ->(hosts) { [hosts.warp_staff.host, "warp.org.localhost"] },

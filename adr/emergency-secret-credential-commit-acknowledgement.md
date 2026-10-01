@@ -13,7 +13,7 @@ Accepted
 The App Emergency Secret Credential (`ClientSecretCredential`, `secret_kind = "temporary_access"`,
 `usage_policy = "single_use"`) lives in `app_zenith`. The app session it creates (`ClientToken`)
 lives in `app_ticket`. Phase 7 of `plans/backlog/2026-09-24-integrated-auth-avatar-warp-plan.md`
-keeps `/sign/in/emergency/credential` inactive until a durable claim is bound to a trusted,
+keeps Emergency Credential sign-in behavior inactive until a durable claim is bound to a trusted,
 same-operation proof that the session commit succeeded. No single transaction spans both databases.
 
 The options were compared in
@@ -55,8 +55,10 @@ The five-minute absolute expiry and the five-failure cap come from Phase 7 of th
   `client_secret_credentials` in `app_zenith`, all additive.
 - An interrupted sign-in consumes the credential without a usable session; the user must issue a
   new Emergency Credential. This is the intended fail-closed trade-off.
-- The endpoint remains inactive until issuance (authenticated app session with Step-Up), the Auth
-  sign-in controller, and the Base session wiring call this operation. Those are tracked in the
+- `GET /sign/in/emergency` is a read-only placeholder entrypoint. Emergency Credential
+  issuance and sign-in behavior remain unimplemented; the placeholder does not call the operation.
+  The credential ceremony remains inactive until issuance (authenticated app session with Step-Up),
+  the Auth sign-in controller, and the Base session wiring call this operation. Those are tracked in the
   remaining-work ledger.
 
 ## Alternatives Considered

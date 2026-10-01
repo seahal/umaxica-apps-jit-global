@@ -56,7 +56,12 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     news/app news/com news/org
   ).freeze
 
-  RI_EXEMPT_TARGETS = (RI_EXEMPT_INFRASTRUCTURE_TARGETS + RI_EXEMPT_CONTENT_TARGETS).freeze
+  # Experience Phase 0 is a static, non-regional landing surface. It deliberately excludes
+  # PreferenceGlobal and Actor.preferences; no region state or credential is hydrated.
+  RI_EXEMPT_XPER_TARGETS = %w(xper/app xper/com xper/org).freeze
+
+  RI_EXEMPT_TARGETS =
+    (RI_EXEMPT_INFRASTRUCTURE_TARGETS + RI_EXEMPT_CONTENT_TARGETS + RI_EXEMPT_XPER_TARGETS).freeze
 
   # Controllers inside a participating target that legitimately do not run `set_region`. Every entry
   # is a machine-to-machine endpoint: protocol redirects and token/cookie transports that must not

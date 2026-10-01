@@ -13,6 +13,33 @@ require "test_helper"
 class HealthEndpointsTest < ActionDispatch::IntegrationTest
   SURFACES = [
     {
+      host: "xper.app.localhost",
+      controller: "xper/app/healths",
+      liveness_controller: "xper/app/health/livenesses",
+      readiness_controller: "xper/app/health/readinesses",
+      startup_controller: "xper/app/health/startups",
+      json_controller: "xper/app/api/v0/healths",
+      profile: Health::Profiles::App,
+    },
+    {
+      host: "xper.com.localhost",
+      controller: "xper/com/healths",
+      liveness_controller: "xper/com/health/livenesses",
+      readiness_controller: "xper/com/health/readinesses",
+      startup_controller: "xper/com/health/startups",
+      json_controller: "xper/com/api/v0/healths",
+      profile: Health::Profiles::Com,
+    },
+    {
+      host: "xper.org.localhost",
+      controller: "xper/org/healths",
+      liveness_controller: "xper/org/health/livenesses",
+      readiness_controller: "xper/org/health/readinesses",
+      startup_controller: "xper/org/health/startups",
+      json_controller: "xper/org/api/v0/healths",
+      profile: Health::Profiles::Org,
+    },
+    {
       host: ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost"),
       controller: "auth/app/healths",
       liveness_controller: "auth/app/health/livenesses",

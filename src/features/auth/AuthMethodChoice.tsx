@@ -18,6 +18,7 @@ export type AuthMethodChoiceProps = {
   suspended_notice: string | null;
   methods: AuthMethodLink[];
   links: AuthMethodLink[];
+  cancel_label?: string;
 };
 
 export default function AuthMethodChoice({
@@ -26,6 +27,7 @@ export default function AuthMethodChoice({
   suspended_notice: suspendedNotice,
   methods,
   links,
+  cancel_label: cancelLabel,
 }: AuthMethodChoiceProps) {
   if (suspendedNotice) {
     return (
@@ -84,6 +86,7 @@ export default function AuthMethodChoice({
           </a>
         </p>
       ))}
+      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
     </Page>
   );
 }

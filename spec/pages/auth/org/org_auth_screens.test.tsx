@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from "react-dom/server";
 // The operator-facing auth screens, rendered with the shapes the server actually sends.
 //
 // Each one is a decision the server already made -- a suspended sign-up, an unavailable provider, a
@@ -67,8 +68,20 @@ describe("OrgSignUpEntry", () => {
     suspended_notice: null,
     recruit: { prompt: "興味がありますか", label: "採用情報", href: "/careers" },
     sign_in_link: { label: "ログイン", href: "/org/sign/in" },
-    back_to_root: BACK,
+    cancel_link: { label: "Cancel", href: BACK.href },
   };
+
+  it("replaces the top back link with a trailing Cancel link on org sign-up", () => {
+    const markup = renderToStaticMarkup(<OrgSignUpEntry {...props} />);
+    const page = new DOMParser().parseFromString(markup, "text/html").body.lastElementChild;
+    const cancel = page?.lastElementChild;
+    expect(cancel?.tagName).toBe("P");
+    expect(cancel?.textContent).toBe("Cancel");
+    expect(cancel?.closest("a, button, form")).toBeNull();
+    expect(cancel?.querySelector("a")?.getAttribute("href")).toBe(BACK.href);
+    expect(cancel?.querySelector("button, form")).toBeNull();
+    expect(page?.querySelector("header a")).toBeNull();
+  });
 
   it("shows the suspension notice alone when sign-up is switched off", () => {
     const screen = mount(
@@ -98,7 +111,7 @@ describe("OrgSignUpEntry", () => {
         description={null}
         recruit={null}
         sign_in_link={null}
-        back_to_root={null}
+        cancel_link={null}
       />,
     );
 
@@ -116,8 +129,23 @@ describe("OrgSignInEntry", () => {
       { key: "secret", kind: "link" as const, label: "パスワードでログイン", href: "/org/secret" },
     ],
     registration_link: { label: "招待コードをお持ちの方", href: "/org/invitation" },
-    back_to_root: BACK,
   };
+
+  it("appends text-only Cancel without a top back link on org sign-in", () => {
+    const markup = renderToStaticMarkup(
+      <OrgSignInEntry
+        {...props}
+        cancel_label="Cancel"
+      />,
+    );
+    const page = new DOMParser().parseFromString(markup, "text/html").body.lastElementChild;
+    const cancel = page?.lastElementChild;
+    expect(cancel?.tagName).toBe("P");
+    expect(cancel?.textContent).toBe("Cancel");
+    expect(cancel?.closest("a, button, form")).toBeNull();
+    expect(cancel?.querySelector("a, button, form")).toBeNull();
+    expect(page?.querySelector("header a")).toBeNull();
+  });
 
   it("posts the provider method as a document form and links the rest", () => {
     const screen = mount(<OrgSignInEntry {...props} />);

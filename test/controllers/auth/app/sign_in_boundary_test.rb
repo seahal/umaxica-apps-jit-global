@@ -20,6 +20,8 @@ class Auth::App::SignInBoundaryTest < ActiveSupport::TestCase
 
     paths = [
       "app/controllers/auth/app/sign/in/emails_controller.rb",
+      "app/controllers/auth/app/sign/in/emergencies_controller.rb",
+      "app/controllers/auth/app/sign/in/devices_controller.rb",
       "app/controllers/auth/app/sign/in/passkeys_controller.rb",
       "app/controllers/auth/app/sign/in/passkey/options_controller.rb",
       "app/controllers/auth/app/sign/in/passkey/verifications_controller.rb",

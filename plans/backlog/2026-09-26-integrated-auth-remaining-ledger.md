@@ -15,7 +15,7 @@ application), **external** (needs outside input, registration, keys, deployment,
 | A. Dashboard Avatar image | 14 | done, except browser render | Render check in a real browser: no Chromium in the 2026-09-26 environment. HTTP check against the dev server with a fakecloud-stored image passed. | A machine with a browser; load `/dashboard?ri=jp` and confirm the image paints. |
 | B1. Emergency commit-acknowledgement contract | 07 | done | — | — |
 | B2. Emergency issuance | 07 | open | Authenticated app session + Step-Up issuance of a `temporary_access`/`single_use` credential with `max_failures: 5` and `discard_at = issued_at + 5 minutes`; show the public ID with the secret once. | Decision below on the credential kind id. |
-| B3. Emergency sign-in endpoint | 07 | open | Auth app `/sign/in/emergency/credential`: call `ClientEmergencySecretCredentialSignInOperation.claim!`, create the session through `log_in` inside `issue_session!`, then `consume!`; keep the operation id in the ceremony so a retry only reconciles. Then verify end to end from the real entry point to a committed session. | B2. |
+| B3. Emergency sign-in endpoint | 07 | open | `GET /sign/in/emergency` placeholder entrypoint exists, but Emergency Credential issuance/sign-in behavior remains unimplemented. Future behavior: call `ClientEmergencySecretCredentialSignInOperation.claim!`, create the session through `log_in` inside `issue_session!`, then `consume!`; keep the operation id in the ceremony so a retry only reconciles. Then verify end to end from the real entry point to a committed session. | B2. |
 | B4. Retention purge of claimed-but-unconsumed Emergency rows | 07 | open | Confirm `RetentionPurgeJob` covers them once `discard_at` passes; add a test. | B2. |
 | C1. Owner-family cutover | 02, 06 | code-ready | `bin/rails authority:cutover_guard` is read-only and fail-closed. On the dev DB it reports `ready: false` (app `client_persona` and `enterprise` have one unresolved row each; com/org families are empty). Run it on the target database, resolve each unresolved row through an authorized decision, then establish the marker. | Target-DB read access, owner decisions for unresolved rows, persistent-write approval and a recovery plan. |
 | C2. Avatar moniker data | 06 | code-ready | The current schema has no `avatars.moniker` column; monikers live in `avatar_monikers`. Whether the target database went through the same migration and has conflicting history was not checked. | Target-DB read access. |
@@ -39,6 +39,26 @@ application), **external** (needs outside input, registration, keys, deployment,
 - Impact of (1): reference-data migration in `app_zenith`, kind constants, fixtures.
 - Acceptance: issuance writes the chosen id; the legacy inventory and any revocation never select
   Emergency rows.
+
+## Open: Cancel behavior on five Auth entry pages
+
+Added 2026-10-01. Cancel functionality still needs implementation at these five entry points;
+its detailed behavior and acceptance criteria have not been defined:
+
+| Surface | Entry page | Current Cancel behavior |
+| --- | --- | --- |
+| app | Sign-in | Plain text only |
+| app | Sign-up | Plain text only |
+| com | Sign-in | Plain text only |
+| com | Sign-up | Plain text only |
+| org | Sign-in | Plain text only |
+
+The labels reserve the UI choice; they do not implement cancellation. Define the behavior before
+implementation, including the destination, affected ceremony/state, and applicable security
+contract. This entry records open work and does not decide those details.
+
+Org Sign-up is excluded: its informational page already uses a Cancel link to the former back-link
+destination (`auth_org_root_path`), without a cancellation mutation.
 
 ## Deferred (approved)
 

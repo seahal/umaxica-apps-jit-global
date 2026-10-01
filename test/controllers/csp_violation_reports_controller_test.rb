@@ -161,6 +161,9 @@ class CspViolationReportsControllerTest < ActionDispatch::IntegrationTest
 
   def csp_report_product_cases
     [
+      ["xper.app.localhost", :xper_app_csp_violation_report_path],
+      ["xper.com.localhost", :xper_com_csp_violation_report_path],
+      ["xper.org.localhost", :xper_org_csp_violation_report_path],
       [configured_host(:base_service), :base_app_csp_violation_report_path],
       [configured_host(:base_corporate), :base_com_csp_violation_report_path],
       [configured_host(:base_staff), :base_org_csp_violation_report_path],

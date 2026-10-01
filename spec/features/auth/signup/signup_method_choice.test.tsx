@@ -34,6 +34,29 @@ describe("SignUpMethodChoice", () => {
     links: [{ key: "sign_in", label: "ログイン", href: "/sign/in" }],
   };
 
+  it("appends Cancel as plain text after the sign-in link", () => {
+    const markup = renderToStaticMarkup(
+      <SignUpMethodChoice
+        {...props}
+        cancel_label="Cancel"
+      />,
+    );
+    const document = new DOMParser().parseFromString(markup, "text/html");
+    const cancel = document.querySelector("section")?.lastElementChild;
+    expect(cancel?.textContent).toBe("Cancel");
+    expect(cancel?.tagName).toBe("P");
+    expect(cancel?.closest("a, button, form")).toBeNull();
+    expect(cancel?.querySelector("a, button, form")).toBeNull();
+    expect(cancel?.previousElementSibling?.querySelector("a")?.getAttribute("href")).toBe(
+      "/sign/in",
+    );
+  });
+
+  it("omits Cancel when its optional label is absent", () => {
+    const markup = renderToStaticMarkup(<SignUpMethodChoice {...props} />);
+    expect(markup).not.toContain("Cancel");
+  });
+
   it("lists every registration method and social provider the server offered", () => {
     const markup = renderToStaticMarkup(<SignUpMethodChoice {...props} />);
 

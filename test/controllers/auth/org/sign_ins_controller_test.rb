@@ -39,6 +39,8 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     methods = inertia_props.fetch("methods")
 
+    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+
     assert_equal 2, methods.length
     assert_equal "provider", method_for("entra").fetch("kind")
     assert_equal auth_org_social_entra_session_path(ri: "jp"), method_for("entra").fetch("href")
@@ -142,7 +144,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     assert_nil inertia_props["registration_link"]
   end
 
-  test "local ceremony renders back to root link" do
+  test "local ceremony offers only text Cancel without a back link" do
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "org",
       intent: "sign_in",
@@ -157,10 +159,8 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
 
-    base_staff_host = ENV.fetch("PRIVATE_BASE_STAFF_URL", "base.org.localhost")
-
-    assert_equal auth_org_root_url(ri: "jp", host: base_staff_host),
-                 inertia_props.fetch("back_to_root").fetch("href")
+    assert_not inertia_props.key?("back_to_root")
+    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
   end
 
   test "rejects direct entry when logged in without account-switching guidance" do
