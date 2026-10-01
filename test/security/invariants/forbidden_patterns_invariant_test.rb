@@ -63,6 +63,13 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
+          path: "app/controllers/palm/app/oidc/callbacks_controller.rb",
+          line: /redirect_to\(uri\.to_s, allow_other_host: true, status: :see_other\)/,
+          reason: "Palm delivers a verified Base return to a fixed registered native callback, " \
+                  "bound to the initiating browser state; see adr/jump-directed-rails-handoff-contract.md.",
+        },
+        {
+          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/concerns/oidc_callback.rb",
           line: /redirect_to\(sign_in_url_with_pt\(nil\), alert: I18n\.t\("errors\.messages\.login_required"\),
                 \s*allow_other_host: true\)/,

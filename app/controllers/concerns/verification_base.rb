@@ -545,9 +545,9 @@ module VerificationBase
     if destination.to_s.start_with?("/")
       safe_redirect_to(destination, fallback: fallback, **redirect_options)
     else
-      redirect_to(
+      redirect_to_surface_url(
         destination,
-        allow_other_host: cross_host_redirect_allowed?,
+        preserve_query_keys: ["pt"],
         **redirect_options,
       )
     end

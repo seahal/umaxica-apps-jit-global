@@ -124,7 +124,7 @@ class Auth::Org::Settings::EntrasControllerTest < ActionDispatch::IntegrationTes
       host: host,
       session_public_id: session_public_id,
       resource_type: resource_type,
-      jwt_issuer_id: "surface:SIGN_ORG",
+      jwt_issuer_id: "surface:AUTH_ORG",
     )
   end
 end

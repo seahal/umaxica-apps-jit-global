@@ -45,7 +45,10 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :redirect
-      assert_match(%r{/sign/up/guard/google}, response.location)
+      gateway = URI.parse(response.location)
+      assert_equal "jump.umaxica.net", gateway.host
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      assert_equal "https://auth.umaxica.app/sign/up/guard/google", payload.fetch("url").split("?").first
 
       cycle = ClientSignUpFlow.where(principal_id: @client.id).recent_first.first
 
@@ -70,7 +73,10 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :see_other
-      assert_match(%r{/settings/google}, response.location)
+      gateway = URI.parse(response.location)
+      assert_equal "jump.umaxica.net", gateway.host
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      assert_equal "https://auth.umaxica.app/settings/google", payload.fetch("url").split("?").first
     end
   end
 
@@ -85,7 +91,10 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
            }
 
       assert_response :see_other
-      assert_match(%r{/settings/apple}, response.location)
+      gateway = URI.parse(response.location)
+      assert_equal "jump.umaxica.net", gateway.host
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      assert_equal "https://auth.umaxica.app/settings/apple", payload.fetch("url").split("?").first
     end
   end
 

@@ -326,7 +326,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       when "visitor" then "COM"
       else "APP"
       end
-    "surface:SIGN_#{surface}"
+    "surface:AUTH_#{surface}"
   end
 
   def handoff_form

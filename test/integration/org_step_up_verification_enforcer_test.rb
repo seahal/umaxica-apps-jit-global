@@ -35,7 +35,10 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
     query = Rack::Utils.parse_query(uri.query)
 
     assert_equal ENV.fetch("PUBLIC_AUTH_STAFF_URL"), uri.host
@@ -279,12 +282,12 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       elsif normalized.include?("core")
         "CORE"
       elsif normalized.include?("auth") || normalized.include?("sign") || normalized.include?("log.umaxica")
-        "SIGN"
+        "AUTH"
       else
         "BASE"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

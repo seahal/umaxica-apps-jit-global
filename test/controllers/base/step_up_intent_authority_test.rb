@@ -405,7 +405,10 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
     get base_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
         headers: app_session_headers(host, token, user)
-    sign_location = response.location
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    sign_location = payload.fetch("url")
 
     assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
       get sign_location, headers: app_session_headers(sign_host, token, user)
@@ -667,7 +670,12 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   def redirect_query
-    Rack::Utils.parse_query(URI.parse(response.location).query)
+    uri = URI.parse(response.location)
+    if uri.host == "jump.umaxica.net"
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(uri.query).fetch("rt"), nil, false)
+      uri = URI.parse(payload.fetch("url"))
+    end
+    Rack::Utils.parse_query(uri.query)
   end
 
   def decode_grant(token, surface:)
@@ -757,9 +765,9 @@ class BaseStepUpIntentAuthorityTest
     }
     return "surface:BASE_#{base_hosts.key(normalized)}" if base_hosts.value?(normalized)
 
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -1187,7 +1195,7 @@ class BaseStepUpIntentAuthorityTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

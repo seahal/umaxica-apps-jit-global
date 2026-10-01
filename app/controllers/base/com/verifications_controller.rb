@@ -22,6 +22,7 @@ module Base
             auth_com_verification_url(
               query.merge(
                 host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+                protocol: "https",
               ),
             )
           },

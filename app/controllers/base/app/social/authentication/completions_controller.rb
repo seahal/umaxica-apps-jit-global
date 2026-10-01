@@ -87,9 +87,8 @@ module Base
           end
 
           def reject_social_link_completion!(provider)
-            redirect_to(
+            redirect_to_surface_url(
               sign_social_settings_url_for(provider),
-              allow_other_host: cross_host_redirect_allowed?,
               status: :see_other,
             )
           end
@@ -99,11 +98,13 @@ module Base
               auth_app_settings_apple_url(
                 ri: params[:ri],
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                protocol: "https",
               )
             else
               auth_app_settings_google_url(
                 ri: params[:ri],
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                protocol: "https",
               )
             end
           end
@@ -132,9 +133,8 @@ module Base
               signup_flow = commit.result["operation"].to_s == "signup"
               complete_base_social_signup_flow!(commit, sign_in_result) if signup_flow
               redirect_url = base_social_login_redirect_to(sign_in_result)
-              return redirect_to(
+              return redirect_to_surface_url(
                 redirect_url,
-                allow_other_host: base_social_login_redirect_allows_other_host?(redirect_url),
               )
             end
 
@@ -183,14 +183,14 @@ module Base
             cycle = create_social_sign_up_flow!(commit)
             bind_social_sign_up_flow!(cycle, commit)
             normalized_provider = SocialIdentifiable.normalize_provider(provider)
-            redirect_to(
+            redirect_to_surface_url(
               public_send(
                 :"auth_app_sign_up_guard_#{normalized_provider}_url",
                 ri: params[:ri],
                 pt: signed_pt_token(commit.pt),
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                protocol: "https",
               ),
-              allow_other_host: cross_host_redirect_allowed?,
             )
           end
 

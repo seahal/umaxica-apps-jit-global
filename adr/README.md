@@ -24,6 +24,9 @@ Current org federated sign-in decision:
 
 Current identity authority decision:
 
+- `adr/jump-directed-rails-handoff-contract.md` — current same-TLD Jump graph, Auth issuer naming,
+  Palm browser/native handoff, development trust prerequisites, and rollout boundaries.
+
 - `adr/base-auth-ceremony-and-seven-rp-boundary.md` — **current** physical boundary: Base is the
   sole IdP/AS, Auth is ceremony-only, seven first-party RPs (`core-*`/`side-*`/`edit-org`), opaque
   handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.

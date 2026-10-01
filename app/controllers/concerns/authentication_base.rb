@@ -3181,7 +3181,7 @@ module AuthenticationBase
   def handle_guest_only_html(options)
     path = after_login_path
     message = options[:message] || I18n.t("errors.messages.already_authenticated")
-    redirect_to(path, allow_other_host: after_login_allows_other_host?, alert: message)
+    redirect_to_surface_url(path, alert: message)
   end
 
   def after_login_allows_other_host?

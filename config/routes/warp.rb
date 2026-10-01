@@ -10,6 +10,10 @@ scope module: :warp, as: :warp do
       # Thin landing endpoint.
       root to: "roots#index"
 
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
+
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
       # whole endpoint.
@@ -103,6 +107,10 @@ scope module: :warp, as: :warp do
       # Thin landing endpoint.
       root to: "roots#index"
 
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
+
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
       # whole endpoint.
@@ -194,6 +202,10 @@ scope module: :warp, as: :warp do
     scope module: :org, as: :org do
       # Thin landing endpoint.
       root to: "roots#index"
+
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the

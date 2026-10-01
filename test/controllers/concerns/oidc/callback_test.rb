@@ -15,6 +15,7 @@ class OidcCallbackTestController < ApplicationController
   end
 
   include OidcCallback
+  include OidcSsoInitiator
 
   def seed
     if params[:state].present?
@@ -94,7 +95,15 @@ class OidcCallbackTestController < ApplicationController
   end
 
   def sign_in_url_with_pt(_return_to)
-    "https://#{Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host}/sign/in"
+    initiate_oidc_session!(pt: "/")
+  end
+
+  def oidc_base_authority_host
+    Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
+  end
+
+  def jump_rt_issuer_namespace
+    "CORE_APP"
   end
 
   def sign_app_sign_in_session_path
@@ -498,7 +507,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to "https://#{configured_host(:sign_service)}/sign/in"
+    assert_response :redirect
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal "https://www.umaxica.app/oauth/authorize", payload.fetch("url").split("?").first
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
 
@@ -529,7 +542,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to "https://#{configured_host(:sign_service)}/sign/in"
+    assert_response :redirect
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal "https://www.umaxica.app/oauth/authorize", payload.fetch("url").split("?").first
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
 
@@ -740,7 +757,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to "https://#{configured_host(:sign_service)}/sign/in"
+    assert_response :redirect
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal "https://www.umaxica.app/oauth/authorize", payload.fetch("url").split("?").first
     assert_equal 1, logged.count { |entry| entry[:event] == "oidc.rp.callback.failed" }
   end
 
@@ -1025,9 +1046,9 @@ class OidcCallbackTestController
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -1236,12 +1257,12 @@ class OidcCallbackTestController
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
     {
       "JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
-      "JWT_SIGN_APP_ACTIVE_KID" => "sign-app-test",
-      "JWT_SIGN_APP_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_ORG_ACTIVE_KID" => "sign-org-test",
-      "JWT_SIGN_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_COM_ACTIVE_KID" => "sign-com-test",
-      "JWT_SIGN_COM_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-test",
+      "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
+      "JWT_AUTH_ORG_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_COM_ACTIVE_KID" => "sign-com-test",
+      "JWT_AUTH_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_APP_ACTIVE_KID" => "acme-app-test",
       "JWT_ACME_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_ORG_ACTIVE_KID" => "acme-org-test",
@@ -1617,7 +1638,7 @@ class OidcCallbackTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

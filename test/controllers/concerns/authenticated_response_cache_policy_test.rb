@@ -124,7 +124,7 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
 
   def jwt_issuer_id_for_test_host(host)
     normalized = host.to_s
-    service = (normalized.include?("auth") || normalized.include?("sign")) ? "SIGN" : "BASE"
+    service = (normalized.include?("auth") || normalized.include?("sign")) ? "AUTH" : "BASE"
     "surface:#{service}_APP"
   end
 end

@@ -121,14 +121,13 @@ module Base
               candidate: @user_email,
             )
             session.delete(registration_email_session_key)
-            redirect_to(
+            redirect_to_surface_url(
               email_registration_return_path(
                 base_com_identity_emails_url(
                   ri: params[:ri],
                   host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
                 ),
               ),
-              allow_other_host: cross_host_redirect_allowed?,
             )
           end
 

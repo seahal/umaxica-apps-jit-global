@@ -3,18 +3,18 @@
 
 module SignAcmeAuthorityRedirect
   extend ActiveSupport::Concern
+  include CommonRedirect
 
   private
 
   def redirect_to_base_authority!(path, query: nil)
-    redirect_to(
+    redirect_to_jump_url(
       URI::Generic.build(
-        scheme: request.scheme,
+        scheme: "https",
         host: base_authority_host,
         path: path,
         query: base_authority_query(query),
       ).to_s,
-      allow_other_host: cross_host_redirect_allowed?,
       status: :see_other,
     )
   end
@@ -32,11 +32,11 @@ module SignAcmeAuthorityRedirect
 
   def base_authority_host
     case self.class.name
-    when /\A(Auth::App|Sign::App|Acme::App)::/ then ENV.fetch("PRIVATE_BASE_SERVICE_URL")
-    when /\A(Auth::Com|Sign::Com|Acme::Com)::/ then ENV.fetch("PRIVATE_BASE_CORPORATE_URL")
-    when /\A(Auth::Org|Sign::Org|Acme::Org)::/ then ENV.fetch("PRIVATE_BASE_STAFF_URL")
+    when /\AAuth::App::/ then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    when /\AAuth::Com::/ then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    when /\AAuth::Org::/ then ENV.fetch("PUBLIC_BASE_STAFF_URL")
     else
-      request.host
+      raise JumpRtConfigurationError, "No Base authority is configured for #{self.class.name}"
     end
   end
 

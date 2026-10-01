@@ -109,9 +109,30 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_includes Auth::App::ApplicationController.ancestors, JumpRtReturnVerification
   end
 
-  test "sign com and org surfaces do not include jump return verification" do
-    assert_not_includes Auth::Com::ApplicationController.ancestors, JumpRtReturnVerification
-    assert_not_includes Auth::Org::ApplicationController.ancestors, JumpRtReturnVerification
+  test "Auth com org and Palm reject invalid returns before their normal flow" do
+    %w(auth.umaxica.com auth.umaxica.org palm-jp.umaxica.app).each do |host|
+      host! host
+      https!
+      get "/", params: { rt: "not-a-jwt" }
+
+      assert_response :bad_request
+    end
+  end
+
+  test "Auth com org and Palm verify Base returns and clean the return token" do
+    %w(auth.umaxica.com auth.umaxica.org palm-jp.umaxica.app).each do |host|
+      origin = "https://#{host}"
+      base = "https://www.umaxica.#{host.split(".").last}"
+      token = sign_return_token(aud: origin, src: base, url: "#{origin}/?ri=us&ok=1")
+      prime_jump_jwks_cache
+      host! host
+      https!
+      get "/", params: { ri: "us", ok: "1", rt: token }
+
+      assert_response :see_other
+      assert_equal "#{origin}/?ri=us&ok=1", response.location
+      assert_match(/no-store/, response.headers.fetch("Cache-Control"))
+    end
   end
 
   test "sign app consumes valid jump return rt and strips it from url" do

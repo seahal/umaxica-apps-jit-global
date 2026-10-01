@@ -362,9 +362,9 @@ class BasePreferenceAuthoritySlice1fTest < ActionDispatch::IntegrationTest
     }
     return "surface:BASE_#{base_hosts.key(normalized)}" if base_hosts.value?(normalized)
 
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

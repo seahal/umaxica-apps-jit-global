@@ -97,10 +97,9 @@ module SignEmailRegistrationFlow
       session_ref: current_session_public_id,
       candidate: @user_email,
     )
-    redirect_to(
+    redirect_to_surface_url(
       after_email_registration_verified_path,
       notice: t("sign.app.registration.email.update.success"),
-      allow_other_host: cross_host_redirect_allowed?,
     )
   end
 

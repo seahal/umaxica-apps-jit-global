@@ -145,7 +145,10 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
 
     assert_response :see_other
-    assert_equal "/verification/setup/new", URI.parse(response.location).path
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal "https://auth.umaxica.com/verification/setup/new", payload.fetch("url").split("?").first
     assert_predicate @current_token.reload, :currently_usable?
     assert_predicate @other_token.reload, :currently_usable?
   end

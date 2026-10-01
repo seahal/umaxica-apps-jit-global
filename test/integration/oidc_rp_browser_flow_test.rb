@@ -124,7 +124,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     with_core_oidc_client_key do
       TurnstileVerifierStub.challenge_enabled = true
-      acme_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "base.app.localhost")
+      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
       sign_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
       core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
       user = clients(:one)
@@ -158,6 +158,10 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_equal redirect_uri_for_core_app(core_host), authorize_query.fetch("redirect_uri")
       assert_nil authorize_query["screen_hint"]
 
+      # Production uses host-only __Host-session cookies. Test's shared-domain session cookie
+      # needs explicit per-host transport while this browser visits the public Base/Auth hosts.
+      core_continuity_cookies = cookies.to_hash
+      assert_predicate core_continuity_cookies["session"], :present?
       host!(acme_host)
       get(authorize_uri.request_uri, headers: browser_headers)
 
@@ -322,6 +326,11 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       OidcRpTokenClient.stub(:call, token_result) do
         host!(callback_uri.host)
+        cookies.delete("session")
+        cookies.merge(
+          "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
+          URI.parse("https://#{core_host}/"),
+        )
         get(callback_uri.request_uri, headers: browser_headers)
       end
 
@@ -528,7 +537,10 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
            headers: browser_headers.merge("X-Inertia" => "true")
 
     assert_response :conflict
-    location = URI.parse(response.headers["X-Inertia-Location"])
+    gateway = URI.parse(response.headers["X-Inertia-Location"])
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    location = URI.parse(payload.fetch("url"))
 
     assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}").host, location.host
     assert_nil response.headers["Location"]
@@ -785,10 +797,10 @@ class OidcRpBrowserFlowTest
       elsif normalized.start_with?("base.") || normalized.start_with?("www.umaxica.")
         "BASE"
       else
-        "SIGN"
+        "AUTH"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -1235,7 +1247,7 @@ class OidcRpBrowserFlowTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

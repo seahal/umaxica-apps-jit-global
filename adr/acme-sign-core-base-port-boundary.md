@@ -1,5 +1,11 @@
 # Acme, Sign, Core, Base, And Palm Boundary
 
+> **Palm handoff supersession (2026-10-01):**
+> [Jump directed Rails handoff contract](jump-directed-rails-handoff-contract.md) supersedes the
+> prohibition on a Palm browser launcher and temporary browser continuity state. Native API
+> bearer-token authentication remains separate. The canonical Palm origin is
+> `https://palm-jp.umaxica.app`; Base owns authorization and token issuance.
+
 > **Supersession (2026-09-13):** Physical Rails authority is Base (sole IdP/AS). Auth is a ceremony
 > service, not a special RP. Seven first-party RPs replace shared browser clients. See
 > `adr/base-auth-ceremony-and-seven-rp-boundary.md`. Acme remains conceptual vocabulary.

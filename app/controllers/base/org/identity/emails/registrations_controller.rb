@@ -226,14 +226,13 @@ module Base
               candidate: @staff_email,
             )
             reset_registration_session!
-            redirect_to(
+            redirect_to_surface_url(
               bootstrap_return_path(
                 base_org_identity_emails_url(
                   ri: params[:ri],
                   host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
                 ),
               ),
-              allow_other_host: cross_host_redirect_allowed?,
             )
           end
 

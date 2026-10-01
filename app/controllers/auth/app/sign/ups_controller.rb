@@ -34,9 +34,8 @@ module Auth
         # in the cross-host redirect chain when the SSO handshake briefly
         # revisited this endpoint.
         def redirect_logged_in_direct_entry!
-          redirect_to(
-            base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host),
-            allow_other_host: true,
+          redirect_to_jump_url(
+            base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host, protocol: "https"),
           )
         end
 

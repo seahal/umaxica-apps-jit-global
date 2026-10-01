@@ -123,15 +123,15 @@ module AuthenticationJwtTokens
   end
 
   def auth_jwt_namespace
-    return "SIGN_#{resource_surface_key.to_s.upcase}" unless respond_to?(:controller_path)
+    return "AUTH_#{resource_surface_key.to_s.upcase}" unless respond_to?(:controller_path)
 
     service, surface = controller_path.to_s.split("/", 3)
     service = service.to_s.upcase
     surface = surface.to_s.upcase
     namespace = "#{service}_#{surface}"
-    return namespace if JitSecurityJwtRegistry::SURFACE_NAMESPACES.include?(namespace)
+    return namespace if JitSecurityJwtRegistry::ACCESS_TOKEN_SURFACE_NAMESPACES.include?(namespace)
 
-    "SIGN_#{resource_surface_key.to_s.upcase}"
+    "AUTH_#{resource_surface_key.to_s.upcase}"
   end
 
   def resource_surface_key

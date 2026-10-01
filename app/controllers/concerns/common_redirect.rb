@@ -26,6 +26,19 @@ module CommonRedirect
 
   private
 
+  def redirect_to_surface_url(url, preserve_query_keys: [], **)
+    uri = URI.parse(url.to_s)
+    if uri.host.nil?
+      redirect_to(url, allow_other_host: false, **)
+    elsif uri.is_a?(URI::HTTP) && uri.host == request.host && uri.userinfo.blank?
+      redirect_to(uri.request_uri, allow_other_host: false, **)
+    else
+      redirect_to_jump_url(url, preserve_query_keys: preserve_query_keys, **)
+    end
+  rescue URI::InvalidURIError
+    render plain: I18n.t("errors.messages.invalid_request"), status: :unprocessable_content
+  end
+
   def redirect_to_jump_url(
     url,
     namespace: jump_rt_issuer_namespace,

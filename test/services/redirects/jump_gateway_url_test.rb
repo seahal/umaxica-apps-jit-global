@@ -39,12 +39,12 @@ class RedirectsJumpGatewayUrlTest < ActiveSupport::TestCase
   test "accepts rails issued jwt" do
     private_key = OpenSSL::PKey::EC.generate("secp384r1")
     with_env(
-      "JWT_SIGN_APP_ACTIVE_KID" => "sign-app-es384-test-a",
+      "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a",
       "PRIVATE_AUTH_SERVICE_URL" => "log.umaxica.app",
       "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
     ) do
       JumpRtKeyring.stub(:private_key, private_key) do
-        token = JumpRtIssuer.call(namespace: "SIGN_APP", url: "https://www.umaxica.app/dashboard")
+        token = JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/dashboard")
         result = RedirectsJumpGatewayUrl.call(token)
 
         assert_predicate result, :ok?

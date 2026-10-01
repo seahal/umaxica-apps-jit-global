@@ -15,8 +15,8 @@ class JumpRtKeyringTest < ActiveSupport::TestCase
 
     JitSecurityJwtRegistry.stub(:surface, issuer) do
       JitSecurityJwtRegistry.stub(:private_key_for, @private_key) do
-        assert_equal "kid-123", JumpRtKeyring.active_kid("SIGN_APP")
-        assert_equal @private_key, JumpRtKeyring.private_key("SIGN_APP")
+        assert_equal "kid-123", JumpRtKeyring.active_kid("AUTH_APP")
+        assert_equal @private_key, JumpRtKeyring.private_key("AUTH_APP")
       end
     end
   end

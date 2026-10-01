@@ -157,17 +157,20 @@ module AuthenticationRedirects
     when :app
       base_app_welcome_url(
         **attrs,
-        host: ENV.fetch("PRIVATE_BASE_SERVICE_URL"),
+        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+        protocol: "https",
       )
     when :com
       base_com_welcome_url(
         **attrs,
-        host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        protocol: "https",
       )
     when :org
       base_org_welcome_url(
         **attrs,
-        host: ENV.fetch("PRIVATE_BASE_STAFF_URL"),
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+        protocol: "https",
       )
     else
       path = "/welcome"
@@ -184,16 +187,19 @@ module AuthenticationRedirects
       base_app_dashboard_url(
         ri: params[:ri],
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+        protocol: "https",
       )
     when :com
       base_com_dashboard_url(
         ri: params[:ri],
-        host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        protocol: "https",
       )
     when :org
       base_org_dashboard_url(
         ri: params[:ri],
-        host: ENV.fetch("PRIVATE_BASE_STAFF_URL"),
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+        protocol: "https",
       )
     else
       "/"

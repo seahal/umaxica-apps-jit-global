@@ -67,12 +67,11 @@ module Base
           )
           reset_secret_credential_ceremony_session!
 
-          redirect_to(
+          redirect_to_surface_url(
             base_com_identity_secrets_url(
               ri: params[:ri],
               host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
             ),
-            allow_other_host: cross_host_redirect_allowed?,
           )
         rescue ActiveRecord::RecordInvalid => e
           @secret_credential ||= e.record

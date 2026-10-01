@@ -36,8 +36,8 @@ module Jit
               Rails.configuration.x.boot_config.fetch(:hosts).base_origins.map(&:to_s),
               issuers.fetch("preference").audiences,
             )
-            assert_equal "sign-app-kid", issuers.fetch("surface:SIGN_APP").current_kid
-            assert_predicate issuers.fetch("surface:SIGN_APP").jwks.fetch(:keys), :present?
+            assert_equal "sign-app-kid", issuers.fetch("surface:AUTH_APP").current_kid
+            assert_predicate issuers.fetch("surface:AUTH_APP").jwks.fetch(:keys), :present?
             assert_equal JitSecurityJwtRegistry::OIDC_CLIENT_NAMESPACES.size,
                          issuers.keys.grep(/\Aoidc_client:/).size
             assert JitSecurityJwtRegistry.public_key_for("auth", "auth-legacy-kid")
@@ -112,10 +112,10 @@ module Jit
         end
 
         test "rejects malformed public jwk json at registry load" do
-          with_registry_inputs("JWT_SIGN_APP_PUBLIC_KEYSET" => "not-json") do
+          with_registry_inputs("JWT_AUTH_APP_PUBLIC_KEYSET" => "not-json") do
             error = assert_raises(JitSecurityJwtRegistry::ConfigurationError) { JitSecurityJwtRegistry.reload! }
 
-            assert_match(/JWT_SIGN_APP_PUBLIC_KEYSET contains invalid JSON/, error.message)
+            assert_match(/JWT_AUTH_APP_PUBLIC_KEYSET contains invalid JSON/, error.message)
           end
         end
 
@@ -123,7 +123,7 @@ module Jit
           wrong_key = OpenSSL::PKey::EC.generate("secp384r1")
           wrong_jwk = JitSecurityJwtRegistry.export_public_jwk(wrong_key, kid: "sign-app-kid")
 
-          with_registry_inputs("JWT_SIGN_APP_PUBLIC_KEYSET" => JSON.generate([wrong_jwk])) do
+          with_registry_inputs("JWT_AUTH_APP_PUBLIC_KEYSET" => JSON.generate([wrong_jwk])) do
             error = assert_raises(JitSecurityJwtRegistry::ConfigurationError) { JitSecurityJwtRegistry.reload! }
 
             assert_match(/active public JWK does not match active private key/, error.message)
@@ -131,11 +131,11 @@ module Jit
         end
 
         test "does not expose revoked kids in jwks and refuses their public keys" do
-          with_registry_inputs("JWT_SIGN_APP_REVOKED_KIDS" => "legacy-kid") do
+          with_registry_inputs("JWT_AUTH_APP_REVOKED_KIDS" => "legacy-kid") do
             JitSecurityJwtRegistry.reload!
 
-            assert_nil JitSecurityJwtRegistry.public_key_for("surface:SIGN_APP", "legacy-kid")
-            kids = JitSecurityJwtRegistry.jwks_for("surface:SIGN_APP").fetch(:keys).map { |jwk| jwk.fetch("kid") }
+            assert_nil JitSecurityJwtRegistry.public_key_for("surface:AUTH_APP", "legacy-kid")
+            kids = JitSecurityJwtRegistry.jwks_for("surface:AUTH_APP").fetch(:keys).map { |jwk| jwk.fetch("kid") }
 
             assert_not_includes kids, "legacy-kid"
           end
@@ -257,7 +257,7 @@ module Jit
           with_registry_inputs do
             valid_records = JitSecurityJwtRegistry.reload!
 
-            with_env("JWT_SIGN_APP_PUBLIC_KEYSET" => "not-json") do
+            with_env("JWT_AUTH_APP_PUBLIC_KEYSET" => "not-json") do
               assert_raises(JitSecurityJwtRegistry::ConfigurationError) { JitSecurityJwtRegistry.reload! }
             end
 
@@ -307,8 +307,8 @@ module Jit
             "AUTH_JWT_ISSUER" => "auth-test-issuer",
             "PREFERENCE_JWT_ACTIVE_KID" => "pref-kid",
             "PREFERENCE_JWT_ISSUER" => "preference-test-issuer",
-            "JWT_SIGN_APP_ACTIVE_KID" => "sign-app-kid",
-            "JWT_SIGN_APP_PUBLIC_KEYSET" => JSON.generate([legacy_jwk]),
+            "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-kid",
+            "JWT_AUTH_APP_PUBLIC_KEYSET" => JSON.generate([legacy_jwk]),
           }.merge(extra_env)
           clear_unused_registry_namespace_env(env)
           env["AUTH_JWT_PRIVATE_KEYSET"] =
@@ -326,7 +326,7 @@ module Jit
 
         def clear_unused_registry_namespace_env(env)
           JitSecurityJwtRegistry::SURFACE_NAMESPACES.each do |namespace|
-            next if namespace == "SIGN_APP"
+            next if namespace == "AUTH_APP"
 
             env["JWT_#{namespace}_ACTIVE_KID"] = nil
             env["JWT_#{namespace}_PUBLIC_KEYSET"] = nil
@@ -355,7 +355,7 @@ module Jit
             :PREFERENCE_JWT_PUBLIC_KEYSET => JSON.generate(
               keys: [JitSecurityJwtRegistry.export_public_jwk(@preference_legacy_key, kid: "pref-legacy-kid")],
             ),
-            "JWT_SIGN_APP_PRIVATE_KEY" => base64_der(@surface_key),
+            "JWT_AUTH_APP_PRIVATE_KEY" => base64_der(@surface_key),
           }
         end
 

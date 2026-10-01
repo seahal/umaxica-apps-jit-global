@@ -14,14 +14,17 @@ module JitSecurityJwtRegistry
   REQUIRED_JWK_FIELDS = JitSecurityJwtJwk::REQUIRED_PUBLIC_FIELDS
   PRIVATE_JWK_FIELDS = JitSecurityJwtJwk::PRIVATE_FIELDS
   SURFACE_NAMESPACES = %w(
-    SIGN_APP SIGN_COM SIGN_ORG
+    AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG
     CORE_APP CORE_COM CORE_ORG
     WARP_APP WARP_COM WARP_ORG
+    PALM_APP
     BASE_APP BASE_COM BASE_ORG
   ).freeze
+  # Palm signs Jump RTs, while its native bearer API accepts Base-issued access tokens.
+  ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(PALM_APP)).freeze
   OIDC_CLIENT_NAMESPACES = %w(
-    SIGN_APP SIGN_COM SIGN_ORG
+    AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG
     CORE_APP CORE_COM CORE_ORG
     BASE_APP BASE_COM BASE_ORG
@@ -29,18 +32,19 @@ module JitSecurityJwtRegistry
     EDIT_ORG
   ).freeze
   SURFACE_ISSUER_ORIGINS = {
-    "SIGN_APP" => "https://log.umaxica.app",
-    "SIGN_COM" => "https://log.umaxica.com",
-    "SIGN_ORG" => "https://log.umaxica.org",
+    "AUTH_APP" => "https://auth.umaxica.app",
+    "AUTH_COM" => "https://auth.umaxica.com",
+    "AUTH_ORG" => "https://auth.umaxica.org",
     "ACME_APP" => "https://www.umaxica.app",
     "ACME_COM" => "https://www.umaxica.com",
     "ACME_ORG" => "https://www.umaxica.org",
-    "CORE_APP" => "https://jpx.umaxica.app",
-    "CORE_COM" => "https://jpx.umaxica.com",
-    "CORE_ORG" => "https://jpx.umaxica.org",
+    "CORE_APP" => "https://jp.umaxica.app",
+    "CORE_COM" => "https://jp.umaxica.com",
+    "CORE_ORG" => "https://jp.umaxica.org",
     "WARP_APP" => "https://www-jp.umaxica.app",
     "WARP_COM" => "https://www-jp.umaxica.com",
     "WARP_ORG" => "https://www-jp.umaxica.org",
+    "PALM_APP" => "https://palm-jp.umaxica.app",
     "EDIT_ORG" => "https://edit.umaxica.org",
     "BASE_APP" => "https://www.umaxica.app",
     "BASE_COM" => "https://www.umaxica.com",

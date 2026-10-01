@@ -57,14 +57,13 @@ module Auth
         end
 
         def redirect_to_base_sign_out!
-          redirect_to(
+          redirect_to_jump_url(
             base_org_sign_out_url(
               host: base_authority_host,
               protocol: "https",
               ri: params[:ri],
             ),
             status: :see_other,
-            allow_other_host: true,
           )
         end
 

@@ -86,7 +86,7 @@ class OidcJwksServiceTest < ActiveSupport::TestCase
   end
 
   test "surface jwk_set returns prebuilt current public key material" do
-    result = JitSecurityJwtJwksService.jwk_set("SIGN_APP")
+    result = JitSecurityJwtJwksService.jwk_set("AUTH_APP")
     key = result.fetch(:keys).first
 
     assert_predicate key.fetch("kid"), :present?
@@ -103,7 +103,7 @@ class OidcJwksServiceTest < ActiveSupport::TestCase
     {
       kty: "EC",
       crv: "P-384",
-      kid: JitSecurityJwtRegistry.surface("SIGN_APP").current_kid,
+      kid: JitSecurityJwtRegistry.surface("AUTH_APP").current_kid,
       alg: "ES384",
       use: "sig",
       x: "x-value",

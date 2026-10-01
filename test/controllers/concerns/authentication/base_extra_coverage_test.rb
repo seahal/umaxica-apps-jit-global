@@ -258,7 +258,7 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
         assert_equal "user", resource_type
         assert_nil issuer
         assert_nil audiences
-        assert_equal "surface:SIGN_APP", jwt_issuer_id
+        assert_equal "surface:AUTH_APP", jwt_issuer_id
         "session-public-id"
       },
     ) do

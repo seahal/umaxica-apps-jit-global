@@ -13,9 +13,12 @@ class Auth::Org::SupportControllerTest < ActionDispatch::IntegrationTest
     get auth_org_support_index_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :see_other
-    uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
 
-    assert_equal ENV.fetch("PRIVATE_BASE_STAFF_URL"), uri.host
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), uri.host
     assert_equal "/support", uri.path
   end
 

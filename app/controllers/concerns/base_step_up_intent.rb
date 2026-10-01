@@ -22,7 +22,7 @@ module BaseStepUpIntent
       expires_at: self.class::STEP_UP_TTL.from_now,
     )
 
-    redirect_to(
+    redirect_to_surface_url(
       sign_url_builder.call(
         scope: scope,
         pt: params[:pt],
@@ -30,8 +30,8 @@ module BaseStepUpIntent
         step_up_ceremony_grant: issuance.grant,
         step_up_completion_csrf: form_authenticity_token,
       ),
-      allow_other_host: cross_host_redirect_allowed?,
       status: :see_other,
+      preserve_query_keys: ["pt"],
     )
   end
 

@@ -20,9 +20,12 @@ class Auth::OrgAuthorityRedirectsTest < ActionDispatch::IntegrationTest
       get public_send(helper, host: ENV.fetch("PRIVATE_AUTH_STAFF_URL", "sign.org.localhost"), ri: "jp")
 
       assert_response :see_other
-      location = URI.parse(response.location)
+      gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    location = URI.parse(payload.fetch("url"))
 
-      assert_equal ENV.fetch("PRIVATE_BASE_STAFF_URL"), location.host
+      assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), location.host
       assert_equal path, location.path
     end
   end

@@ -156,7 +156,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     submit_social_completion_if_present!
 
     assert_response :redirect
-    redirect_uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    redirect_uri = URI.parse(payload.fetch("url"))
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), redirect_uri.host
     assert_equal "/sign/in/limitation", redirect_uri.path
@@ -168,7 +171,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       Rails.application.message_verifier(:social_session_limit_limitation).verify(social_resolution).fetch("actor_ref"),
     )
 
-    get response.location, headers: browser_headers
+    get redirect_uri.to_s, headers: browser_headers
 
     assert_response :success
     assert_equal "Session limit", inertia_props.fetch("heading")
@@ -873,9 +876,9 @@ class SocialAuthLoginTest
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -1368,7 +1371,7 @@ class SocialAuthLoginTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

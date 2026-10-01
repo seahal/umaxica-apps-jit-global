@@ -13,7 +13,10 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
     assert_response :see_other
-    location = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    location = URI.parse(payload.fetch("url"))
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
     assert_equal "/", location.path
@@ -46,6 +49,7 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     location = URI.parse(response.location)
+    assert_equal @host, location.host
 
     assert_equal "/sign/in", location.path
     assert_nil Rack::Utils.parse_nested_query(location.query.to_s)["admission"]

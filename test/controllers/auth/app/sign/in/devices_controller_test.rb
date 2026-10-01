@@ -31,7 +31,7 @@ class Auth::App::Sign::In::DevicesControllerTest < ActionDispatch::IntegrationTe
     token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     access_token = AuthenticationToken.encode(
       client, host: host, session_public_id: token.public_id, resource_type: "client",
-              jwt_issuer_id: "surface:SIGN_APP",
+              jwt_issuer_id: "surface:AUTH_APP",
     )
     credentials = ClientSecretCredential.order(:id).map(&:attributes)
     assert_no_difference ["ClientToken.count", "ClientDeviceSession.count", "ClientEmergencySignInOperation.count"] do

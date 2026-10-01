@@ -41,6 +41,14 @@ class PalmLogoutCoordinator < ApplicationService
     return failure(transaction_result.error, transaction_result.error_description) unless transaction_result.success?
 
     transaction = transaction_result.transaction
+    rt = JumpRtIssuer.call(
+      namespace: "PALM_APP",
+      url: acme_oidc_logout_url(logout_challenge: transaction.logout_challenge),
+    )
+    return failure("invalid_request", "logout Jump token could not be issued") if rt.blank?
+
+    gateway = RedirectsJumpGatewayUrl.call(rt)
+    return failure("invalid_request", "logout Jump gateway is unavailable") unless gateway.ok?
 
     AuthenticationLogoutCurrentSession.call(
       current: Actor,
@@ -58,7 +66,7 @@ class PalmLogoutCoordinator < ApplicationService
 
     Result.new(
       success: true,
-      logout_url: acme_oidc_logout_url(logout_challenge: transaction.logout_challenge),
+      logout_url: gateway.value,
       state: state,
       expires_at: transaction.expires_at,
       transaction: transaction,
@@ -117,6 +125,7 @@ class PalmLogoutCoordinator < ApplicationService
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     Rails.application.routes.url_helpers.base_app_oidc_logout_url(
       host: host,
+      protocol: "https",
       ri: ri || RequestContextContract.default_region,
       **query,
     )

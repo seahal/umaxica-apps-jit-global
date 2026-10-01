@@ -198,9 +198,9 @@ class AuthRedirectBulletinTest < ActiveSupport::TestCase
 
   test "Auth controllers resolve welcome URLs on their Base surface" do
     expectations = {
-      Auth::App::ApplicationController => ["PRIVATE_BASE_SERVICE_URL", "base.app.localhost"],
-      Auth::Com::ApplicationController => ["PRIVATE_BASE_CORPORATE_URL", "base.com.localhost"],
-      Auth::Org::ApplicationController => ["PRIVATE_BASE_STAFF_URL", "base.org.localhost"],
+      Auth::App::ApplicationController => ["PUBLIC_BASE_SERVICE_URL", "www.umaxica.app"],
+      Auth::Com::ApplicationController => ["PUBLIC_BASE_CORPORATE_URL", "www.umaxica.com"],
+      Auth::Org::ApplicationController => ["PUBLIC_BASE_STAFF_URL", "www.umaxica.org"],
     }
 
     expectations.each do |controller_class, (environment_key, expected_host)|
@@ -209,12 +209,13 @@ class AuthRedirectBulletinTest < ActiveSupport::TestCase
       controller.define_singleton_method(:current_region_identifier) { "jp" }
       controller.define_singleton_method(:params) { {} }
 
+      original_fetch = ENV.method(:fetch)
       ENV.stub(
         :fetch, ->(key, *args, &block) {
-          (key == environment_key) ? expected_host : ENV.fetch(key, *args, &block)
+          (key == environment_key) ? expected_host : original_fetch.call(key, *args, &block)
         },
       ) do
-        assert_equal "http://#{expected_host}/welcome?ri=jp", controller.sign_in_welcome_path
+        assert_equal "https://#{expected_host}/welcome?ri=jp", controller.sign_in_welcome_path
       end
     end
   end

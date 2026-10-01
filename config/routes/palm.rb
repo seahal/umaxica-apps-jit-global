@@ -34,14 +34,18 @@ scope module: :palm, as: :palm do
       # Sitemap endpoint.
       resource :sitemap, only: :show, path: "sitemap.xml"
 
-      # Native callback compatibility stub only. Palm does not expose an unfinished native
-      # authorization launcher before a real native client and registration are approved.
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
+
+      # Native apps start in an external browser on Palm and return here through Jump.
       namespace :oidc do
         resource :callback, only: :show
       end
 
       # Native sign-out notice; does not clear bearer tokens from the browser.
       namespace :sign do
+        resource :in, only: :show, controller: :ins
         resource :termination, only: %i(show create), path: "out", controller: :outs, as: :out
       end
 

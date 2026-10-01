@@ -100,14 +100,13 @@ module AuthCeremonyAdmission
   end
 
   def bridge_to_base_admission!
-    redirect_to(
+    redirect_to_jump_url(
       URI::Generic.build(
-        scheme: request.scheme,
+        scheme: "https",
         host: base_authority_host,
         path: "/",
         query: params[:ri].present? ? { ri: params[:ri] }.to_query : nil,
       ).to_s,
-      allow_other_host: cross_host_redirect_allowed?,
       status: :see_other,
     )
   end

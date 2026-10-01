@@ -79,7 +79,7 @@ module Warp
       end
 
       def oidc_base_authority_host
-        ENV.fetch("PRIVATE_BASE_STAFF_URL")
+        ENV.fetch("PUBLIC_BASE_STAFF_URL")
       end
 
       def oidc_acme_host

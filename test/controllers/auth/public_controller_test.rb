@@ -232,9 +232,9 @@ class Auth::App::TestCsrfController
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -443,12 +443,12 @@ class Auth::App::TestCsrfController
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
     {
       "JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
-      "JWT_SIGN_APP_ACTIVE_KID" => "sign-app-test",
-      "JWT_SIGN_APP_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_ORG_ACTIVE_KID" => "sign-org-test",
-      "JWT_SIGN_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_COM_ACTIVE_KID" => "sign-com-test",
-      "JWT_SIGN_COM_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-test",
+      "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
+      "JWT_AUTH_ORG_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_COM_ACTIVE_KID" => "sign-com-test",
+      "JWT_AUTH_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_APP_ACTIVE_KID" => "acme-app-test",
       "JWT_ACME_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_ORG_ACTIVE_KID" => "acme-org-test",
@@ -790,7 +790,7 @@ class Auth::App::AuthPublicControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

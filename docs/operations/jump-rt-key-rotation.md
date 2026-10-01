@@ -5,13 +5,27 @@
 This runbook manages ES384 signing keys for Jump redirect tokens.
 
 Jump RT keys are issuer-surface scoped. Do not reuse one private key or `kid` across `app`, `com`,
-and `org`, or across `sign`, `acme`, and `core` issuer groups.
+and `org`, or across `auth`, `acme`, and `core` issuer groups.
 
 Issuer surfaces:
 
-- `SIGN_APP`, `SIGN_COM`, `SIGN_ORG`
+- `AUTH_APP`, `AUTH_COM`, `AUTH_ORG`
 - `ACME_APP`, `ACME_COM`, `ACME_ORG`
 - `CORE_APP`, `CORE_COM`, `CORE_ORG`
+- `WARP_APP`, `WARP_COM`, `WARP_ORG`
+- `BASE_APP`, `BASE_COM`, `BASE_ORG`
+- `PALM_APP` — Palm publishes public JWKS at
+  `https://palm-jp.umaxica.app/.well-known/jwks.json`.
+
+
+Issuer registration and permitted destinations are separate contracts. See
+[the directed handoff ADR](../../adr/jump-directed-rails-handoff-contract.md). Development issuance
+is disabled until its distinct public issuer/JWKS/destination and gateway trust contract is approved.
+
+The list is `JitSecurityJwtRegistry::SURFACE_NAMESPACES`. A listed namespace with no key at all
+boots as unconfigured, and the first Jump rt it is asked to issue raises `JumpRtConfigurationError`
+("signing key configuration is incomplete"); a partial, malformed, or mismatched key configuration
+fails boot (see Runtime Contract).
 
 ## Runtime Contract
 
@@ -70,7 +84,7 @@ also be retained while its public key is in `grace`.
 ## Normal Rotation
 
 1. Generate a new P-384 private key.
-2. Choose a globally unique `kid`, for example `sign-app-jump-rt-es384-prod-2026-06-a`.
+2. Choose a globally unique `kid`, for example `auth-app-jump-rt-es384-prod-2026-06-a`.
 3. Store the new private key as the issuer surface `JWT_<NAMESPACE>_PRIVATE_KEY` secret version.
 4. Add the new public JWK to `JWT_<NAMESPACE>_PUBLIC_KEYSET` while keeping the old active public
    JWK.

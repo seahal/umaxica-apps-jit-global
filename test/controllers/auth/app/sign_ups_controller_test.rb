@@ -148,10 +148,10 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     get auth_app_sign_up_url(format: :html, ri: "jp"), headers: as_user_headers(user, host: host)
 
     assert_response :redirect
-    assert_redirected_to base_app_dashboard_url(
-      ri: "jp",
-      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", Rails.configuration.x.boot_config.fetch(:hosts).base_service.host),
-    )
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal base_app_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https"), payload.fetch("url")
   end
 
   test "checkpoint without active registration redirects to sign up start" do
@@ -450,7 +450,7 @@ class Auth::App::SignUpsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
@@ -540,9 +540,9 @@ class Auth::App::SignUpsControllerTest
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

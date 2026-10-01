@@ -1,0 +1,76 @@
+# Rails Directed Jump Rollout
+
+The accepted contract is `adr/jump-directed-rails-handoff-contract.md`. This Rails change is separate
+from the Hono minor release; it performs no gateway deployment, binding/secret write or migration.
+
+## Required implementation
+
+1. Palm RP round-trip: browser entry, Palm-to-Base RT, public JWKS, Base-to-Palm return verification,
+   state-bound native delivery and existing sign-out handoffs. Preserve native PKCE ownership and
+   the `palm-api` audience.
+2. Core issuer normalization: `jp.umaxica.*` for JWT/Jump/JWKS. Keep persistence normalization in a
+   separately approved migration; do not silently rewrite stored bridge identities.
+3. Stale `www.jp.*` removal: no executable positive contract or alias. Keep negative regression
+   cases to prove rejection. Warp canonical origins remain `www-jp.*`.
+4. Directed return policy: exact same-TLD Base/Auth and Base/approved-RP pairs. Required RPs are
+   Warp App/Com/Org JP, Core App/Com/Org JP and Palm App JP. Deny self-loop and cross-TLD.
+5. Receiver parity: Auth Com/Org and Palm receive the same Jump signature, claim, URL and source
+   verification as the existing receivers. Preserve rate limits and security-control ordering.
+6. Public destination and production Jump contract: public HTTPS browser targets; explicit
+   development issuance gate until its public issuer/JWKS/kid/trust/return contract is specified.
+7. Obsolete Sign issuer removal: `AUTH_*`, `auth.*`, matching JWKS and configuration references.
+   Keep `/sign/...`, stored `side-*`, `SIDE_*`, and independent ceremony protocol values.
+
+## Deployment prerequisites
+
+- Register the approved graph and Rails issuer/JWKS trust in the separately managed gateway.
+- Supply `JWT_AUTH_{APP,COM,ORG}_{ACTIVE_KID,PRIVATE_KEY,PUBLIC_KEYSET,REVOKED_KIDS}` using the
+  existing Auth material; retire the old variable names without a runtime alias or implicit copy.
+- Supply scoped Palm signing configuration and check Warp/Palm public JWKS from the gateway's
+  network. Never publish development auto-generated keys as production issuer keys.
+- Confirm the public host variables match the canonical graph, especially Core `jp.*`, Warp
+  `www-jp.*`, Palm `palm-jp.*`, Base `www.*` and Auth `auth.*`.
+- Coordinate native apps: browser launch on Palm, new Palm HTTPS redirect URI for Base code
+  redemption, and fixed native delivery callbacks. The HTTPS Palm receiver must reach Rails before
+  native link interception; any claimed app-link endpoint must be a separate delivery endpoint.
+- Define development's distinct issuer origin, reachable JWKS URL, kid, explicit production Jump
+  trust and public return origin per surface. Private ingress is not a browser/protocol identity.
+  Development public Jump remains disabled until this is done.
+- Specify independent host-bound browser continuity for development RP/Base/Auth surfaces as part
+  of that contract. Production uses host-only `__Host-session`; the shared-domain test session
+  cookie requires explicit per-host transport in the multi-surface integration fixture.
+- Plan reauthentication for old Auth surface access JWTs and drain incompatible native/Core
+  authorization ceremonies before cutover. Their lifetimes are separate from Jump's RT TTL.
+
+## Verification and rollout
+
+Verify the complete graph's allowed and denied pairs; issuer-to-public-JWKS key agreement; receiver
+claim and exact-URL binding; `rpl=once` replay rejection and `rpl=reuse` behavior. Verify PKCE, state,
+nonce propagation and Palm missing/mismatched/expired/replayed callbacks. Keep native bearer API
+and signed POST ceremonies under their existing independent controls.
+
+Retain the prior production artifact and configuration reference, then deploy in a coordinated
+window. Smoke Base/Auth for each TLD and required RP round-trips, including native authorization
+code redemption and logout. Local automated tests do not establish public DNS, gateway trust,
+device callbacks or production acceptance. Retain deployment evidence before declaring rollout done.
+
+## Rollback contract
+
+- Introduce no DB/KV/persistent storage migration.
+- Keep production Jump signing keys, active kid and public JWKS unchanged.
+- Preserve the `schema=1` and ES384 Jump wire contract.
+- Separate secrets/bindings changes from application code; record their independent rollback refs.
+- Retain the immediately preceding production revision/artifact.
+- Account for N/N-1 RTs throughout TTL plus clock leeway. Coordinate incompatible issuer/graph
+  cutover by draining tokens rather than introducing retired-host or issuer aliases.
+- Roll back native client registration/application behavior together if their contract changed;
+  drain outstanding authorization codes and transactions according to their actual lifetimes.
+- After rollback smoke existing same-TLD Base/Auth in both directions.
+
+## Review then fix
+
+- Edit Org RP round-trip and graph inclusion require a separate explicit design decision.
+- A finite destination allowlist in `JumpRtIssuer` requires a separate issuer least-privilege
+  decision. This change validates public URL form and receivers' graph but does not add that list.
+- Existing Core bridge column defaults/rows and legacy production Host Authorization need a
+  separate persistence/cutover plan. The current change intentionally supplies no migration.

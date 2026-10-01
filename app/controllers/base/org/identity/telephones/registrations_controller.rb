@@ -179,12 +179,11 @@ module Base
                 candidate: @staff_telephone,
               )
               reset_registration_session!
-              redirect_to(
+              redirect_to_surface_url(
                 base_org_identity_telephones_url(
                   ri: params[:ri],
                   host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
                 ),
-                allow_other_host: cross_host_redirect_allowed?,
               )
             when :session_expired, :locked
               reset_registration_session!

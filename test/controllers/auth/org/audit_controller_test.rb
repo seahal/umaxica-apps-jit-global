@@ -13,9 +13,12 @@ class Auth::Org::AuditControllerTest < ActionDispatch::IntegrationTest
     get auth_org_audit_index_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :see_other
-    uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
 
-    assert_equal ENV.fetch("PRIVATE_BASE_STAFF_URL"), uri.host
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), uri.host
     assert_equal "/audit", uri.path
   end
 
@@ -148,9 +151,9 @@ class Auth::Org::AuditControllerTest < ActionDispatch::IntegrationTest
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

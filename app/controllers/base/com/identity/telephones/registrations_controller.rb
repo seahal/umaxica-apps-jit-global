@@ -191,12 +191,11 @@ module Base
                 candidate: @user_telephone,
               )
               reset_registration_session!
-              redirect_to(
+              redirect_to_surface_url(
                 base_com_identity_telephones_url(
                   ri: params[:ri],
                   host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
                 ),
-                allow_other_host: cross_host_redirect_allowed?,
               )
             when :session_expired, :locked
               reset_registration_session!

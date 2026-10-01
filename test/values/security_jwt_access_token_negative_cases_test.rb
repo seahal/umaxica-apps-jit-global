@@ -24,7 +24,7 @@ class SecurityJwtAccessTokenNegativeCasesTest < ActiveSupport::TestCase
   test "auth access rejects a token signed by another keyring" do
     surface_token = AuthenticationToken.encode(
       clients(:one), host: AUTH_HOST, session_public_id: "sid", resource_type: "client",
-                     jwt_issuer_id: "surface:SIGN_APP",
+                     jwt_issuer_id: "surface:AUTH_APP",
     )
     payload, header = auth_parts
     preference_signed = JWT.encode(payload, PreferenceJwtConfiguration.private_key_for_active, "ES384", header)

@@ -11,9 +11,9 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   AUTH_NAMESPACES = {
-    "SIGN_APP" => :sign_service,
-    "SIGN_COM" => :sign_corporate,
-    "SIGN_ORG" => :sign_staff,
+    "AUTH_APP" => :sign_service,
+    "AUTH_COM" => :sign_corporate,
+    "AUTH_ORG" => :sign_staff,
   }.freeze
 
   AUTH_NAMESPACES.each do |namespace, host_key|
@@ -35,6 +35,21 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_equal boot_hosts.base_service.to_s, payload.fetch("iss")
     assert_includes published_kids(payload.fetch("iss")), header.fetch("kid")
+  end
+
+  test "Core Warp and Palm publish the signing kid at the canonical issuer origin" do
+    %w(CORE_APP CORE_COM CORE_ORG WARP_APP WARP_COM WARP_ORG PALM_APP).each do |namespace|
+      token = JumpRtIssuer.call(namespace: namespace, url: "https://www.umaxica.app/")
+      payload, header = JWT.decode(token, nil, false)
+      uri = URI.parse(payload.fetch("iss"))
+      host! uri.host
+      https!
+      get "/.well-known/jwks.json"
+
+      assert_response :ok
+      assert_includes response.parsed_body.fetch("keys").pluck("kid"), header.fetch("kid")
+      assert_not_includes response.parsed_body.fetch("keys").flat_map(&:keys), "d"
+    end
   end
 
   private

@@ -13,9 +13,12 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :see_other
-    uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
 
-    assert_equal ENV.fetch("PRIVATE_BASE_STAFF_URL"), uri.host
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), uri.host
     assert_equal "/system", uri.path
   end
 
@@ -27,7 +30,8 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url, headers: host_headers(@host)
 
     assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_equal "jp", query["ri"]
   end
@@ -36,7 +40,8 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url(ri: "us"), headers: host_headers(@host)
 
     assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_equal "us", query["ri"]
   end
@@ -45,7 +50,8 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url(ri: "xx"), headers: host_headers(@host)
 
     assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_equal "jp", query["ri"]
   end

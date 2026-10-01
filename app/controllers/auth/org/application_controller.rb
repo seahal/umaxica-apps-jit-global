@@ -6,6 +6,7 @@ module Auth
     class ApplicationController < ActionController::Base
       include ::FqdnAvailabilityGate
       include ::RateLimit
+      include ::JumpRtReturnVerification
       include ::WebauthnSurfaceDeclarable
 
       webauthn_surface :org
@@ -69,6 +70,7 @@ module Auth
         store: rate_limit_store,
         with: -> { render_rate_limited(retry_after: 60) },
       )
+      before_action :verify_jump_return_rt!, if: :jump_return_rt_request?
       before_action :set_current_context
       before_action :reset_flash
       before_action :set_preferences_cookie
@@ -106,7 +108,7 @@ module Auth
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
         complete_auth_ceremony_session!
-        base_org_dashboard_url(ri: current_region_identifier, host: base_authority_host)
+        base_org_dashboard_url(ri: current_region_identifier, host: base_authority_host, protocol: "https")
       end
 
       def after_login_allows_other_host?

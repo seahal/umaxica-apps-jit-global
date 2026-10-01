@@ -61,7 +61,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
                 preference_type: @preference_type,
                 public_id: @public_id,
                 jti: @jti,
-                jwt_issuer_id: "surface:SIGN_APP",
+                jwt_issuer_id: "surface:AUTH_APP",
               )
 
               assert_not_nil token
@@ -69,7 +69,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
               decoded = PreferenceToken.decode(
                 token,
                 host: "log.umaxica.app",
-                jwt_issuer_id: "surface:SIGN_APP",
+                jwt_issuer_id: "surface:AUTH_APP",
               )
 
               assert_equal "dr", decoded.dig("preferences", "ct")

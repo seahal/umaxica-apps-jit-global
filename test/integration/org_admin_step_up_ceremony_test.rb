@@ -63,7 +63,10 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     get response.location, headers: base_headers
 
     assert_response :see_other
-    auth_location = response.location
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    auth_location = payload.fetch("url")
     grant_query = Rack::Utils.parse_query(URI.parse(auth_location).query)
     transaction = OperatorStepUpCeremonyTransaction.order(:created_at).last
 

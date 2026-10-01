@@ -10,6 +10,7 @@ module Palm
     class ApplicationController < ActionController::Base
       include ::FqdnAvailabilityGate
       include ::RateLimit
+      include ::JumpRtReturnVerification
       include ::PreferenceGlobal
 
       AUTHENTICATION_MODE = :bare
@@ -37,6 +38,7 @@ module Palm
       # a GET/HEAD without a valid region is redirected to the canonical URL that carries one, and
       # `PreferenceGlobal#default_url_options` then propagates it into every generated link.
       # See docs/architecture/preference.md and test/support/ri_routing_contract.rb.
+      before_action :verify_jump_return_rt!, if: :jump_return_rt_request?
       before_action :resolve_param_context
       before_action :set_region
     end

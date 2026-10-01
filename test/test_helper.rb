@@ -327,7 +327,7 @@ module AuthenticationHarness
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "SIGN"
+    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "AUTH"
     surface =
       if resource_type == "operator" || normalized.include?(".org") || normalized.include?("org.")
         "ORG"

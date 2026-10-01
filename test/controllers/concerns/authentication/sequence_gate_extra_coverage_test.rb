@@ -79,6 +79,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class Harness
+    include CommonRedirect
     include AuthenticationSequenceGate
 
     attr_accessor :session_hash, :params_hash, :request_obj, :rendered, :redirected, :current_resource,

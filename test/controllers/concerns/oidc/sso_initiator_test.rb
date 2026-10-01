@@ -47,9 +47,7 @@ class OidcSsoInitiatorTestController < ApplicationController
     Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host
   end
 
-  # Base::App::ApplicationController resolves this to PUBLIC_BASE_SERVICE_URL, which is
-  # same-site with the Auth host. Pointing the stand-in at a different family would make
-  # the hop cross-site and exercise the jump gateway instead of the direct authorize path.
+  # Public browser authority remains Base; cross-host authorization uses Jump even within one TLD.
   def oidc_base_authority_host
     Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
   end
@@ -96,12 +94,13 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    location = response.location
-    uri = URI.parse(location)
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
 
     assert_equal configured_host(:base_service), uri.host
     assert_equal "/oauth/authorize", uri.path
-    assert_not_equal "jump.umaxica.net", uri.host
 
     authorize_params = Rack::Utils.parse_nested_query(uri.query)
 
@@ -121,7 +120,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     assert_predicate pending_flow.fetch("code_verifier"), :present?
     assert_equal authorize_params.fetch("nonce"), pending_flow.fetch("nonce")
     assert_equal "/oidc/sso", pending_flow.fetch("pt")
-    assert_includes io.string, "oidc.sso.redirect_policy.direct"
+    assert_includes io.string, "oidc.sso.redirect_policy.jump"
     assert_includes io.string, "reason_code"
     assert_includes io.string, "target_host"
     assert_not_includes io.string, authorize_params.fetch("state")
@@ -132,15 +131,16 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
   end
 
   test "authenticate! preserves the protected request query in oidc return path" do
-    # https, as a browser would: an http request to a public host is a scheme mismatch and
-    # takes the jump gateway instead of the direct authorize hop.
+    # Use the browser-facing HTTPS source while preserving its protected return path.
     get "/oidc/sso", params: { ri: "jp" },
                      headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
     assert_nil session[:oidc_pt]
 
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
+    gateway = URI.parse(response.location)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
     pending_flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
 
     assert_equal "/oidc/sso?ri=jp", pending_flow.fetch("pt")
@@ -150,7 +150,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     get "/oidc/sso/fresh", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
-    uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
     query = Rack::Utils.parse_nested_query(uri.query)
 
     assert_equal "login", query.fetch("prompt")
@@ -162,7 +164,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     get "/oidc/sso/hinted", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
+    gateway = URI.parse(response.location)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_nil query["screen_hint"]
     flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
@@ -202,14 +206,16 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
                              headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
       assert_response :redirect
-      state = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("state")
+      gateway = URI.parse(response.location)
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      state = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query).fetch("state")
 
       assert_equal "/", session.fetch("oidc_pending_flows").fetch(state).fetch("pt"), target
     end
   end
 
   test "authenticate! keeps using jump for cross-site oidc authorize urls" do
-    cross_site_acme_host = configured_host(:acme_corporate)
+    cross_site_acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
     OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) { cross_site_acme_host }
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
       OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
@@ -389,9 +395,9 @@ class OidcSsoInitiatorTestController
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -601,12 +607,12 @@ class OidcSsoInitiatorTestController
     {
       "JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
       "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
-      "JWT_SIGN_APP_ACTIVE_KID" => "sign-app-test",
-      "JWT_SIGN_APP_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_ORG_ACTIVE_KID" => "sign-org-test",
-      "JWT_SIGN_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_COM_ACTIVE_KID" => "sign-com-test",
-      "JWT_SIGN_COM_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-test",
+      "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
+      "JWT_AUTH_ORG_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_COM_ACTIVE_KID" => "sign-com-test",
+      "JWT_AUTH_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_APP_ACTIVE_KID" => "acme-app-test",
       "JWT_ACME_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_ORG_ACTIVE_KID" => "acme-org-test",
@@ -945,7 +951,7 @@ class OidcSsoInitiatorTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

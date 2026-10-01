@@ -9,19 +9,19 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
     {
       host: ENV.fetch("PUBLIC_CORE_SERVICE_URL", ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")),
       client_id: "core-app",
-      acme_host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"),
       resource: -> { clients(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost")),
       client_id: "core-org",
-      acme_host: ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost"),
       resource: -> { operators(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost")),
       client_id: "core-com",
-      acme_host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost"),
+      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.com.localhost"),
       resource: -> { create_visitor! },
     },
   ].freeze
@@ -203,9 +203,9 @@ class CoreRpBrowserFlowTest
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -633,7 +633,7 @@ class CoreRpBrowserFlowTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

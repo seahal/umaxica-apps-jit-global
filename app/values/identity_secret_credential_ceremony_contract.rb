@@ -66,7 +66,7 @@ module IdentitySecretCredentialCeremonyContract
 
   def acme_audience(surface) = fetch_surface_value(ACME_AUDIENCES, surface)
 
-  def sign_issuer_id(surface) = "surface:SIGN_#{surface.to_s.upcase}"
+  def sign_issuer_id(surface) = "surface:AUTH_#{surface.to_s.upcase}"
 
   def acme_issuer_id(surface) = "surface:BASE_#{surface.to_s.upcase}"
 

@@ -106,14 +106,13 @@ module Auth
           )
           end_totp_enrollment!
 
-          redirect_to(
+          redirect_to_surface_url(
             bootstrap_return_path(
               auth_app_settings_totps_url(
                 ri: params[:ri],
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
               ),
             ),
-            allow_other_host: cross_host_redirect_allowed?,
             status: :see_other,
           )
         end

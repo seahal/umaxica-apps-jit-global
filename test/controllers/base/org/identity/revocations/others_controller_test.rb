@@ -54,7 +54,10 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
     delete base_org_identity_other_sessions_url(ri: "jp", host: @host), headers: headers
 
     assert_response :see_other
-    assert_equal "/verification/setup/new", URI.parse(response.location).path
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal "/verification/setup/new", URI.parse(payload.fetch("url")).path
     assert_predicate current.reload, :currently_usable?
     assert_predicate other.reload, :currently_usable?
   end

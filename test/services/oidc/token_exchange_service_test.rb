@@ -1029,12 +1029,12 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "app-ios-rp cannot exchange an authorization code issued to app-android-rp" do
-    code_record = issue_code!(client_id: "app-android-rp", redirect_uri: "com.umaxica.app:/oidc/callback")
+    code_record = issue_code!(client_id: "app-android-rp", redirect_uri: "https://palm-jp.umaxica.app/oidc/callback")
 
     result = OidcTokenExchangeCoordinator.call(
       grant_type: "authorization_code",
       code: code_record.code,
-      redirect_uri: "com.umaxica.app:/oidc/callback",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
       client_id: "app-ios-rp",
       code_verifier: @code_verifier,
       expected_resource_type: "client",

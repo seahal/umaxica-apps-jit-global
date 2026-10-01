@@ -28,7 +28,7 @@ class VerificationSessionsTest < ActionDispatch::IntegrationTest
       "Authorization" => "Bearer #{
         AuthenticationToken.encode(
           @user, host: @host, session_public_id: @token.public_id, resource_type: "client",
-                 jwt_issuer_id: "surface:SIGN_APP",
+                 jwt_issuer_id: "surface:AUTH_APP",
         )
       }",
     }.freeze

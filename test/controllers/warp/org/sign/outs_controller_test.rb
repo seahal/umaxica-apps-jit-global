@@ -106,7 +106,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       host: @host,
       session_public_id: token.public_id,
       resource_type: "operator",
-      jwt_issuer_id: "surface:SIGN_ORG",
+      jwt_issuer_id: "surface:AUTH_ORG",
     )
     { "Authorization" => "Bearer #{token_encoded}" }
   end

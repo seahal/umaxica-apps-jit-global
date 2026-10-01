@@ -23,6 +23,7 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
     app/controllers/concerns/oidc_sso_initiator.rb
     app/controllers/concerns/sign_oidc_logout.rb
     app/controllers/core/app/sign/outs_controller.rb
+    app/controllers/palm/app/oidc/callbacks_controller.rb
     app/controllers/sign/app/sign/ins_controller.rb
     app/controllers/sign/app/sign/outs_controller.rb
   ).freeze
@@ -44,7 +45,7 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
     assert_empty offenders
   end
 
-  test "allow_other_host true is limited to jump facade" do
+  test "allow_other_host true is limited to reviewed Jump and protocol handoff boundaries" do
     offenders =
       ruby_files.select do |path|
         next false if ALLOW_OTHER_HOST_ALLOWLIST.include?(path)

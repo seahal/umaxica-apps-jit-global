@@ -225,7 +225,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       token,
       host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
       resource_type: "operator",
-      jwt_issuer_id: "surface:SIGN_ORG",
+      jwt_issuer_id: "surface:AUTH_ORG",
     )
   end
 end

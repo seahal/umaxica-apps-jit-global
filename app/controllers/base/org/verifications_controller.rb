@@ -20,7 +20,7 @@ module Base
           allowed_scopes: StepUpScopeCatalog::ORG,
           sign_url_builder: ->(**query) {
             auth_org_verification_url(
-              query.merge(host: ENV.fetch("PRIVATE_AUTH_STAFF_URL")),
+              query.merge(host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"), protocol: "https"),
             )
           },
         )

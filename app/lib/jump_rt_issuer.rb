@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "jwt"
+require "ipaddr"
 
 class JumpRtIssuer
   ALGORITHM = SecurityJwtJumpRtTokenCodec::ALGORITHM
@@ -76,8 +77,9 @@ class JumpRtIssuer
 
     uri = URI.parse(raw)
     return nil unless uri.is_a?(URI::HTTP)
-    return nil unless uri.scheme == "https" || local_http_allowed?(uri)
+    return nil unless uri.scheme == "https"
     return nil if uri.host.blank?
+    return nil if private_destination?(uri)
     return nil if uri.userinfo.present?
     return nil if uri.fragment.present?
 
@@ -122,10 +124,15 @@ class JumpRtIssuer
     boot_jump_config.audience
   end
 
-  def local_http_allowed?(uri)
-    return false unless Rails.env.local?
+  def private_destination?(uri)
+    host = uri.hostname.downcase.delete_suffix(".")
+    return true unless host.include?(".") || host.include?(":")
+    return true if host.end_with?(".localhost", ".local", ".internal")
 
-    uri.scheme == "http" && (uri.host == "localhost" || uri.host.end_with?(".localhost"))
+    address = IPAddr.new(host).native
+    address.private? || address.loopback? || address.link_local? || address.to_i.zero?
+  rescue IPAddr::InvalidAddressError
+    false
   end
 
   def boot_jump_config

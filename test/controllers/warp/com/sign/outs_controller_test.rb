@@ -103,7 +103,7 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   def session_headers(visitor, token)
     token_encoded = AuthenticationToken.encode(
       visitor, host: @host, session_public_id: token.public_id, resource_type: "visitor",
-               jwt_issuer_id: "surface:SIGN_COM",
+               jwt_issuer_id: "surface:AUTH_COM",
     )
     { "Authorization" => "Bearer #{token_encoded}" }
   end

@@ -905,10 +905,10 @@ class Auth::App::Sign::In::SessionsControllerTest
       elsif normalized.include?("core")
         "CORE"
       else
-        "SIGN"
+        "AUTH"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

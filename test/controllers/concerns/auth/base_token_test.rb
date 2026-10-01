@@ -128,7 +128,7 @@ module Auth
         host: "log.umaxica.app",
         session_public_id: "sid",
         resource_type: "client",
-        jwt_issuer_id: "surface:SIGN_APP",
+        jwt_issuer_id: "surface:AUTH_APP",
       )
 
       # The keyring is never inferred from the host: without the explicit
@@ -139,7 +139,7 @@ module Auth
         token,
         host: "log.umaxica.app",
         resource_type: "client",
-        jwt_issuer_id: "surface:SIGN_APP",
+        jwt_issuer_id: "surface:AUTH_APP",
       )
 
       assert_equal clients(:one).id.to_s, payload["sub"]

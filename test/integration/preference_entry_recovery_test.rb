@@ -110,7 +110,10 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     get auth_app_sign_in_url(ri: "jp")
 
     assert_response :see_other
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(response.location).host
+    gateway = URI.parse(response.location)
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(payload.fetch("url")).host
   end
 
   test "the org sign-up guide still renders with a stale refresh cookie" do

@@ -199,12 +199,12 @@ class Base::Org::SwitcherControllerTest
       elsif normalized.include?("core")
         "CORE"
       elsif normalized.include?("auth") || normalized.include?("sign") || normalized.include?("log.umaxica")
-        "SIGN"
+        "AUTH"
       else
         "BASE"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

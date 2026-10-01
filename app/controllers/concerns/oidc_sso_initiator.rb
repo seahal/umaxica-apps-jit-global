@@ -76,7 +76,13 @@ module OidcSsoInitiator
   end
 
   def oidc_redirect_decision(url)
-    oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
+    decision = oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
+    return decision unless decision.direct?
+    # Edit's RP ceremony is a separate review slice; preserve its existing admission decision.
+    return decision if oidc_client_id == "edit-org"
+
+    # A shared registrable domain does not merge RP and Base trust boundaries.
+    decision.with(kind: :jump, reason_code: "jump_authorize_handoff")
   end
 
   def oidc_authorization_url(code_challenge:, state:, nonce:, prompt: nil, max_age: nil)

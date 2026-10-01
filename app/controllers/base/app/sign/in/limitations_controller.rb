@@ -61,11 +61,11 @@ module Base
             return render_invalid_resolution unless resolution_loaded?
 
             @resolution.cancel! unless social_resolution?
-            redirect_to(
+            redirect_to_surface_url(
               auth_app_sign_in_url(
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+                protocol: "https",
               ),
-              allow_other_host: cross_host_redirect_allowed?,
               status: :see_other,
             )
             # The cancel button issues an Inertia visit, and sign-in lives on the Auth host, so a

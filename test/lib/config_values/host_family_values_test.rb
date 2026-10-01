@@ -18,9 +18,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://sign.com.localhost", values.sign_corporate.to_s
     assert_equal "https://sign.org.localhost", values.sign_staff.to_s
 
-    assert_equal "https://jpx.umaxica.app", values.core_service.to_s
-    assert_equal "https://jpx.umaxica.com", values.core_corporate.to_s
-    assert_equal "https://jpx.umaxica.org", values.core_staff.to_s
+    assert_equal "https://jp.umaxica.app", values.core_service.to_s
+    assert_equal "https://jp.umaxica.com", values.core_corporate.to_s
+    assert_equal "https://jp.umaxica.org", values.core_staff.to_s
 
     assert_equal "https://www.umaxica.app", values.base_service.to_s
     assert_equal "https://www.umaxica.com", values.base_corporate.to_s

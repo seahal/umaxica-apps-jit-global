@@ -216,7 +216,7 @@ module OidcCallback
       ),
     )
     clear_oidc_session_state!
-    redirect_to(sign_in_url_with_pt(nil), allow_other_host: true)
+    redirect_to_oidc_authorization_url(sign_in_url_with_pt(nil))
   end
 
   def log_invalid_callback_state!(reason)

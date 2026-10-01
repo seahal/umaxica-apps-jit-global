@@ -20,9 +20,9 @@ class WellKnownJwksControllerTest < ActionDispatch::IntegrationTest
     ["core app", "CORE_APP", normalized_host(ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"))],
     ["core com", "CORE_COM", normalized_host(ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"))],
     ["core org", "CORE_ORG", normalized_host(ENV.fetch("PUBLIC_CORE_STAFF_URL", "core.org.localhost"))],
-    ["sign app", "SIGN_APP", normalized_host(ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost"))],
-    ["sign com", "SIGN_COM", normalized_host(ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost"))],
-    ["sign org", "SIGN_ORG", normalized_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL", "sign.org.localhost"))],
+    ["sign app", "AUTH_APP", normalized_host(ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost"))],
+    ["sign com", "AUTH_COM", normalized_host(ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost"))],
+    ["sign org", "AUTH_ORG", normalized_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL", "sign.org.localhost"))],
   ].freeze
 
   setup do

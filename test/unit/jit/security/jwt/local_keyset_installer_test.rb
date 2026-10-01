@@ -63,13 +63,13 @@ module Jit
             preference_type: "OrgPreference",
             public_id: "org-pref-public",
             jti: "org-pref-jti",
-            jwt_issuer_id: "surface:SIGN_ORG",
+            jwt_issuer_id: "surface:AUTH_ORG",
           )
 
           assert_not_nil PreferenceToken.decode(
             token,
             host: "log.umaxica.org",
-            jwt_issuer_id: "surface:SIGN_ORG",
+            jwt_issuer_id: "surface:AUTH_ORG",
           )
 
           clear_local_jwt_env!
@@ -80,7 +80,7 @@ module Jit
           decoded = PreferenceToken.decode(
             token,
             host: "log.umaxica.org",
-            jwt_issuer_id: "surface:SIGN_ORG",
+            jwt_issuer_id: "surface:AUTH_ORG",
           )
 
           assert_not_nil decoded
@@ -103,19 +103,19 @@ module Jit
 
         test "partial surface env is repaired from local store as one matching set" do
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
-          original_private_key = ENV.fetch("JWT_SIGN_APP_PRIVATE_KEY")
-          original_public_keyset = ENV.fetch("JWT_SIGN_APP_PUBLIC_KEYSET")
+          original_private_key = ENV.fetch("JWT_AUTH_APP_PRIVATE_KEY")
+          original_public_keyset = ENV.fetch("JWT_AUTH_APP_PUBLIC_KEYSET")
 
-          ENV["JWT_SIGN_APP_PRIVATE_KEY"] = nil
+          ENV["JWT_AUTH_APP_PRIVATE_KEY"] = nil
 
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
 
-          assert_equal original_private_key, ENV["JWT_SIGN_APP_PRIVATE_KEY"]
-          assert_equal original_public_keyset, ENV["JWT_SIGN_APP_PUBLIC_KEYSET"]
+          assert_equal original_private_key, ENV["JWT_AUTH_APP_PRIVATE_KEY"]
+          assert_equal original_public_keyset, ENV["JWT_AUTH_APP_PUBLIC_KEYSET"]
           JitSecurityJwtRegistry.reload!
 
-          assert JitSecurityJwtRegistry.private_key_for("surface:SIGN_APP")
-          assert JitSecurityJwtRegistry.public_key_for("surface:SIGN_APP", ENV.fetch("JWT_SIGN_APP_ACTIVE_KID"))
+          assert JitSecurityJwtRegistry.private_key_for("surface:AUTH_APP")
+          assert JitSecurityJwtRegistry.public_key_for("surface:AUTH_APP", ENV.fetch("JWT_AUTH_APP_ACTIVE_KID"))
         end
 
         test "partial oidc client env is repaired from local store as one matching set" do

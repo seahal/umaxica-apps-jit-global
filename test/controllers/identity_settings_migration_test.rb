@@ -65,7 +65,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
     bearer_headers(
       AuthenticationToken.encode(
         @user, host: @sign_host, session_public_id: @token.public_id, resource_type: "client",
-               jwt_issuer_id: "surface:SIGN_APP",
+               jwt_issuer_id: "surface:AUTH_APP",
       ),
       host: @sign_host,
     )

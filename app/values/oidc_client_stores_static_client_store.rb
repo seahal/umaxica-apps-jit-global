@@ -86,10 +86,16 @@ module OidcClientStoresStaticClientStore
 
   def native_rp_clients
     {
-      "app-ios-rp" => native_rp_client(["umaxica://oidc/callback"], "App iOS RP"),
-      "app-android-rp" => native_rp_client(["com.umaxica.app:/oidc/callback"], "App Android RP"),
+      "app-ios-rp" => native_rp_client(build_redirect_uris("PUBLIC_PALM_SERVICE_URL"), "App iOS RP"),
+      "app-android-rp" => native_rp_client(build_redirect_uris("PUBLIC_PALM_SERVICE_URL"), "App Android RP"),
     }
   end
+
+  # App delivery follows Palm's verified HTTPS callback. These are not Base redirect URIs.
+  NATIVE_COMPLETION_URIS = {
+    "app-ios-rp" => "umaxica://oidc/callback",
+    "app-android-rp" => "com.umaxica.app:/oidc/callback",
+  }.freeze
 
   def core_next_rp_client
     {
@@ -207,6 +213,7 @@ module OidcClientStoresStaticClientStore
       when "PUBLIC_CORE_SERVICE_URL", "CORE_SERVICE_URL" then hosts.core_service.to_s
       when "PUBLIC_CORE_STAFF_URL", "CORE_STAFF_URL" then hosts.core_staff.to_s
       when "PUBLIC_CORE_CORPORATE_URL", "CORE_CORPORATE_URL" then hosts.core_corporate.to_s
+      when "PUBLIC_PALM_SERVICE_URL" then hosts.palm_service.to_s
       else
         raise KeyError, "No boot host mapping for #{env_key} and no default host given" if default_host.blank?
 

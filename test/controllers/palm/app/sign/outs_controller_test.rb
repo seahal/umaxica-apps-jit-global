@@ -99,7 +99,18 @@ module Palm
           assert_predicate AcmeRefreshTokenIssuer.call(refresh_token: unrelated_refresh), :success?
           assert_not_predicate unrelated_token.device_session.reload, :revoked?
 
-          logout_uri = URI.parse(payload["logout_url"])
+          gateway_uri = URI.parse(payload.fetch("logout_url"))
+
+          assert_equal "https://jump.umaxica.net", "#{gateway_uri.scheme}://#{gateway_uri.host}"
+          rt = Rack::Utils.parse_nested_query(gateway_uri.query.to_s).fetch("rt")
+          rt_payload, rt_header = JWT.decode(
+            rt, JumpRtKeyring.private_key("PALM_APP"), true, algorithms: ["ES384"],
+          )
+
+          assert_equal "https://palm-jp.umaxica.app", rt_payload.fetch("iss")
+          assert_equal "ES384", rt_header.fetch("alg")
+          assert_equal 1, rt_payload.fetch("schema")
+          logout_uri = URI.parse(rt_payload.fetch("url"))
           query = Rack::Utils.parse_nested_query(logout_uri.query.to_s)
 
           assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), logout_uri.host
@@ -664,7 +675,7 @@ class Palm::App::Sign::OutsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key

@@ -125,13 +125,13 @@ class << ConfigValues::HostFamilyValues
         env, auth_key(env, "STAFF"), development_host(production, "sign.org.localhost"), production: production,
       ),
       core_service: origin(
-        env, core_key(env, "SERVICE"), development_host(production, "jpx.umaxica.app"), production: production,
+        env, core_key(env, "SERVICE"), development_host(production, "jp.umaxica.app"), production: production,
       ),
       core_corporate: origin(
-        env, core_key(env, "CORPORATE"), development_host(production, "jpx.umaxica.com"), production: production,
+        env, core_key(env, "CORPORATE"), development_host(production, "jp.umaxica.com"), production: production,
       ),
       core_staff: origin(
-        env, core_key(env, "STAFF"), development_host(production, "jpx.umaxica.org"),
+        env, core_key(env, "STAFF"), development_host(production, "jp.umaxica.org"),
         production: production,
       ),
       base_service: origin(
