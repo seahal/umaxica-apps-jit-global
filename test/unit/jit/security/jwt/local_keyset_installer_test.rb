@@ -219,6 +219,50 @@ module Jit
                        "reusing persisted keys must not look like a key rotation"
         end
 
+        test "a surface signing key preset in ENV is refused instead of being used as a local Jump key" do
+          foreign = OpenSSL::PKey::EC.generate("secp384r1")
+          ENV["JWT_BASE_APP_PRIVATE_KEY"] = Base64.strict_encode64(foreign.to_der)
+
+          error =
+            assert_raises(ArgumentError) do
+              JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+            end
+
+          assert_match(/JWT_BASE_APP_PRIVATE_KEY must not be set/, error.message)
+          assert_not_includes error.message, ENV.fetch("JWT_BASE_APP_PRIVATE_KEY")
+        end
+
+        test "a surface kid preset in ENV is refused even when a store already exists" do
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          ENV["JWT_PALM_APP_ACTIVE_KID"] = "production-palm-app-es384-a"
+
+          assert_raises(ArgumentError) do
+            JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          end
+        end
+
+        test "a restart reuses the persisted surface Jump key from the local store" do
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          kid = ENV.fetch("JWT_BASE_APP_ACTIVE_KID")
+          private_key = ENV.fetch("JWT_BASE_APP_PRIVATE_KEY")
+          clear_local_jwt_env!
+
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+
+          assert_equal kid, ENV.fetch("JWT_BASE_APP_ACTIVE_KID")
+          assert_equal private_key, ENV.fetch("JWT_BASE_APP_PRIVATE_KEY")
+          assert_equal "#{Rails.env}-base-app-es384-a", kid
+        end
+
+        test "installing twice in one process accepts the values the installer exported" do
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          kid = ENV.fetch("JWT_AUTH_ORG_ACTIVE_KID")
+
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+
+          assert_equal kid, ENV.fetch("JWT_AUTH_ORG_ACTIVE_KID")
+        end
+
         test "explicit local jwt env values are not replaced" do
           ENV["PREFERENCE_JWT_ACTIVE_KID"] = "explicit-pref-kid"
           ENV["PREFERENCE_JWT_PRIVATE_KEYSET"] = '{"explicit-pref-kid":"private"}'

@@ -139,6 +139,47 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # Jump RTs are reusable navigation instructions; one-time behavior belongs to the receiver's
+  # own protocol state. A fresh, validly signed RT for an unknown or already completed state is
+  # refused by Palm's pending-flow check, not by Jump replay tracking.
+  test "a valid Jump return cannot complete an unknown or finished Palm flow" do
+    key = OpenSSL::PKey::EC.generate("secp384r1")
+    jwk = JWT::JWK.new(key, kid: "palm-return-test").export.stringify_keys.except("d").merge(
+      "alg" => "ES384",
+      "use" => "sig",
+    )
+    cache = ActiveSupport::Cache::MemoryStore.new
+    cache.write(
+      "jump_rt:return_jwks:#{Digest::SHA256.hexdigest("https://jump.umaxica.net/.well-known/jwks.json")}",
+      { "keys" => [jwk] },
+    )
+    now = Time.current.to_i
+    claims = {
+      schema: 1,
+      iss: "https://jump.umaxica.net",
+      aud: "https://palm-jp.umaxica.app",
+      sub: "jump-redirect",
+      iat: now,
+      nbf: now,
+      exp: now + 30,
+      jti: SecureRandom.uuid,
+      rpl: "reuse",
+      dst: "internal",
+      src: "https://www.umaxica.app",
+      url: "https://palm-jp.umaxica.app/oidc/callback?code=code-from-base&state=never-started",
+    }
+    rt = JWT.encode(claims, key, "ES384", { typ: "JWT", kid: "palm-return-test" })
+    host! "palm-jp.umaxica.app"
+    https!
+
+    Rails.stub(:cache, cache) do
+      get "/oidc/callback", params: { code: "code-from-base", state: "never-started", rt: rt }
+    end
+
+    assert_response :bad_request
+    assert_not session.key?(Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY)
+  end
+
   test "Palm refuses an unsolicited callback without a verified Jump return" do
     host! "palm-jp.umaxica.app"
     https!

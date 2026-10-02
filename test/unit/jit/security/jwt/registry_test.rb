@@ -253,6 +253,39 @@ module Jit
           assert_match(/active key "auth-kid" is missing from JWKS/, error.message)
         end
 
+        test "every Jump issuer record carries the PUBLIC_* issuer origin that Jump RTs sign as" do
+          with_registry_inputs do
+            issuers = JitSecurityJwtRegistry.reload!
+
+            JumpRtSurface::ISSUER_NAMESPACES.each do |namespace|
+              assert_equal JumpRtSurface.issuer_origin(namespace), issuers.fetch("surface:#{namespace}").issuer,
+                           namespace
+            end
+          end
+        end
+
+        test "a non-Jump surface record keeps its fixed issuer metadata" do
+          with_registry_inputs do
+            assert_equal "https://www.umaxica.app", JitSecurityJwtRegistry.reload!.fetch("surface:ACME_APP").issuer
+          end
+        end
+
+        test "an unsafe Jump issuer origin fails registry configuration at boot instead of at request time" do
+          with_registry_inputs("PUBLIC_BASE_SERVICE_URL" => "base.app.localhost") do
+            error = assert_raises(JitSecurityJwtRegistry::ConfigurationError) { JitSecurityJwtRegistry.reload! }
+
+            assert_match(/PUBLIC_BASE_SERVICE_URL/, error.message)
+          end
+        end
+
+        test "a missing Jump issuer origin fails registry configuration" do
+          with_registry_inputs("PUBLIC_PALM_SERVICE_URL" => nil) do
+            error = assert_raises(JitSecurityJwtRegistry::ConfigurationError) { JitSecurityJwtRegistry.reload! }
+
+            assert_match(/PUBLIC_PALM_SERVICE_URL is required/, error.message)
+          end
+        end
+
         test "does not retain invalid registry after failed reload" do
           with_registry_inputs do
             valid_records = JitSecurityJwtRegistry.reload!

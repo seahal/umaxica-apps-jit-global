@@ -53,7 +53,6 @@ class JumpRtReturnVerifier
       destination_origin: request_base_url,
       source: payload["src"],
     )
-    return failure("replayed") if one_time_return?(payload) && !consume_jti!(payload)
 
     Result.new(success: true, payload: payload, error: nil)
   rescue JwksUnavailable
@@ -176,7 +175,7 @@ class JumpRtReturnVerifier
     return false if payload["jti"].blank?
     return false if payload["src"].blank?
     return false if payload["url"].blank?
-    return false unless valid_replay_policy?(payload["rpl"])
+    return false unless payload["rpl"] == SecurityJwtJumpRtTokenCodec::REPLAY_POLICY
 
     iat = payload["iat"].to_i
     exp = payload["exp"].to_i
@@ -189,32 +188,10 @@ class JumpRtReturnVerifier
     true
   end
 
-  def valid_replay_policy?(value)
-    value.blank? || JumpRtIssuer::VALID_REPLAY_POLICIES.include?(value.to_s)
-  end
-
   def same_request_without_rt?(claimed_url)
     claimed = normalize_url_without_rt(claimed_url)
     current = normalize_url_without_rt(request_url)
     !claimed.nil? && !current.nil? && claimed == current
-  end
-
-  def consume_jti!(payload)
-    expires_at = Time.zone.at(payload["exp"].to_i + LEEWAY)
-    return false unless expires_at.future?
-
-    SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:jump_rt_return),
-      issuer: payload["iss"],
-      jti: payload["jti"],
-      expires_at: expires_at,
-    )
-  rescue ActiveRecord::ActiveRecordError
-    false
-  end
-
-  def one_time_return?(payload)
-    payload["rpl"].to_s == "once"
   end
 
   # Returns a comparable tuple [scheme, host, port, path, query_hash] so the
@@ -223,7 +200,7 @@ class JumpRtReturnVerifier
   def normalize_url_without_rt(value)
     uri = URI.parse(value.to_s)
     return nil unless uri.is_a?(URI::HTTP)
-    return nil unless https_url_allowed?(uri)
+    return nil unless uri.scheme == "https"
     return nil if uri.userinfo.present?
     return nil if uri.fragment.present?
 
@@ -240,23 +217,12 @@ class JumpRtReturnVerifier
     nil
   end
 
-  def https_url_allowed?(uri)
-    return true if uri.scheme == "https"
-    return false unless Rails.env.local?
-
-    uri.scheme == "http"
-  end
-
   def jump_origin
-    JumpRtReturnPolicy.normalize_origin(jump_gateway_url)
+    current_jump_config.origin
   end
 
   def jwks_url
     current_jump_config.jwks_uri
-  end
-
-  def jump_gateway_url
-    current_jump_config.origin.to_s
   end
 
   def revoked_kid?(kid)
@@ -268,7 +234,7 @@ class JumpRtReturnVerifier
   end
 
   def current_jump_config
-    ConfigValues::JumpGatewayValues.build(env: ENV, production: Rails.env.production?)
+    Rails.configuration.x.boot_config.fetch(:jump)
   end
 
   def failure(error)

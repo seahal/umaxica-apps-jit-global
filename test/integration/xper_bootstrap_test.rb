@@ -75,6 +75,12 @@ class XperBootstrapTest < ActionDispatch::IntegrationTest
         assert_select "h1", "Experience"
         assert_select "p", "Surface: xper"
         assert_select "p", "Edition: #{edition}"
+        # Turbo reads this meta tag to nonce its injected progress-bar <style>; without it
+        # style-src-elem blocks the element and the browser files a CSP violation report.
+        nonce = css_select('meta[name="csp-nonce"]').first&.[]("content")
+
+        assert_predicate nonce, :present?
+        assert_includes response.headers["Content-Security-Policy"], "'nonce-#{nonce}'"
         # Inertia Rails installs a global CSRF cookie hook on ActionController::Base.
         # Framework CSRF/session cookies are distinct from either credential authority.
         set_cookie = response.headers["Set-Cookie"].to_s

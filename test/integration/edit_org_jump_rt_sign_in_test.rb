@@ -12,6 +12,7 @@ class EditOrgJumpRtSignInTest < ActionDispatch::IntegrationTest
     assert_response :found
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query)
+
     assert_equal "www.umaxica.org", location.host
     assert_equal "/oauth/authorize", location.path
     assert_equal "edit-org", query.fetch("client_id")

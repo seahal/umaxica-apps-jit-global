@@ -220,7 +220,15 @@ class HostAuthorizationContractTest < Minitest::Test
     refute_empty buckets, "expected at least one registered object-storage boundary"
     # rubocop:enable Rails/RefuteMethods
 
-    SHARED_OBJECT_STORAGE_ENV.merge(buckets)
+    # The parent test process exported its own installer-owned surface signing keys. A development
+    # child must load its own local key store instead, so those inherited values are unset.
+    # Plain Minitest without ActiveSupport has no Enumerable#index_with.
+    # rubocop:disable Rails/IndexWith
+    inherited_surface_keys =
+      ENV.keys.grep(/\AJWT_[A-Z]+_[A-Z]+_(?:ACTIVE_KID|PRIVATE_KEY|PUBLIC_KEYSET)\z/).to_h { |name| [name, nil] }
+    # rubocop:enable Rails/IndexWith
+
+    SHARED_OBJECT_STORAGE_ENV.merge(buckets, inherited_surface_keys)
   end
 
   def development_published_host_env(unconfigured_site_host)

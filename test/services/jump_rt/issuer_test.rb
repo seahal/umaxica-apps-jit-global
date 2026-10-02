@@ -26,7 +26,6 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     with_env(
       "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a",
       "PRIVATE_AUTH_SERVICE_URL" => "sign.example.test",
-      "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
     ) do
       JumpRtKeyring.stub(:private_key, @private_key) do
         token = JumpRtIssuer.call(
@@ -64,7 +63,6 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
   test "returns nil for url with invalid percent encoding" do
     with_env(
       "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a",
-      "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
     ) do
       JumpRtKeyring.stub(:private_key, @private_key) do
         result = JumpRtIssuer.call(
@@ -87,32 +85,38 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_nil token
   end
 
-  test "can mark issued jump rt as one-time replay policy" do
-    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
-      JumpRtKeyring.stub(:private_key, @private_key) do
-        token = JumpRtIssuer.call(
-          namespace: "AUTH_APP",
-          url: "https://target.example/path",
-          replay_policy: "once",
-        )
-        payload, = JWT.decode(token, nil, false)
-
-        assert_equal "once", payload["rpl"]
+  test "callers cannot choose a replay policy" do
+    %w(reuse once).each do |policy|
+      assert_raises(ArgumentError, policy) do
+        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://target.example/path", replay_policy: policy)
       end
     end
   end
 
-  test "refuses invalid replay policy" do
-    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
-      JumpRtKeyring.stub(:private_key, @private_key) do
-        token = JumpRtIssuer.call(
-          namespace: "AUTH_APP",
-          url: "https://target.example/path",
-          replay_policy: "single",
-        )
+  test "every schema 1 token issued by each Jump issuer carries rpl reuse" do
+    JumpRtSurface::ISSUER_NAMESPACES.each do |namespace|
+      token = JumpRtIssuer.call(namespace: namespace, url: "https://target.example/path")
+      payload, = JWT.decode(token, nil, false)
 
-        assert_nil token
-      end
+      assert_equal 1, payload.fetch("schema"), namespace
+      assert_equal "reuse", payload.fetch("rpl"), namespace
+      assert_equal "https://jump.umaxica.net", payload.fetch("aud"), namespace
+    end
+  end
+
+  test "codec issue payload fixes rpl to reuse" do
+    payload = SecurityJwtJumpRtTokenCodec.build_issue_payload(
+      issuer: "https://auth.umaxica.app", normalized_url: "https://www.umaxica.app/", dst: "internal",
+      ttl: 30, now: Time.zone.at(1_800_000_000), jti: "jti", audience: "https://jump.umaxica.net",
+    )
+
+    assert_equal "reuse", payload.fetch(:rpl)
+    assert_raises(ArgumentError) do
+      SecurityJwtJumpRtTokenCodec.build_issue_payload(
+        issuer: "https://auth.umaxica.app", normalized_url: "https://www.umaxica.app/", dst: "internal",
+        replay_policy: "once", ttl: 30, now: Time.zone.at(1_800_000_000), jti: "jti",
+        audience: "https://jump.umaxica.net",
+      )
     end
   end
 
@@ -254,7 +258,6 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_equal "AUTH_APP", JumpRtSurface.namespace_for_controller("Auth::App::DashboardsController")
     assert_equal "AUTH_COM", JumpRtSurface.namespace_for_controller("Auth::Com::DashboardsController")
     assert_equal "AUTH_ORG", JumpRtSurface.namespace_for_controller("Auth::Org::DashboardsController")
-    assert_equal "ACME_APP", JumpRtSurface.namespace_for_controller("Acme::App::RootsController")
     assert_equal "BASE_APP", JumpRtSurface.namespace_for_controller("Base::App::RootsController")
     assert_equal "CORE_ORG", JumpRtSurface.namespace_for_controller("Core::Org::RootsController")
     assert_equal "BASE_COM", JumpRtSurface.namespace_for_controller("Base::Com::RootsController")
@@ -342,8 +345,17 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     end
   end
 
-  test "development issuance requires a distinct public issuer and gateway trust contract" do
-    Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("development")) do
+  test "development issuance signs as the canonical PUBLIC_* issuer origin" do
+    token =
+      Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("development")) do
+        JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/")
+      end
+
+    assert_equal "https://auth.umaxica.app", JWT.decode(token, nil, false).first.fetch("iss")
+  end
+
+  test "issuance fails closed when the PUBLIC_* issuer origin is unsafe" do
+    with_env("PUBLIC_AUTH_SERVICE_URL" => "auth.app.localhost") do
       assert_raises(JumpRtConfigurationError) do
         JumpRtIssuer.call(namespace: "AUTH_APP", url: "https://www.umaxica.app/")
       end

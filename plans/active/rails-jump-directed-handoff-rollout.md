@@ -28,15 +28,22 @@ from the Hono minor release; it performs no gateway deployment, binding/secret w
 - Supply `JWT_AUTH_{APP,COM,ORG}_{ACTIVE_KID,PRIVATE_KEY,PUBLIC_KEYSET,REVOKED_KIDS}` using the
   existing Auth material; retire the old variable names without a runtime alias or implicit copy.
 - Supply scoped Palm signing configuration and check Warp/Palm public JWKS from the gateway's
-  network. Never publish development auto-generated keys as production issuer keys.
+  network. A development-generated key published in a canonical origin's JWKS becomes a full
+  signing key of that canonical issuer; publish one only as a deliberate operating decision.
 - Confirm the public host variables match the canonical graph, especially Core `jp.*`, Warp
   `www-jp.*`, Palm `palm-jp.*`, Base `www.*` and Auth `auth.*`.
 - Coordinate native apps: browser launch on Palm, new Palm HTTPS redirect URI for Base code
   redemption, and fixed native delivery callbacks. The HTTPS Palm receiver must reach Rails before
   native link interception; any claimed app-link endpoint must be a separate delivery endpoint.
-- Define development's distinct issuer origin, reachable JWKS URL, kid, explicit production Jump
-  trust and public return origin per surface. Private ingress is not a browser/protocol identity.
-  Configure the per-issuer opt-in contract; local-only surfaces fail Jump issuance explicitly.
+- Development live Jump derives each issuer, return origin and JWKS URI from the existing
+  `PUBLIC_*` surface setting and signs with installer-owned local keys. `Rails.env` does not select
+  the identity: a canonical origin is allowed when its public JWKS publishes the local kid, while
+  localhost, private ingress and other non-public values fail at boot.
+- `PUBLIC_JUMP_GATEWAY_URL` is the sole gateway setting; JWKS URI and `aud` are derived, and
+  `JUMP_GATEWAY_URL` plus the old JWKS/audience settings fail boot. No `PRIVATE_JUMP_GATEWAY_URL`
+  exists because Rails has no private path to Jump. Hono must emit a required `rpl: "reuse"` on
+  return tokens before the round trip works again; Rails provides no compatibility fallback in the
+  meantime.
 - Specify independent host-bound browser continuity for development RP/Base/Auth surfaces as part
   of that contract. Production uses host-only `__Host-session`; the shared-domain test session
   cookie requires explicit per-host transport in the multi-surface integration fixture.
@@ -46,7 +53,7 @@ from the Hono minor release; it performs no gateway deployment, binding/secret w
 ## Verification and rollout
 
 Verify the complete graph's allowed and denied pairs; issuer-to-public-JWKS key agreement; receiver
-claim and exact-URL binding; `rpl=once` replay rejection and `rpl=reuse` behavior. Verify PKCE, state,
+claim and exact-URL binding; required exact `rpl: "reuse"` and receiver-owned one-time state. Verify PKCE, state,
 nonce propagation and Palm missing/mismatched/expired/replayed callbacks. Keep native bearer API
 and signed POST ceremonies under their existing independent controls.
 

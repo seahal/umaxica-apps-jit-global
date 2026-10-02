@@ -42,11 +42,11 @@ credentials, files, KMS, or the network while serving a request.
 
 JumpRT token-family behavior is implemented through `SecurityJwtJumpRtTokenCodec` while
 `JumpRtIssuer` and `JumpRtReturnVerifier` remain the service entry points. URL normalization,
-return-policy checks, JWKS fetch/cache behavior, and one-time replay caching stay in JumpRT
-services.
+return-policy checks and JWKS fetch/cache behavior stay in JumpRT services. Jump RTs are reusable
+(`rpl` is always `"reuse"`); Rails keeps no Jump replay state.
 
 Inbound Jump-gateway return tokens are verified only with the Jump public JWKS derived as
-`{PUBLIC_JUMP_GATEWAY_URL}/.well-known/jwks.json`. The lifetime cap is 30 seconds. Clock leeway is 5
+`{PUBLIC_JUMP_GATEWAY_URL}/.well-known/jwks.json`; neither that URI nor the `aud` is configurable. The lifetime cap is 30 seconds. Clock leeway is 5
 seconds. A JWKS fetch failure fails closed; Rails does not keep a stale JWKS fallback and does not
 store the Jump gateway private key.
 
@@ -150,41 +150,27 @@ Before production deployment:
 - Token TTL is no more than the verifier maximum.
 - Rollback private key versions are still available.
 
-## Public development issuance
+## Development issuance
 
-Keep `PUBLIC_JUMP_GATEWAY_URL=https://jump.umaxica.net`. Its boot-configured origin, audience and
-JWKS must also name that exact gateway. For each explicitly enabled issuer namespace, supply:
+`PUBLIC_JUMP_GATEWAY_URL` is the only gateway setting; keep it at `https://jump.umaxica.net` while
+no emulator exists. `JUMP_GATEWAY_URL` was removed and fails boot if still set. There is no
+`PRIVATE_JUMP_GATEWAY_URL`: Rails has no private network path to Jump. There are no Jump-specific development settings. Development signs with the
+installer-owned keys in `tmp/local_jwt_keysets.json` (kid `development-<namespace>-es384-a`); a
+`JWT_<NAMESPACE>_*` environment value that does not match that store fails boot, so no other key
+material can be injected locally.
 
-```text
-JUMP_DEVELOPMENT_<NAMESPACE>_ISSUER_ORIGIN
-JUMP_DEVELOPMENT_<NAMESPACE>_JWKS_URI
-JUMP_DEVELOPMENT_<NAMESPACE>_RETURN_ORIGIN
-JUMP_DEVELOPMENT_<NAMESPACE>_PRODUCTION_PUBLIC_KEYSET
-JWT_DEVELOPMENT_<NAMESPACE>_ACTIVE_KID
-JWT_DEVELOPMENT_<NAMESPACE>_PRIVATE_KEY
-JWT_DEVELOPMENT_<NAMESPACE>_PUBLIC_KEYSET
-JWT_DEVELOPMENT_<NAMESPACE>_REVOKED_KIDS  # optional comma-separated revocations
-```
+Issuer identity comes from the existing surface setting for the namespace (`PUBLIC_AUTH_*_URL`,
+`PUBLIC_BASE_*_URL`, `PUBLIC_CORE_*_URL`, `PUBLIC_WARP_*_URL`, `PUBLIC_PALM_SERVICE_URL`). For live
+Jump each such setting must be a public HTTPS root origin; localhost, private ingress and IP
+literals fail registry configuration at boot and raise `JumpRtConfigurationError` at issuance and
+on return verification. `Rails.env` does not change the identity, so development may use a
+canonical origin such as `https://www.umaxica.app`. In that case the JWKS at that origin must
+publish the development kid, and the development private key then signs as the canonical issuer
+with full authority; the `development` marker in the kid does not limit it. Otherwise expose a
+distinct origin's Rails JWKS route and browser return through public HTTPS ingress, and register
+the exact issuer, JWKS and kid in Hono separately. Verify DNS, TLS, JWKS accessibility from Jump and the published kid before use.
+An Access login page in front of JWKS does not constitute a fetchable keyset. No deployment, trust
+registration, secret provisioning or key rotation is performed by this Rails change.
 
-The issuer is a distinct public HTTPS origin in the namespace's TLD. No path, credentials,
-non-default port, query, fragment, private ingress or production/retired identity is accepted.
-Return origin equals issuer origin. JWKS URI is exactly `issuer/.well-known/jwks.json`.
-The kid starts with `development-`; provision a dedicated P-384 key through the development secret
-backend. The local key installer does not generate these opt-in settings or keys.
-
-The non-secret production reference is a public JWK Set containing all active/grace production
-Jump keys. Keep it complete and current. Rails rejects overlapping kids and EC key coordinates,
-including a production key renamed to a development kid. This reference is supplied explicitly;
-Rails does not fetch it or infer production key separation from the kid name alone.
-
-Configure the surface's existing public host variable to the same issuer hostname and expose its
-Rails JWKS route and browser return through public HTTPS ingress. Register the exact development
-issuer/JWKS/kids and logical node ID in Hono separately. Verify DNS, TLS, JWKS accessibility from
-Jump, matching published kid, and host-only browser continuity before rollout. An Access login
-page in front of JWKS does not constitute a fetchable keyset. No deployment, trust registration,
-secret provisioning or key rotation is performed by this Rails change.
-
-Configured development return/source identities resolve to their existing logical canonical nodes
-only in development; the same twenty-edge policy applies. Production policy retains thirteen
-canonical origins and no development aliases. Edit remains an OIDC assertion client, not a Jump
+Edit remains an OIDC assertion client, not a Jump
 issuer; its OIDC keys and registration are independent from this surface key runbook.

@@ -22,24 +22,32 @@ class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
       "WARP_ORG" => "https://www-jp.umaxica.org",
       "PALM_APP" => "https://palm-jp.umaxica.app",
     }
+
+    assert_equal issuers.keys.sort, JumpRtSurface::ISSUER_NAMESPACES.sort
     issuers.each do |namespace, origin|
       tld = namespace.split("_").last.downcase
       peer = namespace.start_with?("BASE_") ? "auth" : "www"
       token = JumpRtIssuer.call(namespace: namespace, url: "https://#{peer}.umaxica.#{tld}/")
       claims, header = JWT.decode(token, nil, false)
+
       assert_equal origin, claims.fetch("iss"), namespace
       assert_equal "ES384", header.fetch("alg"), namespace
+      assert_equal "reuse", claims.fetch("rpl"), namespace
       host! URI.parse(origin).host
       https!
       get "/.well-known/jwks.json"
 
       assert_response :ok
       keys = response.parsed_body.fetch("keys")
+
       assert_includes keys.pluck("kid"), header.fetch("kid"), namespace
       assert_empty keys.flat_map(&:keys) & JitSecurityJwtJwk::PRIVATE_FIELDS, namespace
-      verified, = JWT.decode(token, nil, true, algorithms: ["ES384"],
-                             jwks: JWT::JWK::Set.new(response.parsed_body),
-                             verify_iss: true, iss: origin, verify_aud: true, aud: "https://jump.umaxica.net")
+      verified, = JWT.decode(
+        token, nil, true, algorithms: ["ES384"],
+                          jwks: JWT::JWK::Set.new(response.parsed_body),
+                          verify_iss: true, iss: origin, verify_aud: true, aud: "https://jump.umaxica.net",
+      )
+
       assert_equal claims, verified, namespace
     end
   end

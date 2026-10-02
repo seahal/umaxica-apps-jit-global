@@ -47,10 +47,7 @@ class WarpSsoStartContractTest < ActionDispatch::IntegrationTest
 
         assert_response :redirect, "#{surface} SSO start must not return the historical 422"
         gateway = URI.parse(response.location)
-        gateway_origin = ConfigValues::JumpGatewayValues.build(
-          env: ENV,
-          production: Rails.env.production?,
-        ).origin
+        gateway_origin = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin)
 
         assert_equal [gateway_origin.scheme, gateway_origin.host, gateway_origin.port],
                      [gateway.scheme, gateway.host, gateway.port]

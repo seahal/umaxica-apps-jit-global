@@ -43,7 +43,6 @@ module CommonRedirect
     url,
     namespace: jump_rt_issuer_namespace,
     dst: "internal",
-    replay_policy: "reuse",
     preserve_query_keys: [],
     fallback_internal: false,
     **
@@ -53,18 +52,17 @@ module CommonRedirect
       namespace: namespace,
       url: url,
       dst: dst,
-      replay_policy: replay_policy,
       preserve_query_keys: preserve_query_keys,
     )
     if token.present?
-      log_jump_rt_issued(token: token, namespace: namespace, dst: dst, replay_policy: replay_policy, url: url)
+      log_jump_rt_issued(token: token, namespace: namespace, dst: dst, url: url)
       result = RedirectsJumpGatewayUrl.call(token)
       return redirect_to(result.value, allow_other_host: true, **) if result.ok?
 
       fallback_path = safe_return_path(url) if fallback_internal
       if fallback_path.present?
         log_jump_rt_fallback_internal(
-          namespace: namespace, dst: dst, replay_policy: replay_policy, url: url,
+          namespace: namespace, dst: dst, url: url,
           reason: :gateway_url_failed, gateway_failure: result.failure_reason,
         )
         return redirect_to(fallback_path, allow_other_host: false, **)
@@ -78,7 +76,7 @@ module CommonRedirect
     fallback_path = safe_return_path(url) if fallback_internal
     if fallback_path.present?
       log_jump_rt_fallback_internal(
-        namespace: namespace, dst: dst, replay_policy: replay_policy, url: url,
+        namespace: namespace, dst: dst, url: url,
         reason: :issuance_failed,
       )
       return redirect_to(fallback_path, allow_other_host: false, **)
@@ -226,7 +224,7 @@ module CommonRedirect
     JumpRtSurface.namespace_for_controller(self.class.name)
   end
 
-  def log_jump_rt_issued(token:, namespace:, dst:, replay_policy:, url:)
+  def log_jump_rt_issued(token:, namespace:, dst:, url:)
     req = request if respond_to?(:request, true)
     headers = req.headers if req&.respond_to?(:headers)
     request_id = req.request_id if req&.respond_to?(:request_id)
@@ -240,7 +238,6 @@ module CommonRedirect
         request_id: request_id,
         namespace: namespace,
         dst: dst,
-        rpl: replay_policy,
         rt_length: token.to_s.bytesize,
         rt_parts: token.to_s.split(".").size,
         rt_digest12: Digest::SHA256.hexdigest(token.to_s)[0, 12],
@@ -256,11 +253,10 @@ module CommonRedirect
     )
   end
 
-  # Emitted when redirect_to_jump_url could not push the user through the
-  # Jump gateway and silently downgraded to a same-host redirect via
-  # fallback_internal. Surfaces key-config and gateway-issuance regressions
-  # that would otherwise be invisible in production.
-  def log_jump_rt_fallback_internal(namespace:, dst:, replay_policy:, url:, reason:, gateway_failure: nil)
+  # Emitted when redirect_to_jump_url downgraded an unusable target URL to a same-host redirect via
+  # fallback_internal. Jump configuration errors (gateway, issuer identity, signing key) raise
+  # JumpRtConfigurationError before this point and are never downgraded.
+  def log_jump_rt_fallback_internal(namespace:, dst:, url:, reason:, gateway_failure: nil)
     request_id = request.request_id if respond_to?(:request, true) && request.respond_to?(:request_id)
     Rails.logger.warn(
       JitLogEvent.format(
@@ -268,7 +264,6 @@ module CommonRedirect
         request_id: request_id,
         namespace: namespace,
         dst: dst,
-        rpl: replay_policy,
         reason: reason,
         gateway_failure: gateway_failure,
         target_url_digest: Digest::SHA256.hexdigest(url.to_s)[0, 12],

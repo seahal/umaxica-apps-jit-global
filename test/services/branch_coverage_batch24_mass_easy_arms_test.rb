@@ -80,7 +80,7 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
   end
 
   test "RedirectsExternalTargetResolver refuses blank origins" do
-    resolver = RedirectsExternalTargetResolver.new(:jump, path: "/", query: {}, source: :explicit_external)
+    resolver = RedirectsExternalTargetResolver.new(:rp_app, path: "/", query: {}, source: :explicit_external)
     resolver.define_singleton_method(:origin_for) { |_| "" }
 
     assert_equal "invalid_origin", resolver.call.failure_reason

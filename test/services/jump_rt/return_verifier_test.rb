@@ -33,50 +33,43 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "https://auth.umaxica.app", result.payload.fetch("src")
   end
 
-  test "allows reusable return token jti by default" do
+  test "a reusable return token verifies repeatedly and records no consumed jti" do
     token = sign_return_token(jti: "reusable-jti")
 
-    assert_predicate verify(token), :success?
-    assert_predicate verify(token), :success?
-  end
-
-  test "rejects replayed return token jti when replay policy is one-time" do
-    token = sign_return_token(jti: "single-use-jti", rpl: "once")
-
-    assert_predicate verify(token), :success?
-    assert_equal "replayed", verify(token).error
-  end
-
-  test "one-time jti record expires no later than token expiration plus leeway" do
-    token = sign_return_token(jti: "ttl-jti", rpl: "once", exp: @now.to_i + 10)
-
-    assert_predicate verify(token), :success?
-
-    record = SecurityConsumedJti.find_by!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:jump_rt_return),
-      issuer: "https://jump.umaxica.net",
-      jti_digest: SecurityConsumedJti.digest_jti("ttl-jti"),
-    )
-
-    travel_to(@now + JumpRtReturnVerifier::LEEWAY + 11.seconds) do
-      assert_operator record.expires_at, :<, Time.current
+    assert_no_difference -> { SecurityConsumedJti.count } do
+      assert_predicate verify(token), :success?
+      assert_predicate verify(token), :success?
     end
   end
 
-  test "one-time jti replay guard does not write return jti entries to Rails cache" do
-    token = sign_return_token(jti: "db-backed-jti", rpl: "once")
-
-    assert_predicate verify(token), :success?
-
-    cached_keys = Rails.cache.instance_variable_get(:@data).keys
-
-    assert_empty cached_keys.grep(/return_jti/)
+  test "rpl exact reuse is the only accepted replay policy" do
+    assert_predicate verify(sign_return_token(rpl: "reuse")), :success?
   end
 
-  test "rejects unknown replay policy" do
-    token = sign_return_token(rpl: "single")
+  test "rpl missing is rejected rather than treated as reuse" do
+    assert_equal "invalid_claim", verify(sign_return_token_without(:rpl)).error
+  end
 
-    assert_equal "invalid_claim", verify(token).error
+  {
+    "null" => nil,
+    "empty string" => "",
+    "once" => "once",
+    "capitalized" => "Reuse",
+    "uppercase" => "REUSE",
+    "other string" => "single",
+    "NUL suffix" => "reuse\u0000",
+    "padded" => " reuse",
+    "zero" => 0,
+    "false" => false,
+    "true" => true,
+    "array" => ["reuse"],
+    "empty array" => [],
+    "object" => { "rpl" => "reuse" },
+    "empty object" => {},
+  }.each do |label, value|
+    test "rpl #{label} is rejected" do
+      assert_equal "invalid_claim", verify(sign_return_token(rpl: value)).error
+    end
   end
 
   test "rejects wrong audience" do
@@ -235,26 +228,12 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
 
   test "rejects locally revoked kid before using cached jwks" do
     token = sign_return_token
+    jump = ConfigValues::JumpGatewayValues.build(
+      env: { "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net", "JUMP_RETURN_REVOKED_KIDS" => "jump-test" },
+    )
 
-    with_env("JUMP_RETURN_REVOKED_KIDS" => "jump-test") do
-      result = verify(token)
-
-      assert_equal "revoked_kid", result.error
-    end
-  end
-
-  test "requires https jwks url" do
-    token = sign_return_token
-
-    with_env("JUMP_GATEWAY_JWKS_URL" => "http://jump.umaxica.net/.well-known/jwks.json") do
-      result = JumpRtReturnVerifier.call(
-        token: token,
-        request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
-        request_base_url: "https://www.umaxica.app",
-        now: @now,
-      )
-
-      assert_equal "jwks_unavailable", result.error
+    Rails.configuration.x.stub(:boot_config, Rails.configuration.x.boot_config.merge(jump: jump)) do
+      assert_equal "revoked_kid", verify(token).error
     end
   end
 
@@ -297,22 +276,19 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
                     verify(sign_return_token(nbf: @now.to_i + 90, exp: @now.to_i + 60)).error
   end
 
-  test "rejects http claimed urls outside local environments" do
+  test "rejects http claimed urls in the local environment too" do
     token = sign_return_token(aud: "http://www.umaxica.app", url: "http://www.umaxica.app/path?ok=1")
 
-    with_env("PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net") do
-      Rails.stub(:env, ActiveSupport::StringInquirer.new("production")) do
-        result = JumpRtReturnVerifier.call(
-          token: token,
-          request_url: "http://www.umaxica.app/path?ok=1&rt=#{token}",
-          request_base_url: "http://www.umaxica.app",
-          fetcher: -> { { "keys" => [@public_jwk] } },
-          now: @now,
-        )
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "http://www.umaxica.app/path?ok=1&rt=#{token}",
+      request_base_url: "http://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } },
+      now: @now,
+    )
 
-        assert_equal "invalid_url", result.error
-      end
-    end
+    assert_predicate Rails.env, :local?
+    assert_equal "invalid_url", result.error
   end
 
   test "rejects claimed urls that include userinfo or fragments" do
@@ -350,25 +326,28 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "jwks_unavailable", result.error
   end
 
-  test "default fetcher verifies against jwks served over https" do
+  test "default fetcher reads the JWKS URI derived from PUBLIC_JUMP_GATEWAY_URL" do
     token = sign_return_token
     response = Struct.new(:success?, :body).new(true, { "keys" => [@public_jwk] }.to_json)
+    requested = []
     connection = Object.new
-    connection.define_singleton_method(:get) { |_uri| response }
+    connection.define_singleton_method(:get) do |uri|
+      requested << uri.to_s
+      response
+    end
 
     result =
-      with_env("JUMP_GATEWAY_JWKS_URL" => JWKS_URL) do
-        OutboundHttp::Connection.stub(:build, connection) do
-          JumpRtReturnVerifier.call(
-            token: token,
-            request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
-            request_base_url: "https://www.umaxica.app",
-            now: @now,
-          )
-        end
+      OutboundHttp::Connection.stub(:build, connection) do
+        JumpRtReturnVerifier.call(
+          token: token,
+          request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+          request_base_url: "https://www.umaxica.app",
+          now: @now,
+        )
       end
 
     assert_predicate result, :success?
+    assert_equal [JWKS_URL], requested
   end
 
   test "default fetcher fails closed on a non-success jwks response" do
@@ -378,15 +357,13 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     connection.define_singleton_method(:get) { |_uri| response }
 
     result =
-      with_env("JUMP_GATEWAY_JWKS_URL" => JWKS_URL) do
-        OutboundHttp::Connection.stub(:build, connection) do
-          JumpRtReturnVerifier.call(
-            token: token,
-            request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
-            request_base_url: "https://www.umaxica.app",
-            now: @now,
-          )
-        end
+      OutboundHttp::Connection.stub(:build, connection) do
+        JumpRtReturnVerifier.call(
+          token: token,
+          request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+          request_base_url: "https://www.umaxica.app",
+          now: @now,
+        )
       end
 
     assert_equal "jwks_unavailable", result.error
@@ -402,49 +379,18 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
         response = Struct.new(:success?, :body).new(true, body)
         connection = Object.new
         connection.define_singleton_method(:get) { |_uri| response }
-        with_env("JUMP_GATEWAY_JWKS_URL" => JWKS_URL) do
-          OutboundHttp::Connection.stub(:build, connection) do
-            JumpRtReturnVerifier.call(
-              token: token,
-              request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
-              request_base_url: "https://www.umaxica.app",
-              now: @now,
-            )
-          end
+        OutboundHttp::Connection.stub(:build, connection) do
+          JumpRtReturnVerifier.call(
+            token: token,
+            request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+            request_base_url: "https://www.umaxica.app",
+            now: @now,
+          )
         end
       end
 
     assert_predicate results.first, :success?
     assert_equal "jwks_unavailable", results.last.error
-  end
-
-  test "treats a one-time token as replayed when the jti store raises" do
-    token = sign_return_token(jti: "store-down-jti", rpl: "once")
-    failing_consume = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "down" }
-
-    result = SecurityConsumedJti.stub(:consume!, failing_consume) { verify(token) }
-
-    assert_equal "replayed", result.error
-  end
-
-  test "accepts http claimed urls in the local environment" do
-    token = sign_return_token(aud: "http://www.umaxica.app", url: "http://www.umaxica.app/path?ok=1")
-
-    # The source allowlist is a separate check with its own tests; it is held open here so the
-    # result isolates the local-environment http allowance in the url comparison.
-    result =
-      JumpRtReturnPolicy.stub(:allowed_source?, true) do
-        JumpRtReturnVerifier.call(
-          token: token,
-          request_url: "http://www.umaxica.app/path?ok=1&rt=#{token}",
-          request_base_url: "http://www.umaxica.app",
-          fetcher: -> { { "keys" => [@public_jwk] } },
-          now: @now,
-        )
-      end
-
-    assert_predicate Rails.env, :local?
-    assert_predicate result, :success?
   end
 
   private
@@ -480,20 +426,12 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       jti: "jump-return-jti",
       src: "https://auth.umaxica.app",
       dst: "internal",
+      rpl: "reuse",
       url: "https://www.umaxica.app/path?ok=1",
     }
   end
 
-  def with_env(values)
-    previous = {}
-    values.each do |key, value|
-      previous[key] = ENV[key]
-      value.nil? ? ENV.delete(key) : ENV[key] = value
-    end
-    yield
-  ensure
-    previous.each do |key, value|
-      value.nil? ? ENV.delete(key) : ENV[key] = value
-    end
+  def sign_return_token_without(claim)
+    JWT.encode(return_payload.except(claim), @private_key, "ES384", { typ: "JWT", kid: "jump-test" })
   end
 end

@@ -3,6 +3,7 @@
 <head>
   <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (APP)", separator: "—", reverse: true %>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <%= csp_meta_tag %>
   <%= stylesheet_link_tag "application", nonce: true %>
   <%= stylesheet_link_tag "xper", nonce: true %>
   <%= javascript_importmap_tags %>

@@ -27,15 +27,12 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   end
 
   test "rails issued rt can round trip through a stubbed jump gateway and return verifier" do
-    with_env(
-      "PRIVATE_AUTH_SERVICE_URL" => "www.umaxica.app",
-      "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
-    ) do
+    with_env("PRIVATE_AUTH_SERVICE_URL" => "www.umaxica.app") do
       JumpRtKeyring.stub(:active_kid, "acme-app-test") do
         JumpRtKeyring.stub(:private_key, @rails_private_key) do
           app_origin = acme_app_origin
           rails_rt = JumpRtIssuer.call(
-            namespace: "ACME_APP",
+            namespace: "AUTH_APP",
             url: "#{app_origin}/",
             dst: "internal",
             now: @now,
@@ -103,6 +100,37 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_includes joined, "jump_return.rejected"
     assert_not_includes joined, token
     assert_no_match(/rt=#{Regexp.escape(token)}/, joined)
+  end
+
+  # Receiver responsibility (adr/jump-directed-rails-handoff-contract.md): a verified return only
+  # removes rt and re-enters the same request URL on the receiving host. A downstream redirect
+  # parameter carried through Jump is never followed by the return step itself.
+  test "a verified Jump return does not follow a downstream redirect parameter off the receiving host" do
+    origin = "https://auth.umaxica.com"
+    url = "#{origin}/?redirect_uri=https%3A%2F%2Fevil.example%2Fcb&ri=us"
+    token = sign_return_token(aud: origin, src: "https://www.umaxica.com", url: url)
+    prime_jump_jwks_cache
+    host! "auth.umaxica.com"
+    https!
+    get "/", params: { redirect_uri: "https://evil.example/cb", ri: "us", rt: token }
+
+    assert_response :see_other
+    location = URI.parse(response.location)
+
+    assert_equal "auth.umaxica.com", location.host
+    assert_equal "https://evil.example/cb", Rack::Utils.parse_nested_query(location.query).fetch("redirect_uri")
+    assert_not_includes Rack::Utils.parse_nested_query(location.query).keys, "rt"
+  end
+
+  test "a Jump return whose source edge is not approved is rejected even with a valid signature" do
+    origin = "https://auth.umaxica.com"
+    token = sign_return_token(aud: origin, src: "https://jp.umaxica.com", url: "#{origin}/?ri=us")
+    prime_jump_jwks_cache
+    host! "auth.umaxica.com"
+    https!
+    get "/", params: { ri: "us", rt: token }
+
+    assert_response :bad_request
   end
 
   test "sign app includes jump return verification" do
@@ -208,7 +236,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
   end
 
   def stubbed_jump_location(rails_rt)
-    rails_issuer = JumpRtSurface.issuer_origin("ACME_APP")
+    rails_issuer = JumpRtSurface.issuer_origin("AUTH_APP")
     payload, header = JWT.decode(
       rails_rt,
       JWT::JWK.import(@rails_public_jwk).public_key,
@@ -229,6 +257,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_equal 1, payload.fetch("schema")
     assert_equal "jump-redirect", payload.fetch("sub")
     assert_equal "internal", payload.fetch("dst")
+    assert_equal "reuse", payload.fetch("rpl")
     assert_equal "#{acme_app_origin}/", payload.fetch("url")
 
     return_rt = sign_return_token(
@@ -262,6 +291,7 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
       jti: "jump-return-jti",
       src: "https://#{ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")}",
       dst: "internal",
+      rpl: "reuse",
       url: "https://www.app.localhost/",
     }.merge(overrides)
 

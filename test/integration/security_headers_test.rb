@@ -54,7 +54,7 @@ class SecurityHeadersTest < ActionDispatch::IntegrationTest
     # The jump gateway must be a valid form-action target: sign-flow form submissions
     # (e.g. the sign-up birthdate checkpoint) finalize by redirecting through it.
     assert_includes response.headers["Content-Security-Policy"],
-                    ENV.fetch("PUBLIC_JUMP_GATEWAY_URL")
+                    Rails.configuration.x.boot_config.fetch(:jump).origin
     # connect-src decides where injected script may send data, so it must name
     # origins rather than the `https:` scheme. `https:` permits every HTTPS host
     # on the internet and removes CSP's value as an exfiltration control.

@@ -431,7 +431,7 @@ class Base::App::TestCsrfController
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
     {
-      "JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
+      "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
       "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-test",
       "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
@@ -784,7 +784,7 @@ class Base::App::BasePublicControllerTest
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

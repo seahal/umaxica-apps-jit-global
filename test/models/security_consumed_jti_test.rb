@@ -31,7 +31,7 @@ class SecurityConsumedJtiTest < ActiveSupport::TestCase
       expires_at: 2.minutes.from_now,
     )
     assert SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:jump_rt_return),
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:sign_out_notice),
       issuer: "issuer-a",
       jti: jti,
       expires_at: 2.minutes.from_now,

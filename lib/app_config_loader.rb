@@ -11,7 +11,7 @@ module AppConfigLoader
   def load!(env: ENV, rails_env: Rails.env)
     production = rails_env.production?
     hosts = ConfigValues::HostFamilyValues.build(env: env, production: production)
-    jump = ConfigValues::JumpGatewayValues.build(env: env, production: production)
+    jump = ConfigValues::JumpGatewayValues.build(env: env)
     oidc = ConfigValues::OidcAuthorityValues.build(hosts)
 
     {

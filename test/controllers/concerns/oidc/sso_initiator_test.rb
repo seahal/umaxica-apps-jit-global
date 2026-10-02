@@ -56,8 +56,9 @@ class OidcSsoInitiatorTestController < ApplicationController
     OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
   end
 
+  # Acme is Base-hosted and has no Jump issuer of its own.
   def jump_rt_issuer_namespace
-    "ACME_APP"
+    "BASE_APP"
   end
 end
 
@@ -606,7 +607,6 @@ class OidcSsoInitiatorTestController
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
     {
-      "JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
       "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
       "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-test",
       "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
@@ -957,7 +957,6 @@ class OidcSsoInitiatorTest
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end

@@ -88,14 +88,22 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
     assert_equal 80, JumpRtReturnPolicy.default_port_for("http")
   end
 
-  test "allowed_sources lists the auth jump rt issuing origin for the base destination" do
-    sources = JumpRtReturnPolicy.allowed_sources
-
-    assert_includes sources.keys, "https://www.umaxica.app"
-    assert_includes sources["https://www.umaxica.app"], "https://auth.umaxica.app"
-  end
-
-  test "only the approved same TLD directed graph is allowed" do
+  test "only the approved same TLD directed graph is allowed across all 169 ordered canonical pairs" do
+    namespaces = {
+      "auth-app-ww" => "AUTH_APP",
+      "auth-com-ww" => "AUTH_COM",
+      "auth-org-ww" => "AUTH_ORG",
+      "base-app-ww" => "BASE_APP",
+      "base-com-ww" => "BASE_COM",
+      "base-org-ww" => "BASE_ORG",
+      "core-app-jp" => "CORE_APP",
+      "core-com-jp" => "CORE_COM",
+      "core-org-jp" => "CORE_ORG",
+      "palm-app-jp" => "PALM_APP",
+      "warp-app-jp" => "WARP_APP",
+      "warp-com-jp" => "WARP_COM",
+      "warp-org-jp" => "WARP_ORG",
+    }
     origins = {
       "auth-app-ww" => "https://auth.umaxica.app",
       "auth-com-ww" => "https://auth.umaxica.com",
@@ -133,16 +141,19 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
       ["warp-com-jp", "base-com-ww"],
       ["warp-org-jp", "base-org-ww"],
     ]
+
     assert_equal 20, edges.size
-    observed = JumpRtReturnPolicy.allowed_sources.flat_map do |destination, sources|
-      sources.map { |source| [source, destination] }
-    end
-    assert_equal edges.map { |source, destination| [origins.fetch(source), origins.fetch(destination)] }.sort,
-                 observed.sort
-    origins.keys.product(origins.keys).each do |source, destination|
+    assert_equal edges.map { |source, destination| [namespaces.fetch(source), namespaces.fetch(destination)] }.sort,
+                 JumpRtReturnPolicy::ALLOWED_EDGES.sort
+    pairs = origins.keys.product(origins.keys)
+
+    assert_equal 169, pairs.size
+    pairs.each do |source, destination|
       assert_equal edges.include?([source, destination]),
-                   JumpRtReturnPolicy.allowed_source?(destination_origin: origins.fetch(destination),
-                                                      source: origins.fetch(source)),
+                   JumpRtReturnPolicy.allowed_source?(
+                     destination_origin: origins.fetch(destination),
+                     source: origins.fetch(source),
+                   ),
                    "#{source} -> #{destination}"
     end
   end

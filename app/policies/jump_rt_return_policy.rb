@@ -4,38 +4,37 @@
 module JumpRtReturnPolicy
   module_function
 
-  # Directed, destination-indexed graph. An RP is approved explicitly, never by host shape.
-  ALLOWED_SOURCES = {
-    "https://auth.umaxica.app" => %w(https://www.umaxica.app).freeze,
-    "https://auth.umaxica.com" => %w(https://www.umaxica.com).freeze,
-    "https://auth.umaxica.org" => %w(https://www.umaxica.org).freeze,
-    "https://www.umaxica.app" => %w(
-      https://auth.umaxica.app https://jp.umaxica.app https://www-jp.umaxica.app https://palm-jp.umaxica.app
-    ).freeze,
-    "https://www.umaxica.com" => %w(
-      https://auth.umaxica.com https://jp.umaxica.com https://www-jp.umaxica.com
-    ).freeze,
-    "https://www.umaxica.org" => %w(
-      https://auth.umaxica.org https://jp.umaxica.org https://www-jp.umaxica.org
-    ).freeze,
-    "https://jp.umaxica.app" => %w(https://www.umaxica.app).freeze,
-    "https://jp.umaxica.com" => %w(https://www.umaxica.com).freeze,
-    "https://jp.umaxica.org" => %w(https://www.umaxica.org).freeze,
-    "https://www-jp.umaxica.app" => %w(https://www.umaxica.app).freeze,
-    "https://www-jp.umaxica.com" => %w(https://www.umaxica.com).freeze,
-    "https://www-jp.umaxica.org" => %w(https://www.umaxica.org).freeze,
-    "https://palm-jp.umaxica.app" => %w(https://www.umaxica.app).freeze,
-  }.freeze
+  # Frozen directed graph of exactly twenty [source, destination] edges between logical Jump
+  # issuer namespaces. Each namespace resolves to its origin through JumpRtSurface, so the graph
+  # never depends on host shape and an environment's identities map onto the same edges.
+  ALLOWED_EDGES = [
+    %w(AUTH_APP BASE_APP), %w(AUTH_COM BASE_COM), %w(AUTH_ORG BASE_ORG),
+    %w(BASE_APP AUTH_APP), %w(BASE_COM AUTH_COM), %w(BASE_ORG AUTH_ORG),
+    %w(BASE_APP CORE_APP), %w(BASE_COM CORE_COM), %w(BASE_ORG CORE_ORG),
+    %w(CORE_APP BASE_APP), %w(CORE_COM BASE_COM), %w(CORE_ORG BASE_ORG),
+    %w(BASE_APP WARP_APP), %w(BASE_COM WARP_COM), %w(BASE_ORG WARP_ORG),
+    %w(WARP_APP BASE_APP), %w(WARP_COM BASE_COM), %w(WARP_ORG BASE_ORG),
+    %w(BASE_APP PALM_APP), %w(PALM_APP BASE_APP),
+  ].map(&:freeze).freeze
 
   def allowed_source?(destination_origin:, source:)
-    destination = JitSecurityJwtRegistry.canonical_jump_origin(normalize_origin(destination_origin))
-    source_origin = JitSecurityJwtRegistry.canonical_jump_origin(normalize_origin(source))
-    sources = allowed_sources.fetch(destination, [])
-    sources.include?(source_origin)
+    destination = namespace_for_origin(normalize_origin(destination_origin))
+    source_namespace = namespace_for_origin(normalize_origin(source))
+    return false if destination.nil? || source_namespace.nil?
+
+    ALLOWED_EDGES.include?([source_namespace, destination])
   end
 
-  def allowed_sources
-    ALLOWED_SOURCES
+  # Configured origins must be pairwise distinct; an ambiguous identity is a configuration error,
+  # not a reason to pick one namespace.
+  def namespace_for_origin(origin)
+    return nil if origin.nil?
+
+    matches = JumpRtSurface::ISSUER_NAMESPACES.select { |namespace| JumpRtSurface.issuer_origin(namespace) == origin }
+    raise JumpRtConfigurationError,
+          "Jump issuer origin #{origin} is configured for #{matches.join(", ")}" if matches.size > 1
+
+    matches.first
   end
 
   def normalize_origin(value)

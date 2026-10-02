@@ -5,6 +5,10 @@ class SecurityJwtJumpRtTokenCodec
   ALGORITHM = "ES384"
   TOKEN_TYPE = "JWT"
   TOKEN_SUBJECT = "jump-redirect"
+  SCHEMA = 1
+  # Schema 1 Jump RTs are reusable navigation instructions. "reuse" is the only valid value;
+  # Jump never provides single-use semantics.
+  REPLAY_POLICY = "reuse"
   REQUIRED_JWK_FIELDS = JitSecurityJwtJwk::REQUIRED_PUBLIC_FIELDS
   PRIVATE_JWK_FIELDS = JitSecurityJwtJwk::PRIVATE_FIELDS
 
@@ -18,11 +22,11 @@ class SecurityJwtJumpRtTokenCodec
       )
     end
 
-    def build_issue_payload(namespace:, normalized_url:, dst:, replay_policy:, ttl:, now:, jti:, audience:)
+    def build_issue_payload(issuer:, normalized_url:, dst:, ttl:, now:, jti:, audience:)
       issued_at = now.to_i
       {
-        schema: 1,
-        iss: JumpRtSurface.issuer_origin(namespace),
+        schema: SCHEMA,
+        iss: issuer,
         aud: audience,
         sub: TOKEN_SUBJECT,
         iat: issued_at,
@@ -30,7 +34,7 @@ class SecurityJwtJumpRtTokenCodec
         exp: issued_at + ttl.to_i,
         jti: jti,
         dst: dst,
-        rpl: replay_policy,
+        rpl: REPLAY_POLICY,
         url: normalized_url,
       }
     end
@@ -50,7 +54,7 @@ class SecurityJwtJumpRtTokenCodec
         key,
         true,
         algorithms: [ALGORITHM],
-        required_claims: %w(schema iss aud sub iat nbf exp jti src dst url),
+        required_claims: %w(schema iss aud sub iat nbf exp jti src dst rpl url),
         leeway: leeway,
         verify_iat: true,
         verify_exp: true,

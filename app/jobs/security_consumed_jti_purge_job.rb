@@ -4,7 +4,7 @@
 # Deletes expired replay-prevention rows from `security_consumed_jtis`.
 #
 # Every row records that a single-use token was consumed: OIDC logout requests
-# and logout tokens, Jump RT return tokens, sign-out notices, and OIDC client
+# and logout tokens, sign-out notices, and OIDC client
 # assertions. The row only has to outlive the token it guards, which is what
 # `expires_at` records -- past that point the token is rejected on `exp` before
 # the replay check is ever reached, so the row can no longer prevent anything.

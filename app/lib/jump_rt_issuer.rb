@@ -6,14 +6,10 @@ require "ipaddr"
 
 class JumpRtIssuer
   ALGORITHM = SecurityJwtJumpRtTokenCodec::ALGORITHM
-  AUDIENCE_ENV = "PUBLIC_JUMP_GATEWAY_URL"
-  TTL_ENV = "JUMP_RT_TTL_SECONDS"
-  DEFAULT_AUDIENCE = "https://jump.umaxica.net"
   DEFAULT_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
   MAX_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
   TOKEN_SUBJECT = SecurityJwtJumpRtTokenCodec::TOKEN_SUBJECT
   VALID_DESTINATIONS = %w(internal external).freeze
-  VALID_REPLAY_POLICIES = %w(reuse once).freeze
   # Defense in depth: strip redirect-target query keys from the signed URL so
   # the gateway cannot return a request that re-enters a `pt`/`nt`/`xt`/`rt`
   # processing path. Same list as RedirectsExternalTargetResolver.
@@ -23,12 +19,11 @@ class JumpRtIssuer
     new(...).call
   end
 
-  def initialize(namespace:, url:, dst: "internal", replay_policy: "reuse", preserve_query_keys: [], ttl: nil,
-                 now: Time.current, jti: SecureRandom.uuid)
+  def initialize(namespace:, url:, dst: "internal", preserve_query_keys: [], ttl: nil, now: Time.current,
+                 jti: SecureRandom.uuid)
     @namespace = JumpRtSurface.normalize_namespace(namespace)
     @url = url
     @dst = dst.to_s
-    @replay_policy = replay_policy.to_s
     @preserve_query_keys = Array(preserve_query_keys).map(&:to_s)
     @ttl = ttl || default_ttl
     @now = now
@@ -37,40 +32,31 @@ class JumpRtIssuer
 
   def call
     return nil unless valid_destination?
-    return nil unless valid_replay_policy?
     return nil unless valid_ttl?
 
     normalized_url = normalize_url(url)
     return nil if normalized_url.blank?
 
-    if Rails.env.development?
-      jump = boot_jump_config
-      unless jump.origin.to_s == DEFAULT_AUDIENCE && jump.audience == DEFAULT_AUDIENCE &&
-          jump.jwks_uri == "#{DEFAULT_AUDIENCE}/.well-known/jwks.json"
-        raise JumpRtConfigurationError, "development Jump gateway origin, audience and JWKS must name production Jump"
-      end
-    end
-
+    issuer = JumpRtSurface.issuer_origin(namespace)
     kid = JumpRtKeyring.active_kid(namespace)
     private_key = JumpRtKeyring.private_key(namespace)
     if kid.blank? || private_key.blank?
       raise JumpRtConfigurationError, "Jump RT signing key configuration is incomplete for #{namespace}"
     end
 
-    SecurityJwtJumpRtTokenCodec.encode(payload(normalized_url), private_key: private_key, kid: kid)
+    SecurityJwtJumpRtTokenCodec.encode(payload(issuer, normalized_url), private_key: private_key, kid: kid)
   end
 
   private
 
-  attr_reader :namespace, :url, :dst, :replay_policy, :preserve_query_keys, :ttl, :now, :jti
+  attr_reader :namespace, :url, :dst, :preserve_query_keys, :ttl, :now, :jti
 
-  def payload(normalized_url)
+  def payload(issuer, normalized_url)
     issued_at = now.to_i
     SecurityJwtJumpRtTokenCodec.build_issue_payload(
-      namespace: namespace,
+      issuer: issuer,
       normalized_url: normalized_url,
       dst: dst,
-      replay_policy: replay_policy,
       ttl: ttl,
       now: Time.zone.at(issued_at),
       jti: jti,
@@ -116,10 +102,6 @@ class JumpRtIssuer
     VALID_DESTINATIONS.include?(dst)
   end
 
-  def valid_replay_policy?
-    VALID_REPLAY_POLICIES.include?(replay_policy)
-  end
-
   def valid_ttl?
     ttl.to_i.positive? && ttl.to_i <= MAX_TTL.to_i
   end
@@ -144,9 +126,6 @@ class JumpRtIssuer
   end
 
   def boot_jump_config
-    config = Rails.configuration.x.boot_config
-    return config.fetch(:jump) if config.respond_to?(:fetch)
-
-    config.jump
+    Rails.configuration.x.boot_config.fetch(:jump)
   end
 end

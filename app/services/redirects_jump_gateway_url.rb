@@ -22,7 +22,7 @@ class RedirectsJumpGatewayUrl
 
     uri = URI.parse(gateway_origin)
     return failure(:invalid_origin) if uri.scheme.blank? || uri.host.blank?
-    return failure(:https_required) unless uri.scheme == "https" || local_origin_allowed?(uri)
+    return failure(:https_required) unless uri.scheme == "https"
 
     uri.path = "/"
     uri.query = URI.encode_www_form("rt" => token)
@@ -39,17 +39,9 @@ class RedirectsJumpGatewayUrl
 
   attr_reader :token, :source
 
+  # The boot-validated PUBLIC_JUMP_GATEWAY_URL origin; never re-read from ENV here.
   def gateway_origin
-    # Resolve through JumpGatewayValues so the origin is normalized (scheme added, validated) with
-    # the same PUBLIC_JUMP_GATEWAY_URL/JUMP_GATEWAY_URL precedence. Reading the raw ENV directly is
-    # unsafe: a scheme-less PUBLIC_JUMP_GATEWAY_URL (e.g. "jump.umaxica.net") would fail origin
-    # validation here and break every jump-gateway redirect.
-    ConfigValues::JumpGatewayValues.build(env: ENV, production: Rails.env.production?).origin.to_s
-  end
-
-  def local_origin_allowed?(uri)
-    Rails.env.local? && uri.scheme == "http" &&
-      (uri.host == "localhost" || uri.host.end_with?(".localhost"))
+    Rails.configuration.x.boot_config.fetch(:jump).origin
   end
 
   def failure(reason)
