@@ -37,11 +37,9 @@ in the session, not the URL.
 `/sign/out/edit` confirmation, and redirect back to the exact registered `post_logout_redirect_uri`
 or a surface-local `/sign/out/complete`.
 
-Palm remains a future Universal/App Link contract only:
-
-```text
-https://<palm-host>/sign/out/complete
-```
+Palm is an approved native RP. Its implemented browser authorization and Jump logout handoff
+contract is recorded in `adr/jump-directed-rails-handoff-contract.md`; native custom-scheme
+completion delivery remains outside the Jump graph.
 
 ## Consequences
 

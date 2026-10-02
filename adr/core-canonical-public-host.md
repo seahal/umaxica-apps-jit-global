@@ -1,5 +1,9 @@
 # Core Canonical Public Host
 
+> Amended 2026-10-02: the directed Jump handoff ADR and explicit user instruction remove production
+> `jpx.*` Host Authorization aliases now. Stored bridge defaults/rows still require a separate
+> persistence migration; that migration is not part of the Jump graph freeze.
+
 ## Status
 
 Accepted (2026-08-09). Supersedes the Open revision of the same date, which recorded the conflict
@@ -90,7 +94,7 @@ These are sequenced deliberately and are not complete:
    its own migration plan.
 3. Remove `jpx.umaxica.*` and `core-jp.umaxica.*` from `config/environments/production.rb`.
 
-Until steps 1 and 2 complete, do not remove the legacy Core host entries, and do not enable
+The explicit 2026-10-02 Jump freeze supersedes the legacy-host retention gate. Do not enable
 `CORE_BROWSER_JWT_COOKIE_ENABLED` — the latter additionally requires the edge cookie-stripping
 enforcement described in `docs/operations/core-nextjs-zero-cookie-edge-contract.md`.
 

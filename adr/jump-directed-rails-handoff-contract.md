@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-01), following the explicit implementation instructions in this session.
+Accepted (2026-10-01), amended 2026-10-02 to freeze the twenty-edge Hono handoff contract.
 Supersedes the Palm authorization-launcher restriction in
 `adr/acme-sign-core-base-port-boundary.md` and the issuer/return-policy portion of the remaining
 steps in `adr/core-canonical-public-host.md`. Their persistence and API ownership boundaries remain.
@@ -61,7 +61,7 @@ Palm browser receivers verify Jump returns. Palm's machine callback also verifie
 
 ### Palm native browser ceremony
 
-Palm is a first-party RP with the required browser route
+Palm is an approved first-party RP with the implemented browser route
 `Palm -> Base -> Auth -> Base -> Palm`. It is not destination-only. A native app opens
 `https://palm-jp.umaxica.app/sign/in` in an external browser with its registered client ID, an
 authorization-code request, S256 challenge, state and nonce. The PKCE verifier remains on the
@@ -91,10 +91,20 @@ Browser destinations use public HTTPS origins. Jump issuance rejects localhost, 
 names and private/loopback/link-local literal addresses, including HTTPS variants. No issuer-side
 general destination allowlist is introduced by this work.
 
-Development is intended to use production Jump, but its distinct public issuer, reachable JWKS,
-signing kid, gateway trust and public return origins are not yet specified. Development Jump
-issuance therefore fails explicitly; production identities are not assigned to development keys.
-This gate is removed only after the separate public contract is approved and configured.
+Development can issue to production Jump only with an explicit public contract per issuer.
+`JUMP_DEVELOPMENT_<NAMESPACE>_{ISSUER_ORIGIN,JWKS_URI,RETURN_ORIGIN}` names a distinct HTTPS
+identity, its exact `/.well-known/jwks.json`, and the same public origin for browser returns.
+`JWT_DEVELOPMENT_<NAMESPACE>_*` supplies dedicated signing material with a `development-` kid;
+local auto-generated and production `JWT_<NAMESPACE>_*` material is never a fallback. A required
+production public-key snapshot rejects reuse of production kids or key coordinates. Missing,
+partial, private, stale, or production-identity configurations fail explicitly.
+
+Configured development identities map to the existing logical nodes only in development. The
+return verifier applies the same twenty directed edges; this does not add production origin
+aliases or graph edges. Surface host configuration and HTTPS ingress must expose the configured
+JWKS and browser origin. Rails validates the issuance contract; public DNS/TLS reachability and
+production Hono trust registration are separate deployment prerequisites, not inferred from Rails
+configuration. See `docs/operations/jump-rt-key-rotation.md` for the required setting names.
 
 `schema=1`, ES384, TTL and leeway remain. `rpl=once` consumes JTI and rejects reuse; `rpl=reuse`
 continues to allow reuse. No new persistent replay storage or migration is introduced.
@@ -104,10 +114,11 @@ continues to allow reuse. No new persistent replay storage or migration is intro
 Deployment needs the same Rails Auth signing material under `JWT_AUTH_*` configuration names and
 public Warp/Palm JWKS with registered trust at Jump. No secret changes are performed by this code
 change. Existing Auth access tokens with the old logical issuer may require reauthentication;
-retired issuer aliases are not accepted. Existing Core bridge rows/defaults and legacy Host
-Authorization entries remain pending a separately authorized persistence migration.
+retired issuer aliases are not accepted. Existing Core bridge rows/defaults remain pending a separately authorized persistence migration.
+Production Host Authorization no longer includes the explicit legacy `jpx.*` entries.
 
-Edit RP completion and general issuer-side destination least privilege remain design-review work.
-Existing Edit implementation in the worktree is retained; this decision does not approve its edge.
-Its existing same-site authorization admission remains direct pending the separate review.
+Edit remains an OIDC RP with its client registration, assertion keys and callback contracts.
+It has no Jump surface issuer, surface JWKS route or approved Jump edge. Its existing same-site
+OIDC admission remains direct; an attempted Edit Jump handoff raises `JumpRtConfigurationError`.
+Graph inclusion and general issuer-side destination least privilege require separate review.
 Rollout and rollback gates are in `plans/active/rails-jump-directed-handoff-rollout.md`.

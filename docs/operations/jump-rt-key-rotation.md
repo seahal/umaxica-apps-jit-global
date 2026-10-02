@@ -16,13 +16,10 @@ Issuer surfaces:
 - `BASE_APP`, `BASE_COM`, `BASE_ORG`
 - `PALM_APP` — Palm publishes public JWKS at
   `https://palm-jp.umaxica.app/.well-known/jwks.json`.
-- `EDIT_ORG` — Edit publishes public JWKS at
-  `https://edit.umaxica.org/.well-known/jwks.json`. Namespace availability does not approve an
-  Edit edge in the current directed return policy; its RP completion remains a separate review.
 
 Issuer registration and permitted destinations are separate contracts. See
 [the directed handoff ADR](../../adr/jump-directed-rails-handoff-contract.md). Development issuance
-is disabled until its distinct public issuer/JWKS/destination and gateway trust contract is approved.
+is opt-in with the public identity contract below; gateway trust registration is a separate step.
 
 The list is `JitSecurityJwtRegistry::SURFACE_NAMESPACES`. A listed namespace with no key at all
 boots as unconfigured, and the first Jump rt it is asked to issue raises `JumpRtConfigurationError`
@@ -152,3 +149,42 @@ Before production deployment:
 - Token `aud` is the Jump gateway origin.
 - Token TTL is no more than the verifier maximum.
 - Rollback private key versions are still available.
+
+## Public development issuance
+
+Keep `PUBLIC_JUMP_GATEWAY_URL=https://jump.umaxica.net`. Its boot-configured origin, audience and
+JWKS must also name that exact gateway. For each explicitly enabled issuer namespace, supply:
+
+```text
+JUMP_DEVELOPMENT_<NAMESPACE>_ISSUER_ORIGIN
+JUMP_DEVELOPMENT_<NAMESPACE>_JWKS_URI
+JUMP_DEVELOPMENT_<NAMESPACE>_RETURN_ORIGIN
+JUMP_DEVELOPMENT_<NAMESPACE>_PRODUCTION_PUBLIC_KEYSET
+JWT_DEVELOPMENT_<NAMESPACE>_ACTIVE_KID
+JWT_DEVELOPMENT_<NAMESPACE>_PRIVATE_KEY
+JWT_DEVELOPMENT_<NAMESPACE>_PUBLIC_KEYSET
+JWT_DEVELOPMENT_<NAMESPACE>_REVOKED_KIDS  # optional comma-separated revocations
+```
+
+The issuer is a distinct public HTTPS origin in the namespace's TLD. No path, credentials,
+non-default port, query, fragment, private ingress or production/retired identity is accepted.
+Return origin equals issuer origin. JWKS URI is exactly `issuer/.well-known/jwks.json`.
+The kid starts with `development-`; provision a dedicated P-384 key through the development secret
+backend. The local key installer does not generate these opt-in settings or keys.
+
+The non-secret production reference is a public JWK Set containing all active/grace production
+Jump keys. Keep it complete and current. Rails rejects overlapping kids and EC key coordinates,
+including a production key renamed to a development kid. This reference is supplied explicitly;
+Rails does not fetch it or infer production key separation from the kid name alone.
+
+Configure the surface's existing public host variable to the same issuer hostname and expose its
+Rails JWKS route and browser return through public HTTPS ingress. Register the exact development
+issuer/JWKS/kids and logical node ID in Hono separately. Verify DNS, TLS, JWKS accessibility from
+Jump, matching published kid, and host-only browser continuity before rollout. An Access login
+page in front of JWKS does not constitute a fetchable keyset. No deployment, trust registration,
+secret provisioning or key rotation is performed by this Rails change.
+
+Configured development return/source identities resolve to their existing logical canonical nodes
+only in development; the same twenty-edge policy applies. Production policy retains thirteen
+canonical origins and no development aliases. Edit remains an OIDC assertion client, not a Jump
+issuer; its OIDC keys and registration are independent from this surface key runbook.

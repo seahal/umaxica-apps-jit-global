@@ -28,8 +28,10 @@ module JumpRtReturnPolicy
   }.freeze
 
   def allowed_source?(destination_origin:, source:)
-    sources = allowed_sources.fetch(normalize_origin(destination_origin), [])
-    sources.include?(normalize_origin(source))
+    destination = JitSecurityJwtRegistry.canonical_jump_origin(normalize_origin(destination_origin))
+    source_origin = JitSecurityJwtRegistry.canonical_jump_origin(normalize_origin(source))
+    sources = allowed_sources.fetch(destination, [])
+    sources.include?(source_origin)
   end
 
   def allowed_sources

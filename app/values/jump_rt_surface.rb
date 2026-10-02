@@ -5,12 +5,17 @@ module JumpRtSurface
   module_function
 
   def issuer_origin(namespace)
+    normalized = normalize_namespace(namespace)
+    record = JitSecurityJwtRegistry.surface(normalized)
     if Rails.env.development?
-      raise JumpRtConfigurationError,
-            "Development Jump issuance requires an approved public issuer, JWKS, signing kid and gateway trust contract"
+      contract = JitSecurityJwtRegistry.development_jump_contract(normalized)
+      unless record.issuer == contract.issuer_origin
+        raise JumpRtConfigurationError, "Development Jump issuer does not match its explicit public contract"
+      end
     end
-
-    JitSecurityJwtRegistry.surface(normalize_namespace(namespace)).issuer
+    record.issuer
+  rescue JitSecurityJwtRegistry::ConfigurationError => e
+    raise JumpRtConfigurationError, e.message
   end
 
   def namespace_for_controller(controller_class_name)
@@ -21,7 +26,6 @@ module JumpRtSurface
       when /\ACore::/ then "CORE"
       when /\AWarp::/ then "WARP"
       when /\ABase::/ then "BASE"
-      when /\AEdit::/ then "EDIT"
       when /\APalm::/ then "PALM"
       end
     surface =

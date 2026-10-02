@@ -5,6 +5,7 @@ require "jwt"
 require "jit_security_jwt_issuer_builder"
 require "jit_security_jwt_key_source"
 require "jit_security_jwt_jwk"
+require_relative "../app/values/jump_rt_development_contract_value"
 
 module JitSecurityJwtRegistry
   module_function
@@ -20,12 +21,9 @@ module JitSecurityJwtRegistry
     WARP_APP WARP_COM WARP_ORG
     PALM_APP
     BASE_APP BASE_COM BASE_ORG
-    EDIT_ORG
   ).freeze
-  # Surfaces whose controllers sign and verify access tokens under their own namespace. EDIT_ORG is
-  # a surface issuer only for Jump rt values (Edit publishes its JWKS for the Jump gateway); Edit
-  # access tokens keep resolving to AUTH_ORG, so EDIT_ORG must not appear here.
-  ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(EDIT_ORG PALM_APP)).freeze
+  # Palm signs Jump RTs; its bearer API does not use a surface access-token issuer.
+  ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(PALM_APP)).freeze
   OIDC_CLIENT_NAMESPACES = %w(
     AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG
@@ -48,7 +46,6 @@ module JitSecurityJwtRegistry
     "WARP_COM" => "https://www-jp.umaxica.com",
     "WARP_ORG" => "https://www-jp.umaxica.org",
     "PALM_APP" => "https://palm-jp.umaxica.app",
-    "EDIT_ORG" => "https://edit.umaxica.org",
     "BASE_APP" => "https://www.umaxica.app",
     "BASE_COM" => "https://www.umaxica.com",
     "BASE_ORG" => "https://www.umaxica.org",
@@ -72,11 +69,15 @@ module JitSecurityJwtRegistry
     /\b(?:development|test|local|fixture|sample|example|dummy|staging)\b/i
 
   def configure!
-    records = build_issuers
+    source = JitSecurityJwtKeySource.new
+    development_contracts = build_development_contracts(source)
+    records = build_issuers(source: source, development_contracts: development_contracts)
     validate!(records)
     # rubocop:disable ThreadSafety/ClassInstanceVariable
     @issuers = records
+    @development_jump_contracts = development_contracts
     # rubocop:enable ThreadSafety/ClassInstanceVariable
+    records
   rescue ConfigurationError => e
     Rails.logger.fatal(
       "jwt.registry.configuration_invalid error_class=#{e.class.name} reason=#{e.message.inspect}",
@@ -141,8 +142,52 @@ module JitSecurityJwtRegistry
     value
   end
 
-  def build_issuers
-    source = JitSecurityJwtKeySource.new
+  def development_jump_contract(namespace)
+    issuers
+    # rubocop:disable ThreadSafety/ClassInstanceVariable
+    @development_jump_contracts.fetch(normalize_namespace(namespace)) do
+      raise ConfigurationError, "#{namespace} requires an explicit public development Jump contract"
+    end
+    # rubocop:enable ThreadSafety/ClassInstanceVariable
+  end
+
+  # Explicit environment identities resolve to the existing logical production graph.
+  # This mapping is inactive outside development and never rewrites legacy hostnames.
+  def canonical_jump_origin(origin)
+    return origin unless Rails.env.development?
+
+    issuers
+    # rubocop:disable ThreadSafety/ClassInstanceVariable
+    pair = @development_jump_contracts.find { |_namespace, contract| contract.return_origin == origin }
+    # rubocop:enable ThreadSafety/ClassInstanceVariable
+    pair ? SURFACE_ISSUER_ORIGINS.fetch(pair.first) : origin
+  end
+
+  def build_development_contracts(source)
+    return {}.freeze unless Rails.env.development?
+
+    namespaces = ENV.keys.filter_map do |name|
+      match = name.match(/\A(?:JUMP|JWT)_DEVELOPMENT_([A-Z]+_[A-Z]+)_/)
+      match && match[1]
+    end.uniq
+    contracts = namespaces.each_with_object({}) do |namespace, result|
+      unless SURFACE_NAMESPACES.include?(namespace)
+        raise ConfigurationError, "unsupported development Jump surface: #{namespace}"
+      end
+      result[namespace] = JumpRtDevelopmentContractValue.from_source(
+        namespace: namespace, source: source, production_origins: SURFACE_ISSUER_ORIGINS.values,
+      )
+    end
+    origins = contracts.values.map(&:issuer_origin)
+    if origins.uniq.size != origins.size
+      raise ConfigurationError, "development Jump surfaces require distinct public issuer origins"
+    end
+    contracts.freeze
+  rescue JumpRtDevelopmentContractValue::Error => e
+    raise ConfigurationError, e.message
+  end
+
+  def build_issuers(source:, development_contracts:)
     records = {}
     auth_audiences = AUTH_AUDIENCE_ENV_NAMES.flat_map { |name| source.csv(name) }
     auth_audiences.uniq!
@@ -168,7 +213,7 @@ module JitSecurityJwtRegistry
     )
 
     SURFACE_NAMESPACES.each do |namespace|
-      records["surface:#{namespace}"] = build_surface_issuer(namespace, source: source)
+      records["surface:#{namespace}"] = build_surface_issuer(namespace, source: source, development_contract: development_contracts[namespace])
     end
     OIDC_CLIENT_NAMESPACES.each do |namespace|
       records["oidc_client:#{namespace}"] = build_oidc_client_issuer(namespace, source: source)
@@ -194,18 +239,32 @@ module JitSecurityJwtRegistry
     raise ConfigurationError, e.message
   end
 
-  def build_surface_issuer(namespace, source:)
-    JitSecurityJwtIssuerBuilder.build_surface_issuer(
+  def build_surface_issuer(namespace, source:, development_contract: nil)
+    prefix = development_contract ? "JWT_DEVELOPMENT_#{namespace}" : "JWT_#{namespace}"
+    record = JitSecurityJwtIssuerBuilder.build_surface_issuer(
       namespace: namespace,
-      active_kid: source.value("JWT_#{namespace}_ACTIVE_KID"),
-      private_key: source.value("JWT_#{namespace}_PRIVATE_KEY"),
-      private_key_source: "JWT_#{namespace}_PRIVATE_KEY",
-      public_keyset: source.value("JWT_#{namespace}_PUBLIC_KEYSET"),
-      public_keyset_source: "JWT_#{namespace}_PUBLIC_KEYSET",
-      revoked_kids: source.csv("JWT_#{namespace}_REVOKED_KIDS"),
-      issuer: surface_issuer_origin(namespace),
+      active_kid: source.value("#{prefix}_ACTIVE_KID"),
+      private_key: source.value("#{prefix}_PRIVATE_KEY"),
+      private_key_source: "#{prefix}_PRIVATE_KEY",
+      public_keyset: source.value("#{prefix}_PUBLIC_KEYSET"),
+      public_keyset_source: "#{prefix}_PUBLIC_KEYSET",
+      revoked_kids: source.csv("#{prefix}_REVOKED_KIDS"),
+      issuer: development_contract ? development_contract.issuer_origin : surface_issuer_origin(namespace),
       audiences: [jump_gateway_audience(source)].freeze,
     )
+    if development_contract
+      unless record.current_kid.to_s.start_with?("development-")
+        raise ConfigurationError, "#{namespace} public development kid must start with development-"
+      end
+      record.keys.each_value do |key|
+        reused = development_contract.production_keys.any? do |production_key|
+          production_key.fetch("kid") == key.kid ||
+            production_key.values_at("crv", "x", "y") == key.public_jwk.values_at("crv", "x", "y")
+        end
+        raise ConfigurationError, "#{namespace} development signing material reuses production identity" if reused
+      end
+    end
+    record
   rescue JitSecurityJwtIssuerBuilder::Error => e
     raise ConfigurationError, e.message
   end
@@ -371,7 +430,7 @@ module JitSecurityJwtRegistry
     RESERVED_ENV_KID_PATTERN.match?(kid.to_s)
   end
 
-  private_class_method :build_issuers, :build_oidc_client_issuer, :jump_gateway_audience,
+  private_class_method :build_issuers, :build_development_contracts, :build_oidc_client_issuer, :jump_gateway_audience,
                        :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
                        :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
                        :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,

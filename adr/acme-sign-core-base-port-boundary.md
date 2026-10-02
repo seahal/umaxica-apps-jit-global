@@ -123,8 +123,8 @@ iOS / Android -> Acme /authorize -> Acme /token -> Palm API
 ```
 
 Native applications are expected to use Acme-issued credentials when they call Palm. Authorization
-Code + PKCE is the expected OAuth/OIDC building block when the native RP flow is implemented, but
-the concrete iOS/Android flow is still open. Palm must not issue OAuth/OIDC Access Tokens, Refresh
+Code + PKCE is implemented through the approved Palm browser relay described in
+`adr/jump-directed-rails-handoff-contract.md`. Palm must not issue OAuth/OIDC Access Tokens, Refresh
 Tokens, or ID Tokens.
 
 ```json
@@ -168,12 +168,11 @@ secret reflection, and no cookie issuance. Do not delete them until native app r
 provider console settings, external documentation, and access logs have been checked. They are
 deletion or consolidation candidates, not the formal Palm OAuth/OIDC entry point.
 
-Palm also does not expose a browser-facing native authorization launcher while the native client
-registration and concrete iOS/Android flow remain unapproved. The Rails Palm root must not publish
-native sign-in or sign-up links, and Palm must not proxy a client-specific authorization request to
-Acme. Once an actual native client and its external registration are approved, the common Acme
-authorization entry point may be enabled through a separately reviewed contract. This does not
-remove the inert callback compatibility stub described above.
+Palm is an approved first-party RP. Its browser-facing native authorization entry is `/sign/in`,
+using `Palm -> Base -> Auth -> Base -> Palm`, S256 PKCE, state and nonce. Palm verifies the Jump
+return at its HTTPS `/oidc/callback` before delivery to a fixed native completion URI. It does
+not exchange OAuth tokens or authenticate its bearer API with browser cookies. See the directed
+handoff ADR for the implemented contract and native deployment prerequisites.
 
 Future Palm device and token transport APIs should use explicit API namespaces such as:
 
@@ -231,11 +230,9 @@ The URL direction is:
 - Sign: `sign.example.com` or equivalent.
 - Core: `jp.example.com`.
 - Base: `www.jp.example.com` or another Rails foundation/control-plane subdomain.
-- Palm: `palm.jp.umaxica.app` in the current Rails route configuration; final production URL shape
-  remains open.
+- Palm: `palm-jp.umaxica.app`, an approved first-party RP in the directed Jump graph.
 
-Palm URL selection remains separately adjustable. The responsibility, `palm-api` token audience, and
-bearer-token boundary are decided first.
+The `palm-api` audience and bearer-token API boundary remain independent from browser relay state.
 
 ## Supersession
 

@@ -298,11 +298,20 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_equal "SIDE_APP", warp_app.fetch(:jwt_namespace)
   end
 
-  test "Edit org uses its own Jump RT issuer published at the Edit origin" do
-    assert_equal "EDIT_ORG", JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::Info::Org::EntriesController")
-    assert_equal "EDIT_ORG", JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::Docs::App::EntriesController")
-    assert_equal "EDIT_ORG", JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::Docs::Com::EntriesController")
-    assert_equal "https://edit.umaxica.org", JumpRtSurface.issuer_origin("EDIT_ORG")
+  test "Edit has no Jump issuer while its OIDC private key client remains configured" do
+    %w(Info::Org Docs::App Docs::Com).each do |publishing_surface|
+      assert_raises(JumpRtConfigurationError) do
+        JumpRtSurface.namespace_for_controller("Edit::Org::Publishing::#{publishing_surface}::EntriesController")
+      end
+    end
+    assert_raises(JumpRtConfigurationError) do
+      JumpRtIssuer.call(namespace: "EDIT_ORG", url: "https://www.umaxica.org/oauth/authorize")
+    end
+    assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+      JitSecurityJwtRegistry.surface("EDIT_ORG")
+    end
+    assert_equal "EDIT_ORG", JitSecurityJwtRegistry.oidc_client("EDIT_ORG").namespace
+    assert_equal "edit-org", OidcClientRegistry.find!("edit-org").client_id
   end
 
   test "normalizes unsupported issuer surface names by raising" do

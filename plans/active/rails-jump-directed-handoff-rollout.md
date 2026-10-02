@@ -17,7 +17,8 @@ from the Hono minor release; it performs no gateway deployment, binding/secret w
 5. Receiver parity: Auth Com/Org and Palm receive the same Jump signature, claim, URL and source
    verification as the existing receivers. Preserve rate limits and security-control ordering.
 6. Public destination and production Jump contract: public HTTPS browser targets; explicit
-   development issuance gate until its public issuer/JWKS/kid/trust/return contract is specified.
+   opt-in development issuance with explicit public issuer/JWKS/kid/return configuration and
+   dedicated keys. Hono trust registration remains a separate deployment prerequisite.
 7. Obsolete Sign issuer removal: `AUTH_*`, `auth.*`, matching JWKS and configuration references.
    Keep `/sign/...`, stored `side-*`, `SIDE_*`, and independent ceremony protocol values.
 
@@ -35,7 +36,7 @@ from the Hono minor release; it performs no gateway deployment, binding/secret w
   native link interception; any claimed app-link endpoint must be a separate delivery endpoint.
 - Define development's distinct issuer origin, reachable JWKS URL, kid, explicit production Jump
   trust and public return origin per surface. Private ingress is not a browser/protocol identity.
-  Development public Jump remains disabled until this is done.
+  Configure the per-issuer opt-in contract; local-only surfaces fail Jump issuance explicitly.
 - Specify independent host-bound browser continuity for development RP/Base/Auth surfaces as part
   of that contract. Production uses host-only `__Host-session`; the shared-domain test session
   cookie requires explicit per-host transport in the multi-surface integration fixture.
@@ -72,5 +73,23 @@ device callbacks or production acceptance. Retain deployment evidence before dec
 - Edit Org RP round-trip and graph inclusion require a separate explicit design decision.
 - A finite destination allowlist in `JumpRtIssuer` requires a separate issuer least-privilege
   decision. This change validates public URL form and receivers' graph but does not add that list.
-- Existing Core bridge column defaults/rows and legacy production Host Authorization need a
-  separate persistence/cutover plan. The current change intentionally supplies no migration.
+- Existing Core bridge column defaults/rows need a separate persistence/cutover plan. Explicit
+  legacy production Host Authorization entries are removed; this change supplies no migration.
+
+## Final Rails contract freeze
+
+The graph is thirteen canonical nodes and exactly twenty directed edges, listed in the accepted
+ADR. The fixed test enumerates all 169 ordered canonical pairs and compares the entire runtime
+allowlist against literal expected edges. The authority test signs and verifies RTs with each of
+the thirteen issuer origins' published public JWKS. Palm is implemented and approved; native
+custom-scheme completion is final device delivery, never a Jump destination.
+
+Edit's Jump issuer mapping, surface registry entry and surface JWKS endpoint are removed.
+Its OIDC client namespace, private-key assertion configuration and callback/logout registration
+remain. Canonical same-site admission is characterized independently from the unsupported Jump
+path. Production `jpx.*` Host Authorization aliases are removed without changing stored rows.
+
+Development issuance requires the documented public settings and isolated keys. Supplying valid
+Rails settings does not establish gateway registration or public reachability. Hono receives this
+frozen graph and the canonical issuer/JWKS contract; development identities must be registered
+explicitly against their logical node IDs before public rollout.

@@ -10,12 +10,6 @@ scope module: :edit, as: :edit do
     scope module: :org, as: :org do
       root to: "roots#index"
 
-      # Publishes the EDIT_ORG Jump RT verification keys; the Jump gateway verifies Edit-issued rt
-      # values against this origin. Keep the fixed JSON suffix.
-      namespace :well_known, path: ".well-known" do
-        resource :jwks, only: :show, path: "jwks.json", format: false
-      end
-
       resource :dashboard, only: :show
 
       resource :revision, only: :show, format: false

@@ -48,11 +48,9 @@ and does not use `sot`.
 
 `DELETE /sign/out` is not part of the public contract.
 
-Palm is a future native client. Its documented completion target is:
-
-```text
-https://<palm-host>/sign/out/complete
-```
+Palm is an approved native RP. Its implemented browser authorization and Jump logout handoff
+contract is recorded in `adr/jump-directed-rails-handoff-contract.md`; native custom-scheme
+completion delivery remains outside the Jump graph.
 
 ## Consequences
 

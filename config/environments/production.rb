@@ -178,14 +178,7 @@ Rails.application.configure do
     "www.umaxica.app",
     "www.umaxica.com",
     "www.umaxica.org",
-    # Legacy Core host family. `adr/core-canonical-public-host.md` chose jp.umaxica.* as
-    # canonical; these stay until the external OAuth/OIDC redirect URIs are re-registered
-    # and the jpx.* column defaults are migrated, then they are removed.
-    "jpx.umaxica.app",
-    "jpx.umaxica.com",
-    "jpx.umaxica.org",
-    # Canonical Core host family. Listed alongside the legacy families during the cutover so
-    # the origin answers on the new name before the edge publishes it.
+    # Core public authority uses only the canonical jp.* host family.
     "jp.umaxica.app",
     "jp.umaxica.com",
     "jp.umaxica.org",

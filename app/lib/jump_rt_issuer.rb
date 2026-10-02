@@ -43,6 +43,14 @@ class JumpRtIssuer
     normalized_url = normalize_url(url)
     return nil if normalized_url.blank?
 
+    if Rails.env.development?
+      jump = boot_jump_config
+      unless jump.origin.to_s == DEFAULT_AUDIENCE && jump.audience == DEFAULT_AUDIENCE &&
+          jump.jwks_uri == "#{DEFAULT_AUDIENCE}/.well-known/jwks.json"
+        raise JumpRtConfigurationError, "development Jump gateway origin, audience and JWKS must name production Jump"
+      end
+    end
+
     kid = JumpRtKeyring.active_kid(namespace)
     private_key = JumpRtKeyring.private_key(namespace)
     if kid.blank? || private_key.blank?

@@ -55,7 +55,8 @@ Sign up; Auth owns that internal ceremony choice. The obsolete shared browser re
 `sign-rp`, `base-rails-rp`, and `side-rails-rp` are retired from the local registry after the
 surface-specific flows work. `core-next-rp` remains a separately gated compatibility registration
 until its live `CoreRpBridge` path and external registration/key ownership are reconciled. Native
-clients remain as a separate future-facing boundary. The read-only `docs`, `news`, and `help`
+clients use the approved Palm browser relay and fixed native completion delivery described in
+`adr/jump-directed-rails-handoff-contract.md`. The read-only `docs`, `news`, and `help`
 surfaces are Rails content/resource surfaces, not Rails-authenticated OIDC RPs; they have no
 content RP registrations in the current static client registry.
 

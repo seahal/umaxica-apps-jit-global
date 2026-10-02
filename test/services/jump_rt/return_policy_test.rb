@@ -96,23 +96,53 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
   end
 
   test "only the approved same TLD directed graph is allowed" do
-    edges =
-      %w(app com org).flat_map do |tld|
-        base = "https://www.umaxica.#{tld}"
-        peers = ["https://auth.umaxica.#{tld}", "https://jp.umaxica.#{tld}", "https://www-jp.umaxica.#{tld}"]
-        peers.flat_map { |peer| [[base, peer], [peer, base]] }
-      end
-    edges.concat(
-      [
-        ["https://www.umaxica.app", "https://palm-jp.umaxica.app"],
-        ["https://palm-jp.umaxica.app", "https://www.umaxica.app"],
-      ],
-    )
-    origins = edges.flatten.uniq
-
-    origins.product(origins).each do |source, destination|
+    origins = {
+      "auth-app-ww" => "https://auth.umaxica.app",
+      "auth-com-ww" => "https://auth.umaxica.com",
+      "auth-org-ww" => "https://auth.umaxica.org",
+      "base-app-ww" => "https://www.umaxica.app",
+      "base-com-ww" => "https://www.umaxica.com",
+      "base-org-ww" => "https://www.umaxica.org",
+      "core-app-jp" => "https://jp.umaxica.app",
+      "core-com-jp" => "https://jp.umaxica.com",
+      "core-org-jp" => "https://jp.umaxica.org",
+      "palm-app-jp" => "https://palm-jp.umaxica.app",
+      "warp-app-jp" => "https://www-jp.umaxica.app",
+      "warp-com-jp" => "https://www-jp.umaxica.com",
+      "warp-org-jp" => "https://www-jp.umaxica.org",
+    }
+    edges = [
+      ["auth-app-ww", "base-app-ww"],
+      ["auth-com-ww", "base-com-ww"],
+      ["auth-org-ww", "base-org-ww"],
+      ["base-app-ww", "auth-app-ww"],
+      ["base-app-ww", "core-app-jp"],
+      ["base-app-ww", "palm-app-jp"],
+      ["base-app-ww", "warp-app-jp"],
+      ["base-com-ww", "auth-com-ww"],
+      ["base-com-ww", "core-com-jp"],
+      ["base-com-ww", "warp-com-jp"],
+      ["base-org-ww", "auth-org-ww"],
+      ["base-org-ww", "core-org-jp"],
+      ["base-org-ww", "warp-org-jp"],
+      ["core-app-jp", "base-app-ww"],
+      ["core-com-jp", "base-com-ww"],
+      ["core-org-jp", "base-org-ww"],
+      ["palm-app-jp", "base-app-ww"],
+      ["warp-app-jp", "base-app-ww"],
+      ["warp-com-jp", "base-com-ww"],
+      ["warp-org-jp", "base-org-ww"],
+    ]
+    assert_equal 20, edges.size
+    observed = JumpRtReturnPolicy.allowed_sources.flat_map do |destination, sources|
+      sources.map { |source| [source, destination] }
+    end
+    assert_equal edges.map { |source, destination| [origins.fetch(source), origins.fetch(destination)] }.sort,
+                 observed.sort
+    origins.keys.product(origins.keys).each do |source, destination|
       assert_equal edges.include?([source, destination]),
-                   JumpRtReturnPolicy.allowed_source?(destination_origin: destination, source: source),
+                   JumpRtReturnPolicy.allowed_source?(destination_origin: origins.fetch(destination),
+                                                      source: origins.fetch(source)),
                    "#{source} -> #{destination}"
     end
   end

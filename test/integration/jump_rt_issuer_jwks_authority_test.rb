@@ -3,79 +3,44 @@
 
 require "test_helper"
 
-# The external Jump gateway verifies a Rails-issued rt against the JWKS of the issuing surface
-# (adr/secure-jump-link-redirector.md). That only works when the token's `iss` is the origin that
-# publishes the signing `kid` at `/.well-known/jwks.json`. These tests pin that authority contract
-# end to end: issue the rt, then fetch the JWKS from the origin the token names.
 class JumpRtIssuerJwksAuthorityTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  AUTH_NAMESPACES = {
-    "AUTH_APP" => :sign_service,
-    "AUTH_COM" => :sign_corporate,
-    "AUTH_ORG" => :sign_staff,
-  }.freeze
-
-  AUTH_NAMESPACES.each do |namespace, host_key|
-    test "#{namespace} jump rt iss is the canonical auth origin from boot config" do
-      payload, = decode_unverified(issue(namespace))
-
-      assert_equal boot_hosts.public_send(host_key).to_s, payload.fetch("iss")
-    end
-
-    test "#{namespace} jump rt kid is published by the JWKS at its iss origin" do
-      payload, header = decode_unverified(issue(namespace))
-
-      assert_includes published_kids(payload.fetch("iss")), header.fetch("kid")
-    end
-  end
-
-  test "BASE_APP jump rt kid stays published by the JWKS at its iss origin" do
-    payload, header = decode_unverified(issue("BASE_APP"))
-
-    assert_equal boot_hosts.base_service.to_s, payload.fetch("iss")
-    assert_includes published_kids(payload.fetch("iss")), header.fetch("kid")
-  end
-
-  test "Core Warp and Palm publish the signing kid at the canonical issuer origin" do
-    %w(CORE_APP CORE_COM CORE_ORG WARP_APP WARP_COM WARP_ORG PALM_APP).each do |namespace|
-      token = JumpRtIssuer.call(namespace: namespace, url: "https://www.umaxica.app/")
-      payload, header = JWT.decode(token, nil, false)
-      uri = URI.parse(payload.fetch("iss"))
-      host! uri.host
+  test "all thirteen canonical Jump issuers publish the exact RT signing key" do
+    issuers = {
+      "AUTH_APP" => "https://auth.umaxica.app",
+      "AUTH_COM" => "https://auth.umaxica.com",
+      "AUTH_ORG" => "https://auth.umaxica.org",
+      "BASE_APP" => "https://www.umaxica.app",
+      "BASE_COM" => "https://www.umaxica.com",
+      "BASE_ORG" => "https://www.umaxica.org",
+      "CORE_APP" => "https://jp.umaxica.app",
+      "CORE_COM" => "https://jp.umaxica.com",
+      "CORE_ORG" => "https://jp.umaxica.org",
+      "WARP_APP" => "https://www-jp.umaxica.app",
+      "WARP_COM" => "https://www-jp.umaxica.com",
+      "WARP_ORG" => "https://www-jp.umaxica.org",
+      "PALM_APP" => "https://palm-jp.umaxica.app",
+    }
+    issuers.each do |namespace, origin|
+      tld = namespace.split("_").last.downcase
+      peer = namespace.start_with?("BASE_") ? "auth" : "www"
+      token = JumpRtIssuer.call(namespace: namespace, url: "https://#{peer}.umaxica.#{tld}/")
+      claims, header = JWT.decode(token, nil, false)
+      assert_equal origin, claims.fetch("iss"), namespace
+      assert_equal "ES384", header.fetch("alg"), namespace
+      host! URI.parse(origin).host
       https!
       get "/.well-known/jwks.json"
 
       assert_response :ok
-      assert_includes response.parsed_body.fetch("keys").pluck("kid"), header.fetch("kid")
-      assert_not_includes response.parsed_body.fetch("keys").flat_map(&:keys), "d"
+      keys = response.parsed_body.fetch("keys")
+      assert_includes keys.pluck("kid"), header.fetch("kid"), namespace
+      assert_empty keys.flat_map(&:keys) & JitSecurityJwtJwk::PRIVATE_FIELDS, namespace
+      verified, = JWT.decode(token, nil, true, algorithms: ["ES384"],
+                             jwks: JWT::JWK::Set.new(response.parsed_body),
+                             verify_iss: true, iss: origin, verify_aud: true, aud: "https://jump.umaxica.net")
+      assert_equal claims, verified, namespace
     end
-  end
-
-  private
-
-  def issue(namespace)
-    token = JumpRtIssuer.call(namespace: namespace, url: "https://www.umaxica.app/", dst: "internal")
-
-    assert_predicate token, :present?, "#{namespace} must issue a jump rt"
-    token
-  end
-
-  def decode_unverified(token)
-    JWT.decode(token, nil, false)
-  end
-
-  def published_kids(issuer_origin)
-    uri = URI.parse(issuer_origin)
-    host!(uri.host)
-    https!(uri.scheme == "https")
-    get("/.well-known/jwks.json")
-
-    assert_response :ok
-    response.parsed_body.fetch("keys").pluck("kid")
-  end
-
-  def boot_hosts
-    Rails.configuration.x.boot_config.fetch(:hosts)
   end
 end
