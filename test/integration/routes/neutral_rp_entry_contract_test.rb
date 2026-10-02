@@ -61,13 +61,13 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "every first-party browser RP has a protocol callback at sign callback" do
+  test "every first-party browser RP has its protocol callback at oidc callback" do
     RP_ROUTES.each do |rp|
       host = rp.fetch(:host).call
 
       assert_recognizes(
         { controller: rp.fetch(:callback_controller), action: "show" },
-        { path: "http://#{host}/sign/callback", method: :get },
+        { path: "http://#{host}/oidc/callback", method: :get },
       )
     end
   end
@@ -113,6 +113,8 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       assert_equal "/sign", URI.parse(forms.first["action"]).path
       assert_equal "post", forms.first["method"]
       assert_select "input[name='screen_hint']", count: 0
+      assert_select "h1", text: I18n.t("actions.continue")
+      assert_select "input[type=submit][value=?]", I18n.t("actions.continue")
       assert_no_match %r{/oauth/authorize}, response.body
       assert_nil session["oidc_pending_flows"]
       assert_nil session[:oidc_state]
@@ -174,7 +176,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       assert_predicate authorize_query["nonce"], :present?
       assert_predicate authorize_query["code_challenge"], :present?
       assert_equal "S256", authorize_query["code_challenge_method"]
-      assert_equal "/sign/callback", URI.parse(authorize_query.fetch("redirect_uri")).path
+      assert_equal "/oidc/callback", URI.parse(authorize_query.fetch("redirect_uri")).path
 
       pending_flow = session.fetch("oidc_pending_flows").fetch(authorize_query.fetch("state"))
 
@@ -208,9 +210,11 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
 
     post "/sign", params: { pt: "/" }, headers: authenticated_headers
 
-    assert_response :conflict
-    assert_equal AlreadyAuthenticatedError::MESSAGE, response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_equal "text/plain", response.media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
   end
 
   test "an RP-authenticated browser receives a plain refusal instead of a new RP flow" do
@@ -237,9 +241,11 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
 
     post "/sign", params: { pt: "/" }, headers: host_headers(host)
 
-    assert_response :conflict
-    assert_equal AlreadyAuthenticatedError::MESSAGE, response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_equal "text/plain", response.media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
     assert_nil session["oidc_pending_flows"]
   end
 

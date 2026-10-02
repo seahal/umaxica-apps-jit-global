@@ -201,8 +201,8 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     # is nothing left to replay.
     post auth_org_sign_in_passkey_options_url(ri: "jp"), params: {}
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_includes response.headers["Cache-Control"], "no-store"
     assert_nil session[OrgNormalSignInTransaction::SESSION_KEY]
   end

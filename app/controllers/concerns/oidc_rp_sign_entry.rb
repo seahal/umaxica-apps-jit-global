@@ -25,8 +25,7 @@ module OidcRpSignEntry
     return unless request.post?
     return unless logged_in? || authenticated_rp_browser?
 
-    response.set_header("Cache-Control", "no-store")
-    render plain: AlreadyAuthenticatedError::MESSAGE, status: :conflict
+    render_sign_in_unavailable_while_authenticated
   end
 
   def authenticated_rp_browser?

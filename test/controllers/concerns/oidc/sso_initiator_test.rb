@@ -86,7 +86,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "authenticate! redirects unauthenticated html requests to oidc authorize url" do
+  # A protected page is not a Sign entry: it points at the passive GET /sign on the same host and
+  # starts no OIDC flow (plans/active/sign-fqdn-integrated-plan.md section 5).
+  test "authenticate! sends an unauthenticated html request to the passive sign entry without a flow" do
     io = StringIO.new
     logger = Logger.new(io)
 
@@ -95,57 +97,26 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    gateway = URI.parse(response.location)
+    location = URI.parse(response.location)
 
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    uri = URI.parse(payload.fetch("url"))
-
-    assert_equal configured_host(:base_service), uri.host
-    assert_equal "/oauth/authorize", uri.path
-
-    authorize_params = Rack::Utils.parse_nested_query(uri.query)
-
-    assert_equal "core-app", authorize_params.fetch("client_id")
-    assert_equal OidcClientRegistry.find!("core-app").redirect_uris.first, authorize_params.fetch("redirect_uri")
-    session_cookie =
-      response.headers["Set-Cookie"].to_s.split("\n").find { |line| line.start_with?("session=") }
-
-    assert_predicate session_cookie, :present?
-    assert_operator session_cookie.bytesize, :<, 3500
+    assert_equal configured_host(:sign_service), location.host
+    assert_equal "/sign", location.path
+    assert_equal "/oidc/sso", Rack::Utils.parse_nested_query(location.query).fetch("pt")
+    assert_nil session["oidc_pending_flows"]
     assert_nil session[:oidc_code_verifier]
-    assert_nil session[:oidc_state]
-    assert_nil session[:oidc_nonce]
-    assert_nil session[:oidc_pt]
-    pending_flow = session.fetch("oidc_pending_flows").fetch(authorize_params.fetch("state"))
-
-    assert_predicate pending_flow.fetch("code_verifier"), :present?
-    assert_equal authorize_params.fetch("nonce"), pending_flow.fetch("nonce")
-    assert_equal "/oidc/sso", pending_flow.fetch("pt")
-    assert_includes io.string, "oidc.sso.redirect_policy.jump"
-    assert_includes io.string, "reason_code"
-    assert_includes io.string, "target_host"
-    assert_not_includes io.string, authorize_params.fetch("state")
-    assert_not_includes io.string, authorize_params.fetch("nonce")
-    assert_not_includes io.string, pending_flow.fetch("code_verifier")
-    assert_not_includes io.string, response.location
-    assert_not_includes io.string, "oauth/authorize?"
+    assert_not_includes io.string, "oidc.sso.redirect_policy"
   end
 
-  test "authenticate! preserves the protected request query in oidc return path" do
-    # Use the browser-facing HTTPS source while preserving its protected return path.
+  test "authenticate! preserves the protected request query in the sign entry return path" do
     get "/oidc/sso", params: { ri: "jp" },
                      headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
-    assert_nil session[:oidc_pt]
+    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
 
-    gateway = URI.parse(response.location)
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
-    pending_flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
-
-    assert_equal "/oidc/sso?ri=jp", pending_flow.fetch("pt")
+    assert_equal "/oidc/sso?ri=jp", query.fetch("pt")
+    assert_equal "jp", query.fetch("ri")
+    assert_nil session["oidc_pending_flows"]
   end
 
   test "authorization URL carries prompt and max_age into the pending flow" do
@@ -216,7 +187,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "authenticate! keeps using jump for cross-site oidc authorize urls" do
+  test "the started flow keeps using jump for cross-site oidc authorize urls" do
     cross_site_acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
     OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) { cross_site_acme_host }
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
@@ -228,7 +199,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     Rails.stub(:logger, logger) do
       https!
-      get("/oidc/sso", headers: { "Host" => configured_host(:sign_service) })
+      get("/oidc/sso/hinted", headers: { "Host" => configured_host(:sign_service) })
     end
 
     assert_response :redirect

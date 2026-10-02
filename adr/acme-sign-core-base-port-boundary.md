@@ -168,7 +168,8 @@ secret reflection, and no cookie issuance. Do not delete them until native app r
 provider console settings, external documentation, and access logs have been checked. They are
 deletion or consolidation candidates, not the formal Palm OAuth/OIDC entry point.
 
-Palm is an approved first-party RP. Its browser-facing native authorization entry is `/sign/in`,
+Palm is an approved first-party RP. Its browser-facing native authorization entry is `GET /sign`
+followed by `POST /sign`, like every other first-party RP,
 using `Palm -> Base -> Auth -> Base -> Palm`, S256 PKCE, state and nonce. Palm verifies the Jump
 return at its HTTPS `/oidc/callback` before delivery to a fixed native completion URI. It does
 not exchange OAuth tokens or authenticate its bearer API with browser cookies. See the directed

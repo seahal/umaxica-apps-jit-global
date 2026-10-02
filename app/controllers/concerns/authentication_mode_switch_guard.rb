@@ -17,8 +17,6 @@
 module AuthenticationModeSwitchGuard
   extend ActiveSupport::Concern
 
-  SIGN_IN_UNAVAILABLE_MESSAGE = AlreadyAuthenticatedError::MESSAGE
-
   included do
     before_action :prevent_sign_in_response_storage!
   end
@@ -44,11 +42,6 @@ module AuthenticationModeSwitchGuard
     return unless logged_in?
 
     render_sign_in_unavailable_while_authenticated
-  end
-
-  def render_sign_in_unavailable_while_authenticated(_exception = nil)
-    prevent_sign_in_response_storage!
-    render plain: SIGN_IN_UNAVAILABLE_MESSAGE, status: :conflict
   end
 
   def prevent_sign_in_response_storage!

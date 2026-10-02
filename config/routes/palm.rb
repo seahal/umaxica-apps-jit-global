@@ -43,9 +43,15 @@ scope module: :palm, as: :palm do
         resource :callback, only: :show
       end
 
+      # Neutral RP entry shared with Core, Warp and Edit: GET renders the page, POST starts the
+      # native flow. A native app opens `GET /sign` in an external browser with its OIDC request.
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
+
       # Native sign-out notice; does not clear bearer tokens from the browser.
       namespace :sign do
-        resource :in, only: :show, controller: :ins
         resource :termination, only: %i(show create), path: "out", controller: :outs, as: :out
       end
 

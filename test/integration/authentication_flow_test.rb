@@ -69,7 +69,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     cookies_header = "auth_refresh=#{refresh_plain}"
     get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-    assert_response :see_other
+    assert_response :bad_request
     assert_equal before, token_record.reload.attributes
   end
 
@@ -92,7 +92,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
       cookies_header = "auth_refresh=#{refresh_plain}"
       get auth_app_sign_in_path(ri: "jp"), headers: { "Cookie" => cookies_header, "Host" => @host }
 
-      assert_response :see_other
+      assert_response :bad_request
       assert_equal 0, audit_attempts
       assert_equal before, token_record.reload.attributes
     end

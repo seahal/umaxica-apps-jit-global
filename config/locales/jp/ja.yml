@@ -2336,6 +2336,7 @@ ja:
       not_authorized: この操作を行う権限がありません。
       not_found: 見つかりませんでした。
       odd: は奇数にしてください
+      operation_not_permitted: この操作は許可されていません。
       other_than: は%{count}以外の値にしてください
       password_too_long: が長すぎます
       preference_operation_failed: 設定の操作に失敗しました。

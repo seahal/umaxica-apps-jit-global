@@ -15,7 +15,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     get base_app_avatars_url(ri: "jp", host: @host), headers: host_headers(@host)
 
     assert_response :redirect
-    assert_auth_ceremony_redirect(response.location, surface: :app)
+    assert_base_sign_entry_redirect(response.location, surface: :app)
   end
 
   test "selector-only (no selected context) cannot access avatars" do

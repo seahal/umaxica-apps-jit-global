@@ -330,7 +330,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
            headers: { "Host" => @host }
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :app)
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
   end
 
   test "unlink succeeds when user has only inactive legacy social identity and an active email" do

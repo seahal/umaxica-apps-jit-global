@@ -3,9 +3,10 @@
 
 require "test_helper"
 
-# A Jump configuration failure is a configuration error. The login-required handoff passes
-# fallback_internal: true, and that same-host downgrade must never absorb a missing signing key or
-# an invalid issuer identity.
+# A Jump configuration failure is a configuration error. The Base sign start is the handoff to Auth
+# that goes through Jump, and it must never absorb a missing signing key or an invalid issuer
+# identity by downgrading to a same-host redirect. (A protected Base page no longer hands off at all:
+# it points at Base's own GET /sign.)
 class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
@@ -14,7 +15,7 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
   test "a sign-in handoff succeeds through Jump when configuration is valid" do
     host! "www.umaxica.app"
     https!
-    get base_app_accounts_path(ri: "jp")
+    post base_app_sign_show_path(ri: "jp")
 
     assert_response :redirect
     assert_equal "jump.umaxica.net", URI.parse(response.location).host
@@ -25,7 +26,7 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     https!
 
     JumpRtKeyring.stub(:private_key, nil) do
-      assert_raises(JumpRtConfigurationError) { get base_app_accounts_path(ri: "jp") }
+      assert_raises(JumpRtConfigurationError) { post base_app_sign_show_path(ri: "jp") }
     end
   end
 
@@ -34,7 +35,7 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     https!
 
     ENV["PUBLIC_BASE_SERVICE_URL"] = "base.app.localhost"
-    assert_raises(JumpRtConfigurationError) { get(base_app_accounts_path(ri: "jp")) }
+    assert_raises(JumpRtConfigurationError) { post(base_app_sign_show_path(ri: "jp")) }
   ensure
     ENV["PUBLIC_BASE_SERVICE_URL"] = @original_base_service_url
   end
@@ -44,7 +45,7 @@ class JumpConfigurationFailClosedTest < ActionDispatch::IntegrationTest
     https!
 
     Rails.stub(:env, ActiveSupport::EnvironmentInquirer.new("development")) do
-      get base_app_accounts_path(ri: "jp")
+      post base_app_sign_show_path(ri: "jp")
     end
 
     assert_response :redirect

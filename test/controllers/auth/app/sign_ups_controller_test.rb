@@ -9,12 +9,12 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
   setup { host! host }
 
-  test "direct entry without a login challenge lists the registration methods" do
+  test "direct entry without a login challenge is refused without admission" do
     get auth_app_sign_up_url(format: :html, ri: "jp"), headers: { "Host" => host }
 
-    assert_response :see_other
+    assert_response :bad_request
+    assert_nil response.location
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_equal "/", URI.parse(response.location).path
   end
 
   test "direct entry without a login challenge starts no OIDC handoff state" do
@@ -143,18 +143,14 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     assert_includes inertia_props.fetch("methods").map { |method| method.fetch("label") }, "メールで登録する"
   end
 
-  test "logged in direct entry redirects to dashboard" do
+  test "logged in direct entry is refused with a plain 403" do
     user = clients(:one)
     get auth_app_sign_up_url(format: :html, ri: "jp"), headers: as_user_headers(user, host: host)
 
-    assert_response :redirect
-    gateway = URI.parse(response.location)
-
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-
-    assert_equal base_app_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https"),
-                 payload.fetch("url")
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
   end
 
   test "checkpoint without active registration redirects to sign up start" do

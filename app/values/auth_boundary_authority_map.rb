@@ -77,7 +77,7 @@ module AuthBoundaryAuthorityMap
     "edit-org" => { surface: "edit", face: "org", actor: "operator" },
   }.freeze
 
-  CANONICAL_RP_CALLBACK_PATH = "/sign/callback"
+  CANONICAL_RP_CALLBACK_PATH = "/oidc/callback"
   CANONICAL_RP_SIGN_IN_PATH = "/sign"
   CANONICAL_RP_SIGN_OUT_PATH = "/sign/out"
 

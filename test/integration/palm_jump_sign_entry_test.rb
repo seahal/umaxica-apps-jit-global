@@ -2,14 +2,14 @@
 
 require "test_helper"
 
-class PalmJumpSignInTest < ActionDispatch::IntegrationTest
+class PalmJumpSignEntryTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  test "native apps enter Palm in the browser with S256 and the registered Palm callback" do
+  test "native apps start Palm with POST /sign with S256 and the registered Palm callback" do
     %w(app-ios-rp app-android-rp).each do |client_id|
       host! "palm-jp.umaxica.app"
       https!
-      get "/sign/in", params: {
+      post "/sign", params: {
         client_id: client_id,
         response_type: "code",
         scope: "openid palm.read",
@@ -40,6 +40,83 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "GET /sign renders the neutral page carrying the native request without starting a flow" do
+    host! "palm-jp.umaxica.app"
+    https!
+    get "/sign", params: {
+      client_id: "app-ios-rp",
+      response_type: "code",
+      scope: "openid palm.read",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      state: "page-state",
+      nonce: "page-nonce",
+      ri: "jp",
+    }
+
+    assert_response :ok
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_select "form[method=post][action=?]", "/sign?ri=jp" do
+      assert_select "input[type=hidden][name=client_id][value=app-ios-rp]"
+      assert_select "input[type=hidden][name=redirect_uri][value=?]", "https://palm-jp.umaxica.app/oidc/callback"
+      assert_select "input[type=hidden][name=code_challenge][value=?]", "a" * 43
+      assert_select "input[type=hidden][name=state][value=page-state]"
+      assert_select "input[type=hidden][name=nonce][value=page-nonce]"
+    end
+    assert_not session.key?(Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY)
+  end
+
+  test "GET /sign labels its heading and submit with the shared continue translation" do
+    host! "palm-jp.umaxica.app"
+    https!
+    get "/sign", params: {
+      client_id: "app-ios-rp",
+      response_type: "code",
+      scope: "openid palm.read",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      state: "page-state",
+      nonce: "page-nonce",
+      ri: "jp",
+    }
+
+    assert_response :ok
+    assert_select "h1", text: I18n.t("actions.continue")
+    assert_select "input[type=submit][value=?]", I18n.t("actions.continue")
+  end
+
+  test "GET /sign refuses an unsupported client and a missing code challenge" do
+    host! "palm-jp.umaxica.app"
+    https!
+    valid = {
+      client_id: "app-ios-rp",
+      response_type: "code",
+      scope: "openid palm.read",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      state: "page-state",
+      nonce: "page-nonce",
+      ri: "jp",
+    }
+    [{ client_id: "core-app" }, { code_challenge: nil },
+     { redirect_uri: "https://evil.example/callback" },].each do |override|
+      get "/sign", params: valid.merge(override)
+
+      assert_response :bad_request
+    end
+  end
+
+  test "the former Palm /sign/in entry no longer exists" do
+    host! "palm-jp.umaxica.app"
+    https!
+    get "/sign/in", params: { ri: "jp" }
+
+    assert_response :not_found
+  end
+
   test "Palm refuses invalid S256 boundaries unsupported clients and unregistered callbacks" do
     host! "palm-jp.umaxica.app"
     https!
@@ -58,7 +135,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
      { code_challenge: nil }, { code_challenge_method: "plain" }, { state: "" }, { nonce: nil },
      { client_id: "unknown" }, { client_id: "core-app" },
      { redirect_uri: "umaxica://oidc/callback" }, { redirect_uri: "https://evil.example/callback" },].each do |override|
-      get "/sign/in", params: valid.merge(override)
+      post "/sign", params: valid.merge(override)
 
       assert_response :bad_request
     end
@@ -71,7 +148,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     }.each do |client_id, completion|
       host! "palm-jp.umaxica.app"
       https!
-      get "/sign/in", params: {
+      post "/sign", params: {
         client_id: client_id,
         response_type: "code",
         scope: "openid palm.read",
@@ -127,7 +204,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
 
       assert_equal completion, target.to_s.split("?").first
       assert_equal({ "code" => "code-from-base", "state" => "app-state" }, Rack::Utils.parse_nested_query(target.query))
-      assert_not session.key?(Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY)
+      assert_not session.key?(Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY)
       Rails.stub(:cache, cache) do
         get "/oidc/callback", params: { code: "code-from-base", state: "app-state", rt: rt }
       end
@@ -177,7 +254,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :bad_request
-    assert_not session.key?(Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY)
+    assert_not session.key?(Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY)
   end
 
   test "Palm refuses an unsolicited callback without a verified Jump return" do
@@ -188,9 +265,8 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  # Each case runs in a fresh browser so the two-flow limit never decides the outcome.
   test "state and nonce byte boundaries reject zero and 257 and accept one 255 and 256" do
-    host! "palm-jp.umaxica.app"
-    https!
     valid = {
       client_id: "app-ios-rp",
       response_type: "code",
@@ -204,18 +280,55 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     }
     %i(state nonce).each do |field|
       [0, 1, 255, 256, 257].each do |length|
+        reset!
+        host! "palm-jp.umaxica.app"
+        https!
         query = valid.merge(:state => "#{field}-#{length}", field => "a" * length)
-        get "/sign/in", params: query
+        post "/sign", params: query
 
         assert_response(length.between?(1, 256) ? :see_other : :bad_request)
       end
-      get "/sign/in", params: valid.merge(:state => "#{field}-unicode", field => "あ" * 86)
+      reset!
+      host! "palm-jp.umaxica.app"
+      https!
+      post "/sign", params: valid.merge(:state => "#{field}-unicode", field => "あ" * 86)
 
       assert_response :bad_request
     end
   end
 
-  test "pending flow expiry is exclusive at 600 seconds and only the newest two states remain active" do
+  test "pending flow expiry is exclusive at 600 seconds" do
+    valid = {
+      client_id: "app-ios-rp",
+      response_type: "code",
+      scope: "openid palm.read",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      nonce: "nonce",
+      ri: "jp",
+    }
+    started = Time.current.change(usec: 0)
+    [599, 600, 601].each do |age|
+      reset!
+      host! "palm-jp.umaxica.app"
+      https!
+      travel_to(started) do
+        post "/sign", params: valid.merge(state: "expires-#{age}")
+
+        assert_response :see_other
+      end
+      travel_to(started + age.seconds) do
+        post "/sign", params: valid.merge(state: "expires-#{age}")
+
+        assert_response((age < 600) ? :bad_request : :see_other, "age #{age}")
+      end
+    end
+  end
+
+  # BVA on the two-flow limit: the third live flow is refused explicitly and the two earlier flows
+  # are kept; nothing is evicted silently. A slot frees only when a flow expires.
+  test "a third live pending flow is refused and the two earlier flows stay pending" do
     host! "palm-jp.umaxica.app"
     https!
     valid = {
@@ -229,33 +342,28 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
       ri: "jp",
     }
     started = Time.current.change(usec: 0)
-    [599, 600, 601].each do |age|
-      travel_to(started) do
-        get "/sign/in", params: valid.merge(state: "expires-#{age}")
-
-        assert_response :see_other
-      end
-      travel_to(started + age.seconds) do
-        get "/sign/in", params: valid.merge(state: "expires-#{age}")
-
-        assert_response((age < 600) ? :bad_request : :see_other)
-      end
-    end
-    travel_to(started + 2.hours) do
-      %w(first second third).each do |state|
-        get "/sign/in", params: valid.merge(state: state)
-
-        assert_response :see_other
-      end
-      get "/sign/in", params: valid.merge(state: "second")
-
-      assert_response :bad_request
-      get "/sign/in", params: valid.merge(state: "third")
-
-      assert_response :bad_request
-      get "/sign/in", params: valid.merge(state: "first")
+    travel_to(started) do
+      post "/sign", params: valid.merge(state: "first")
 
       assert_response :see_other
+    end
+    travel_to(started + 1.second) do
+      post "/sign", params: valid.merge(state: "second")
+
+      assert_response :see_other
+      post "/sign", params: valid.merge(state: "third")
+
+      assert_response :bad_request
+      assert_nil response.location
+      assert_equal %w(first second),
+                   session[Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY].keys.sort
+    end
+    travel_to(started + 600.seconds) do
+      post "/sign", params: valid.merge(state: "third")
+
+      assert_response :see_other
+      assert_equal %w(second third),
+                   session[Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY].keys.sort
     end
   end
 
@@ -264,7 +372,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     https!
     started = Time.current.change(usec: 0)
     travel_to(started) do
-      get "/sign/in", params: {
+      post "/sign", params: {
         client_id: "app-ios-rp",
         response_type: "code",
         scope: "openid palm.read",
@@ -282,7 +390,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
       get "/oidc/callback", params: { code: "expired-code", state: "expired-state" }
 
       assert_response :bad_request
-      assert_not session.key?(Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY)
+      assert_not session.key?(Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY)
     end
   end
 end

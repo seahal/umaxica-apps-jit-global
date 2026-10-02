@@ -24,12 +24,17 @@ module OidcSsoInitiator
       path: request&.fullpath,
       method: request&.request_method,
     )
-    url = sign_in_url_with_pt(encoded_pt(request.fullpath))
-    redirect_to_oidc_authorization_url(url)
+    redirect_to_oidc_authorization_url(sign_in_url_with_pt(encoded_pt(request.fullpath)))
   end
 
+  # A protected page, a failed callback, or an expired session is not a Sign entry of its own: the
+  # browser is pointed at this surface's passive GET /sign, and only the user's POST there starts an
+  # OIDC flow (plans/active/sign-fqdn-integrated-plan.md section 5).
+  # Every first-party browser RP serves its neutral entry at GET /sign on its own host
+  # (test/integration/routes/neutral_rp_entry_contract_test.rb).
   def sign_in_url_with_pt(pt)
-    initiate_oidc_session!(pt: decode_pt(pt))
+    query = { ri: RequestContextContract.normalize_region(params[:ri]), pt: pt.present? ? decode_pt(pt).presence : nil }
+    "/sign?#{query.compact.to_query}"
   end
 
   private
@@ -61,15 +66,19 @@ module OidcSsoInitiator
     )
   end
 
-  def redirect_to_oidc_authorization_url(url, **)
+  def redirect_to_oidc_authorization_url(url, **options)
+    if url.start_with?("/") && !url.start_with?("//")
+      return redirect_to(url, allow_other_host: false, **options.except(:fallback_internal, :preserve_query_keys))
+    end
+
     decision = oidc_redirect_decision(url)
     log_oidc_redirect_decision(decision)
 
     case decision.kind
     when :direct
-      redirect_to(url, allow_other_host: true, **)
+      redirect_to(url, allow_other_host: true, **options)
     when :jump
-      redirect_to_jump_url(url, preserve_query_keys: ["redirect_uri"], **)
+      redirect_to_jump_url(url, preserve_query_keys: ["redirect_uri"], **options)
     else
       head :bad_request
     end

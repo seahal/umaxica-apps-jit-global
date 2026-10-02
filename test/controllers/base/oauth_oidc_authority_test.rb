@@ -703,7 +703,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "openid profile", transaction.scope
   end
 
-  test "base oauth authorize issues a code immediately for an already authenticated browser session" do
+  test "base oauth authorize refuses a new Sign from an already authenticated browser session" do
     [
       {
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
@@ -778,20 +778,13 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                                 headers: headers
       end
 
-      assert_response :redirect
-      uri = URI.parse(response.location)
-      callback_uri = URI.parse(jump_rt_url_from_location(response.location))
-      query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
-
-      assert_equal "jump.umaxica.net", uri.host
-      assert_equal "/oidc/callback", callback_uri.path
-      assert_predicate query["code"], :present?
-      assert_equal oidc_authorize_params[:state], query["state"]
-      assert_not_includes callback_uri.query.to_s, "login_challenge"
+      assert_response :forbidden
+      assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+      assert_nil response.location
     end
   end
 
-  test "base app authorize honors prompt none for a fresh authenticated browser session" do
+  test "base app authorize refuses prompt none from a fresh authenticated browser session" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     actor = clients(:one)
     ensure_user_token_reference_records!
@@ -808,13 +801,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"),
                             headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
 
-    assert_response :redirect
-    callback = URI.parse(jump_rt_url_from_location(response.location))
-
-    assert_predicate Rack::Utils.parse_nested_query(callback.query.to_s)["code"], :present?
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_nil response.location
   end
 
-  test "base app authorize starts a ceremony for prompt login despite an existing session" do
+  test "base app authorize refuses prompt login from an existing session instead of reauthenticating" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     actor = clients(:one)
     ensure_user_token_reference_records!
@@ -831,17 +823,9 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
                             headers: as_user_headers(actor, host: host, session_public_id: token.public_id)
 
-    assert_response :redirect
-    uri = URI.parse(jump_rt_url_from_location(response.location))
-
-    assert_equal "/sign/in", uri.path
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
-      reference: query.fetch("transaction_ref"), surface: "app", expected_intent: "sign_in",
-    )
-    transaction = ClientOidcAuthorizationTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
-
-    assert_equal "login", transaction.oidc_prompt
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_nil response.location
   end
 
   test "base oauth authorize starts sign up ceremony when screen_hint requests signup" do

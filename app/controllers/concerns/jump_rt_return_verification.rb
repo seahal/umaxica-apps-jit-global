@@ -6,18 +6,26 @@ module JumpRtReturnVerification
 
   private
 
+  # Decided from the raw query rather than params[:rt]: Rack collapses repeated and nested rt keys,
+  # so params cannot prove the request carries exactly one scalar token.
   def jump_return_rt_request?
-    (request.get? || request.head?) && params[:rt].present?
+    (request.get? || request.head?) && JumpRtReturnUrlValue.carries_return_token?(request.query_string)
   end
 
   def verify_jump_return_rt!
-    result = JumpRtReturnVerifier.call(
-      token: params[:rt],
-      request_url: request.original_url,
-      request_base_url: request.base_url,
-    )
+    return_url = JumpRtReturnUrlValue.parse(request.original_url)
+    result =
+      if return_url.nil?
+        JumpRtReturnVerifier::Result.new(success: false, payload: nil, error: "invalid_url")
+      else
+        JumpRtReturnVerifier.call(
+          token: return_url.return_token,
+          request_url: request.original_url,
+          request_base_url: request.base_url,
+        )
+      end
 
-    return redirect_to_jump_return_target! if result.success?
+    return redirect_to_jump_return_target!(return_url) if result.success?
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -31,17 +39,11 @@ module JumpRtReturnVerification
            status: :bad_request
   end
 
-  def redirect_to_jump_return_target!
+  # Redirects to the serialization that was just verified, so no lossy re-parse can change the
+  # target between verification and navigation.
+  def redirect_to_jump_return_target!(return_url)
     response.set_header("Referrer-Policy", "no-referrer")
     response.set_header("Cache-Control", "no-store")
-    redirect_to(jump_return_url_without_rt, allow_other_host: false, status: :see_other)
-  end
-
-  def jump_return_url_without_rt
-    uri = URI.parse(request.original_url)
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    query.delete("rt")
-    uri.query = query.present? ? Rack::Utils.build_nested_query(query) : nil
-    uri.request_uri
+    redirect_to(return_url.request_uri_without_return_token, allow_other_host: false, status: :see_other)
   end
 end

@@ -9,18 +9,11 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     host! @host
   end
 
-  test "direct entry without admission bridges to Base and starts no ceremony" do
+  test "direct entry without admission is refused and starts no ceremony" do
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
-    assert_response :see_other
-    gateway = URI.parse(response.location)
-
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    location = URI.parse(payload.fetch("url"))
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
-    assert_equal "/", location.path
+    assert_response :bad_request
+    assert_nil response.location
     assert_nil session[:oidc_authorization_login_challenge]
     assert_nil cookies["auth_sid"]
   end

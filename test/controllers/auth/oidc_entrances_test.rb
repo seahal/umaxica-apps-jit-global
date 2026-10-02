@@ -53,24 +53,19 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
     assert_nil session[:oidc_authorization_login_challenge]
   end
 
-  test "sign in entry without login challenge lists methods and stores no challenge" do
+  test "sign in entry without login challenge is refused without admission and stores no challenge" do
     get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @sign_host }
 
-    assert_response :see_other
+    assert_response :bad_request
+    assert_nil response.location
     assert_nil session[:oidc_authorization_login_challenge]
   end
 
-  test "sign up entry without login challenge lists methods and stores no challenge" do
+  test "sign up entry without login challenge is refused without admission and stores no challenge" do
     get auth_app_sign_up_url(ri: "jp"), headers: { "Host" => @sign_host }
 
-    assert_response :see_other
-    assert_nil session[:oidc_authorization_login_challenge]
-  end
-
-  test "sign in started flow without issued login challenge stores no challenge" do
-    get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @sign_host }
-
-    assert_response :see_other
+    assert_response :bad_request
+    assert_nil response.location
     assert_nil session[:oidc_authorization_login_challenge]
   end
 

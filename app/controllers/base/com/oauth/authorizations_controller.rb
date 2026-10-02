@@ -6,6 +6,7 @@ module Base
     module Oauth
       class AuthorizationsController < Base::Com::ApplicationController
         include ::OauthAuthorizeRateLimit
+        include ::OauthAuthorizeRequestSizeLimit
         include ::OidcAuthorizationResultPost
 
         AUTHENTICATION_MODE = :open
@@ -20,12 +21,17 @@ module Base
                              only: :create,
                              if: -> { params[:result].present? }
         skip_before_action :set_region, raise: false
+        before_action :enforce_oauth_authorize_request_size!, only: :show
 
         def show
           validate_authorization_request!
 
-          if logged_in? && current_visitor.present? && authorization_authentication_satisfied?
-            issue_authorization_code!(current_visitor)
+          # A browser already authenticated here may not start a new Sign, even for an RP that has
+          # no session yet; there is no SSO success branch
+          # (adr/sign-neutral-entry-and-logout-target-authorization.md). The Auth result POST
+          # (`create`) is the only continuation that issues a code.
+          if logged_in?
+            render_sign_in_unavailable_while_authenticated
           elsif prompt_none_requested?
             redirect_login_required!
           else
@@ -41,9 +47,22 @@ module Base
           render json: { error: "invalid_request", error_description: e.message }, status: :bad_request
         # RecordNotFound is different: its message names the model and the primary key that
         # was looked up. The client gets a fixed description; the detail goes to the log.
-        rescue BaseAuthAdmissionCoordinator::Denied, Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+        rescue BaseAuthAdmissionCoordinator::Denied
           render json: { error: "invalid_request", error_description: "invalid authorization request" },
                  status: :bad_request
+        rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
+          Rails.logger.error(
+            JitLogEvent.format(
+              "oidc.authorize.backend_failure",
+              surface: oidc_result_surface,
+              error_class: e.class.name,
+              request_id: request.request_id,
+            ),
+          )
+          render json: {
+            error: "temporarily_unavailable",
+            error_description: I18n.t("errors.rate_limit.backend_unavailable"),
+          }, status: :service_unavailable
         rescue ActiveRecord::RecordNotFound => e
           Rails.logger.info(
             JitLogEvent.format(
@@ -192,14 +211,6 @@ module Base
 
         def oidc_sign_protocol
           URI.parse(OidcIssuer.absolute_url(oidc_sign_host)).scheme
-        end
-
-        def authorization_authentication_satisfied?
-          OidcAuthorizeRequestResolver.authentication_satisfied?(
-            prompt: authorize_params[:prompt],
-            max_age: authorize_params[:max_age],
-            authenticated_at: current_authentication_event_at,
-          )
         end
 
         # The client and redirect_uri were validated above, so the protocol error is returned

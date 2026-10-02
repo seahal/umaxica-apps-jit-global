@@ -134,6 +134,141 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_request", response.parsed_body.fetch("error")
   end
 
+  # Capacity (plans/active/sign-fqdn-integrated-plan.md section 5): 2048 bytes per parameter and
+  # 8192 bytes per query, refused with 400 before any transaction is allocated. Values use only
+  # unreserved characters so the byte counts are exact on the wire.
+  test "authorize accepts a 2048-byte parameter and refuses 2049 bytes before allocating state" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    base = authorize_params(realm: "client").except(:state).to_query
+
+    { 2047 => true, 2048 => true, 2049 => false }.each do |bytes, accepted|
+      count = ClientOidcAuthorizationTransaction.count
+      get "/oauth/authorize?#{base}&state=#{"a" * bytes}", headers: { "Host" => host }
+
+      if accepted
+        assert_response :redirect, "#{bytes} bytes"
+        assert_equal count + 1, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+      else
+        assert_response :bad_request, "#{bytes} bytes"
+        assert_equal "invalid_request", response.parsed_body.fetch("error")
+        assert_equal count, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+      end
+    end
+  end
+
+  test "authorize accepts an 8192-byte query and refuses 8193 bytes before allocating state" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    padding = (1..3).map { |index| "pad#{index}=#{"b" * 2000}" }.join("&")
+    base = "#{authorize_params(realm: "client").to_query}&#{padding}&pad4="
+
+    { 8191 => true, 8192 => true, 8193 => false }.each do |bytes, accepted|
+      query = "#{base}#{"c" * (bytes - base.bytesize)}"
+      count = ClientOidcAuthorizationTransaction.count
+
+      assert_equal bytes, query.bytesize
+      get "/oauth/authorize?#{query}", headers: { "Host" => host }
+
+      if accepted
+        assert_response :redirect, "#{bytes} bytes"
+        assert_equal count + 1, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+      else
+        assert_response :bad_request, "#{bytes} bytes"
+        assert_equal count, ClientOidcAuthorizationTransaction.count, "#{bytes} bytes"
+      end
+    end
+  end
+
+  test "authorize refuses array and hash parameter values before allocating state" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    base = authorize_params(realm: "client").except(:state).to_query
+
+    ["state[]=a", "state[k]=a"].each do |shaped|
+      count = ClientOidcAuthorizationTransaction.count
+      get "/oauth/authorize?#{base}&#{shaped}", headers: { "Host" => host }
+
+      assert_response :bad_request, shaped
+      assert_equal count, ClientOidcAuthorizationTransaction.count, shaped
+    end
+  end
+
+  # E02: a browser already authenticated at Base starting a new Sign is refused, even when the RP has
+  # no session yet. This is the intended product constraint, not an SSO success path.
+  test "E02 app authorize refuses an authenticated browser with a plain 403 and issues nothing" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    transaction_count = ClientOidcAuthorizationTransaction.count
+
+    get base_app_oauth_authorization_url(host: host, **authorize_params(realm: "client")),
+        headers: as_user_headers(clients(:one), host: host)
+
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_equal "text/plain", response.media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
+    assert_equal transaction_count, ClientOidcAuthorizationTransaction.count
+  end
+
+  # E02: a browser already authenticated at Base starting a new Sign is refused, even when the RP has
+  # no session yet. This is the intended product constraint, not an SSO success path.
+  test "E02 com authorize refuses an authenticated browser with a plain 403 and issues nothing" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    transaction_count = VisitorOidcAuthorizationTransaction.count
+
+    get base_com_oauth_authorization_url(host: host, **authorize_params(realm: "visitor")),
+        headers: as_visitor_headers(visitors(:reserved_visitor), host: host)
+
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_equal "text/plain", response.media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
+    assert_equal transaction_count, VisitorOidcAuthorizationTransaction.count
+  end
+
+  # E02: a browser already authenticated at Base starting a new Sign is refused, even when the RP has
+  # no session yet. This is the intended product constraint, not an SSO success path.
+  test "E02 org authorize refuses an authenticated browser with a plain 403 and issues nothing" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    transaction_count = OperatorOidcAuthorizationTransaction.count
+
+    get base_org_oauth_authorization_url(host: host, **authorize_params(realm: "operator")),
+        headers: as_staff_headers(operators(:one), host: host)
+
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_equal "text/plain", response.media_type
+    assert_includes response.headers["Cache-Control"], "no-store"
+    assert_nil response.location
+    assert_equal transaction_count, OperatorOidcAuthorizationTransaction.count
+  end
+
+  # E03: a Valkey outage while reading the result is a dependency failure, not a rejected request.
+  # Only the Valkey store is replaced; transaction lookup, readiness checks, and the route are real.
+  test "E03 com authorize answers 503 without consuming the transaction when Valkey is unavailable" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    visitor = visitors(:reserved_visitor)
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "com", intent: "sign_in", params: authorize_params(realm: "visitor"),
+    )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: "com", login_challenge: issuance.transaction.login_challenge,
+      actor: visitor, session_ref: "com-e03-session", auth_method: "passkey",
+      authentication_event_at: Time.current,
+    )
+    unavailable_store = Object.new
+    def unavailable_store.read(*, **) = raise(Umaxica::Valkey::Unavailable, "Valkey admission read unavailable")
+
+    Valkey::AuthState::OpaqueAdmissionStore.stub(:new, unavailable_store) do
+      post base_com_oauth_authorization_url(host: host),
+           params: { result: result.code, transaction_ref: result.transaction.transaction_id },
+           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
+    end
+
+    assert_response :service_unavailable
+    assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
+    assert_not_predicate issuance.transaction.reload, :consumed?
+  end
+
   test "com authorize rejects an unknown result code as an invalid request" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 

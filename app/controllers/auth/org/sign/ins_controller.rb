@@ -20,13 +20,6 @@ module Auth
 
         def auth_ceremony_entry_intent = "sign_in"
 
-        def reject_logged_in_direct_entry!
-          render_sign_in_unavailable_while_authenticated
-        end
-
-        # Logged-in direct entry is refused; unauthenticated direct entry bridges to Base admission.
-        alias handle_logged_in_direct_entry! reject_logged_in_direct_entry!
-
         def render_method_selection!
           render inertia: true, props: sign_in_entry_props
         end

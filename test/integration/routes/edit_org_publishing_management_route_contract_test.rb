@@ -137,7 +137,7 @@ class EditOrgPublishingManagementRouteContractTest < ActionDispatch::Integration
     recognized = Rails.application.routes.recognize_path("http://#{HOST}/sign", method: :get)
 
     assert_equal "edit/org/sign/entries", recognized.fetch(:controller)
-    recognized = Rails.application.routes.recognize_path("http://#{HOST}/sign/callback", method: :get)
+    recognized = Rails.application.routes.recognize_path("http://#{HOST}/oidc/callback", method: :get)
 
     assert_equal "edit/org/oidc/callbacks", recognized.fetch(:controller)
     assert_raises(ActionController::RoutingError) do
@@ -146,7 +146,7 @@ class EditOrgPublishingManagementRouteContractTest < ActionDispatch::Integration
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{HOST}/sign/in/callback", method: :get)
     end
-    ["/oidc/authorization", "/oidc/callback"].each do |path|
+    ["/oidc/authorization", "/sign/callback"].each do |path|
       assert_raises(ActionController::RoutingError) do
         Rails.application.routes.recognize_path("http://#{HOST}#{path}", method: :get)
       end

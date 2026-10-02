@@ -5,7 +5,7 @@ require "test_helper"
 
 class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
   CLIENT_ID = "core-app"
-  REDIRECT_URI = "https://core.umaxica.app/sign/callback"
+  REDIRECT_URI = "https://core.umaxica.app/oidc/callback"
 
   setup do
     @suite = "suite-#{SecureRandom.hex(4)}"

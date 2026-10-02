@@ -27,11 +27,25 @@ module OidcAuthorizationResultPost
       expected_intent: transaction.intent,
     )
     resume_authorization!(transaction, result_generation: result_payload.fetch("result_generation"))
-  rescue BaseAuthAdmissionCoordinator::Denied, Umaxica::Valkey::Unavailable,
-         Umaxica::Valkey::OperationError, ActiveRecord::RecordNotFound,
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri, ArgumentError
     render json: { error: "invalid_request", error_description: "invalid authorization request" },
            status: :bad_request
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
+    # A Valkey failure says nothing about the request, so it must not read as a rejected result.
+    # The result stays unconsumed and may be retried while it is valid.
+    Rails.logger.error(
+      JitLogEvent.format(
+        "oidc.authorization_result.backend_failure",
+        surface: oidc_result_surface,
+        error_class: e.class.name,
+        request_id: request.request_id,
+      ),
+    )
+    render json: {
+      error: "temporarily_unavailable",
+      error_description: I18n.t("errors.rate_limit.backend_unavailable"),
+    }, status: :service_unavailable
   end
 
   private

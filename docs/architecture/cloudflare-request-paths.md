@@ -204,6 +204,34 @@ Browser --(HTTPS, Access cookie/JWT)--> Cloudflare edge --(Access policy check)-
   merely for "defense in depth" duplicates the connector-side check without a concrete requirement
   driving it.
 
+#### Core (`jp.*`) tunnel path rules
+
+The browser-facing tunnel publishes the core hosts with a path regular expression, so only the
+listed paths reach Rails; every other path falls through to a later ingress rule and never appears
+in the Rails log. Like the rest of the ingress configuration, these rules live in the Cloudflare
+dashboard; this is the recorded intended value, not something the repository can enforce.
+
+| Hostname         | Service                          |
+| ---------------- | -------------------------------- |
+| `jp.umaxica.app` | `http://core.app.localhost:3000` |
+| `jp.umaxica.com` | `http://core.com.localhost:3000` |
+| `jp.umaxica.org` | `http://core.org.localhost:3000` |
+
+All three share this path:
+
+```text
+^/((api/v0|oidc|sign)(/.*)?|\.well-known/jwks\.json|csp-violation-report)$
+```
+
+- `sign(/.*)?` covers the whole `/sign` scope in `config/routes/core.rb`: `GET`/`POST /sign` (RP
+  start), `/sign/callback` (OIDC callback), and `/sign/out` (sign-out). An earlier value listed only
+  `sign/out`, so `/sign` and `/sign/callback` never reached Rails and the edge answered with an
+  empty HTTP 300.
+- The anchored group does not admit sibling prefixes such as `/signup` or `/signs`.
+- `jp.umaxica.dev` is not published through this rule set.
+- Diagnosis: a response that reached Rails carries `x-request-id`; a response without it, and no
+  matching line in `log/development.log`, was answered by Cloudflare.
+
 ### 3. Worker / Edge request through Workers VPC
 
 ```text

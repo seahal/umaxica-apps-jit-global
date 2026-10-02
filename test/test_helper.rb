@@ -133,35 +133,30 @@ module AuthenticationHarness
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  # Base protected pages may use the approved Jump gateway transport before the browser reaches
-  # Auth. Assert the destination contract after that transport is unwrapped: Base must hand the
-  # browser to the matching Auth ceremony with an opaque local admission, never to a legacy OIDC
-  # RP authorization endpoint.
-  def assert_auth_ceremony_redirect(location, surface:)
-    target = jump_rt_url_from_location_for_test(location)
-    uri = URI.parse(target)
+  # A protected Base page is not a Sign entry: it points the browser at Base's own passive GET /sign
+  # on the same host and issues no admission (plans/active/sign-fqdn-integrated-plan.md section 5).
+  def assert_base_sign_entry_redirect(location, surface:)
+    uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    auth_host = auth_host_for_test_surface(surface)
+    base_host_key = { app: :base_service, com: :base_corporate, org: :base_staff }.fetch(surface)
 
-    assert_equal auth_host, uri.host
-    assert_equal public_send(:"auth_#{surface}_sign_in_path"), uri.path
-    assert_predicate query["entry_ref"], :present?
+    assert_includes [nil, Rails.configuration.x.boot_config.fetch(:hosts).public_send(base_host_key).host], uri.host
+    assert_equal public_send(:"base_#{surface}_sign_show_path"), uri.path
+    assert_nil query["entry_ref"]
     assert_nil query["client_id"]
     assert_nil query["screen_hint"]
   end
 
-  # Auth-owned pages use the local ceremony entry when the request is already on Auth. It must
-  # not manufacture an OIDC RP authorization request or a cross-surface client binding.
-  # A protected Auth page hands sign-in off to the Base admission entry of its surface, never to the
+  # A protected Auth page hands the browser to its surface's Base passive GET /sign, never to the
   # Auth origin's own /sign/in: the Jump gateway refuses a same-origin internal rt.
-  def assert_base_admission_entry_redirect(location, surface:)
+  def assert_base_sign_handoff_redirect(location, surface:)
     target = jump_rt_url_from_location_for_test(location)
     uri = URI.parse(target)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
     base_host_key = { app: :base_service, com: :base_corporate, org: :base_staff }.fetch(surface)
 
     assert_equal Rails.configuration.x.boot_config.fetch(:hosts).public_send(base_host_key).host, uri.host
-    assert_equal "/", uri.path
+    assert_equal public_send(:"base_#{surface}_sign_show_path"), uri.path
     assert_nil query["client_id"]
     assert_nil query["screen_hint"]
   end

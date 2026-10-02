@@ -12,22 +12,14 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
     host! @host
   end
 
-  test "direct entry without a login challenge renders the org entry page" do
+  test "direct entry without a login challenge is refused without admission" do
     get auth_org_sign_up_url(ri: "jp"), headers: { "Host" => @host }
 
-    assert_response :see_other
-    assert_equal "/", URI.parse(response.location).path
+    assert_response :bad_request
+    assert_nil response.location
     assert_nil session[:oidc_authorization_login_challenge]
     assert_nil session[:oidc_code_verifier]
     assert_nil session[:oidc_state]
-  end
-
-  test "direct entry offers the reciprocal sign in link" do
-    get auth_org_sign_up_url(ri: "jp"), headers: { "Host" => @host }
-
-    assert_response :see_other
-    assert_equal "/", URI.parse(response.location).path
-    assert_nil session[:oidc_authorization_login_challenge]
   end
 
   test "local ceremony does not render sign in link on sign up page" do

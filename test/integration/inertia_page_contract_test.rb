@@ -86,7 +86,7 @@ class InertiaPageContractTest < ActionDispatch::IntegrationTest
 
     assert_predicate location, :present?
 
-    assert_auth_ceremony_redirect(location, surface: :app)
+    assert_base_sign_entry_redirect(location, surface: :app)
   end
 
   test "a plain unauthenticated browser request still redirects" do

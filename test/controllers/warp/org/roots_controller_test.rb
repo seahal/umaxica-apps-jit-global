@@ -36,7 +36,7 @@ class Warp::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal(
       [
         ["Settings", warp_org_settings_path(ri: "jp")],
-        ["Continue", warp_org_sign_show_path(ri: "jp")],
+        [I18n.t("actions.continue"), warp_org_sign_show_path(ri: "jp")],
       ],
       inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
     )

@@ -33,7 +33,7 @@ module Warp
           sign_up: nil,
           links: [
             { label: "Settings", href: warp_com_settings_path(ri: params[:ri]) },
-            { label: "Continue", href: warp_com_sign_show_path(ri: params[:ri]) },
+            { label: t("actions.continue"), href: warp_com_sign_show_path(ri: params[:ri]) },
           ],
         }
       end

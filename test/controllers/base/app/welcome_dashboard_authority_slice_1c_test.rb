@@ -24,19 +24,12 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     @user.update!(status_id: ClientStatus::ACTIVE)
   end
 
-  test "public_root_renders Base-owned local authentication forms" do
+  test "public_root_renders one neutral link to the Base sign entry" do
     get base_app_root_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :success
-    %w(sign_in sign_up).each do |intent|
-      action = inertia_props.fetch(intent)
-
-      assert_equal base_app_root_authentication_path(ri: "jp"), action.fetch("action")
-      assert_equal "post", action.fetch("method")
-      assert_equal intent, action.fetch("intent")
-      assert_predicate action.fetch("authenticity_token"), :present?
-      assert_nil action["href"]
-    end
+    assert_equal base_app_sign_show_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
+    assert_nil inertia_props["sign_up"]
   end
 
   test "dashboard_renders_when_signed_in" do

@@ -13,14 +13,14 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
     assert_not_nil client
     assert_equal "core-app", client.client_id
     assert_equal "core-app", client.aud
-    assert client.redirect_uris.any? { |uri| uri.end_with?("/sign/callback") }
+    assert client.redirect_uris.any? { |uri| uri.end_with?("/oidc/callback") }
   end
 
   test "each first-party RP registers a callback on its own surface" do
     AuthBoundaryAuthorityMap.first_party_rp_client_ids.each do |client_id|
       client = OidcClientRegistry.find!(client_id)
 
-      assert client.redirect_uris.any? { |uri| uri.end_with?("/sign/callback") },
+      assert client.redirect_uris.any? { |uri| uri.end_with?("/oidc/callback") },
              "#{client_id} has no registered canonical callback"
       assert_equal [client.resource_type], client.redirect_uris_by_realm.keys
     end

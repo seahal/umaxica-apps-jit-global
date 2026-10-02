@@ -133,6 +133,44 @@ class JumpRtReturnVerificationTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  test "a verified Jump return redirects to the signed target with order and repeated pairs intact" do
+    origin = "https://auth.umaxica.com"
+    token = sign_return_token(aud: origin, src: "https://www.umaxica.com", url: "#{origin}/?ri=us&tag=b&tag=a&q=a%2Bb")
+    prime_jump_jwks_cache
+    host! "auth.umaxica.com"
+    https!
+    get "/?ri=us&tag=b&rt=#{token}&tag=a&q=a%2Bb"
+
+    assert_response :see_other
+    assert_equal "#{origin}/?ri=us&tag=b&tag=a&q=a%2Bb", response.location
+  end
+
+  {
+    "reordered pairs" => "tag=a&ri=us&tag=b&rt=%<token>s",
+    "a second rt" => "ri=us&tag=b&tag=a&rt=%<token>s&rt=%<token>s",
+    "a nested rt key" => "ri=us&tag=b&tag=a&rt=%<token>s&rt%%5Bx%%5D=1",
+    "a duplicated reserved parameter" => "ri=us&tag=b&tag=a&next=%%2Fevil&next=%%2Fevil&rt=%<token>s",
+  }.each do |label, query_format|
+    test "a Jump-signed return with #{label} is rejected" do
+      origin = "https://auth.umaxica.com"
+      token = sign_return_token(aud: origin, src: "https://www.umaxica.com", url: "#{origin}/?ri=us&tag=b&tag=a")
+      prime_jump_jwks_cache
+      host! "auth.umaxica.com"
+      https!
+      get "/?#{format(query_format, token: token)}"
+
+      assert_response :bad_request
+    end
+  end
+
+  test "a request whose only return token key is nested is rejected before the normal flow" do
+    host! "auth.umaxica.com"
+    https!
+    get "/?rt%5B%5D=a.b.c"
+
+    assert_response :bad_request
+  end
+
   test "sign app includes jump return verification" do
     assert_includes Auth::App::ApplicationController.ancestors, JumpRtReturnVerification
   end

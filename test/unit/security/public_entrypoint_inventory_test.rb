@@ -270,7 +270,7 @@ module Security
     end
 
     def public_sign_in_or_up?(entry)
-      entry.path == "/sign" || entry.path == "/sign/callback" ||
+      entry.path == "/sign" || entry.path == "/oidc/callback" ||
         entry.path.start_with?("/sign/in", "/sign/up", "/web/v0/in/")
     end
 

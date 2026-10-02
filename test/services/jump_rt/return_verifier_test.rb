@@ -146,7 +146,7 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     assert_equal "invalid_url", verify(token).error
   end
 
-  test "matches token url to request when query parameter order differs" do
+  test "rejects a request whose query parameter order differs from the signed url" do
     token = sign_return_token(url: "https://www.umaxica.app/path?ok=1&extra=2")
 
     result = JumpRtReturnVerifier.call(
@@ -157,7 +157,83 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
       now: @now,
     )
 
+    assert_equal "invalid_url", result.error
+  end
+
+  test "accepts rt at any position when the remaining pairs keep the signed order" do
+    token = sign_return_token(url: "https://www.umaxica.app/path?ok=1&extra=2")
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}&extra=2",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } },
+      now: @now,
+    )
+
     assert_predicate result, :success?
+  end
+
+  test "rejects a request that repeats a reserved parameter the signed url carries once" do
+    token = sign_return_token(url: "https://www.umaxica.app/path?next=%2Fa")
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?next=%2Fevil&next=%2Fa&rt=#{token}",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } },
+      now: @now,
+    )
+
+    assert_equal "invalid_url", result.error
+  end
+
+  test "rejects a request carrying a second rt" do
+    token = sign_return_token
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}&rt=#{token}",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } },
+      now: @now,
+    )
+
+    assert_equal "invalid_url", result.error
+  end
+
+  test "rejects a request whose rt value is not the verified token" do
+    token = sign_return_token
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?ok=1&rt=other",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } },
+      now: @now,
+    )
+
+    assert_equal "invalid_url", result.error
+  end
+
+  test "rejects a signed url that itself carries rt" do
+    token = sign_return_token(url: "https://www.umaxica.app/path?ok=1&rt=nested")
+
+    assert_equal "invalid_url", verify(token).error
+  end
+
+  test "distinguishes a literal plus from a space in the signed url" do
+    token = sign_return_token(url: "https://www.umaxica.app/path?q=a%2Bb")
+
+    result = JumpRtReturnVerifier.call(
+      token: token,
+      request_url: "https://www.umaxica.app/path?q=a+b&rt=#{token}",
+      request_base_url: "https://www.umaxica.app",
+      fetcher: -> { { "keys" => [@public_jwk] } },
+      now: @now,
+    )
+
+    assert_equal "invalid_url", result.error
   end
 
   test "rejects jwks entries with private material" do
@@ -173,6 +249,69 @@ class JumpRtReturnVerifierTest < ActiveSupport::TestCase
     )
 
     assert_equal "unknown_kid", result.error
+  end
+
+  [1, 10, 29, 30].each do |issuance_ttl|
+    test "accepts a 30 second return token while rails issuance ttl is #{issuance_ttl} seconds" do
+      jump = Rails.configuration.x.boot_config.fetch(:jump)
+      boot_config = Rails.configuration.x.boot_config.merge(jump: jump.with(ttl_seconds: issuance_ttl))
+      token = sign_return_token(exp: @now.to_i + 30)
+
+      result =
+        Rails.configuration.x.stub(:boot_config, boot_config) do
+          JumpRtReturnVerifier.call(
+            token: token,
+            request_url: "https://www.umaxica.app/path?ok=1&rt=#{token}",
+            request_base_url: "https://www.umaxica.app",
+            fetcher: -> { { "keys" => [@public_jwk] } },
+            now: @now,
+          )
+        end
+
+      assert_predicate result, :success?
+    end
+  end
+
+  [[29, true], [30, true], [31, false]].each do |lifetime, accepted|
+    test "return token lifetime boundary exp minus iat #{lifetime} is #{accepted ? "accepted" : "rejected"}" do
+      token = sign_return_token(exp: @now.to_i + lifetime)
+
+      result = verify(token)
+
+      assert_equal accepted, result.success?, result.error
+    end
+  end
+
+  test "rejects a fractional lifetime just above the 30 second maximum" do
+    token = sign_return_token(exp: @now.to_i + 30.5)
+
+    assert_equal "invalid_claim", verify(token).error
+  end
+
+  # JWT.encode refuses non-numeric time claims, so these tokens are signed through JWT::Token to
+  # model a signer that emits the wrong JSON type. NaN and Infinity are not representable in JSON.
+  %i(iat nbf exp).each do |claim|
+    { "string" => ->(value) { value.to_s }, "null" => ->(_value) { } }.each do |label, convert|
+      test "rejects a #{label} #{claim} claim" do
+        payload = return_payload.merge(claim => convert.call(return_payload.fetch(claim)))
+        jwt = JWT::Token.new(payload: payload, header: { "typ" => "JWT", "kid" => "jump-test" })
+        jwt.sign!(algorithm: "ES384", key: @private_key)
+
+        result = verify(jwt.jwt)
+
+        assert_equal "invalid_claim", result.error
+      end
+    end
+  end
+
+  [[5, true], [6, false]].each do |skew, accepted|
+    test "iat skew boundary #{skew} seconds ahead is #{accepted ? "accepted" : "rejected"}" do
+      token = sign_return_token(iat: @now.to_i + skew, nbf: @now.to_i, exp: @now.to_i + 30)
+
+      result = verify(token)
+
+      assert_equal accepted, result.success?, result.error
+    end
   end
 
   test "rejects excessive ttl" do

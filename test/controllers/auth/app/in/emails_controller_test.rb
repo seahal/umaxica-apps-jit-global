@@ -36,8 +36,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     get new_auth_app_sign_in_email_url(ri: "jp"),
         headers: as_user_headers(user, host: @host)
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_includes response.headers["Cache-Control"], "no-store"
   end
 

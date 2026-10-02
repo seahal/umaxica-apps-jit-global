@@ -98,14 +98,6 @@ module Auth
             logos: logos && { white: logos[:white], black: logos[:black], width: 28, height: 40 },
           }
         end
-
-        def redirect_logged_in_direct_entry!
-          redirect_to_jump_url(
-            base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host, protocol: "https"),
-          )
-        end
-
-        alias handle_logged_in_direct_entry! redirect_logged_in_direct_entry!
       end
     end
   end

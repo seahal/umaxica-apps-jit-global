@@ -50,7 +50,7 @@ module Security
       assert_equal SecurityTokenLifetimes::OIDC_ID_TOKEN_TTL, OidcIdTokenIssuer::TOKEN_TTL
       assert_equal SecurityTokenLifetimes::JUMP_RT_TTL, JumpRtIssuer::DEFAULT_TTL
       assert_equal SecurityTokenLifetimes::JUMP_RT_TTL, JumpRtIssuer::MAX_TTL
-      assert_equal SecurityTokenLifetimes::JUMP_RT_TTL, JumpRtReturnVerifier::DEFAULT_MAX_TTL
+      assert_equal SecurityTokenLifetimes::JUMP_RT_TTL.to_i, JumpRtReturnVerifier::MAX_RETURN_TTL
     end
   end
 end

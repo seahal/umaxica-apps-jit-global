@@ -9,12 +9,12 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
   end
 
-  test "direct entry without a login challenge lists the registration methods" do
+  test "direct entry without a login challenge is refused without admission" do
     get auth_com_sign_up_url(ct: "dr", ri: "jp"), headers: default_headers
 
-    assert_response :see_other
+    assert_response :bad_request
+    assert_nil response.location
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_equal "/", URI.parse(response.location).path
   end
 
   test "local ceremony shows email and telephone registration methods" do

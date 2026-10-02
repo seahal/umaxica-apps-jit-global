@@ -111,8 +111,8 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
         headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
           .merge("X-STRICT-SOCIAL-STATE" => "1")
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
 
     identity = ClientAppleIdentity.find_by(uid: uid)
 
@@ -127,8 +127,8 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
         headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
           .merge("X-STRICT-SOCIAL-STATE" => "1")
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_nil ClientGoogleIdentity.find_by(uid: uid)
   end
 
@@ -150,8 +150,8 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
           headers: @callback_headers.merge(as_user_headers(@user_one, host: @host))
     end
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
 
     identity = ClientAppleIdentity.find_by(uid: uid)
 
@@ -179,7 +179,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
          headers: host_headers(@host)
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :app)
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
     assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
   end
 
@@ -202,7 +202,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
          headers: host_headers(@host)
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :app)
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
     assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
   end
 
@@ -260,7 +260,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
          headers: { "Host" => @host }
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :app)
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
   end
 
   test "link intent rejects resource-level step up without token-bound step up" do

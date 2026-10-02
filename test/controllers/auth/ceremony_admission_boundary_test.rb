@@ -28,7 +28,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     },
   ].freeze
 
-  test "absent admission stores no challenge and does not create a Base session token" do
+  # E01: Auth without a Base-issued admission is refused explicitly; it no longer bridges to Base.
+  test "absent admission is refused without a redirect, a stored challenge, or a Base session token" do
     SURFACES.each do |surface|
       host = ENV.fetch(surface.fetch(:host_env))
       token_count = ClientToken.count
@@ -36,8 +37,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         browser.host!(host)
         browser.get(public_send(surface.fetch(:sign_in), ri: "jp"), headers: { "Host" => host })
 
-        assert_equal 303, browser.response.status, surface.fetch(:name)
-        assert_equal "/", URI.parse(browser.response.location).path, surface.fetch(:name)
+        assert_equal 400, browser.response.status, surface.fetch(:name)
+        assert_equal I18n.t("errors.messages.invalid_request"), browser.response.body, surface.fetch(:name)
+        assert_nil browser.response.location, surface.fetch(:name)
         assert_nil browser.session[:oidc_authorization_login_challenge]
         assert_equal token_count, ClientToken.count
       end

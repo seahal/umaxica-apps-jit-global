@@ -37,8 +37,8 @@ class Auth::App::Sign::In::DevicesControllerTest < ActionDispatch::IntegrationTe
     assert_no_difference ["ClientToken.count", "ClientDeviceSession.count", "ClientEmergencySignInOperation.count"] do
       get auth_app_sign_in_device_path(ri: "jp"), headers: { "Authorization" => "Bearer #{access_token}" }
     end
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_includes response.headers["Cache-Control"], "no-store"
     assert_equal credentials, ClientSecretCredential.order(:id).map(&:attributes)
   end

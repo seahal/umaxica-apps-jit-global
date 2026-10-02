@@ -547,6 +547,7 @@ en:
     actions: Actions
     back: Back
     connect: Connect
+    continue: Continue
     destroy: Delete
     disconnect: Disconnect
     edit: Edit
@@ -2255,6 +2256,7 @@ en:
       not_a_number: is not a number
       not_an_integer: must be an integer
       odd: must be odd
+      operation_not_permitted: This operation is not permitted.
       other_than: must be other than %{count}
       password_too_long: is too long
       preference_operation_failed: The preference operation failed.

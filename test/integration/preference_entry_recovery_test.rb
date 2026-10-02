@@ -15,19 +15,19 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
            preference: "AppPreference",
            sign_in: :auth_app_sign_in_url,
            sign_in_path: :auth_app_sign_in_path,
-           base_root: :base_app_root_path, },
+           base_sign: :base_app_sign_show_path, },
     com: { auth_env: "PUBLIC_AUTH_CORPORATE_URL",
            base_env: "PUBLIC_BASE_CORPORATE_URL",
            preference: "ComPreference",
            sign_in: :auth_com_sign_in_url,
            sign_in_path: :auth_com_sign_in_path,
-           base_root: :base_com_root_path, },
+           base_sign: :base_com_sign_show_path, },
     org: { auth_env: "PUBLIC_AUTH_STAFF_URL",
            base_env: "PUBLIC_BASE_STAFF_URL",
            preference: "OrgPreference",
            sign_in: :auth_org_sign_in_url,
            sign_in_path: :auth_org_sign_in_path,
-           base_root: :base_org_root_path, },
+           base_sign: :base_org_sign_show_path, },
   }.freeze
 
   SURFACES.each do |surface, config|
@@ -69,13 +69,13 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
       assert_empty response.body
     end
 
-    test "#{surface}: the Base sign-in start POST proceeds with a stale refresh cookie and creates no preference" do
+    test "#{surface}: the Base neutral sign POST proceeds with a stale refresh cookie and creates no preference" do
       host! ENV.fetch(config[:base_env])
       plant_refresh_cookie(surface, stale_refresh_token(config))
       preference_class = config[:preference].constantize
 
       assert_no_difference -> { preference_class.count } do
-        post public_send(config[:base_root], ri: "jp"), params: { intent: "sign_in" }
+        post public_send(config[:base_sign], ri: "jp")
       end
 
       assert_response :see_other
@@ -87,20 +87,11 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
       host! ENV.fetch(config[:base_env])
       plant_refresh_cookie(surface, stale_refresh_token(config))
 
-      post public_send(config[:base_root], ri: "jp", format: :json), params: { intent: "sign_in" }
+      post public_send(config[:base_sign], ri: "jp", format: :json)
 
       assert_response :unauthorized
       assert_equal "invalid_refresh_token", response.parsed_body["error_code"]
     end
-  end
-
-  test "the Base sign-in start POST still requires a valid intent when the credential is detached" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    plant_refresh_cookie(:app, stale_refresh_token(SURFACES[:app]))
-
-    post base_app_root_path(ri: "jp"), params: { intent: "" }
-
-    assert_response :bad_request
   end
 
   test "the Auth entry still refuses a direct entry without admission when the credential is detached" do
@@ -109,13 +100,8 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
 
     get auth_app_sign_in_url(ri: "jp")
 
-    assert_response :see_other
-    gateway = URI.parse(response.location)
-
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(payload.fetch("url")).host
+    assert_response :bad_request
+    assert_nil response.location
   end
 
   test "the org sign-up guide still renders with a stale refresh cookie" do

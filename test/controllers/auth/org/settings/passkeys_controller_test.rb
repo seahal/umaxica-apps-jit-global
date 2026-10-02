@@ -137,7 +137,7 @@ class Auth::Org::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     get auth_org_settings_passkeys_url(ri: "jp"), headers: browser_headers.merge(@host_headers)
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :org)
+    assert_base_sign_handoff_redirect(response.location, surface: :org)
   end
 
   test "should get edit" do

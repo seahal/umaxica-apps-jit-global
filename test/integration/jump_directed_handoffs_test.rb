@@ -5,11 +5,16 @@ require "test_helper"
 class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  test "Auth direct ceremony entry and sign out use same TLD public Base through Jump" do
+  test "Auth sign out uses same TLD public Base through Jump and direct ceremony entry is refused" do
     %w(app com org).each do |tld|
       host! "auth.umaxica.#{tld}"
       https!
-      %w(/sign/in /sign/out).each do |path|
+      get "/sign/in", params: { ri: "us" }
+
+      assert_response :bad_request
+      assert_nil response.location
+
+      %w(/sign/out).each do |path|
         get path, params: { ri: "us" }
 
         assert_response :see_other
@@ -50,7 +55,7 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
         assert_equal "www.umaxica.#{tld}", target.host
         assert_equal "https", target.scheme
         assert_equal "/oauth/authorize", target.path
-        assert_equal "https://#{host}/sign/callback", query.fetch("redirect_uri")
+        assert_equal "https://#{host}/oidc/callback", query.fetch("redirect_uri")
         assert_equal "S256", query.fetch("code_challenge_method")
         assert_predicate query.fetch("state"), :present?
         assert_predicate query.fetch("nonce"), :present?
@@ -58,10 +63,10 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "Edit keeps its existing same-site authorization admission pending separate RP review" do
+  test "Edit sign POST keeps its existing same-site authorization admission pending separate RP review" do
     host! "edit.umaxica.org"
     https!
-    get "/publishing/info/org/entries", params: { ri: "jp" }
+    post "/sign", params: { ri: "jp" }
 
     assert_response :found
     target = URI.parse(response.location)

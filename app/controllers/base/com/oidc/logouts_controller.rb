@@ -23,12 +23,19 @@ module Base
         layout -> { @render_surface_erb_layout ? "base/com/application" : "base/com/inertia" }
 
         declare_authentication_mode! :open
-        protect_from_forgery using: :header_only,
-                             trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS,
-                             with: :exception,
-                             only: :create,
-                             if: -> { params[:logout_challenge].present? }
-
+        # CSRF: ordinary POSTs keep the surface-wide `:header_or_legacy_token` check inherited from
+        # the application controller. Do not redeclare `protect_from_forgery` here: Rails keeps one
+        # `verify_authenticity_token` callback per controller, so a redeclaration with `only:`/`if:`
+        # replaces the inherited check instead of adding to it (that is how plain POSTs once ran with
+        # no CSRF check at all; adr/sign-neutral-entry-and-logout-target-authorization.md).
+        #
+        # A coordinated-logout POST cannot carry this surface's legacy token, because the initiating
+        # surface does not share this session. `SignOutNotice#verified_request?` accepts a live,
+        # unexpired, unfinalized logout challenge in its place, and the `before_action` below is the
+        # Fetch Metadata gate for that POST: Sec-Fetch-Site must be same-origin/same-site and the
+        # Origin blank, one of COORDINATED_LOGOUT_TRUSTED_ORIGINS, or `null` bound to the live
+        # challenge. Dropping this `before_action` or adding an origin is a security-boundary change
+        # that requires explicit human review.
         before_action only: :create do
           verify_coordinated_sign_out_post!(trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS)
         end

@@ -20,8 +20,8 @@ class SocialAuthStepUpTest < ActionDispatch::IntegrationTest
     post auth_app_social_google_session_url(intent: "step_up", ri: "jp"),
          headers: as_user_headers(@user, host: @host)
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
     assert_not_equal "step_up", session[SocialAuth::SOCIAL_INTENT_SESSION_KEY]
     assert_nil @user.reload.last_step_up_at

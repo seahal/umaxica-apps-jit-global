@@ -131,7 +131,7 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
       else raise ArgumentError, "unknown Base host: #{host}"
       end
 
-    assert_auth_ceremony_redirect(response.location, surface: surface)
+    assert_base_sign_entry_redirect(response.location, surface: surface)
   end
 
   def assert_self_service_page(url, headers:, title:)

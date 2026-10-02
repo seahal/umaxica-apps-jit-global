@@ -12,13 +12,13 @@ module Auth
         host! @host
       end
 
-      test "direct entry without a login challenge lists the sign-in methods" do
+      test "direct entry without a login challenge is refused without admission" do
         get auth_com_sign_in_url(ri: "jp"), headers: { "Host" => @host }
 
-        assert_response :see_other
+        assert_response :bad_request
+        assert_nil response.location
         assert_includes response.headers["Cache-Control"], "no-store"
         assert_nil session[:oidc_authorization_login_challenge]
-        assert_equal "/", URI.parse(response.location).path
       end
 
       test "valid login challenge renders local ceremony" do
@@ -89,9 +89,9 @@ module Auth
 
         get auth_com_sign_in_url(ri: "jp"), headers: as_visitor_headers(visitor, host: @host)
 
-        assert_response :conflict
+        assert_response :forbidden
         assert_equal "text/plain; charset=utf-8", response.headers["Content-Type"]
-        assert_equal "Sign-in is unavailable while authenticated.", response.body
+        assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
         assert_includes response.headers["Cache-Control"], "no-store"
       end
 

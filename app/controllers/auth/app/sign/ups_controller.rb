@@ -10,10 +10,9 @@ module Auth
         include AppSignUpEntryPage
         include ::AuthCeremonyAdmission
 
-        # Use :open instead of :guest so already-authenticated users reach the
-        # action body and get redirected to their dashboard (see
-        # `redirect_logged_in_direct_entry!`) instead of receiving a 403 from
-        # the guest enforcement. Matches the sibling InsController policy.
+        # :open rather than :guest so an admitted ceremony continuation reaches
+        # `admit_or_render_sign_ceremony!`, which itself refuses a new Sign from an
+        # authenticated browser. Matches the sibling InsController policy.
         AUTHENTICATION_MODE = :open
 
         before_action :reject_suspended_sign_up!
@@ -28,19 +27,6 @@ module Auth
         def auth_ceremony_entry_intent = "sign_up"
 
         def sign_up_surface = :app
-
-        # Logged-in users hitting /sign/up directly are sent to their post-auth
-        # landing instead of receiving a 403. The 403 surfaced as a hard error
-        # in the cross-host redirect chain when the SSO handshake briefly
-        # revisited this endpoint.
-        def redirect_logged_in_direct_entry!
-          redirect_to_jump_url(
-            base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host, protocol: "https"),
-          )
-        end
-
-        # Logged-in direct entry returns to Base Root. Unauthenticated direct entry bridges to Base admission.
-        alias handle_logged_in_direct_entry! redirect_logged_in_direct_entry!
 
         def render_method_selection!
           render_sign_up_entry_page!

@@ -384,3 +384,6 @@ Historical engine-era ADRs are retained for traceability only. They do not autho
 boundaries in this repository.
 
 - `valkey-nonprod-logical-db-topology.md` — one nonprod Valkey, DBs 0–5, AUTH_STATE_REDIS_URL.
+- `sign-neutral-entry-and-logout-target-authorization.md` — neutral `/sign` entry, 403 for an
+  authenticated new Sign (including Base-only sessions), and `id_token_hint` never authorizes
+  revoking a session the browser does not hold. Amends `adr/logout-ceremony-boundary.md`.

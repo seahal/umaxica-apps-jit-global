@@ -56,7 +56,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
       assert_equal expected_surface, meta.fetch(:surface)
       assert_equal client_id.split("-").last, meta.fetch(:face)
       assert_includes %w(client visitor operator), meta.fetch(:actor)
-      assert_equal "/sign/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
+      assert_equal "/oidc/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
       assert_equal "/sign/out", AuthBoundaryAuthorityMap.sign_out_path_for(client_id)
     end
   end

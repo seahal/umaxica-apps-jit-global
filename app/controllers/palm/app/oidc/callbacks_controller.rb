@@ -22,9 +22,9 @@ module Palm
           completion = OidcClientStoresStaticClientStore::NATIVE_COMPLETION_URIS.fetch(flow.fetch("client_id"))
           flows.delete(params[:state].to_s)
           if flows.empty?
-            session.delete(::Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY)
+            session.delete(::Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY)
           else
-            session[::Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY] = flows
+            session[::Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY] = flows
           end
           uri = URI.parse(completion)
           uri.query = flow.fetch("verified_return").to_query
@@ -34,7 +34,7 @@ module Palm
 
         private
 
-        def redirect_to_jump_return_target!
+        def redirect_to_jump_return_target!(return_url)
           flows = pending_flows
           flow = flows[params[:state].to_s]
           return invalid_request unless flow && flow_active?(flow)
@@ -46,7 +46,7 @@ module Palm
           return invalid_request unless values["code"].present? ^ values["error"].present?
 
           flow["verified_return"] = values
-          session[::Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY] = flows
+          session[::Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY] = flows
           super
         end
 
@@ -61,11 +61,11 @@ module Palm
         def flow_active?(flow)
           created_at = flow.fetch("created_at")
           created_at <= Time.current.to_i &&
-            Time.current.to_i < created_at + ::Palm::App::Sign::InsController::FLOW_TTL.to_i
+            Time.current.to_i < created_at + ::Palm::App::Sign::EntriesController::FLOW_TTL.to_i
         end
 
         def pending_flows
-          key = ::Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY
+          key = ::Palm::App::Sign::EntriesController::PENDING_FLOWS_SESSION_KEY
           flows = session[key].to_h.select { |_state, flow| flow_active?(flow) }
           if flows.empty?
             session.delete(key)

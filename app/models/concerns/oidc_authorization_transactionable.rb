@@ -18,6 +18,9 @@ module OidcAuthorizationTransactionable
     scope :authenticated, -> { where(status: STATUS_AUTHENTICATED) }
     scope :consumed, -> { where(status: STATUS_CONSUMED) }
     scope :active_at, ->(time) { where(arel_table[:expires_at].gt(time)) }
+    scope :purgeable_at, lambda { |time, retention_period: RETENTION_PERIOD|
+      where(arel_table[:expires_at].lteq(time - retention_period))
+    }
 
     validates :transaction_id, :surface, :intent, :client_id, :redirect_uri, :response_type, :scope, :state,
               :nonce, :code_challenge, :code_challenge_method, :login_challenge, :login_challenge_expires_at,

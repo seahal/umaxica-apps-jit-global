@@ -28,32 +28,6 @@ module Base
         render inertia: "base/org/dashboards/show", props: dashboard_page_props
       end
 
-      def create
-        return redirect_to(base_org_dashboard_path(ri: params[:ri]), status: :see_other) if logged_in?
-
-        intent = params[:intent].to_s
-        return render plain: "invalid authentication intent", status: :bad_request unless %w(sign_in
-                                                                                             sign_up).include?(intent)
-
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "org", intent: intent)
-        auth_url =
-          if intent == "sign_up"
-            auth_org_sign_up_url(
-              ri: params[:ri], host: oidc_sign_host, protocol: "https",
-              entry_ref: admission.reference,
-            )
-          else
-            auth_org_sign_in_url(
-              ri: params[:ri], host: oidc_sign_host, protocol: "https",
-              entry_ref: admission.reference,
-            )
-          end
-        redirect_to_jump_url(auth_url, status: :see_other)
-      rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
-        Rails.logger.error("[Base::Org::RootsController] local admission failed: #{e.class}")
-        render plain: "authentication service unavailable", status: :service_unavailable
-      end
-
       protected
 
       def track_authenticated_session_activity?
@@ -69,12 +43,6 @@ module Base
         return super unless (request.get? || request.head?) && %w(index show).include?(action_name)
 
         params[:ri] = normalized_param_ri.presence || get_region
-      end
-
-      # The sign-in/sign-up start POST only issues an admission; it needs no preference authority,
-      # so a stale preference credential must not refuse it.
-      def preference_entry_recovery_action?
-        action_name == "create"
       end
 
       def require_selected_actor_context_for_dashboard!
@@ -167,18 +135,9 @@ module Base
           title: nil,
           heading: "Base Org",
           description: t("landing.thin_endpoint"),
-          sign_in: local_entry_props("Sign in", "sign_in"),
-          sign_up: local_entry_props("Sign up", "sign_up"),
-        }
-      end
-
-      def local_entry_props(label, intent)
-        {
-          label: label,
-          action: base_org_root_authentication_path(ri: params[:ri]),
-          method: "post",
-          intent: intent,
-          authenticity_token: form_authenticity_token,
+          # One neutral entry; any allowed switch to registration happens inside Auth.
+          sign_in: { label: t("actions.continue"), href: base_org_sign_show_path(ri: params[:ri]) },
+          sign_up: nil,
         }
       end
     end

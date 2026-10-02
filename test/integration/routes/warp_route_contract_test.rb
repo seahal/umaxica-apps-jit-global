@@ -92,7 +92,7 @@ class WarpRouteContractTest < ActionDispatch::IntegrationTest
         recognized = Rails.application.routes.recognize_path("#{origin}/sign", method: :get)
 
         assert_equal "#{prefix}/sign/entries", recognized[:controller], origin
-        recognized = Rails.application.routes.recognize_path("#{origin}/sign/callback", method: :get)
+        recognized = Rails.application.routes.recognize_path("#{origin}/oidc/callback", method: :get)
 
         assert_equal "#{prefix}/oidc/callbacks", recognized[:controller], origin
         assert_raises(ActionController::RoutingError) do
@@ -101,7 +101,7 @@ class WarpRouteContractTest < ActionDispatch::IntegrationTest
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("#{origin}/sign/in/callback", method: :get)
         end
-        ["/oidc/authorization", "/oidc/callback"].each do |path|
+        ["/oidc/authorization", "/sign/callback"].each do |path|
           assert_raises(ActionController::RoutingError) do
             Rails.application.routes.recognize_path("#{origin}#{path}", method: :get)
           end

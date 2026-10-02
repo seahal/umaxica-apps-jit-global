@@ -5,17 +5,17 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class AlreadyAuthenticatedErrorTest < ActiveSupport::TestCase
-  test "uses the fixed minimal rejection message" do
+  test "uses the shared not-permitted message" do
     error = AlreadyAuthenticatedError.new
 
     assert_nil error.i18n_key
-    assert_equal "Sign-in is unavailable while authenticated.", error.message
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), error.message
   end
 
-  test "initializes with conflict status code" do
+  test "initializes with forbidden status code" do
     error = AlreadyAuthenticatedError.new
 
-    assert_equal :conflict, error.status_code
+    assert_equal :forbidden, error.status_code
   end
 
   test "accepts custom status code" do

@@ -17,7 +17,7 @@ class Auth::App::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
     get auth_app_sign_in_check_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :app)
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
   end
 
   test "show without sign in sequence is rejected" do

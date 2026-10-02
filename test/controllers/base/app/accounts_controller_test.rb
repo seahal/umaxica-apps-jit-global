@@ -12,11 +12,18 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
     @bootstrap = bootstrap_and_select!(@user, @token)
   end
 
-  test "unauthenticated cannot access accounts" do
-    get base_app_accounts_url(ri: "jp", host: @host), headers: host_headers(@host)
+  # A protected Base page is not a Sign entry: it points at Base's passive GET /sign and issues no
+  # admission on a GET.
+  test "unauthenticated cannot access accounts and is sent to the passive sign entry" do
+    BaseAuthAdmissionCoordinator.stub(:issue_local_entry!, ->(**) { flunk("a protected GET must not issue") }) do
+      get base_app_accounts_url(ri: "jp", host: @host), headers: host_headers(@host)
+    end
 
     assert_response :redirect
-    assert_auth_ceremony_redirect(response.location, surface: :app)
+    location = URI.parse(response.location)
+
+    assert_includes [nil, @host], location.host
+    assert_equal base_app_sign_show_path, location.path
   end
 
   test "index lists accounts" do

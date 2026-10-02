@@ -28,7 +28,7 @@ module AuthCeremonyAdmission
     end
 
     if logged_in? && admission_reference_param.blank? && !admitted_ceremony_present?(expected_intent: expected_intent)
-      return handle_logged_in_direct_entry!
+      return render_sign_in_unavailable_while_authenticated
     end
 
     if ceremony_admission_present?
@@ -40,7 +40,9 @@ module AuthCeremonyAdmission
       return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
     end
 
-    bridge_to_base_admission!
+    # Auth starts only from a Base-issued admission or a verified continuation; a context-free
+    # request is refused rather than bridged to Base (adr/sign-neutral-entry-and-logout-target-authorization.md).
+    render_invalid_admission_request!
   end
 
   def redeem_admission_reference_and_redirect!(expected_intent:)
@@ -97,18 +99,6 @@ module AuthCeremonyAdmission
 
   def admitted_ceremony_present?(expected_intent:)
     auth_ceremony_admission_present? && auth_ceremony_matches_intent?(expected_intent)
-  end
-
-  def bridge_to_base_admission!
-    redirect_to_jump_url(
-      URI::Generic.build(
-        scheme: "https",
-        host: base_authority_host,
-        path: "/",
-        query: params[:ri].present? ? { ri: params[:ri] }.to_query : nil,
-      ).to_s,
-      status: :see_other,
-    )
   end
 
   def apply_admission_transport_headers!

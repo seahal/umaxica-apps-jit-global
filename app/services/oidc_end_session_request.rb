@@ -56,12 +56,16 @@ class OidcEndSessionRequest < ApplicationService
     current_failure = current_session_mismatch(payload)
     return current_failure if current_failure
 
+    # The hint names the RP session the RP wants ended; it is not authority for this browser to end
+    # it. Its sub/sid become the logout target only after matching the verified current session.
+    # Without one, the hint still validates client and redirect, but nothing is revoked or notified.
+    target_bound = !current_session_missing?
     success(
       source: SOURCE_ID_TOKEN_HINT,
       client: client,
       client_id: client.client_id,
-      subject: payload["sub"],
-      sid: payload["sid"],
+      subject: target_bound ? payload["sub"] : nil,
+      sid: target_bound ? payload["sid"] : nil,
       post_logout_redirect_uri: redirect_uri,
       state: param(:state).presence,
       ui_locales: param(:ui_locales).presence,

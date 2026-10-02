@@ -22,7 +22,7 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
     get auth_app_settings_url(ri: "jp"), headers: browser_headers
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :app)
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
     assert_nil session[:oidc_state]
     assert_nil session[:oidc_nonce]
     assert_nil session[:oidc_code_verifier]

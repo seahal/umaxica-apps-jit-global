@@ -40,7 +40,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "legacy RP authorize and callback paths are unroutable" do
     SURFACES.each do |surface|
-      ["/oidc/authorization", "/oidc/callback"].each do |path|
+      ["/oidc/authorization", "/sign/callback"].each do |path|
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("http://#{surface[:host]}#{path}", method: :get)
         end
@@ -90,7 +90,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       callback_uri = URI.parse(jump_rt_url_from_location(response.location))
       callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
 
-      assert_equal "/sign/callback", callback_uri.path
+      assert_equal "/oidc/callback", callback_uri.path
       assert_predicate callback_query["code"], :present?
       assert_predicate issuance.transaction.reload, :consumed?
       assert_predicate resolution.transaction.reload, :resolved?
@@ -277,7 +277,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
 
       assert_equal core_host, callback_uri.host
-      assert_equal "/sign/callback", callback_uri.path
+      assert_equal "/oidc/callback", callback_uri.path
       assert_predicate callback_query["code"], :present?
       assert_predicate transaction.reload, :consumed?
 
@@ -599,10 +599,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   test "app com and org old sign entry routes are not exposed" do
     SURFACES.each do |surface|
       host! surface[:host]
-
-      get "/sign", headers: browser_headers
-
-      assert_response :not_found
 
       get "/sign/in", headers: browser_headers
 

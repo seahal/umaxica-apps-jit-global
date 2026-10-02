@@ -185,9 +185,13 @@ module AuthenticationBase
   # - Reads request format and writes HTTP response
   # ======================================================================
 
+  # The one answer to a new Sign started by an authenticated browser, on every RP, Auth, and Base
+  # surface: a plain 403 with no Location, links, or session change
+  # (adr/sign-neutral-entry-and-logout-target-authorization.md).
   def render_sign_in_unavailable_while_authenticated(_exception = nil)
     response.set_header("Cache-Control", "no-store")
-    render plain: AlreadyAuthenticatedError::MESSAGE, status: :conflict
+    render plain: I18n.t("errors.messages.operation_not_permitted"), status: :forbidden,
+           content_type: "text/plain"
   end
 
   # ======================================================================

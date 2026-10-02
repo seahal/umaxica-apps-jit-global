@@ -26,6 +26,12 @@ development:
     priority: 50
     args: []
     schedule: every 15 minutes
+  oidc_authorization_transaction_purge:
+    class: OidcAuthorizationTransactionPurgeJob
+    queue: retention
+    priority: 50
+    args: []
+    schedule: every 15 minutes
   secret_credential_ceremony_transaction_purge:
     class: SecretCredentialCeremonyTransactionPurgeJob
     queue: retention
@@ -130,6 +136,12 @@ production:
     schedule: every 15 minutes
   passkey_ceremony_transaction_purge:
     class: PasskeyCeremonyTransactionPurgeJob
+    queue: retention
+    priority: 50
+    args: []
+    schedule: every 15 minutes
+  oidc_authorization_transaction_purge:
+    class: OidcAuthorizationTransactionPurgeJob
     queue: retention
     priority: 50
     args: []

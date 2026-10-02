@@ -183,8 +183,8 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     get new_auth_org_sign_in_emergency_passkey_url(ri: "jp"),
         headers: as_staff_headers(staff, host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"))
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_includes response.headers["Cache-Control"], "no-store"
   end
 
@@ -195,8 +195,8 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     post auth_org_sign_in_emergency_passkey_options_url(ri: "jp"),
          params: { identifier: staff.public_id }, headers: headers
 
-    assert_response :conflict
-    assert_equal "Sign-in is unavailable while authenticated.", response.body
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
     assert_includes response.headers["Cache-Control"], "no-store"
     assert_nil session[:passkey_challenges]
   end

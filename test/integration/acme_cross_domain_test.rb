@@ -6,13 +6,12 @@ require "test_helper"
 
 # This test verifies current Base ownership at the local authentication boundary.
 class AcmeCrossDomainLinksTest < ActionDispatch::IntegrationTest
-  test "base app root renders a same-origin POST admission boundary" do
+  test "base app root links to its own neutral sign entry" do
     host! ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
     get base_app_root_url(ri: "jp")
 
     assert_response :success
-    assert_equal base_app_root_authentication_path(ri: "jp"), inertia_props.dig("sign_in", "action")
-    assert_equal "post", inertia_props.dig("sign_in", "method")
+    assert_equal base_app_sign_show_path(ri: "jp"), inertia_props.dig("sign_in", "href")
   end
 
   test "cross domain url helpers are accessible from base" do

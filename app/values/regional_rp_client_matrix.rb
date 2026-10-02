@@ -16,7 +16,7 @@ module RegionalRpClientMatrix
 
   class InvalidCanonicalRegistration < KeyError; end
 
-  CALLBACK_PATH = "/sign/callback"
+  CALLBACK_PATH = "/oidc/callback"
   POST_LOGOUT_PATH = "/sign/out"
   BACKCHANNEL_LOGOUT_PATH = "/oidc/backchannel/logout"
 

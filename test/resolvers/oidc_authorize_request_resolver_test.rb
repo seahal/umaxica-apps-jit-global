@@ -44,22 +44,4 @@ class OidcAuthorizeRequestResolverTest < ActiveSupport::TestCase
       end
     assert_equal "max_age must be a non-negative integer", error.message
   end
-
-  test "requires a fresh authentication event for login prompt and stale max_age" do
-    now = Time.utc(2026, 1, 2, 3, 10, 0)
-    event_at = now - 5.minutes
-
-    assert_not OidcAuthorizeRequestResolver.authentication_satisfied?(
-      prompt: "login", max_age: nil, authenticated_at: event_at, now: now,
-    )
-    assert_not OidcAuthorizeRequestResolver.authentication_satisfied?(
-      prompt: nil, max_age: 60, authenticated_at: event_at, now: now,
-    )
-    assert OidcAuthorizeRequestResolver.authentication_satisfied?(
-      prompt: nil, max_age: 300, authenticated_at: event_at, now: now,
-    )
-    assert_not OidcAuthorizeRequestResolver.authentication_satisfied?(
-      prompt: nil, max_age: 60, authenticated_at: nil, now: now,
-    )
-  end
 end

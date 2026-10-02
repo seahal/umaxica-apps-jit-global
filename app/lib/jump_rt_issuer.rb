@@ -82,20 +82,21 @@ class JumpRtIssuer
     uri.path = "/" if uri.path.blank?
     uri.query = strip_dangerous_query(uri.query)
     uri.to_s
-  rescue URI::InvalidURIError,
-         Rack::Utils::ParameterTypeError,
-         Rack::Utils::InvalidParameterError,
-         Rack::Utils::ParamsTooDeepError
+  rescue URI::InvalidURIError
     nil
   end
 
+  # Keeps the remaining pairs in order, repeats included, because the signed url binds them. A key
+  # is blocked in its bare and bracketed forms (rt, rt[], rt[x]) after percent-decoding.
   def strip_dangerous_query(raw_query)
     return nil if raw_query.blank?
 
     blocked_keys = DANGEROUS_QUERY_KEYS - preserve_query_keys
-    pairs =
-      Rack::Utils.parse_nested_query(raw_query).except(*blocked_keys)
-    pairs.present? ? Rack::Utils.build_nested_query(pairs) : nil
+    params =
+      UrlSearchParamsValue.parse(raw_query).reject_keys do |key|
+        blocked_keys.any? { |blocked| key == blocked || key.start_with?("#{blocked}[") }
+      end
+    params.empty? ? nil : params.to_s
   end
 
   def valid_destination?

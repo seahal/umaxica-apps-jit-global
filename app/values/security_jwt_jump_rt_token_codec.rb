@@ -56,7 +56,8 @@ class SecurityJwtJumpRtTokenCodec
         algorithms: [ALGORITHM],
         required_claims: %w(schema iss aud sub iat nbf exp jti src dst rpl url),
         leeway: leeway,
-        verify_iat: true,
+        # jwt applies `leeway` to exp and nbf only; iat needs its own leeway option.
+        verify_iat: { leeway: leeway },
         verify_exp: true,
         verify_iss: true,
         iss: issuer,

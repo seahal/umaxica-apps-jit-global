@@ -7,6 +7,7 @@ require "yaml"
 class RecurringCeremonyCleanupContractTest < ActiveSupport::TestCase
   CEREMONY_PURGE_JOBS = %w(
     EmailCeremonyTransactionPurgeJob
+    OidcAuthorizationTransactionPurgeJob
     PasskeyCeremonyTransactionPurgeJob
     SecretCredentialCeremonyTransactionPurgeJob
     SocialCeremonyTransactionPurgeJob

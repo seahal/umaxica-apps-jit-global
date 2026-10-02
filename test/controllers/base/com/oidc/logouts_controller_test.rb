@@ -18,7 +18,9 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
     )
     @session_public_id = @token.public_id
-    set_access_cookie(base_access_token(@visitor, resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM"))
+    # Cookies only reach the request when the integration session's host matches it.
+    host! @host
+    https!
     # The staged logout confirmation redirects through the jump gateway, which needs signing keys.
     load_jump_rt_env!
   end
@@ -237,24 +239,46 @@ class Base::Com::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal expected_step_before, transaction.reload.expected_step
   end
 
-  private
+  # D2: the coordinated-logout CSRF declaration used to replace the inherited check, so an ordinary
+  # POST without logout_challenge ran no CSRF verification at all.
+  test "D2 cross-site POST without logout_challenge or token does not end the staged session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
 
-  def session_headers
-    browser_headers.merge(
-      "Host" => @host,
-      "X-TEST-CURRENT-RESOURCE" => @visitor.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => @session_public_id,
-    )
+    with_forgery_protection do
+      get base_com_oidc_logout_url(host: @host),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      post base_com_oidc_logout_url(host: @host),
+           headers: session_headers.except("X-CSRF-Token").merge("Sec-Fetch-Site" => "cross-site")
+    end
+
+    assert_not_predicate @token.reload, :revoked?
+    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
-  def base_access_token(resource, resource_type:, jwt_issuer_id:)
-    AuthenticationToken.encode(
-      resource,
-      host: @host,
-      session_public_id: @session_public_id,
-      resource_type: resource_type,
-      jwt_issuer_id: jwt_issuer_id,
-    )
+  test "D2 same-origin POST without logout_challenge still ends the staged session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_com_oidc_logout_url(host: @host),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      post base_com_oidc_logout_url(host: @host), headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+  end
+
+  private
+
+  # A real browser presents the access token as a cookie alongside the Rails session cookie. The
+  # harness headers carry it as a raw Cookie header, which would replace the jar (and the staged
+  # logout request in the session), so the harness-issued token is placed in the jar instead.
+  def session_headers
+    harness = as_visitor_headers(@visitor, host: @host, session_public_id: @session_public_id)
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = harness.fetch("Cookie").split("=", 2).last
+    browser_headers.merge(harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
   end
 
   def id_token(resource: @visitor, subject: OidcSubject.for(@visitor, resource_type: "visitor"),

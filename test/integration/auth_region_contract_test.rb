@@ -45,25 +45,24 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the Base-owned local admission form carries the region" do
+  test "the Base root link to the neutral sign entry carries the region" do
     %w(jp us).each do |region|
       host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
       get base_app_root_path, params: { ri: region }
 
       assert_response :success
 
-      sign_in_action = inertia_props.dig("sign_in", "action")
-      query = Rack::Utils.parse_nested_query(URI.parse(sign_in_action).query)
+      sign_in_href = inertia_props.dig("sign_in", "href")
+      query = Rack::Utils.parse_nested_query(URI.parse(sign_in_href).query)
 
       assert_equal region, query["ri"],
-                   "the local admission form dropped the #{region} region: #{sign_in_action}"
+                   "the neutral sign link dropped the #{region} region: #{sign_in_href}"
     end
   end
 
-  # A bare, un-bridged hit on an entry page now bounces to Base (`AuthCeremonyAdmission
-  # #bridge_to_base_admission!`) instead of rendering -- Auth is ceremony-only and requires a
-  # Base-issued admission code. Redeeming a real one is the only way to reach the rendered page
-  # this test needs to scan.
+  # A bare hit on an entry page is refused (E01): Auth is ceremony-only and requires a Base-issued
+  # admission code. Redeeming a real one is the only way to reach the rendered page this test needs
+  # to scan.
   test "every generated link on an entry page carries the requested region" do
     SURFACES.each do |surface, host|
       ENTRY_PATHS.each do |path|

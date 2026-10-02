@@ -173,12 +173,12 @@ module Auth
         ENV.fetch("PRIVATE_AUTH_CORPORATE_URL")
       end
 
-      # A protected Auth page hands sign-in off to the Base admission entry, which issues the
+      # A protected Auth page hands sign-in off to the Base neutral /sign entry, whose POST issues the
       # admission back into Auth. The Auth origin's own /sign/in is never the target: the Jump
       # gateway refuses an internal rt whose destination origin equals its issuer
       # (adr/secure-jump-link-redirector.md). The Base origin comes from the boot host registry.
       def sign_in_url_with_pt(_return_to)
-        base_com_root_url(
+        base_com_sign_show_url(
           ri: params[:ri],
           host: Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host,
           protocol: "https",

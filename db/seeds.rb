@@ -3,7 +3,7 @@
 
 # Reference data (lookup / status tables) is normally owned by migrations, which insert the fixed
 # rows with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file
-# also replays the current occurrence catalog after a schema-only load, because that database's
+# also replays the current occurrence catalog and avatar lifecycle states after a schema-only load, because that database's
 # migration markers suppress the original data inserts. The remaining content is development/test
 # sample fixtures (sample Client / Operator and their email/secret), and is a no-op in production.
 
@@ -45,6 +45,17 @@ if occurrence_table_presence.any?
     "db/occurrences_migrate/20260918150000_insert_current_jwt_anomaly_reference_data",
   ).to_s
   InsertCurrentJwtAnomalyReferenceData.new.seed_into(occurrence_connection)
+end
+
+# Avatar lifecycle states are owned by the avatar database and are required by
+# avatar provisioning (social sign-up completion). Replay them for the same
+# structure.sql reason as the occurrence catalog above.
+avatar_connection = AvatarRecord.lease_connection
+if avatar_connection.data_source_exists?("avatar_lifecycle_states")
+  require Rails.root.join(
+    "db/avatars_migrate/20260703000001_create_avatar_lifecycle_state_authority",
+  ).to_s
+  CreateAvatarLifecycleStateAuthority.new.seed_into(avatar_connection)
 end
 
 sample_user_secret = "00000000000000000000000000000000"

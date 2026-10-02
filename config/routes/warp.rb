@@ -79,7 +79,11 @@ scope module: :warp, as: :warp do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-        get "callback", to: "oidc/callbacks#show", as: :callback
+      end
+
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        resource :callback, only: :show
       end
 
       namespace :sign do
@@ -177,7 +181,11 @@ scope module: :warp, as: :warp do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-        get "callback", to: "oidc/callbacks#show", as: :callback
+      end
+
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        resource :callback, only: :show
       end
 
       namespace :sign do
@@ -274,7 +282,11 @@ scope module: :warp, as: :warp do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-        get "callback", to: "oidc/callbacks#show", as: :callback
+      end
+
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        resource :callback, only: :show
       end
 
       namespace :sign do

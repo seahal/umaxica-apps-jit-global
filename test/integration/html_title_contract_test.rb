@@ -79,12 +79,21 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
       {
         host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
         path: -> { auth_app_sign_in_path(ri: "jp") },
+        admission: %w(app sign_in),
         tld: "APP",
         page_title: -> { I18n.t("sign.app.authentication.new.page_title") },
       },
       {
+        host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
+        path: -> { auth_com_sign_in_path(ri: "jp") },
+        admission: %w(com sign_in),
+        tld: "COM",
+        page_title: -> { I18n.t("sign.com.authentication.new.page_title") },
+      },
+      {
         host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
         path: -> { auth_org_sign_in_path(ri: "jp") },
+        admission: %w(org sign_in),
         tld: "ORG",
         page_title: -> { I18n.t("sign.org.authentication.new.page_title") },
       },
@@ -98,7 +107,15 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
 
     cases.each do |entry|
       host! entry.fetch(:host)
-      get instance_exec(&entry.fetch(:path))
+      # Auth pages open only from a Base-issued admission (E01); enter them the way Base sends a browser.
+      if entry.key?(:admission)
+        redeem_auth_ceremony_entry!(
+          instance_exec(&entry.fetch(:path)), reference: admission_reference_for(*entry.fetch(:admission)),
+        )
+        follow_redirect!
+      else
+        get instance_exec(&entry.fetch(:path))
+      end
 
       next if response.redirect?
 

@@ -45,7 +45,7 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       browser.host!(host)
       browser.https!
 
-      browser.get("/sign/callback")
+      browser.get("/oidc/callback")
 
       assert_equal 422, browser.response.status
 

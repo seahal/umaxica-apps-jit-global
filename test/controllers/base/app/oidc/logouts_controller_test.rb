@@ -18,7 +18,9 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     @session_public_id = @token.public_id
-    set_access_cookie(base_access_token(@user, resource_type: "client", jwt_issuer_id: "surface:BASE_APP"))
+    # Cookies only reach the request when the integration session's host matches it.
+    host! @host
+    https!
     # The staged logout confirmation redirects through the jump gateway, which needs signing keys.
     load_jump_rt_env!
   end
@@ -312,24 +314,369 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  private
-
-  def session_headers
-    browser_headers.merge(
-      "Host" => @host,
-      "X-TEST-CURRENT-USER" => @user.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => @session_public_id,
+  # D1: an id_token_hint is evidence of which RP session the RP wants ended, not authority for the
+  # presenting browser to end it. These run with forgery protection on and a same-origin fetch so
+  # that CSRF is satisfied and the target-authorization decision is what is exercised.
+  test "D1 unauthenticated browser presenting another subject's hint does not end that subject's session" do
+    other_user = clients(:two)
+    other_token = ClientToken.create!(
+      user: other_user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
     )
+    other_hint = id_token(
+      resource: other_user, subject: OidcSubject.for(other_user, resource_type: "client"), sid: other_token.public_id,
+    )
+    cookies.delete(AuthenticationBase::ACCESS_COOKIE_KEY)
+    unauthenticated_headers = browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: unauthenticated_headers
+      follow_redirect!(headers: unauthenticated_headers) if response.redirect?
+
+      post base_app_oidc_logout_url(host: @host), headers: unauthenticated_headers
+    end
+
+    assert_not_predicate other_token.reload, :revoked?
+    assert_not_predicate @token.reload, :revoked?
+    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
   end
 
-  def base_access_token(resource, resource_type:, jwt_issuer_id:)
-    AuthenticationToken.encode(
-      resource,
-      host: @host,
-      session_public_id: @session_public_id,
-      resource_type: resource_type,
-      jwt_issuer_id: jwt_issuer_id,
+  test "D1 authenticated browser presenting another subject's hint ends neither session" do
+    other_user = clients(:two)
+    other_token = ClientToken.create!(
+      user: other_user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
     )
+    other_hint = id_token(
+      resource: other_user, subject: OidcSubject.for(other_user, resource_type: "client"), sid: other_token.public_id,
+    )
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+
+      assert_no_enqueued_jobs(only: OidcBackchannelLogoutDeliveryJob) do
+        post base_app_oidc_logout_url(host: @host),
+             params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+             headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      end
+    end
+
+    assert_not_predicate other_token.reload, :revoked?
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D1 authenticated browser presenting its own subject's hint for another sid ends neither session" do
+    sibling_token = ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: {
+            id_token_hint: id_token(sid: sibling_token.public_id), post_logout_redirect_uri: redirect_uri, ri: "jp",
+          },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      post base_app_oidc_logout_url(host: @host), headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_not_predicate sibling_token.reload, :revoked?
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D1 access token without sid cannot use its own subject's hint to end a sibling session" do
+    sibling_token = ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
+      @user, host: @host, resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    headers = browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: {
+            id_token_hint: id_token(sid: sibling_token.public_id), post_logout_redirect_uri: redirect_uri, ri: "jp",
+          },
+          headers: headers
+      post base_app_oidc_logout_url(host: @host), headers: headers
+    end
+
+    assert_not_predicate sibling_token.reload, :revoked?
+    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
+  end
+
+  test "D1 swapping in another subject's hint on the POST ends neither session" do
+    other_user = clients(:two)
+    other_token = ClientToken.create!(
+      user: other_user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    other_hint = id_token(
+      resource: other_user, subject: OidcSubject.for(other_user, resource_type: "client"), sid: other_token.public_id,
+    )
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      post base_app_oidc_logout_url(host: @host),
+           params: { id_token_hint: other_hint },
+           headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_not_predicate other_token.reload, :revoked?
+    assert_not_predicate @token.reload, :revoked?
+    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
+  end
+
+  # BVA on the 5-minute staged-request lifetime: the stored expires_at is second-precision ISO 8601
+  # and must be strictly in the future, so 4:59 is the last accepted second and 5:00 is refused.
+  test "D1 staged logout POST one second before the 5-minute expiry ends the session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    freeze_time
+
+    get base_app_oidc_logout_url(host: @host),
+        params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+        headers: session_headers
+
+    travel 4.minutes + 59.seconds
+    post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+  end
+
+  test "D1 staged logout POST exactly at the 5-minute expiry does not end the session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    freeze_time
+
+    get base_app_oidc_logout_url(host: @host),
+        params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+        headers: session_headers
+
+    travel 5.minutes
+    post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_response :ok
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D1 replaying a completed logout POST does not end a session created afterwards" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    get base_app_oidc_logout_url(host: @host),
+        params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+        headers: session_headers
+    post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_predicate @token.reload, :revoked?
+
+    new_token = ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    @session_public_id = new_token.public_id
+    post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_response :ok
+    assert_not_predicate new_token.reload, :revoked?
+  end
+
+  # Sentinels reaching the public parameter as HTTP values: omitted, empty string, array, hash, and a
+  # NUL inside an otherwise valid token. JSON null is not representable in a form/query parameter.
+  test "D1 malformed id_token_hint values never end a session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    valid = id_token
+    [
+      { post_logout_redirect_uri: redirect_uri, ri: "jp" },
+      { id_token_hint: "", post_logout_redirect_uri: redirect_uri, ri: "jp" },
+      { id_token_hint: [valid], post_logout_redirect_uri: redirect_uri, ri: "jp" },
+      { id_token_hint: { "a" => valid }, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+      { id_token_hint: "#{valid}\u0000", post_logout_redirect_uri: redirect_uri, ri: "jp" },
+    ].each do |params|
+      get base_app_oidc_logout_url(host: @host), params: params, headers: session_headers
+      post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+      assert_not_predicate @token.reload, :revoked?, "revoked for #{params[:id_token_hint].inspect}"
+    end
+  end
+
+  test "D1 a second staged request in the same browser does not replace the first" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+    get base_app_oidc_logout_url(host: @host),
+        params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "first", ri: "jp" },
+        headers: session_headers
+    get base_app_oidc_logout_url(host: @host),
+        params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "second", ri: "jp" },
+        headers: session_headers
+
+    assert_response :ok
+
+    post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+    query = Rack::Utils.parse_nested_query(URI.parse(jump_rt_url_from_location(response.location)).query.to_s)
+
+    assert_equal "first", query["state"]
+  end
+
+  test "D1 hint issued for another realm's client and issuer ends no session" do
+    org_client = OidcClientRegistry.find!("core-org")
+    foreign_hint = OidcIdTokenIssuer.call(
+      resource: @user,
+      client: org_client,
+      nonce: "nonce",
+      issuer: OidcIssuer.for_resource_type("operator"),
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
+      subject: OidcSubject.for(@user, resource_type: "client"),
+      sid: @session_public_id,
+    )
+
+    get base_app_oidc_logout_url(host: @host),
+        params: { id_token_hint: foreign_hint,
+                  post_logout_redirect_uri: @client.post_logout_redirect_uris.first,
+                  ri: "jp", },
+        headers: session_headers
+    post base_app_oidc_logout_url(host: @host), headers: session_headers
+
+    assert_not_predicate @token.reload, :revoked?
+    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
+  end
+
+  test "D1 control: own-session logout ends only that session and leaves another subject's session active" do
+    other_user = clients(:two)
+    other_token = ClientToken.create!(
+      user: other_user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "s1", ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+
+      assert_no_changes -> { @token.reload.revoked? } do
+        follow_redirect!(headers: session_headers.merge("Sec-Fetch-Site" => "same-origin"))
+      end
+
+      post base_app_oidc_logout_url(host: @host), headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+    assert_not_predicate other_token.reload, :revoked?
+    assert_equal URI.parse(redirect_uri).host, URI.parse(jump_rt_url_from_location(response.location)).host
+  end
+
+  # D2: the coordinated-logout CSRF declaration used to replace the inherited check, so an ordinary
+  # POST without logout_challenge ran no CSRF verification at all.
+  test "D2 coordinated POST with a live challenge from the Auth origin passes with forgery protection on" do
+    transaction =
+      AcmeLogoutTransactionCoordinator.issue!(
+        origin_surface: "sign",
+        initiating_client_id: "core-app",
+        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+          origin_surface: "sign", ri: "jp",
+          surface: "app",
+        ),
+        surface: "app",
+        ri: "jp",
+      ).transaction
+    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+
+    with_forgery_protection do
+      post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+           headers: session_headers.except("X-CSRF-Token").merge(
+             "Sec-Fetch-Site" => "same-site", "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+           )
+    end
+
+    assert_response :see_other
+    assert_predicate transaction.reload, :finalized?
+  end
+
+  test "D2 coordinated POST with a live challenge is refused cross-site" do
+    transaction =
+      AcmeLogoutTransactionCoordinator.issue!(
+        origin_surface: "sign",
+        initiating_client_id: "core-app",
+        completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+          origin_surface: "sign", ri: "jp",
+          surface: "app",
+        ),
+        surface: "app",
+        ri: "jp",
+      ).transaction
+    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
+
+    with_forgery_protection do
+      post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+           headers: session_headers.except("X-CSRF-Token").merge(
+             "Sec-Fetch-Site" => "cross-site", "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+           )
+    end
+
+    assert_not_predicate transaction.reload, :finalized?
+    assert_not_predicate @token.reload, :revoked?
+  end
+
+  test "D2 cross-site POST without logout_challenge or token does not end the staged session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      post base_app_oidc_logout_url(host: @host),
+           headers: session_headers.except("X-CSRF-Token").merge("Sec-Fetch-Site" => "cross-site")
+    end
+
+    assert_not_predicate @token.reload, :revoked?
+    assert_empty enqueued_jobs.select { |job| job["job_class"] == "OidcBackchannelLogoutDeliveryJob" }
+  end
+
+  test "D2 same-origin POST without logout_challenge still ends the staged session" do
+    redirect_uri = @client.post_logout_redirect_uris.first
+
+    with_forgery_protection do
+      get base_app_oidc_logout_url(host: @host),
+          params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
+          headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+      post base_app_oidc_logout_url(host: @host), headers: session_headers.merge("Sec-Fetch-Site" => "same-origin")
+    end
+
+    assert_response :see_other
+    assert_predicate @token.reload, :revoked?
+  end
+
+  private
+
+  # A real browser presents the access token as a cookie alongside the Rails session cookie. The
+  # harness headers carry it as a raw Cookie header, which would replace the jar (and the staged
+  # logout request in the session), so the harness-issued token is placed in the jar instead.
+  def session_headers
+    harness = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = harness.fetch("Cookie").split("=", 2).last
+    browser_headers.merge(harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
   end
 
   def id_token(resource: @user, subject: OidcSubject.for(@user, resource_type: "client"),

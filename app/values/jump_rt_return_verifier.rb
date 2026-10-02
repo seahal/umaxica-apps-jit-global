@@ -5,7 +5,9 @@ class JumpRtReturnVerifier
   ALGORITHM = SecurityJwtJumpRtTokenCodec::ALGORITHM
   TOKEN_TYPE = SecurityJwtJumpRtTokenCodec::TOKEN_TYPE
   TOKEN_SUBJECT = SecurityJwtJumpRtTokenCodec::TOKEN_SUBJECT
-  DEFAULT_MAX_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
+  # Jump -> Rails structural maximum. Independent of JUMP_RT_TTL_SECONDS, which only sets the
+  # lifetime of tokens Rails issues to Jump; Jump always returns exp - iat = 30.
+  MAX_RETURN_TTL = SecurityTokenLifetimes::JUMP_RT_TTL.to_i
   LEEWAY = 5
   MAX_TOKEN_LENGTH = 8_192
   CACHE_TTL = 30.seconds
@@ -177,44 +179,27 @@ class JumpRtReturnVerifier
     return false if payload["url"].blank?
     return false unless payload["rpl"] == SecurityJwtJumpRtTokenCodec::REPLAY_POLICY
 
-    iat = payload["iat"].to_i
-    exp = payload["exp"].to_i
-    nbf = payload["nbf"].to_i
+    iat, nbf, exp = payload.values_at("iat", "nbf", "exp")
+    return false unless [iat, nbf, exp].all?(Integer)
+
     current = now.to_i
     return false if iat > current + LEEWAY
     return false if nbf > exp
-    return false if exp - iat > max_ttl_seconds
+    return false if exp - iat > MAX_RETURN_TTL
 
     true
   end
 
+  # The request must carry exactly this token as its only rt, and the signed url must carry none;
+  # the remaining ordered pairs must then serialize identically (JumpRtReturnUrlValue).
   def same_request_without_rt?(claimed_url)
-    claimed = normalize_url_without_rt(claimed_url)
-    current = normalize_url_without_rt(request_url)
-    !claimed.nil? && !current.nil? && claimed == current
-  end
+    claimed = JumpRtReturnUrlValue.parse(claimed_url)
+    current = JumpRtReturnUrlValue.parse(request_url)
+    return false if claimed.nil? || current.nil?
+    return false unless claimed.return_token.nil?
+    return false unless current.return_token == token
 
-  # Returns a comparable tuple [scheme, host, port, path, query_hash] so the
-  # caller can match the request URL against the signed claim regardless of
-  # query parameter ordering. Returns nil for unparsable or unsafe URLs.
-  def normalize_url_without_rt(value)
-    uri = URI.parse(value.to_s)
-    return nil unless uri.is_a?(URI::HTTP)
-    return nil unless uri.scheme == "https"
-    return nil if uri.userinfo.present?
-    return nil if uri.fragment.present?
-
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    query.delete("rt")
-    [
-      uri.scheme.downcase,
-      uri.host.to_s.downcase,
-      uri.port,
-      uri.path.presence || "/",
-      query,
-    ]
-  rescue URI::InvalidURIError
-    nil
+    claimed.canonical_without_return_token == current.canonical_without_return_token
   end
 
   def jump_origin
@@ -227,10 +212,6 @@ class JumpRtReturnVerifier
 
   def revoked_kid?(kid)
     current_jump_config.revoked_kids.include?(kid.to_s)
-  end
-
-  def max_ttl_seconds
-    current_jump_config.ttl_seconds
   end
 
   def current_jump_config

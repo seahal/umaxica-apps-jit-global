@@ -8,7 +8,9 @@ make `rpl` a required `"reuse"`. Amended a third time on 2026-10-02 to make
 `PUBLIC_JUMP_GATEWAY_URL` (not `JUMP_GATEWAY_URL`) the sole gateway setting, to record that no
 `PRIVATE_JUMP_GATEWAY_URL` exists, and to withdraw the rule that development may not present a
 canonical issuer origin: the Rails environment name never selects a Jump identity. Amended a fourth
-time on 2026-10-02 to reject `PRIVATE_JUMP_GATEWAY_URL` at boot instead of ignoring it. Supersedes
+time on 2026-10-02 to reject `PRIVATE_JUMP_GATEWAY_URL` at boot instead of ignoring it. Amended a
+fifth time on 2026-10-02 to move the Palm native entry from `/sign/in` to the neutral `GET /sign`
+page and `POST /sign` starter shared by every first-party RP FQDN. Supersedes
 the Palm authorization-launcher restriction in `adr/acme-sign-core-base-port-boundary.md` and the
 issuer/return-policy portion of the remaining steps in `adr/core-canonical-public-host.md`. Their
 persistence and API ownership boundaries remain.
@@ -70,9 +72,16 @@ Palm browser receivers verify Jump returns. Palm's machine callback also verifie
 
 Palm is an approved first-party RP with the implemented browser route
 `Palm -> Base -> Auth -> Base -> Palm`. It is not destination-only. A native app opens
-`https://palm-jp.umaxica.app/sign/in` in an external browser with its registered client ID, an
+`https://palm-jp.umaxica.app/sign` in an external browser with its registered client ID, an
 authorization-code request, S256 challenge, state and nonce. The PKCE verifier remains on the
-device. Existing `app-ios-rp` and `app-android-rp` stay public clients with `palm-api` audience;
+device.
+
+Every first-party RP FQDN, Palm included, starts sign-in at the same path: `GET /sign` renders a
+neutral page and the CSRF-protected `POST /sign` starts the flow. Palm's `GET /sign` validates the
+native request and carries it to `POST /sign` as form fields; it creates no browser state. The
+`POST` records the pending flow and issues the Jump handoff to Base. Palm has no `/sign/in` route.
+The page is an interim, minimal confirmation step while the Palm launch UX is undecided; it keeps
+the path and method contract aligned with the other RPs in the meantime. Existing `app-ios-rp` and `app-android-rp` stay public clients with `palm-api` audience;
 their Base redirect URI is now Palm's HTTPS `/oidc/callback`.
 
 Palm holds only bounded, temporary browser continuity in the existing encrypted Rails session. The

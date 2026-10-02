@@ -14,7 +14,7 @@ class Auth::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
   # The Jump gateway refuses an internal rt whose destination origin equals its issuer
   # (`jump_reject reason=invalid_dst`, adr/secure-jump-link-redirector.md), so the sign-in hand-off
   # from an Auth protected page must leave the Auth origin for the Base admission entry.
-  test "anonymous sign settings hands off cross-origin to the base admission entry" do
+  test "anonymous sign settings hands off cross-origin to the base sign entry" do
     auth_host = configured_host(:sign_corporate)
     base_host = configured_host(:base_corporate)
     issued = nil
@@ -36,7 +36,7 @@ class Auth::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "https", uri.scheme
     assert_equal base_host, uri.host
     assert_not_equal auth_host, uri.host
-    assert_equal "/", uri.path
+    assert_equal base_com_sign_show_path, uri.path
     assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(uri.query.to_s))
   end
 

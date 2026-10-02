@@ -95,14 +95,10 @@ module Base
 
       private
 
-      # Base owns the browser session and starts credential ceremonies through an opaque local
-      # admission. It is not a browser RP and must not redirect protected requests to an
-      # authorization-code callback of its own.
+      # Base owns the browser session and is not its own RP. A protected request is pointed at Base's
+      # passive GET /sign; only the user's POST there issues an admission.
       def sign_in_url_with_pt(_return_to)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_in")
-        auth_com_sign_in_url(
-          ri: params[:ri], host: oidc_sign_host, protocol: "https", entry_ref: admission.reference,
-        )
+        base_com_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]))
       end
 
       # The browser is redirected to this host for the OIDC hop, so it has to be the public

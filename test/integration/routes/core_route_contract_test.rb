@@ -157,7 +157,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/app/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_APP_HOST}/sign/callback", method: :get },
+      { path: "http://#{CORE_APP_HOST}/oidc/callback", method: :get },
     )
 
     assert_recognizes(
@@ -166,7 +166,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/oidc/callback", method: :get)
+      Rails.application.routes.recognize_path("http://#{CORE_APP_HOST}/sign/callback", method: :get)
     end
 
     assert_raises(ActionController::RoutingError) do
@@ -291,7 +291,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/com/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_COM_HOST}/sign/callback", method: :get },
+      { path: "http://#{CORE_COM_HOST}/oidc/callback", method: :get },
     )
 
     assert_recognizes(
@@ -300,7 +300,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/oidc/callback", method: :get)
+      Rails.application.routes.recognize_path("http://#{CORE_COM_HOST}/sign/callback", method: :get)
     end
 
     assert_raises(ActionController::RoutingError) do
@@ -426,7 +426,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
 
     assert_recognizes(
       { controller: "core/org/oidc/callbacks", action: "show" },
-      { path: "http://#{CORE_ORG_HOST}/sign/callback", method: :get },
+      { path: "http://#{CORE_ORG_HOST}/oidc/callback", method: :get },
     )
 
     assert_recognizes(
@@ -435,7 +435,7 @@ class CoreRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/oidc/callback", method: :get)
+      Rails.application.routes.recognize_path("http://#{CORE_ORG_HOST}/sign/callback", method: :get)
     end
 
     assert_raises(ActionController::RoutingError) do

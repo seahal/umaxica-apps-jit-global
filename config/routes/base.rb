@@ -11,7 +11,12 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :app, as: :app) do
       root "roots#index"
-      post "/", to: "roots#create", as: :root_authentication
+      # Neutral entry: GET renders one form, POST issues the Base admission and starts Auth at
+      # /sign/in. Base is not its own RP (adr/sign-neutral-entry-and-logout-target-authorization.md).
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -271,7 +276,12 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :com, as: :com) do
       root "roots#index"
-      post "/", to: "roots#create", as: :root_authentication
+      # Neutral entry: GET renders one form, POST issues the Base admission and starts Auth at
+      # /sign/in. Base is not its own RP (adr/sign-neutral-entry-and-logout-target-authorization.md).
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -468,7 +478,12 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :org, as: :org) do
       root "roots#index"
-      post "/", to: "roots#create", as: :root_authentication
+      # Neutral entry: GET renders one form, POST issues the Base admission and starts Auth at
+      # /sign/in. Base is not its own RP (adr/sign-neutral-entry-and-logout-target-authorization.md).
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the

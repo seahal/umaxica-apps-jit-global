@@ -135,7 +135,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
         client_id: "core-app",
         client_secret: nil,
         code: "code",
-        redirect_uri: "https://jp.umaxica.app/sign/callback",
+        redirect_uri: "https://jp.umaxica.app/oidc/callback",
         code_verifier: "verifier",
         require_https: false,
       )
@@ -152,7 +152,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
       client_id: "core-app",
       client_secret: nil,
       code: "code",
-      redirect_uri: "https://jp.umaxica.app/sign/callback",
+      redirect_uri: "https://jp.umaxica.app/oidc/callback",
       code_verifier: "verifier",
     )
 
@@ -168,7 +168,7 @@ class OidcRpTokenClientTest < ActiveSupport::TestCase
       client_id: "core-app",
       client_secret: client_secret,
       code: code,
-      redirect_uri: "https://jp.umaxica.app/sign/callback",
+      redirect_uri: "https://jp.umaxica.app/oidc/callback",
       code_verifier: code_verifier,
     )
   end

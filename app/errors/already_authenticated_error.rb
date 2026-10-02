@@ -2,13 +2,11 @@
 # frozen_string_literal: true
 
 class AlreadyAuthenticatedError < ApplicationError
-  MESSAGE = "Sign-in is unavailable while authenticated."
-
-  def initialize(_i18n_key = nil, status_code = :conflict, **context)
+  def initialize(_i18n_key = nil, status_code = :forbidden, **context)
     super(nil, status_code, **context)
   end
 
   def message
-    MESSAGE
+    I18n.t("errors.messages.operation_not_permitted")
   end
 end

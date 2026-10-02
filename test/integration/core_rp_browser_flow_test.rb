@@ -62,7 +62,7 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     expectations.each do |host, controller|
       assert_routing(
-        { method: :get, path: "http://#{host}/sign/callback" },
+        { method: :get, path: "http://#{host}/oidc/callback" },
         { controller: controller, action: "show" },
       )
     end

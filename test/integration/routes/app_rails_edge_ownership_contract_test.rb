@@ -6,7 +6,7 @@ class AppRailsEdgeOwnershipContractTest < ActiveSupport::TestCase
   RAILS_OWNED = [
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/", "core/app/roots", "index"],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign", "core/app/sign/entries", "show"],
-    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/sign/callback", "core/app/oidc/callbacks", "show"],
+    [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/oidc/callback", "core/app/oidc/callbacks", "show"],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :post, "/oidc/backchannel/logout", "core/app/oidc/backchannel/logouts",
      "create",],
     [ENV.fetch("PRIVATE_CORE_SERVICE_URL"), :get, "/api/v0/session", "core/app/api/v0/sessions", "show"],
@@ -71,7 +71,7 @@ class AppRailsEdgeOwnershipContractTest < ActiveSupport::TestCase
       Rails.application.routes.recognize_path("http://#{core_host}/oidc/authorization", method: :get)
     end
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{core_host}/oidc/callback", method: :get)
+      Rails.application.routes.recognize_path("http://#{core_host}/sign/callback", method: :get)
     end
   end
 end

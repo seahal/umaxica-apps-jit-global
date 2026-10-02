@@ -76,13 +76,20 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     end
   end
 
-  test "returns nil for a query whose nested parameter shapes conflict" do
-    token = JumpRtIssuer.call(
-      namespace: "AUTH_APP",
-      url: "https://target.example/?a=scalar&a[b]=nested",
-    )
+  # Rack once raised on this query, which refused issuance by accident. Under the WHATWG contract
+  # it is two ordinary pairs, so it is signed in order like any other query.
+  test "signs a query whose bracketed keys Rack would treat as conflicting shapes" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP",
+          url: "https://target.example/?a=scalar&a[b]=nested",
+        )
+        payload, = JWT.decode(token, nil, false)
 
-    assert_nil token
+        assert_equal "https://target.example/?a=scalar&a%5Bb%5D=nested", payload["url"]
+      end
+    end
   end
 
   test "callers cannot choose a replay policy" do
@@ -208,6 +215,50 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
         assert_equal "https://www.example.com/auth/callback", query["redirect_uri"]
         assert_equal "1", query["ok"]
         assert_not query.key?("rt")
+      end
+    end
+  end
+
+  test "keeps the order and repeated pairs of the remaining query when signing the url" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP",
+          url: "https://target.example/path?tag=b&rt=stale&tag=a&q=a%2Bb&s=a+b",
+        )
+        payload, = JWT.decode(token, nil, false)
+
+        assert_equal "https://target.example/path?tag=b&tag=a&q=a%2Bb&s=a+b", payload["url"]
+      end
+    end
+  end
+
+  test "strips nested and percent-encoded forms of redirect-target keys before signing the url" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP",
+          url: "https://target.example/path?ok=1&rt%5B%5D=x&next[x]=evil&%72t=y&redirect_uri%5Ba%5D=z",
+        )
+        payload, = JWT.decode(token, nil, false)
+
+        assert_equal "https://target.example/path?ok=1", payload["url"]
+      end
+    end
+  end
+
+  test "a preserved key keeps its position among the remaining pairs" do
+    with_env("JWT_AUTH_APP_ACTIVE_KID" => "sign-app-es384-test-a") do
+      JumpRtKeyring.stub(:private_key, @private_key) do
+        token = JumpRtIssuer.call(
+          namespace: "AUTH_APP",
+          url: "https://target.example/path?ok=1&redirect_uri=https%3A%2F%2Fwww.example.com%2Fcb&rt=stale&z=2",
+          preserve_query_keys: ["redirect_uri"],
+        )
+        payload, = JWT.decode(token, nil, false)
+
+        assert_equal "https://target.example/path?ok=1&redirect_uri=https%3A%2F%2Fwww.example.com%2Fcb&z=2",
+                     payload["url"]
       end
     end
   end

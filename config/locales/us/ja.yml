@@ -488,6 +488,7 @@ ja:
     back: もどる
     cancel: キャンセル
     connect: 連携する
+    continue: 続行
     delete: 削除
     save: 保存
     submit: 送信
@@ -2058,6 +2059,7 @@ ja:
       not_an_integer: は整数で入力してください
       not_authorized: この操作を行う権限がありません。
       odd: は奇数にしてください
+      operation_not_permitted: この操作は許可されていません。
       other_than: は%{count}以外の値にしてください
       password_too_long: が長すぎます
       preference_operation_failed: 設定の操作に失敗しました。

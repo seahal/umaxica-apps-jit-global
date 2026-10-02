@@ -45,7 +45,7 @@ class Auth::Com::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     get auth_com_settings_passkeys_path(ri: "jp"), headers: browser_headers.merge(host_headers(@host))
 
     assert_response :redirect
-    assert_base_admission_entry_redirect(response.location, surface: :com)
+    assert_base_sign_handoff_redirect(response.location, surface: :com)
   end
 
   test "index renders sign settings passkeys" do

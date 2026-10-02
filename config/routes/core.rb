@@ -66,6 +66,8 @@ scope module: :core, as: :core do
 
       # RP back-channel receiver. Browser entry is the neutral /sign contract.
       namespace :oidc do
+        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        resource :callback, only: :show
         namespace :backchannel do
           resource :logout, only: :create
         end
@@ -75,7 +77,6 @@ scope module: :core, as: :core do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do
@@ -148,6 +149,8 @@ scope module: :core, as: :core do
 
       # RP back-channel receiver. Browser entry is the neutral /sign contract.
       namespace :oidc do
+        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        resource :callback, only: :show
         namespace :backchannel do
           resource :logout, only: :create
         end
@@ -157,7 +160,6 @@ scope module: :core, as: :core do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do
@@ -230,6 +232,8 @@ scope module: :core, as: :core do
 
       # RP back-channel receiver. Browser entry is the neutral /sign contract.
       namespace :oidc do
+        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        resource :callback, only: :show
         namespace :backchannel do
           resource :logout, only: :create
         end
@@ -239,7 +243,6 @@ scope module: :core, as: :core do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-        get "callback", to: "oidc/callbacks#show", as: :callback
       end
 
       namespace :sign do

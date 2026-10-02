@@ -375,7 +375,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
     assert_includes redirect_hosts, expected_host
     assert_includes client.domains, expected_host
-    assert client.redirect_uris.all? { |uri| URI.parse(uri).path == "/sign/callback" }
+    assert client.redirect_uris.all? { |uri| URI.parse(uri).path == "/oidc/callback" }
     assert_equal "core-app", client.aud
     assert_equal "client", client.resource_type
   end
