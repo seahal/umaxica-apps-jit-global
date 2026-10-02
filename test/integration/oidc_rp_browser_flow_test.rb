@@ -328,7 +328,9 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       OidcRpTokenClient.stub(:call, token_result) do
         host!(callback_uri.host)
         cookies.delete("session")
-        cookies.merge!(
+        # Rack::Test::CookieJar#merge mutates the jar and has no #merge! form; Lint/Void would
+        # autocorrect this into a NoMethodError.
+        cookies.merge( # rubocop:disable Lint/Void
           "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
           URI.parse("https://#{core_host}/"),
         )
