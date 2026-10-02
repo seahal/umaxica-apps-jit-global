@@ -404,6 +404,13 @@ module ActiveSupport
     # every test so locale never leaks across the shared process.
     teardown { I18n.locale = I18n.default_locale } # rubocop:disable Rails/I18nLocaleAssignment
 
+    # ENV is process-global and shared by every test a worker runs. Many integration helpers
+    # (load_jump_rt_env!) write JWT_<NAMESPACE>_* without restoring them, and the local keyset
+    # installer rejects such values, so a later test failed depending on seed order. Snapshot
+    # ENV before each test and restore it afterwards so no assignment outlives its test.
+    setup { @env_snapshot_before_test = ENV.to_h }
+    teardown { ENV.replace(@env_snapshot_before_test) if @env_snapshot_before_test }
+
     # Class-level form of `with_rate_limit_counters`: a test case whose whole
     # subject is rate limiting declares this once and every test in it runs
     # against a deterministic MemoryStore. The per-test `setup` in the base
