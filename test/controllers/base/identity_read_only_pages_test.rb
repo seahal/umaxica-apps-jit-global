@@ -305,8 +305,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     uri = URI.parse(response.location)
 
     payload, = JWT.decode(Rack::Utils.parse_nested_query(uri.query).fetch("rt"), nil, false)
+
     assert_equal "jump.umaxica.net", uri.host
     uri = URI.parse(payload.fetch("url"))
+
     assert_equal auth_host, uri.host
     assert_equal "/verification/setup/new", uri.path
   end
@@ -339,8 +341,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     uri = URI.parse(response.location)
 
     payload, = JWT.decode(Rack::Utils.parse_nested_query(uri.query).fetch("rt"), nil, false)
+
     assert_equal "jump.umaxica.net", uri.host
     uri = URI.parse(payload.fetch("url"))
+
     assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), uri.host
     assert_equal "/verification/setup/new", uri.path
   end

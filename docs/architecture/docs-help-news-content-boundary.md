@@ -102,8 +102,8 @@ Rails should not own:
 - `/robots.txt`;
 - `/sitemap.xml`;
 - `/auth/callback`;
-- `/web/v0/cookie`;
-- `/web/v0/theme`;
+- browser preference endpoints (`/api/v0/preferences/{cookie,theme}`; content hosts are not in
+  `PreferenceBrowserControlsRegistry`);
 - mutation routes;
 - dedicated taxonomy routes (taxonomy is a field on an entry and a filter parameter on the index,
   never its own resource);

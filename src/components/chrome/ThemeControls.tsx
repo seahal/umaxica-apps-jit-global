@@ -31,6 +31,7 @@ export default function ThemeControls({ controls }: { controls: ChromeThemeContr
   // in-flight read.
   const chosen = useRef(false);
   const themeRef = useRef(theme);
+  const endpointUrl = controls.endpoint_url;
 
   // Kept in sync after commit rather than during render. watchSystemTheme reads this only from an
   // asynchronous media-query callback, so the committed value is always the one it needs.
@@ -47,7 +48,7 @@ export default function ThemeControls({ controls }: { controls: ChromeThemeContr
     const stopFollowingCookie = watchThemeCookie(setTheme);
 
     const reconcile = async () => {
-      const stored = await fetchStoredTheme();
+      const stored = await fetchStoredTheme(endpointUrl);
       if (stored && !chosen.current) {
         setTheme(stored);
         applyTheme(stored);
@@ -60,7 +61,7 @@ export default function ThemeControls({ controls }: { controls: ChromeThemeContr
       stopWatching();
       stopFollowingCookie();
     };
-  }, []);
+  }, [endpointUrl]);
 
   if (controls.hidden) {
     return null;
@@ -71,7 +72,7 @@ export default function ThemeControls({ controls }: { controls: ChromeThemeContr
     chosen.current = true;
 
     const persist = async () => {
-      const stored = await persistTheme(next, csrfToken());
+      const stored = await persistTheme(endpointUrl, next, csrfToken());
       if (!stored) {
         chosen.current = false;
         return;

@@ -63,7 +63,7 @@ scope(module: :auth, as: :auth) do
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
 
-      # Public web API: OTP delivery, cookie consent, theme.
+      # Public web API: OTP delivery (a ceremony endpoint, not migrated).
       namespace :web do
         namespace :v0 do
           namespace :in do
@@ -71,9 +71,21 @@ scope(module: :auth, as: :auth) do
               resource :otp, only: :create
             end
           end
+        end
+      end
 
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -287,7 +299,7 @@ scope(module: :auth, as: :auth) do
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
 
-      # Public web API: OTP delivery, cookie consent, theme.
+      # Public web API: OTP delivery (a ceremony endpoint, not migrated).
       namespace :web do
         namespace :v0 do
           namespace :in do
@@ -295,9 +307,21 @@ scope(module: :auth, as: :auth) do
               resource :otp, only: :create
             end
           end
+        end
+      end
 
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -452,11 +476,18 @@ scope(module: :auth, as: :auth) do
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
 
-      # Public web API: cookie consent, theme.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 

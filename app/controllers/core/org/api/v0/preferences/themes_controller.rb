@@ -11,6 +11,10 @@ module Core
 
             include ::PreferenceWebThemeActions
 
+            include ::PreferenceBrowserApi
+
+            preference_browser_api!
+
             AUTHENTICATION_MODE = :open
 
             declare_authentication_mode! :open

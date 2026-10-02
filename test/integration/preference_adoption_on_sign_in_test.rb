@@ -54,7 +54,7 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
     https!
     host! @host
 
-    get base_app_web_v0_theme_url(ri: "jp"), headers: @headers
+    get base_app_api_v0_preferences_theme_url(ri: "jp"), headers: @headers
 
     assert_response :success
     assert_predicate response.parsed_body["theme"], :present?
@@ -66,7 +66,7 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
     https!
     host! @host
 
-    get base_app_web_v0_theme_url(ri: "jp"), headers: @headers
+    get base_app_api_v0_preferences_theme_url(ri: "jp"), headers: @headers
 
     assert_response :success
     assert_predicate response.parsed_body["theme"], :present?
@@ -78,7 +78,7 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    get base_app_web_v0_theme_url(ri: "jp")
+    get base_app_api_v0_preferences_theme_url(ri: "jp")
 
     assert_response :success
     assert_equal "dr", response.parsed_body["theme"]
@@ -121,7 +121,7 @@ class PreferenceAdoptionOnSignInTest < ActionDispatch::IntegrationTest
     https!
     host! @host
 
-    get base_app_web_v0_theme_url(ri: "jp"), headers: @headers
+    get base_app_api_v0_preferences_theme_url(ri: "jp"), headers: @headers
 
     assert_response :success
     browser = AppPreference.order(:created_at).last

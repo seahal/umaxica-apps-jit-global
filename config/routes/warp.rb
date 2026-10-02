@@ -57,17 +57,18 @@ scope module: :warp, as: :warp do
       # Control-plane settings index.
       resource :settings, only: :show
 
-      # Web preference JSON authority for this surface's own chrome controls (theme, cookie
-      # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
-      # it the theme/cookie controls rendered in the Warp chrome POST to a route that does not
-      # exist, so a choice changes the page but is never persisted.
-      # FIXME: Keep the Warp browser preference endpoints under `/web/v0` until a compatibility
-      # review identifies every direct chrome caller and an owning `/api/v0` contract. This is a
-      # valuable application API, but a namespace-only move would break the current controls.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -154,17 +155,18 @@ scope module: :warp, as: :warp do
       # Control-plane settings index.
       resource :settings, only: :show
 
-      # Web preference JSON authority for this surface's own chrome controls (theme, cookie
-      # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
-      # it the theme/cookie controls rendered in the Warp chrome POST to a route that does not
-      # exist, so a choice changes the page but is never persisted.
-      # FIXME: Keep the Warp browser preference endpoints under `/web/v0` until a compatibility
-      # review identifies every direct chrome caller and an owning `/api/v0` contract. This is a
-      # valuable application API, but a namespace-only move would break the current controls.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -250,17 +252,18 @@ scope module: :warp, as: :warp do
       # Control-plane settings index.
       resource :settings, only: :show
 
-      # Web preference JSON authority for this surface's own chrome controls (theme, cookie
-      # consent). Mirrors auth and core; base still owns the full HTML preference screens. Without
-      # it the theme/cookie controls rendered in the Warp chrome POST to a route that does not
-      # exist, so a choice changes the page but is never persisted.
-      # FIXME: Keep the Warp browser preference endpoints under `/web/v0` until a compatibility
-      # review identifies every direct chrome caller and an owning `/api/v0` contract. This is a
-      # valuable application API, but a namespace-only move would break the current controls.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 

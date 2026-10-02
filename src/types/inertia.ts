@@ -28,6 +28,8 @@ export type ChromeRestrictedMode = {
 export type ChromeCookieControls = {
   hidden: boolean;
   scope: string;
+  /** Same-origin path the server declared for this page's consent reads and writes. */
+  endpoint_url: string;
   settings_url: string;
   title: string;
   description_html: string;
@@ -39,6 +41,8 @@ export type ChromeCookieControls = {
 
 export type ChromeThemeControls = {
   hidden: boolean;
+  /** Same-origin path the server declared for this page's theme reads and writes. */
+  endpoint_url: string;
   title: string;
   description: string;
   options: {

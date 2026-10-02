@@ -34,7 +34,7 @@ function deferredResponse(): { promise: Promise<Response>; resolve: (value: Resp
 const patchedTheme = (fetchMock: FetchMock): unknown => requestWithMethod(fetchMock, "PATCH")?.body;
 
 const RADIO_GROUP = `
-  <aside data-controller="theme">
+  <aside data-controller="theme" data-theme-endpoint-url-value="/api/v0/preferences/theme">
     <form>
       <input type="radio" name="theme" value="system">
       <input type="radio" name="theme" value="light">
@@ -79,6 +79,21 @@ describe("ThemeController", () => {
   });
 
   describe("connect", () => {
+    it("refuses to read when the layout declared no endpoint", async () => {
+      const fetchMock = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { controller } = await mountController<ThemeController>(
+        "theme",
+        ThemeController,
+        RADIO_GROUP.replace(' data-theme-endpoint-url-value="/api/v0/preferences/theme"', ""),
+      );
+
+      expect(() => controller.endpointUrl()).toThrow(/endpoint-url-value/u);
+      await expect(controller.syncFromServer()).rejects.toThrow(/endpoint-url-value/u);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it("checks the radio for the theme the server has stored", async () => {
       vi.stubGlobal(
         "fetch",

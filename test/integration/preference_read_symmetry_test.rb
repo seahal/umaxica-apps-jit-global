@@ -23,7 +23,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
 
-    get base_app_web_v0_theme_url(ri: "jp")
+    get base_app_api_v0_preferences_theme_url(ri: "jp")
 
     assert_response :success
     assert_equal "dr", response.parsed_body["theme"]
@@ -78,7 +78,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
     assert_equal "dr", response.parsed_body.dig("preference", "ct"),
                  "signed-in write's own response must reflect the value it just wrote"
 
-    get base_app_web_v0_theme_url(ri: "jp"), headers: headers
+    get base_app_api_v0_preferences_theme_url(ri: "jp"), headers: headers
 
     assert_response :success
     assert_equal "dr", response.parsed_body["theme"],

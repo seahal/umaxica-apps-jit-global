@@ -38,8 +38,16 @@ the authenticated subject for an RP. An auth access token may carry authenticati
 the Rails authorization boundary. Neither token turns identity, avatar, organization, or group rows
 into JWT-owned source-of-truth state.
 
-Preference setting writes are exposed through the `sign` surfaces. `acme` and `jump` consume
-preference state as read-only runtime context through `Actor.preferences`.
+Preference authority and preference transport are separate. Base is the preference HTML
+authority: it owns the preference screens and the durable preference records they edit. The
+display-preference transport for page chrome (theme and cookie consent) is host-local: Base, Auth,
+Core, and Warp each serve `/api/v0/preferences/{theme,cookie}` on their own host, because the
+preference credentials are host-only cookies. Serving that transport grants no preference authority;
+the read and update logic is the shared `PreferenceWebThemeEndpoint` / `PreferenceWebCookieEndpoint`
+behavior, and Auth serves it only for its ceremony pages
+(`adr/preference-browser-transport-family-capability.md`). Other runtime code consumes preference
+state as read-only context through `Actor.preferences`. (The historical statement that preference
+writes are exposed through the `sign` surfaces predates that split and no longer applies.)
 
 ## URL Role Boundary
 
@@ -339,8 +347,9 @@ Database reads and writes are allowed only in bounded flows:
 - new preference creation
 - valid refresh-token rotation that intentionally reissues the preference JWT
 - logged-in HTML preference edit entry refresh
-- explicit `sign` preference update endpoints
-- explicit `sign` preference reset or delete endpoints
+- explicit preference update endpoints (Base preference screens and the host-local
+  `/api/v0/preferences/{theme,cookie}` transport)
+- explicit Base preference reset or delete endpoints
 - login-time adoption or sync
 - repair, admin, or maintenance tasks
 
@@ -402,9 +411,10 @@ to the database or JWT.
   preference prefix: `App`/`User`, `Org`/`Staff`, and `Com`/`Visitor`. The `User` and `Staff`
   prefixes are storage compatibility names for the current app and org local preference tables;
   runtime actors are `Client` and `Operator`.
-- Core's `/api/v0/preferences/theme` and `/api/v0/preferences/cookie` JSON endpoints, and the
-  remaining non-Core `/web/v0/theme` and `/web/v0/cookie` endpoints, provide the no-full-page-reload
-  update path for dark mode and cookie consent. They update the matching preference record when a
+- The `/api/v0/preferences/theme` and `/api/v0/preferences/cookie` JSON endpoints on Base, Auth,
+  Core, and Warp provide the no-full-page-reload update path for dark mode and cookie consent. The
+  page chrome receives the endpoint path from the server (`PreferenceBrowserControlsRegistry`), and
+  Palm and Edit render no controls and serve no such endpoint. They update the matching preference record when a
   valid preference access token identifies it, then issue a fresh preference access token.
 - Shared preference credential cookie names are scoped by surface (`app_preference_*`,
   `com_preference_*`, `org_preference_*`) only as legacy compatibility names. The current credential

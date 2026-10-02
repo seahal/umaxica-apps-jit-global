@@ -14,7 +14,7 @@ class CsrfNotificationSubscriberTest < ActiveSupport::TestCase
       "event-id",
       {
         request: Object.new,
-        controller: "Base::App::Web::V0::ThemesController",
+        controller: "Base::App::Api::V0::Preferences::ThemesController",
         action: "update",
         sec_fetch_site: nil,
         message: "contains request-derived details",
@@ -30,7 +30,7 @@ class CsrfNotificationSubscriberTest < ActiveSupport::TestCase
     assert_equal "security.csrf.token_fallback", parsed.fetch("event")
     assert_equal(
       {
-        "controller" => "Base::App::Web::V0::ThemesController",
+        "controller" => "Base::App::Api::V0::Preferences::ThemesController",
         "action" => "update",
         "sec_fetch_site" => "missing",
       },
@@ -47,7 +47,7 @@ class CsrfNotificationSubscriberTest < ActiveSupport::TestCase
       "event-id",
       {
         request: Object.new,
-        controller: "Base::App::Web::V0::ThemesController",
+        controller: "Base::App::Api::V0::Preferences::ThemesController",
         action: "update",
         sec_fetch_site: "cross-site",
         message: "Origin https://untrusted.example did not match",

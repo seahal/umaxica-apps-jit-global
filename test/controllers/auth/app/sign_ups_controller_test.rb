@@ -149,9 +149,12 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    assert_equal base_app_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https"), payload.fetch("url")
+
+    assert_equal base_app_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https"),
+                 payload.fetch("url")
   end
 
   test "checkpoint without active registration redirects to sign up start" do

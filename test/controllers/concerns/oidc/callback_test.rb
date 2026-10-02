@@ -509,8 +509,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_response :redirect
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
     assert_equal "https://www.umaxica.app/oauth/authorize", payload.fetch("url").split("?").first
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
@@ -544,8 +546,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_response :redirect
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
     assert_equal "https://www.umaxica.app/oauth/authorize", payload.fetch("url").split("?").first
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
@@ -759,8 +763,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_response :redirect
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
     assert_equal "https://www.umaxica.app/oauth/authorize", payload.fetch("url").split("?").first
     assert_equal 1, logged.count { |entry| entry[:event] == "oidc.rp.callback.failed" }
   end

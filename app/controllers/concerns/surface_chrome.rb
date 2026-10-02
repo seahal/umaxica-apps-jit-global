@@ -37,11 +37,6 @@ module SurfaceChrome
   # module, so route helpers cannot be composed from the module name alone.
   SURFACE_ROUTE_NAMES = { "dev" => "developer", "net" => "network" }.freeze
 
-  # Only the three user-facing surfaces have a preference authority to send a visitor to, so the
-  # operational surfaces render no cookie or theme controls rather than linking to a host that
-  # does not exist.
-  PREFERENCE_SURFACES = %w(app com org).freeze
-
   included do
     inertia_share chrome: -> { surface_chrome }
   end
@@ -73,8 +68,8 @@ module SurfaceChrome
       banner: chrome_banner(configuration.fetch(:banner_domain)),
       restricted_mode: chrome_restricted_mode,
       footer_navigation: configuration.fetch(:footer_navigation) ? chrome_footer_navigation : nil,
-      cookie_controls: chrome_preference_surface? ? chrome_cookie_controls : nil,
-      theme_controls: chrome_preference_surface? ? chrome_theme_controls : nil,
+      cookie_controls: chrome_cookie_controls,
+      theme_controls: chrome_theme_controls,
       copyright: chrome_copyright,
     }
   end
@@ -134,8 +129,14 @@ module SurfaceChrome
     SURFACE_ROUTE_NAMES.fetch(chrome_configuration.fetch(:surface)) { chrome_configuration.fetch(:surface) }
   end
 
-  def chrome_preference_surface?
-    PREFERENCE_SURFACES.include?(chrome_configuration.fetch(:surface))
+  # Whether the controls render, and where they send their reads and writes, is a family-and-surface
+  # decision (PreferenceBrowserControlsRegistry). A pair the registry does not list raises rather than
+  # rendering controls against a host that may not serve their endpoint.
+  def chrome_preference_controls
+    PreferenceBrowserControlsRegistry.fetch(
+      family: chrome_configuration.fetch(:family),
+      surface: chrome_configuration.fetch(:surface),
+    )
   end
 
   # The banner query previously ran inside a layout partial on every response. It stays server-side
@@ -174,6 +175,9 @@ module SurfaceChrome
   end
 
   def chrome_cookie_controls
+    endpoint_path = chrome_preference_controls.cookie_endpoint_path
+    return nil if endpoint_path.nil?
+
     surface = chrome_configuration.fetch(:surface)
     scope = "layouts.shared.footer_cookie_controls"
     # The cookie screen owns consent while it is being edited; showing the banner there would
@@ -184,6 +188,7 @@ module SurfaceChrome
     {
       hidden: hidden,
       scope: surface,
+      endpoint_url: endpoint_path,
       settings_url: chrome_cookie_settings_url(surface),
       title: chrome_t("#{scope}.title"),
       description_html: chrome_t("#{scope}.description_html", privacy_policy: chrome_t("#{scope}.privacy_policy")),
@@ -219,12 +224,16 @@ module SurfaceChrome
   # The theme screen owns the theme control while it is being edited; showing the footer copy of it
   # there would put two controls for one value on the same page.
   def chrome_theme_controls
+    endpoint_path = chrome_preference_controls.theme_endpoint_path
+    return nil if endpoint_path.nil?
+
     scope = "layouts.shared.footer_theme_controls"
     hidden = params[:action].to_s == "edit" &&
       (params[:preference_screen].to_s == "theme" || controller_path.end_with?("/preference/themes"))
 
     {
       hidden: hidden,
+      endpoint_url: endpoint_path,
       title: chrome_t("#{scope}.title"),
       description: chrome_t("#{scope}.description"),
       options: {

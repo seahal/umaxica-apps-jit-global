@@ -7,12 +7,13 @@ import PreferenceScreenFrame, {
   type PreferenceLink,
 } from "@/features/preferences/PreferenceScreenFrame";
 import { applyTheme, fetchStoredTheme } from "@/lib/theme";
+import type { SharedProps } from "@/types/inertia";
 
 // Backs both `option` (region, timezone, language, theme) and `selectable` (currency, calendar,
 // clock, motion, density, pagination). The two shared ERB templates they replace differed only in
 // how the server built the choice labels, which is still where that difference lives.
 //
-// A theme write must not recolour the document until the server accepts it and GET /web/v0/theme
+// A theme write must not recolour the document until the server accepts it and the theme endpoint
 // reports the stored value — the same contract as the chrome ThemeControls on every Inertia surface.
 
 type PreferenceChoice = {
@@ -60,7 +61,8 @@ export default function PreferenceSelect({
 }: PreferenceSelectProps) {
   const [value, setValue] = useState(String(form.value));
   const [processing, setProcessing] = useState(false);
-  const { errors } = usePage().props;
+  const { errors, chrome } = usePage<SharedProps>().props;
+  const themeEndpointUrl = chrome.theme_controls?.endpoint_url;
   const error = errors[form.field];
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
@@ -75,7 +77,12 @@ export default function PreferenceSelect({
           // The theme screen writes through Inertia rather than the chrome control. Colour
           // follows the value the server stored, and only after that write is accepted.
           if (screen === "theme") {
-            void applyThemeAfterPreferenceWrite();
+            // The theme screen renders only on families whose chrome declares a theme endpoint,
+            // so a missing one is a rendering defect rather than a reason to skip the read.
+            if (themeEndpointUrl === undefined) {
+              throw new Error("theme preference screen rendered without a chrome theme endpoint");
+            }
+            void applyThemeAfterPreferenceWrite(themeEndpointUrl);
           }
         },
       },
@@ -147,8 +154,8 @@ export default function PreferenceSelect({
   );
 }
 
-async function applyThemeAfterPreferenceWrite(): Promise<void> {
-  const stored = await fetchStoredTheme();
+async function applyThemeAfterPreferenceWrite(endpointUrl: string): Promise<void> {
+  const stored = await fetchStoredTheme(endpointUrl);
   if (stored) {
     applyTheme(stored);
   }

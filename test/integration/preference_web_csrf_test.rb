@@ -10,21 +10,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
 
     patch(
-      base_app_web_v0_theme_path, params: { theme: "dark" },
-                                  headers: {
-                                    "Accept" => "application/json",
-                                    "Sec-Fetch-Site" => "cross-site",
-                                  }, as: :json,
+      base_app_api_v0_preferences_theme_path, params: { theme: "dark" },
+                                              headers: {
+                                                "Accept" => "application/json",
+                                                "Sec-Fetch-Site" => "cross-site",
+                                              }, as: :json,
     )
 
     assert_response :forbidden
 
     patch(
-      base_app_web_v0_cookie_path, params: { consented: true },
-                                   headers: {
-                                     "Accept" => "application/json",
-                                     "Sec-Fetch-Site" => "cross-site",
-                                   }, as: :json,
+      base_app_api_v0_preferences_cookie_path, params: { consented: true },
+                                               headers: {
+                                                 "Accept" => "application/json",
+                                                 "Sec-Fetch-Site" => "cross-site",
+                                               }, as: :json,
     )
 
     assert_response :forbidden
@@ -42,21 +42,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
 
     patch(
-      base_com_web_v0_theme_path, params: { theme: "dark" },
-                                  headers: {
-                                    "Accept" => "application/json",
-                                    "Sec-Fetch-Site" => "cross-site",
-                                  }, as: :json,
+      base_com_api_v0_preferences_theme_path, params: { theme: "dark" },
+                                              headers: {
+                                                "Accept" => "application/json",
+                                                "Sec-Fetch-Site" => "cross-site",
+                                              }, as: :json,
     )
 
     assert_response :forbidden
 
     patch(
-      base_com_web_v0_cookie_path, params: { consented: true },
-                                   headers: {
-                                     "Accept" => "application/json",
-                                     "Sec-Fetch-Site" => "cross-site",
-                                   }, as: :json,
+      base_com_api_v0_preferences_cookie_path, params: { consented: true },
+                                               headers: {
+                                                 "Accept" => "application/json",
+                                                 "Sec-Fetch-Site" => "cross-site",
+                                               }, as: :json,
     )
 
     assert_response :forbidden
@@ -74,21 +74,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_BASE_STAFF_URL"))
 
     patch(
-      base_org_web_v0_theme_path, params: { theme: "dark" },
-                                  headers: {
-                                    "Accept" => "application/json",
-                                    "Sec-Fetch-Site" => "cross-site",
-                                  }, as: :json,
+      base_org_api_v0_preferences_theme_path, params: { theme: "dark" },
+                                              headers: {
+                                                "Accept" => "application/json",
+                                                "Sec-Fetch-Site" => "cross-site",
+                                              }, as: :json,
     )
 
     assert_response :forbidden
 
     patch(
-      base_org_web_v0_cookie_path, params: { consented: true },
-                                   headers: {
-                                     "Accept" => "application/json",
-                                     "Sec-Fetch-Site" => "cross-site",
-                                   }, as: :json,
+      base_org_api_v0_preferences_cookie_path, params: { consented: true },
+                                               headers: {
+                                                 "Accept" => "application/json",
+                                                 "Sec-Fetch-Site" => "cross-site",
+                                               }, as: :json,
     )
 
     assert_response :forbidden
@@ -107,7 +107,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -130,9 +130,9 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
 
     [
-      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_web_v0_theme_path],
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_api_v0_preferences_theme_path],
     ].each do |host, path|
       host!(host)
       patch(
@@ -160,9 +160,9 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
 
     [
-      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_web_v0_theme_path],
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_api_v0_preferences_theme_path],
     ].each do |host, path|
       host!(host)
       patch(
@@ -192,7 +192,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -228,7 +228,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}:444",
     ].each do |origin|
       patch(
-        base_app_web_v0_theme_path,
+        base_app_api_v0_preferences_theme_path,
         params: { theme: "dark" },
         headers: {
           "Accept" => "application/json",
@@ -256,7 +256,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -306,7 +306,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_predicate token, :present?
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -335,7 +335,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -388,7 +388,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_predicate token, :present?
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -406,7 +406,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     second_session = open_session
     second_session.host!(host)
     second_session.patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -422,7 +422,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_equal 403, second_session.response.status
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -438,7 +438,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",

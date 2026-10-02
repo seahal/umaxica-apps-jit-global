@@ -57,7 +57,9 @@ sign-in handoff. It applies to future shared lifecycle code, new documentation, 
 - Withdrawal, OIDC authorization transactions, step-up, and per-credential ceremony transactions
   keep their own lifecycles. They may adopt this vocabulary later through separate decisions.
 - The physical representation (one status column, split lifecycle and phase columns, or a mapping)
-  is not decided here.
+  is not decided here. It was later decided in `adr/idp-flow-state-machine-lifecycle.md`: one
+  authoritative state id per flow row with an FK to an id-only per-flow reference table, and no
+  lifecycle column.
 
 ### Lifecycle versus phase
 
@@ -234,11 +236,13 @@ The following are normative for any future shared lifecycle implementation:
   silent debt: user cancellation recorded as `FAILED` in sign-in session-limit handling, the
   sign-up cancel result status `:failed`, sign-in lacking a recorded expiry terminal, and sign-up
   post-commit phases whose terminal path on handoff failure or TTL lapse is not defined.
-- Introducing `HALTED` and splitting `FAILED` will need DB reference-row and audit decisions. Those
-  are deferred to the implementation plan.
+- Introducing `HALTED` and splitting `FAILED` need DB reference-row and audit decisions. The
+  reference-row decisions (`HALTED = 930`, `FAILED = 900` kept as a tombstone, immutable ids) are in
+  `adr/idp-flow-state-machine-lifecycle.md`; audit decisions remain in the implementation plan.
 
 ## Related
 
+- `adr/idp-flow-state-machine-lifecycle.md`
 - `docs/security/idp-flow-lifecycle.md`
 - `plans/backlog/idp-flow-state-machine-unification.md`
 - `adr/base-auth-ceremony-and-seven-rp-boundary.md`

@@ -65,7 +65,7 @@ class ApiProblemExceptionsAppTest < ActiveSupport::TestCase
     # They still render their own error shapes from controllers, so answering their routing misses
     # with Problem Details would give one endpoint two different error formats.
     _status, edge_headers, _body = call(status: 404, original_path: "/edge/v0/token/check")
-    _status, web_headers, _body = call(status: 404, original_path: "/web/v0/cookie")
+    _status, web_headers, _body = call(status: 404, original_path: "/web/v0/in/email/otp")
 
     assert_includes edge_headers.fetch("content-type"), "text/html"
     assert_includes web_headers.fetch("content-type"), "text/html"

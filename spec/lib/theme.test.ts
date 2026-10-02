@@ -213,7 +213,20 @@ describe("watchSystemTheme", () => {
   });
 });
 
+// The server declares the endpoint for each page; the helpers only resolve it on the current origin.
+const THEME_ENDPOINT = "/api/v0/preferences/theme";
+
 describe("fetchStoredTheme", () => {
+  test("refuses an endpoint on another origin before any request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchStoredTheme("https://base.example.test/api/v0/preferences/theme"),
+    ).rejects.toThrow(/same-origin/u);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("reads the stored preference through the theme endpoint", async () => {
     window.history.replaceState({}, "", "/?ct=dr&ri=jp");
     const fetchMock = vi.fn().mockResolvedValue({
@@ -222,8 +235,10 @@ describe("fetchStoredTheme", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(fetchStoredTheme()).resolves.toBe("dark");
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3000/web/v0/theme?ct=dr&ri=jp");
+    await expect(fetchStoredTheme(THEME_ENDPOINT)).resolves.toBe("dark");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3000/api/v0/preferences/theme?ct=dr&ri=jp",
+    );
   });
 
   test("falls back to system when the endpoint answers an unknown code", async () => {
@@ -232,23 +247,33 @@ describe("fetchStoredTheme", () => {
       vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) }),
     );
 
-    await expect(fetchStoredTheme()).resolves.toBe("system");
+    await expect(fetchStoredTheme(THEME_ENDPOINT)).resolves.toBe("system");
   });
 
   test("returns null on an error response so the cookie stays authoritative", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
 
-    await expect(fetchStoredTheme()).resolves.toBeNull();
+    await expect(fetchStoredTheme(THEME_ENDPOINT)).resolves.toBeNull();
   });
 
   test("returns null when the request itself fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
-    await expect(fetchStoredTheme()).resolves.toBeNull();
+    await expect(fetchStoredTheme(THEME_ENDPOINT)).resolves.toBeNull();
   });
 });
 
 describe("persistTheme", () => {
+  test("refuses a protocol-relative endpoint naming another host before any request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      persistTheme("//base.example.test/api/v0/preferences/theme", "dark", "csrf"),
+    ).rejects.toThrow(/same-origin/u);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("sends the choice with the CSRF token and returns what the server stored", async () => {
     // The theme being replaced must not be echoed back to the endpoint as a request parameter.
     window.history.replaceState({}, "", "/?ct=li&theme=light&ri=jp");
@@ -258,8 +283,8 @@ describe("persistTheme", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(persistTheme("dark", "csrf-token")).resolves.toBe("dark");
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3000/web/v0/theme?ri=jp", {
+    await expect(persistTheme(THEME_ENDPOINT, "dark", "csrf-token")).resolves.toBe("dark");
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3000/api/v0/preferences/theme?ri=jp", {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -276,7 +301,7 @@ describe("persistTheme", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(persistTheme("light", "")).resolves.toBe("light");
+    await expect(persistTheme(THEME_ENDPOINT, "light", "")).resolves.toBe("light");
     const [, init] = present(fetchMock.mock.calls[0], "the first fetch call");
     expect(present(init, "the request options").headers).not.toHaveProperty("X-CSRF-Token");
   });
@@ -287,18 +312,18 @@ describe("persistTheme", () => {
       vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) }),
     );
 
-    await expect(persistTheme("dark", "csrf-token")).resolves.toBeNull();
+    await expect(persistTheme(THEME_ENDPOINT, "dark", "csrf-token")).resolves.toBeNull();
   });
 
   test("returns null when the endpoint rejects the write", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 422 }));
 
-    await expect(persistTheme("system", "csrf-token")).resolves.toBeNull();
+    await expect(persistTheme(THEME_ENDPOINT, "system", "csrf-token")).resolves.toBeNull();
   });
 
   test("returns null when the request itself fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
-    await expect(persistTheme("light", "csrf-token")).resolves.toBeNull();
+    await expect(persistTheme(THEME_ENDPOINT, "light", "csrf-token")).resolves.toBeNull();
   });
 });

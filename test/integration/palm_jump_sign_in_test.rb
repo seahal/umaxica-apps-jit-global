@@ -118,6 +118,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
       assert_response :see_other
       assert_equal "https://palm-jp.umaxica.app/oidc/callback?code=code-from-base&state=app-state", response.location
       get "/oidc/callback", params: { code: "tampered-code", state: "app-state" }
+
       assert_response :bad_request
       get "/oidc/callback", params: { code: "code-from-base", state: "app-state" }
 
@@ -130,6 +131,7 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
       Rails.stub(:cache, cache) do
         get "/oidc/callback", params: { code: "code-from-base", state: "app-state", rt: rt }
       end
+
       assert_response :bad_request
       get "/oidc/callback", params: { code: "code-from-base", state: "app-state" }
 
@@ -149,17 +151,25 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     host! "palm-jp.umaxica.app"
     https!
     valid = {
-      client_id: "app-ios-rp", response_type: "code", scope: "openid palm.read",
-      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback", code_challenge: "a" * 43,
-      code_challenge_method: "S256", state: "initial-state", nonce: "initial-nonce", ri: "jp",
+      client_id: "app-ios-rp",
+      response_type: "code",
+      scope: "openid palm.read",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      state: "initial-state",
+      nonce: "initial-nonce",
+      ri: "jp",
     }
     %i(state nonce).each do |field|
       [0, 1, 255, 256, 257].each do |length|
-        query = valid.merge(state: "#{field}-#{length}", field => "a" * length)
+        query = valid.merge(:state => "#{field}-#{length}", field => "a" * length)
         get "/sign/in", params: query
+
         assert_response(length.between?(1, 256) ? :see_other : :bad_request)
       end
-      get "/sign/in", params: valid.merge(state: "#{field}-unicode", field => "あ" * 86)
+      get "/sign/in", params: valid.merge(:state => "#{field}-unicode", field => "あ" * 86)
+
       assert_response :bad_request
     end
   end
@@ -168,35 +178,45 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     host! "palm-jp.umaxica.app"
     https!
     valid = {
-      client_id: "app-ios-rp", response_type: "code", scope: "openid palm.read",
-      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback", code_challenge: "a" * 43,
-      code_challenge_method: "S256", nonce: "nonce", ri: "jp",
+      client_id: "app-ios-rp",
+      response_type: "code",
+      scope: "openid palm.read",
+      redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+      code_challenge: "a" * 43,
+      code_challenge_method: "S256",
+      nonce: "nonce",
+      ri: "jp",
     }
     started = Time.current.change(usec: 0)
     [599, 600, 601].each do |age|
       travel_to(started) do
         get "/sign/in", params: valid.merge(state: "expires-#{age}")
+
         assert_response :see_other
       end
       travel_to(started + age.seconds) do
         get "/sign/in", params: valid.merge(state: "expires-#{age}")
-        assert_response(age < 600 ? :bad_request : :see_other)
+
+        assert_response((age < 600) ? :bad_request : :see_other)
       end
     end
     travel_to(started + 2.hours) do
       %w(first second third).each do |state|
         get "/sign/in", params: valid.merge(state: state)
+
         assert_response :see_other
       end
       get "/sign/in", params: valid.merge(state: "second")
+
       assert_response :bad_request
       get "/sign/in", params: valid.merge(state: "third")
+
       assert_response :bad_request
       get "/sign/in", params: valid.merge(state: "first")
+
       assert_response :see_other
     end
   end
-
 
   test "expired Palm callback prunes its browser continuity and removes the empty container" do
     host! "palm-jp.umaxica.app"
@@ -204,17 +224,24 @@ class PalmJumpSignInTest < ActionDispatch::IntegrationTest
     started = Time.current.change(usec: 0)
     travel_to(started) do
       get "/sign/in", params: {
-        client_id: "app-ios-rp", response_type: "code", scope: "openid palm.read",
-        redirect_uri: "https://palm-jp.umaxica.app/oidc/callback", code_challenge: "a" * 43,
-        code_challenge_method: "S256", state: "expired-state", nonce: "nonce", ri: "jp",
+        client_id: "app-ios-rp",
+        response_type: "code",
+        scope: "openid palm.read",
+        redirect_uri: "https://palm-jp.umaxica.app/oidc/callback",
+        code_challenge: "a" * 43,
+        code_challenge_method: "S256",
+        state: "expired-state",
+        nonce: "nonce",
+        ri: "jp",
       }
+
       assert_response :see_other
     end
     travel_to(started + 600.seconds) do
       get "/oidc/callback", params: { code: "expired-code", state: "expired-state" }
+
       assert_response :bad_request
       assert_not session.key?(Palm::App::Sign::InsController::PENDING_FLOWS_SESSION_KEY)
     end
   end
-
 end

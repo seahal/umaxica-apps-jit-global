@@ -95,6 +95,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     uri = URI.parse(payload.fetch("url"))

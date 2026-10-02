@@ -31,6 +31,14 @@ Current identity authority decision:
   sole IdP/AS, Auth is ceremony-only, seven first-party RPs (`core-*`/`side-*`/`edit-org`), opaque
   handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.
 
+Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):
+
+- `adr/idp-flow-lifecycle-vocabulary.md` — lifecycle, event, request-semantics, and outcome
+  vocabulary for sign-in, sign-up, and sign-out.
+- `adr/idp-flow-state-machine-lifecycle.md` — DB-backed state storage: one state id per flow row,
+  id-only per-flow reference tables, immutable ids, shared terminal ids, FK versus application
+  transition responsibility.
+
 Current browser credential recovery decision:
 
 - `adr/invalid-browser-credential-recovery.md` — **current** contract for refused auth and
@@ -122,7 +130,8 @@ Current API design decisions:
   `docs/reference/api-design-standards.md` limited to specification-backed rules.
 - `adr/api-route-vocabulary-consolidation.md` — accepted naming direction consolidating `/web/v0`
   and `/edge/v0` under `/api/v0`; its 2026-09-15 amendment records the reviewed Core preference API
-  migration, while the remaining services stay subject to endpoint-specific review.
+  migration, and its 2026-10-02 amendment the pre-deployment cutover of the Base, Auth, and Warp
+  theme and cookie endpoints, while the remaining services stay subject to endpoint-specific review.
 
 Current database naming decisions:
 
@@ -187,6 +196,9 @@ Preference decisions:
   authority outside `acme/www`; retained for historical URL-boundary context.
 - `adr/preference-relogin-reconciliation-record-recency.md`
 - `adr/preference-extended-option-reference-tables.md`
+- `adr/preference-browser-transport-family-capability.md` — theme and cookie controls are a
+  family-and-surface capability with a server-declared, same-origin endpoint; Base, Auth, Core, and
+  Warp serve one host-local `/api/v0/preferences` contract, and Auth serves it only as UX transport.
 
 Current hierarchy / collective decisions:
 

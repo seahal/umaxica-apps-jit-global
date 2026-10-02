@@ -13,6 +13,7 @@ import { jsonResponse, noContentResponse, stubFetchByMethod } from "../../suppor
 const controls: ChromeCookieControls = {
   hidden: false,
   scope: "cookie",
+  endpoint_url: "/api/v0/preferences/cookie",
   settings_url: "/preference/cookie/edit?ri=jp",
   title: "Cookie の利用について",
   description_html: "この端末の Cookie 設定を選べます。",
@@ -22,7 +23,8 @@ const controls: ChromeCookieControls = {
   accept_all: "すべて許可",
 };
 
-const ENDPOINT = "http://localhost:3000/web/v0/cookie?ri=us&lx=en&ct=dr&tz=asia%2Ftokyo";
+const ENDPOINT =
+  "http://localhost:3000/api/v0/preferences/cookie?ri=us&lx=en&ct=dr&tz=asia%2Ftokyo";
 
 let container: HTMLDivElement | undefined;
 let root: Root | undefined;
@@ -101,6 +103,20 @@ afterEach(() => {
   clearCookies();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("CookieBanner endpoint", () => {
+  // The read goes to the path the chrome declared, never to one the browser composed itself.
+  test("reads consent from the endpoint the chrome declared", async () => {
+    stubFetch(
+      vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ show_banner: true }) }),
+    );
+
+    await mount({ endpoint_url: "/declared/cookie" });
+
+    const urls = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(urls).toEqual(["/declared/cookie"]);
+  });
 });
 
 describe("CookieBanner mount", () => {

@@ -17,11 +17,19 @@ info:
 
     Endpoints whose wire format is fixed by another specification -- OAuth 2.0, OIDC, WebAuthn,
     DBSC, MCP (JSON-RPC 2.0), and `.well-known` resources -- are intentionally absent. They are
-    governed by their own specifications, not by this contract. Core cookie and theme JSON now
-    live at `/api/v0/preferences/{cookie,theme}`. The DBSC registration endpoint is under
-    `/api/v0/preferences/dbsc` but remains undescribed here because DBSC has its own
-    specification. Non-Core `/edge/v0` and `/web/v0` namespaces stay absent until those
-    surfaces converge (adr/api-route-vocabulary-consolidation.md).
+    governed by their own specifications, not by this contract. The DBSC registration endpoint
+    is under `/api/v0/preferences/dbsc` but remains undescribed here because DBSC has its own
+    specification. The remaining legacy `/edge/v0` and `/web/v0` endpoints stay absent until they
+    converge (adr/api-route-vocabulary-consolidation.md).
+
+    ## Preferences
+
+    `/api/v0/preferences/{cookie,theme}` is a host-local browser API served on several first-party
+    hosts of this surface (Base, Auth, Core, and Warp), each listed in the path's `servers`. Each
+    host reads and writes its own host-only preference credentials, so a browser calls only the
+    origin it is on; the endpoints are not for cross-origin use. The Auth host serves them only as
+    display-preference transport for its ceremony pages
+    (adr/preference-browser-transport-family-capability.md).
 
     The text operational endpoints -- `GET /health`, `GET /health/{startup,liveness,readiness}`,
     and `GET /revision` -- are absent because they are not JSON: they render `text/plain` and do
@@ -31,7 +39,7 @@ info:
     ## Hosts
 
     `servers` appears only where a host is real, public, and knowable from the repository. The
-    Core paths carry one. The health and revision endpoints carry none because they are blocked
+    Core session paths carry one, and the preference paths list every host that serves them. The health and revision endpoints carry none because they are blocked
     at the edge. The content and Palm paths carry none because their hosts are supplied by
     deployment environment variables, and the docs and news content editions have no production
     host at all.
@@ -198,10 +206,16 @@ paths:
   /api/v0/preferences/cookie:
     servers:
       - url: https://jp.umaxica.app
-        description: Canonical Core public host for the app (end-user application) surface.
+        description: Core public host for the app (end-user application) surface.
+      - url: https://www.umaxica.app
+        description: Base public host for the app (end-user application) surface.
+      - url: https://auth.umaxica.app
+        description: Auth public host for the app (end-user application) surface.
+      - url: https://www-jp.umaxica.app
+        description: Warp public host for the app (end-user application) surface.
     get:
       summary: Cookie-consent banner state
-      description: 'Reports whether the cookie-consent banner should be shown. Open: no session is required.'
+      description: 'Reports whether the cookie-consent banner should be shown. Open: no session is required. Served host-locally by each listed host: each host reads and writes its own host-only preference credentials, and a browser calls only its current origin.'
       operationId: getPreferencesCookie
       tags:
         - Preferences
@@ -225,11 +239,29 @@ paths:
           $ref: '#/components/responses/RateLimited'
     patch:
       summary: Record cookie consent
-      description: Writes cookie-consent flags. Requires the preference access token; absence is 401 with a JSON `error` member (not a problem document). Successful writes have no representation.
+      description: 'Records a cookie-consent decision. Open: a caller without a preference token records the decision in the consent buffer only. `cookie.consented` is required; each present flag must be a boolean or one of `1`, `0`, `"1"`, `"0"`, `"true"`, `"false"`, `"t"`, `"f"` (and the upper-case forms), otherwise the request is a 422 naming each field. Successful writes have no representation.'
       operationId: patchPreferencesCookie
       tags:
         - Preferences
       security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cookie
+              properties:
+                cookie:
+                  type: object
+                  required:
+                    - consented
+                  properties:
+                    consented: {}
+                    functional: {}
+                    performant: {}
+                    targetable: {}
       responses:
         '204':
           description: Consent recorded. No body (RFC 9110 15.3.5).
@@ -239,23 +271,33 @@ paths:
                 type: string
                 enum:
                   - no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
-          description: Preference write token is missing.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CookieConsentWriteError'
+          $ref: '#/components/responses/ForeignPreferenceToken'
+        '403':
+          $ref: '#/components/responses/CsrfVerificationFailed'
         '406':
           $ref: '#/components/responses/NotAcceptable'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
   /api/v0/preferences/theme:
     servers:
       - url: https://jp.umaxica.app
-        description: Canonical Core public host for the app (end-user application) surface.
+        description: Core public host for the app (end-user application) surface.
+      - url: https://www.umaxica.app
+        description: Base public host for the app (end-user application) surface.
+      - url: https://auth.umaxica.app
+        description: Auth public host for the app (end-user application) surface.
+      - url: https://www-jp.umaxica.app
+        description: Warp public host for the app (end-user application) surface.
     get:
       summary: Current color theme
-      description: Reports the caller's color theme. No session is required.
+      description: 'Reports the caller''s color theme. No session is required. Served host-locally by each listed host: each host reads and writes its own host-only preference credentials, and a browser calls only its current origin.'
       operationId: getPreferencesTheme
       tags:
         - Preferences
@@ -279,11 +321,29 @@ paths:
           $ref: '#/components/responses/RateLimited'
     patch:
       summary: Update color theme
-      description: Writes the color theme cookie (and actor record when a preference token is present).
+      description: Writes the color theme cookie (and the preference record when a preference token is present). `theme` is `light`, `dark`, or `system` (case-insensitive) or a stored code; any other value, including a missing member, is a 422 with the pointer `/theme`. Unknown members are ignored.
       operationId: patchPreferencesTheme
       tags:
         - Preferences
       security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - theme
+              properties:
+                theme:
+                  type: string
+                  enum:
+                    - light
+                    - dark
+                    - system
+                    - li
+                    - dr
+                    - sy
       responses:
         '200':
           description: Theme after the write.
@@ -297,8 +357,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ColorTheme'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/ForeignPreferenceToken'
+        '403':
+          $ref: '#/components/responses/CsrfVerificationFailed'
         '406':
           $ref: '#/components/responses/NotAcceptable'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/RateLimited'
   /api/v0/profile:
@@ -653,14 +723,6 @@ components:
         show_banner:
           type: boolean
           description: True when the caller has not recorded cookie consent.
-    CookieConsentWriteError:
-      type: object
-      required:
-        - error
-      properties:
-        error:
-          type: string
-          description: Machine-readable refusal. `missing_preference_access_token` when the write token is absent.
     ColorTheme:
       type: object
       required:
@@ -805,6 +867,30 @@ components:
           schema:
             type: string
             example: '"default";r=0;t=60'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BadRequest:
+      description: The request body is not well-formed JSON.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ForeignPreferenceToken:
+      description: The request presented a preference access token minted for another host or audience. A request that presents no preference token is not refused.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    CsrfVerificationFailed:
+      description: The unsafe request did not pass this host's forgery protection.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationFailed:
+      description: The body is well-formed JSON but a field is missing or not an accepted value. `errors` names each field with an RFC 6901 JSON Pointer.
       content:
         application/problem+json:
           schema:

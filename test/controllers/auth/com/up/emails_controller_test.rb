@@ -87,9 +87,12 @@ class Auth::Com::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
         headers: as_visitor_headers(visitor, host: host)
 
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    assert_equal base_com_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https"), payload.fetch("url")
+
+    assert_equal base_com_dashboard_url(ri: "jp", host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https"),
+                 payload.fetch("url")
   end
 
   test "create rejects when visitor is already logged in" do

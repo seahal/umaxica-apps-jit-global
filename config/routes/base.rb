@@ -117,15 +117,18 @@ scope(module: :base, as: :base) do
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
-      # Public web API: cookie consent, theme.
-      # FIXME: Keep these Base-owned browser preference endpoints under `/web/v0` until a
-      # compatibility review identifies every chrome caller and assigns an OpenAPI/authority owner
-      # for the replacement `/api/v0` surface. The current browser callers still construct these
-      # paths directly.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -368,11 +371,18 @@ scope(module: :base, as: :base) do
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
-      # Public web API: cookie consent, theme.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -610,11 +620,18 @@ scope(module: :base, as: :base) do
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
-      # Public web API: cookie consent, theme.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 

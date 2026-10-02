@@ -406,6 +406,7 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     get base_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
         headers: app_session_headers(host, token, user)
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     sign_location = payload.fetch("url")

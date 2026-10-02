@@ -8,7 +8,7 @@ import { jsonResponse, requestUrl } from "../support/http";
 import { mountController } from "../support/stimulus";
 
 const MARKUP = `
-  <div data-controller="cookie-toggle">
+  <div data-controller="cookie-toggle" data-cookie-toggle-endpoint-url-value="/api/v0/preferences/cookie">
     <form>
       <input type="checkbox" data-cookie-toggle-target="checkbox"
              name="preference_cookie[functional]">
@@ -164,7 +164,20 @@ describe("CookieToggleController", () => {
       element.querySelector("form")?.dispatchEvent(submitEnd(true));
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-      expect(requestUrl(fetchMock)).toContain("/web/v0/cookie");
+      expect(new URL(requestUrl(fetchMock)).pathname).toBe("/api/v0/preferences/cookie");
+    });
+
+    it("refuses to re-read when the layout declared no endpoint", async () => {
+      const fetchMock = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", fetchMock);
+      const { controller } = await mount(
+        MARKUP.replace(' data-cookie-toggle-endpoint-url-value="/api/v0/preferences/cookie"', ""),
+      );
+
+      await expect(controller.onFormSubmitEnd(submitEnd(true))).rejects.toThrow(
+        /endpoint-url-value/u,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("does nothing when the markup carries no form", async () => {

@@ -485,8 +485,6 @@ Umaxica/ExplicitMethodVisibility:
     - "app/controllers/concerns/preference_dbsc_registration_endpoint.rb"
     - "app/controllers/concerns/preference_global.rb"
     - "app/controllers/concerns/preference_token.rb"
-    - "app/controllers/concerns/preference_web_cookie_actions.rb"
-    - "app/controllers/concerns/preference_web_theme_actions.rb"
     - "app/controllers/concerns/promotional_email_unsubscribe_actions.rb"
     - "app/controllers/concerns/publishing_management_archives_actions.rb"
     - "app/controllers/concerns/publishing_management_entries_actions.rb"

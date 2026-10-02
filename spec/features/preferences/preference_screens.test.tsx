@@ -10,7 +10,10 @@ vi.mock("@inertiajs/react", () => ({
   ),
   router: { patch: vi.fn(), delete: vi.fn() },
   usePage: () => ({
-    props: { errors: { confirm_reset: "確認が必要です", option_id: "選択してください" } },
+    props: {
+      errors: { confirm_reset: "確認が必要です", option_id: "選択してください" },
+      chrome: { theme_controls: { endpoint_url: "/api/v0/preferences/theme" } },
+    },
   }),
 }));
 

@@ -146,8 +146,10 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
     assert_equal "https://auth.umaxica.com/verification/setup/new", payload.fetch("url").split("?").first
     assert_predicate @current_token.reload, :currently_usable?
     assert_predicate @other_token.reload, :currently_usable?

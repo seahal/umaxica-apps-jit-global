@@ -253,7 +253,10 @@ An endpoint is not removed until it has carried `Sunset` for the announced windo
 endpoint that never advertised a sunset leaves clients with no remediation path and is prohibited.
 
 This applies to each `/edge/v0` and `/web/v0` route as it converges on `/api/v0`
-(`adr/api-route-vocabulary-consolidation.md`).
+(`adr/api-route-vocabulary-consolidation.md`). The one recorded exception is the 2026-10-02
+pre-deployment cutover of `/web/v0/{theme,cookie}` to `/api/v0/preferences/{theme,cookie}`, whose
+only clients were this repository's own browser code and moved in the same change; it is not a
+precedent for removing an endpoint that has a deployed client.
 
 ## Authentication
 

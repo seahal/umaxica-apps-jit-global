@@ -5,7 +5,8 @@ Status: backlog. Not accepted for implementation; no runtime change has been mad
 ## Purpose
 
 Migrate sign-in, sign-up, and sign-out to the lifecycle vocabulary and invariants accepted in
-`adr/idp-flow-lifecycle-vocabulary.md`, one flow at a time. The reference and the current-to-target
+`adr/idp-flow-lifecycle-vocabulary.md` and to the state storage contract accepted in
+`adr/idp-flow-state-machine-lifecycle.md`, one flow at a time. The reference and the current-to-target
 mapping are in `docs/security/idp-flow-lifecycle.md`; this plan does not repeat them.
 
 The goal is a shared lifecycle contract with flow-specific phases preserved. A single merged sign
@@ -37,25 +38,94 @@ Gaps found during the vocabulary audit (each must be confirmed by a failing test
    (`EXPIRED`/`CANCELLED` in sign-in, `TOKEN_REVOKED` in sign-out, checkpoint directly to session
    issuance in sign-in).
 
-## Migration Ordering
+## Phases
 
-Each step is independently shippable and reversible. Later steps do not start until the earlier
-step's tests are green in CI.
+Each phase is independently shippable and reversible. A phase that touches a flow does not start
+until the earlier phase's tests for that flow are green in CI. Every destructive or irreversible
+persistence step (FK validation on large tables, column rename, column or constraint drop) needs
+explicit approval of its risk and recovery plan before it runs.
 
-1. **Contract and graph tests, no behavior change.** Introduce a read-only lifecycle classifier
-   that maps every current status to lifecycle plus phase, and graph tests over each flow's
-   `TRANSITIONS` table (see Testing). Tests that encode current gaps are added as the gap is
-   scheduled, not as skipped tests.
-2. **Sign-up first.** It already has three non-success terminals and a central state machine.
-   Fix the cancel result status, define post-commit terminal behavior (gaps 4 and 5), and split
-   `fail` call sites into `halt` with reason codes versus `rejected`.
-3. **Sign-in second.** Add a cancellation terminal and an expiry terminal, reclassify existing
-   `fail_sign_in!` callers by cause, and retire `DASHBOARD_PENDING` and `RETURN_PENDING` once no
-   live row uses them.
-4. **Sign-out last.** Classify `FAILED` for logout, where fail-closed revocation semantics make the
-   choice security-relevant (see Open Questions).
-5. **Diagrams and docs.** Update Mermaid diagrams for each flow in the same change that ships its
-   runtime migration, and remove the "current runtime vocabulary" notes once they no longer apply.
+### Phase 0 — Inventory
+
+Re-run and record in `evidence/` (with `git rev-parse HEAD`) against the schema files and every
+live database, because the ADR inventory is from one commit only:
+
+- flow tables per database, including `operator_sign_up_flows` and its adoption decision;
+- reference state tables, their columns, types, sequences, and actual rows;
+- every state id in constants and in stored rows, including ids present in rows but missing from
+  constants;
+- FKs (`NOT VALID` or validated, `ON DELETE` behavior) and `CHECK` constraints (sign-in
+  `state`/`step`);
+- `state`/`step` string columns and their readers;
+- status constants and terminal sets in code (`TRANSITIONS`, `SignUpStateMachine`, `FlowSignIn`,
+  `FlowSignOut`);
+- every direct `status_id` write outside the transition boundary;
+- reference-row provisioning paths (request-path `ensure_defaults!`, fixtures, any rake task);
+- collisions with the terminal convention (`100`, `910`, `920`, `930`, reserved `900`) and the
+  active-id convention (below `900`, never `100`).
+
+Exit: an evidence record that either confirms no collision or lists each collision with a
+proposed resolution that never reassigns an existing id.
+
+### Phase 1 — Contract preparation (no behavior change)
+
+- Shared lifecycle constants (`COMPLETED = 100`, `EXPIRED = 910`, `CANCELLED = 920`,
+  `HALTED = 930`, legacy `FAILED = 900`) and a classifier (`active?`, `terminal?`, `lifecycle`).
+- Per-flow state maps: active set, terminal set, retired (tombstone) set.
+- The immutability rule encoded as a test over the documented id table in
+  `docs/security/idp-flow-lifecycle.md`.
+- Per-flow transition graph definitions, with internal events classified as canonical events.
+- Class placement follows `project/value-object-boundaries.mdc`.
+
+### Phase 2 — Reference-table normalization
+
+- Reach `*_flow_states(id PK only)` per flow and database. Existing `*_flow_statuses` tables
+  already hold only `id`; reuse them. Do not drop and recreate a table that already satisfies the
+  contract. Renaming to `*_flow_states`, narrowing to `smallint`, and dropping the sequence are
+  decided here with a migration strategy; each is optional.
+- Move row provisioning into migrations: idempotent inserts of every required id (including new
+  terminal ids and tombstones), then remove request-path `ensure_defaults!` calls for flow states.
+
+### Phase 3 — FK normalization
+
+- Every flow row has `state_id NOT NULL` with a validated FK (`ON DELETE RESTRICT`).
+- Validate the currently `NOT VALID` FKs after confirming every stored id has a row.
+- `status_id` to `state_id`: choose between in-place rename, or add column plus dual-write plus
+  backfill plus cut-over, based on Phase 0 table sizes and deployment constraints. The
+  compatibility window is bounded and removed afterwards.
+- Retire sign-in and sign-up `state`/`step` strings and the sign-in `CHECK` constraints once no
+  reader remains.
+
+### Phase 4 — Transition boundary
+
+- All state changes go through the flow's transition boundary; one terminal entry point per flow
+  for `complete`, `cancel`, `expire`, `halt` (as `SignUpTermination` does today) so retention,
+  cleanup, and audit are not skipped.
+- Remove direct `update!(status_id: ...)` writes from controllers, operations, and models.
+- Add a regression guard (static check or test) that flags direct state writes.
+
+### Phase 5 — Terminal vocabulary migration
+
+Order: sign-up first (it already has `EXPIRED`/`CANCELLED` and a central state machine), sign-in
+second, sign-out last (fail-closed revocation makes classification security-relevant). Classify
+each call site using the FAILED Classification Strategy below; mechanical search-and-replace of
+`FAILED`, `stopped`, `hard_reject`, `blocked`, or `failure` is forbidden. Update Mermaid diagrams
+and sequence docs in the same change that ships each flow.
+
+### Phase 6 — Concurrency
+
+Compare and choose per flow: a revision column, Rails optimistic locking (`lock_version`), row
+locking (`SELECT ... FOR UPDATE`), or the existing checkpoint-version guard generalized. Cover
+multi-tab, outdated requests, replayed terminal requests, and conflict recovery through reentry.
+See Concurrency, Replay, and Reentry below.
+
+### Phase 7 — Model-based validation
+
+Graph and model-based tests per flow asserting at least: unknown state cannot exist; illegal
+transition rejected; terminal absorbing; no terminal-to-active or terminal-to-terminal edge; no
+dead-end active phase; replay idempotent; conflict does not roll back state; expiry wins safely;
+`external_result` one-shot; `back` invalidates downstream one-time artifacts where required. See
+Testing below.
 
 ## Shared Lifecycle Contract
 
@@ -136,7 +206,7 @@ All tests exercise public interfaces per `generic/testing.mdc` and `AGENTS.md` s
 ## Rollback and Compatibility
 
 - Each flow migrates behind its own change; reverting that change restores previous behavior
-  because existing status ids are not renumbered or reused.
+  because existing state ids are never renumbered, reused, or deleted.
 - New reference rows (for example a `HALTED` or a sign-in `CANCELLED` status) are additive. During
   the compatibility period, readers treat both legacy `FAILED` and new terminal statuses as
   terminal.
@@ -145,10 +215,11 @@ All tests exercise public interfaces per `generic/testing.mdc` and `AGENTS.md` s
 
 ## Open Questions for the Implementation Phase
 
-- Physical representation: keep one status column with a lifecycle mapping, or split lifecycle and
-  phase columns.
-- Whether to add `HALTED` as a new status id or reinterpret `FAILED` for new rows only; how audit
-  and reporting distinguish legacy `FAILED`.
+- Physical representation is decided (`adr/idp-flow-state-machine-lifecycle.md`): one state id
+  column, no lifecycle column. Open: rename strategy and timing for `status_id` and
+  `*_flow_statuses`.
+- `HALTED` is decided as new id `930`; `FAILED` is not reinterpreted. Open: how audit and
+  reporting present legacy `900` rows.
 - Reason-code storage: column, audit record only, or both; initial reason-code set.
 - Sign-up post-commit terminal: whether durable finalization plus accepted handoff is sign-up
   `COMPLETED`, and what the sign-up flow records when the sign-in side stops or fails.
@@ -161,6 +232,7 @@ All tests exercise public interfaces per `generic/testing.mdc` and `AGENTS.md` s
 ## Related
 
 - `adr/idp-flow-lifecycle-vocabulary.md`
+- `adr/idp-flow-state-machine-lifecycle.md`
 - `docs/security/idp-flow-lifecycle.md`
 - `plans/backlog/sign-up-failure-recovery-plan.md`
 - `plans/backlog/sign-in-failure-handling-plan.md`

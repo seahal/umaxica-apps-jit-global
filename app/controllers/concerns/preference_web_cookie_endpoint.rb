@@ -9,6 +9,8 @@ module PreferenceWebCookieEndpoint
   include PreferenceConsentedBuffer
   include PreferenceResourceSync
 
+  COOKIE_CONSENT_FIELDS = %w(consented functional performant targetable).freeze
+
   private
 
   def cookie_consent_state
@@ -49,19 +51,27 @@ module PreferenceWebCookieEndpoint
     Rails.logger.warn("[PreferenceWebCookieEndpoint] buffer sync skipped: #{e.class}")
   end
 
+  # The `/edge/v0/cookie` entry point: reads the request leniently (a missing decision is a no-op,
+  # an unreadable boolean is a 400) and applies it.
   def apply_consented_update_from_request!
     requested = requested_cookie_consent_attrs
     return false if requested.blank?
 
+    apply_cookie_consent_update!(requested)
+    true
+  end
+
+  # `requested` is an already read consent decision (`cookie_consent_request` or
+  # `requested_cookie_consent_attrs`).
+  def apply_cookie_consent_update!(requested)
     ensure_preference_access_token_audience_for_write!
 
     if decoded_preference_payload&.dig("public_id").blank?
       apply_buffer_only_cookie_consent!(requested)
-      return true
+      return
     end
 
     persist_cookie_consent!(requested)
-    true
   rescue StandardError => e
     Rails.logger.error("[PreferenceWebCookieEndpoint] consent update failed: #{e.class}")
     raise
@@ -159,6 +169,14 @@ module PreferenceWebCookieEndpoint
   end
 
   def cast_cookie_boolean(value)
+    cast = cookie_boolean(value)
+    raise ActionController::BadRequest, "invalid_cookie_consent" if cast.nil?
+
+    cast
+  end
+
+  # true or false for an accepted spelling, nil for anything else (including nil itself).
+  def cookie_boolean(value)
     case value
     when true, false
       value
@@ -166,9 +184,36 @@ module PreferenceWebCookieEndpoint
       true
     when 0, "0", "false", "FALSE", "f", "F"
       false
-    else
-      raise ActionController::BadRequest, "invalid_cookie_consent"
     end
+  end
+
+  # The consent decision of a browser API request, read strictly: every consent field that is
+  # present must be an accepted boolean, and `consented` must be present. Returns
+  # `{ attrs:, invalid_pointers: }`; `attrs` is nil whenever `invalid_pointers` is not empty.
+  # Keys outside the four consent fields are ignored, as they always were.
+  def cookie_consent_request
+    if params.key?(:consented)
+      consented = cookie_boolean(params[:consented])
+      return { attrs: nil, invalid_pointers: ["/consented"] } if consented.nil?
+
+      return { attrs: default_cookie_consent_attrs(consented), invalid_pointers: [] }
+    end
+
+    raw = params[:cookie]
+    raw = raw.to_unsafe_h if raw.is_a?(ActionController::Parameters)
+    return { attrs: nil, invalid_pointers: ["/cookie/consented"] } if raw.nil?
+    return { attrs: nil, invalid_pointers: ["/cookie"] } unless raw.is_a?(Hash)
+
+    fields = raw.with_indifferent_access.slice(*COOKIE_CONSENT_FIELDS)
+    return { attrs: nil, invalid_pointers: ["/cookie/consented"] } unless fields.key?(:consented)
+
+    values = fields.to_h.transform_values { |value| cookie_boolean(value) }
+    invalid = COOKIE_CONSENT_FIELDS.select { |field| fields.key?(field) && values[field].nil? }
+    return { attrs: nil, invalid_pointers: invalid.map { |field| "/cookie/#{field}" } } if invalid.any?
+
+    attrs = default_cookie_consent_attrs(values.fetch("consented"))
+      .merge(values.except("consented").symbolize_keys)
+    { attrs: attrs, invalid_pointers: [] }
   end
 
   def default_cookie_consent_attrs(consented)

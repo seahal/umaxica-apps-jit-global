@@ -29,7 +29,7 @@ class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
     # canonical (token-backed) preference that was just persisted as "dr".
     cookies[THEME_COOKIE_KEY.call] = "sy"
 
-    get base_app_web_v0_theme_url(ri: "jp")
+    get base_app_api_v0_preferences_theme_url(ri: "jp")
 
     assert_response :success
     body = response.parsed_body
@@ -50,7 +50,7 @@ class PreferenceSigninConflictTest < ActionDispatch::IntegrationTest
 
     cookies[PreferenceIoKeys::Cookies::CONSENTED] = "0"
 
-    get base_app_web_v0_cookie_url(ri: "jp")
+    get base_app_api_v0_preferences_cookie_url(ri: "jp")
 
     assert_response :success
     body = response.parsed_body

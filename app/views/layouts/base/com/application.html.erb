@@ -34,8 +34,9 @@
 
   <footer>
     <aside aria-label="Preferences">
-      <%= render "layouts/shared/footer_cookie_controls", scope: :com %>
-      <%= render "layouts/shared/footer_theme_controls", scope: :com %>
+      <% preference_controls = PreferenceBrowserControlsRegistry.fetch(family: "base", surface: "com") %>
+      <%= render "layouts/shared/footer_cookie_controls", scope: :com, endpoint_url: preference_controls.cookie_endpoint_path %>
+      <%= render "layouts/shared/footer_theme_controls", scope: :com, endpoint_url: preference_controls.theme_endpoint_path %>
     </aside>
     <div>
       <%= render "layouts/shared/copyright" %>

@@ -161,6 +161,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       # Production uses host-only __Host-session cookies. Test's shared-domain session cookie
       # needs explicit per-host transport while this browser visits the public Base/Auth hosts.
       core_continuity_cookies = cookies.to_hash
+
       assert_predicate core_continuity_cookies["session"], :present?
       host!(acme_host)
       get(authorize_uri.request_uri, headers: browser_headers)
@@ -327,7 +328,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       OidcRpTokenClient.stub(:call, token_result) do
         host!(callback_uri.host)
         cookies.delete("session")
-        cookies.merge(
+        cookies.merge!(
           "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
           URI.parse("https://#{core_host}/"),
         )
@@ -538,6 +539,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :conflict
     gateway = URI.parse(response.headers["X-Inertia-Location"])
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
     location = URI.parse(payload.fetch("url"))

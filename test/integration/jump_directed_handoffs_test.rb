@@ -65,10 +65,10 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
 
     assert_response :found
     target = URI.parse(response.location)
+
     assert_equal "https", target.scheme
     assert_equal "www.umaxica.org", target.host
     assert_equal "/oauth/authorize", target.path
     assert_equal "edit-org", Rack::Utils.parse_nested_query(target.query).fetch("client_id")
   end
-
 end

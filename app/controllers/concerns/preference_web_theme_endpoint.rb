@@ -24,22 +24,20 @@ module PreferenceWebThemeEndpoint
     normalize_theme(cookies[PreferenceBase::THEME_COOKIE_KEY])
   end
 
-  def apply_theme_update_from_request!
-    requested = requested_theme_value
-    return nil if requested.nil?
-
+  # `short_code` is an already validated theme code (`requested_theme_value`).
+  def apply_theme_update!(short_code)
     ensure_preference_access_token_audience_for_write!
-    persist_theme!(requested)
-    requested
+    persist_theme!(short_code)
+    short_code
   rescue StandardError => e
     Rails.logger.error("[PreferenceWebThemeEndpoint] theme update failed: #{e.class}")
     raise
   end
 
+  # The requested theme code, or nil when the request names no accepted theme. A nil here is a
+  # refused request, not "keep the current theme".
   def requested_theme_value
-    request_params = params.to_unsafe_h
-    raw_value = request_params["theme"]
-    return nil if raw_value.blank?
+    raw_value = params.to_unsafe_h["theme"]
     return nil unless raw_value.is_a?(String)
 
     normalize_theme(raw_value)

@@ -210,6 +210,7 @@ class AuthRedirectBulletinTest < ActiveSupport::TestCase
       controller.define_singleton_method(:params) { {} }
 
       original_fetch = ENV.method(:fetch)
+
       ENV.stub(
         :fetch, ->(key, *args, &block) {
           (key == environment_key) ? expected_host : original_fetch.call(key, *args, &block)

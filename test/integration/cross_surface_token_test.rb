@@ -76,7 +76,7 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
     cookies[PreferenceCookieName.access] = token
 
     with_preference_jwt_keys(host: host) do
-      get "/web/v0/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
+      get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
     assert_response :ok
@@ -94,7 +94,7 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
     cookies[PreferenceCookieName.access] = token
 
     with_preference_jwt_keys(host: host) do
-      get "/web/v0/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
+      get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
     assert_response :ok
@@ -112,7 +112,7 @@ class CrossSurfaceTokenTest < ActionDispatch::IntegrationTest
     cookies[PreferenceCookieName.access] = token
 
     with_preference_jwt_keys(host: host) do
-      get "/web/v0/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
+      get "/api/v0/preferences/cookie", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
     end
 
     assert_response :ok

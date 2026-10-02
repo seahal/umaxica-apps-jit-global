@@ -2,25 +2,35 @@ import { Controller } from "@hotwired/stimulus";
 
 import { csrfToken } from "@/lib/csrf";
 import { readBoolean } from "@/lib/payload";
+import { preferenceQueryParameters, sameOriginEndpoint } from "@/lib/request";
 
 export default class extends Controller {
   static override values = {
+    endpointUrl: String,
     settingsUrl: String,
   };
 
   // Stimulus defines this from `static values` at registration; the declarations record what it
   // creates so the compiler sees the same properties the runtime does.
+  declare readonly endpointUrlValue: string;
+  declare readonly hasEndpointUrlValue: boolean;
   declare readonly settingsUrlValue: string;
   declare readonly hasSettingsUrlValue: boolean;
 
   // Connects to data-controller="cookie-banner"
   override connect() {
+    // Checked synchronously so a missing or cross-origin endpoint surfaces as a connect error
+    // Stimulus reports, not as a rejected promise nobody awaits.
+    this.cookieEndpointUrl();
     void this.checkConsentState();
   }
 
   async checkConsentState() {
+    // Resolved outside the try: a missing or cross-origin endpoint is a rendering defect, not an
+    // unreadable consent state, and must not be swallowed as one.
+    const url = this.cookieEndpointUrl();
     try {
-      const consentState = await this.fetchCookieConsent();
+      const consentState = await this.fetchCookieConsent(url);
       // `show_banner` is the field the endpoint answers with (`PreferenceWebCookieActions#show`).
       // Reading `consented` here - a key that response has never carried - is why a recorded
       // decision never suppressed the banner: the read silently found nothing and left it up on
@@ -63,8 +73,8 @@ export default class extends Controller {
   }
 
   // Fetch cookie consent from API endpoint
-  async fetchCookieConsent(): Promise<unknown> {
-    const response = await fetch(this.cookieEndpointUrl());
+  async fetchCookieConsent(url: string): Promise<unknown> {
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -127,18 +137,14 @@ export default class extends Controller {
   }
 
   cookieEndpointUrl() {
-    const endpoint = new URL("/web/v0/cookie", window.location.origin);
-    this.cookieEndpointQueryKeys().forEach((key) => {
-      const value = new URLSearchParams(window.location.search).get(key);
-      if (value) {
-        endpoint.searchParams.set(key, value);
-      }
-    });
+    if (!this.hasEndpointUrlValue || this.endpointUrlValue === "") {
+      throw new Error("cookie banner rendered without data-cookie-banner-endpoint-url-value");
+    }
+    const endpoint = sameOriginEndpoint(this.endpointUrlValue);
+    for (const [key, value] of preferenceQueryParameters()) {
+      endpoint.searchParams.set(key, value);
+    }
     return endpoint.toString();
-  }
-
-  cookieEndpointQueryKeys() {
-    return ["ri", "lx", "ct", "tz", "cu", "df", "tf", "mo", "dn", "ps"];
   }
 
   dispatchConsentError(error: unknown) {

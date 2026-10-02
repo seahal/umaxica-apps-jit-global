@@ -31,6 +31,7 @@ const { default: SurfaceLayout } = await import("@/layouts/SurfaceLayout");
 const cookieControls = {
   hidden: false,
   scope: "cookie",
+  endpoint_url: "/api/v0/preferences/cookie",
   settings_url: "/preference/cookie/edit",
   title: "cookie-controls-title",
   description_html: "cookie description",
@@ -42,6 +43,7 @@ const cookieControls = {
 
 const themeControls = {
   hidden: false,
+  endpoint_url: "/api/v0/preferences/theme",
   title: "theme-controls-title",
   description: "テーマを選びます。",
   options: { system: "システム", light: "ライト", dark: "ダーク" },

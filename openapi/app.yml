@@ -17,11 +17,19 @@ info:
 
     Endpoints whose wire format is fixed by another specification -- OAuth 2.0, OIDC, WebAuthn,
     DBSC, MCP (JSON-RPC 2.0), and `.well-known` resources -- are intentionally absent. They are
-    governed by their own specifications, not by this contract. Core cookie and theme JSON now
-    live at `/api/v0/preferences/{cookie,theme}`. The DBSC registration endpoint is under
-    `/api/v0/preferences/dbsc` but remains undescribed here because DBSC has its own
-    specification. Non-Core `/edge/v0` and `/web/v0` namespaces stay absent until those
-    surfaces converge (adr/api-route-vocabulary-consolidation.md).
+    governed by their own specifications, not by this contract. The DBSC registration endpoint
+    is under `/api/v0/preferences/dbsc` but remains undescribed here because DBSC has its own
+    specification. The remaining legacy `/edge/v0` and `/web/v0` endpoints stay absent until they
+    converge (adr/api-route-vocabulary-consolidation.md).
+
+    ## Preferences
+
+    `/api/v0/preferences/{cookie,theme}` is a host-local browser API served on several first-party
+    hosts of this surface (Base, Auth, Core, and Warp), each listed in the path's `servers`. Each
+    host reads and writes its own host-only preference credentials, so a browser calls only the
+    origin it is on; the endpoints are not for cross-origin use. The Auth host serves them only as
+    display-preference transport for its ceremony pages
+    (adr/preference-browser-transport-family-capability.md).
 
     The text operational endpoints -- `GET /health`, `GET /health/{startup,liveness,readiness}`,
     and `GET /revision` -- are absent because they are not JSON: they render `text/plain` and do
@@ -31,7 +39,7 @@ info:
     ## Hosts
 
     `servers` appears only where a host is real, public, and knowable from the repository. The
-    Core paths carry one. The health and revision endpoints carry none because they are blocked
+    Core session paths carry one, and the preference paths list every host that serves them. The health and revision endpoints carry none because they are blocked
     at the edge. The content and Palm paths carry none because their hosts are supplied by
     deployment environment variables, and the docs and news content editions have no production
     host at all.

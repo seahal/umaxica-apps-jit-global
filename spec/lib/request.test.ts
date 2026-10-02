@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 
-import { csrfToken, preferenceQueryParameters } from "@/lib/request";
+import { csrfToken, preferenceQueryParameters, sameOriginEndpoint } from "@/lib/request";
 
 afterEach(() => {
   document.head.innerHTML = "";
@@ -41,5 +41,36 @@ describe("preferenceQueryParameters", () => {
 
   test("returns nothing when the URL carries no preference context", () => {
     expect(preferenceQueryParameters()).toEqual([]);
+  });
+});
+
+describe("sameOriginEndpoint", () => {
+  test("resolves a server-declared path on the current origin", () => {
+    expect(sameOriginEndpoint("/api/v0/preferences/theme").toString()).toBe(
+      `${window.location.origin}/api/v0/preferences/theme`,
+    );
+  });
+
+  test("accepts an absolute URL on the current origin", () => {
+    const declared = `${window.location.origin}/api/v0/preferences/cookie`;
+
+    expect(sameOriginEndpoint(declared).toString()).toBe(declared);
+  });
+
+  test("refuses an absolute URL on another origin", () => {
+    expect(() => sameOriginEndpoint("https://base.example.test/api/v0/preferences/theme")).toThrow(
+      /same-origin/u,
+    );
+  });
+
+  test("refuses a protocol-relative URL that names another host", () => {
+    expect(() => sameOriginEndpoint("//base.example.test/api/v0/preferences/theme")).toThrow(
+      /same-origin/u,
+    );
+  });
+
+  // jsdom serves the spec page from http://localhost:3000.
+  test("refuses the same host on another scheme", () => {
+    expect(() => sameOriginEndpoint("https://localhost:3000/x")).toThrow(/same-origin/u);
   });
 });

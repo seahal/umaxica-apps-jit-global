@@ -33,9 +33,10 @@ module Palm
           query[:scope] = validated.scope
           query[:ri] = current_region_identifier
           now = Time.current.to_i
-          flows = session[PENDING_FLOWS_SESSION_KEY].to_h.select do |_state, flow|
-            flow.fetch("created_at") <= now && now < flow.fetch("created_at") + FLOW_TTL.to_i
-          end
+          flows =
+            session[PENDING_FLOWS_SESSION_KEY].to_h.select do |_state, flow|
+              flow.fetch("created_at") <= now && now < flow.fetch("created_at") + FLOW_TTL.to_i
+            end
           return invalid_request if flows.key?(query.fetch(:state))
 
           flows[query.fetch(:state)] = {

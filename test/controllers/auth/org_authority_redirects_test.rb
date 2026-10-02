@@ -21,9 +21,10 @@ class Auth::OrgAuthorityRedirectsTest < ActionDispatch::IntegrationTest
 
       assert_response :see_other
       gateway = URI.parse(response.location)
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    location = URI.parse(payload.fetch("url"))
+
+      assert_equal "jump.umaxica.net", gateway.host
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      location = URI.parse(payload.fetch("url"))
 
       assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), location.host
       assert_equal path, location.path

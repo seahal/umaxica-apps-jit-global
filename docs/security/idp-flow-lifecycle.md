@@ -1,7 +1,8 @@
 # IdP Flow Lifecycle
 
 This document is the reference for lifecycle vocabulary across sign-in, sign-up, and sign-out. The
-decision is `adr/idp-flow-lifecycle-vocabulary.md`; the migration is planned in
+vocabulary decision is `adr/idp-flow-lifecycle-vocabulary.md`, the state storage decision is
+`adr/idp-flow-state-machine-lifecycle.md`, and the migration is planned in
 `plans/backlog/idp-flow-state-machine-unification.md`.
 
 > **Reading rule:** The "Current runtime" sections describe code as of commit `91974b8b0`. The
@@ -275,6 +276,92 @@ transactions, sessions, and tokens (`adr/base-auth-ceremony-and-seven-rp-boundar
   `external_result` to the RP flow.
 - **Provider and OIDC callbacks.** Always `external_result`, never a direct phase write.
 
+## State Storage
+
+Decision: `adr/idp-flow-state-machine-lifecycle.md`. Current facts were observed at commit
+`7430ddea6`; nothing below is implemented unless marked current.
+
+### Current storage
+
+| Flow table (database)                 | State column          | Reference table                     | FK                        | Duplicate representation                           |
+| ------------------------------------- | --------------------- | ----------------------------------- | ------------------------- | -------------------------------------------------- |
+| `*_sign_in_flows` (app/com/org_ticket) | `status_id` default 10 | `*_sign_in_flow_statuses` (`id` only) | `NOT VALID`, no action    | `state`, `step` strings tied by `NOT VALID` `CHECK` |
+| `*_sign_up_flows` (app/com/org_ticket) | `status_id` default 10 | `*_sign_up_flow_statuses` (`id` only) | `NOT VALID`, `ON DELETE RESTRICT` (client, visitor); no action (operator) | `state`, `step` strings, no `CHECK`                 |
+| `*_sign_out_flows` (app/com/org_ticket) | `status_id` default 10 | `*_sign_out_flow_statuses` (`id` only) | `NOT VALID`, no action    | none                                               |
+
+Reference rows: sign-up rows are inserted by request-path `ensure_defaults!` calls; no migration
+inserts flow status rows; a provisioning path for sign-in and sign-out rows was not located.
+Direct `status_id` assignments exist outside the state machines (sign-up OTP controllers,
+`sign_up_sequence_controller_support`, sign-up finalizer operations, `SignUpTermination`).
+
+### Target storage
+
+- Each flow row has one authoritative `state_id` (target name; current `status_id`), `NOT NULL`,
+  with a validated FK to its own `*_flow_states` reference table in the same database.
+- The reference table has only `id`. No name, code, label, lifecycle, terminal flag, ordering,
+  enablement, or timestamps. Runtime never joins it.
+- Meaning comes from per-flow application constants and the tables below. No lifecycle column and
+  no lifecycle-plus-phase FK pair.
+- Rows are inserted by migrations, idempotently, before the FK is validated. Seeds and request
+  code do not provision them.
+- Flow state tables do not use the `NOTHING = 0` sentinel; the default is the start state.
+
+### Integrity layers
+
+| Layer                     | Guarantees                                          | Does not guarantee                    |
+| ------------------------- | --------------------------------------------------- | ------------------------------------- |
+| FK to reference table     | State-domain integrity: no unknown state id stored. | Transition legality (for example `STARTED -> COMPLETED`). |
+| Application state machine | Transition legality: from-state, event, to-state, guards. | Nothing at the DB level; bypass is prevented by forbidding direct state writes. |
+| DB triggers               | Not used for transitions.                           |                                       |
+
+### State id contract
+
+- Ids are immutable: never reused, never re-meant, never deleted once assigned. Retired ids stay as
+  tombstone rows unreachable from code.
+- Active phase ids are per-flow namespaces; equal ids across flows mean nothing.
+- Shared terminal ids:
+
+| Lifecycle       | Id    | Sign-in today | Sign-up client/visitor today | Sign-up operator today | Sign-out today |
+| --------------- | ----- | ------------- | ---------------------------- | ---------------------- | -------------- |
+| `COMPLETED`     | `100` | present       | present                      | present                | present        |
+| `EXPIRED`       | `910` | absent        | present                      | absent                 | absent         |
+| `CANCELLED`     | `920` | absent        | present                      | absent                 | absent         |
+| `HALTED`        | `930` | absent        | absent                       | absent                 | absent         |
+| legacy `FAILED` | `900` | present       | present                      | absent                 | present        |
+
+`900` stays reserved for legacy `FAILED` and is never reassigned. Active phases use ids below
+`900`, never `100`. A renumbering such as `900 COMPLETED / 910 CANCELLED / 920 EXPIRED` is
+forbidden because it would change the meaning of existing ids.
+
+### Current active phase ids
+
+| Id  | Sign-in                    | Sign-up client/visitor    | Sign-up operator     | Sign-out            |
+| --- | -------------------------- | ------------------------- | -------------------- | ------------------- |
+| 0   |                            |                           |                      | `NOTHING` (retire to tombstone) |
+| 10  | `PRIMARY_PENDING`          | `STARTED`                 | `STARTED`            | `REQUESTED`         |
+| 20  | `MFA_PENDING`              | `CONTACT_PENDING`         | `CONTACT_PENDING`    | `ACCESS_DISCARDED`  |
+| 30  | `SESSION_LIMIT_PENDING`    | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` | `LOGICALLY_REVOKED` |
+| 35  |                            | `CONTACT_VERIFIED`        |                      |                     |
+| 36  |                            | `SOCIAL_CALLBACK_PENDING` |                      |                     |
+| 38  |                            | `GUARDRAIL_PENDING`       |                      |                     |
+| 40  | `GUARDRAIL_PENDING`        | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` | `AWAITING_EXPIRY`   |
+| 50  | `SESSION_ISSUANCE_PENDING` |                           |                      |                     |
+| 60  | `CHECKPOINT_PENDING`       | `FINALIZING`              |                      |                     |
+| 65  | `SELECTOR_PENDING`         |                           |                      |                     |
+| 70  | `DASHBOARD_PENDING` (retire) | `FINALIZED`             |                      |                     |
+| 80  | `RETURN_PENDING` (retire)  | `SIGN_IN_HANDOFF_PENDING` |                      |                     |
+
+These ids keep their meaning in the target. New phases take unused ids below `900`.
+
+### Forbidden transitions (target)
+
+- Any terminal to any active phase, and any terminal to a different terminal.
+- `back` across sign-up durable finalization (`FINALIZING` onward), sign-in session issuance, or
+  sign-out access discard.
+- `cancel` after an irreversible commit or authority handoff.
+- Any state write that bypasses the flow's transition boundary.
+- `halt` from a request parameter or UI action.
+
 ## Current-to-Target Mapping
 
 Mappings marked "case by case" depend on the call site. No runtime rename is implied.
@@ -282,7 +369,9 @@ Mappings marked "case by case" depend on the call site. No runtime rename is imp
 | Current term                                     | Where                                      | Category today        | Target                                                                                       |
 | ------------------------------------------------ | ------------------------------------------ | --------------------- | -------------------------------------------------------------------------------------------- |
 | `*_PENDING`, `STARTED`, `CONTACT_VERIFIED`, `FINALIZING`, `FINALIZED`, `REQUESTED`, `ACCESS_DISCARDED`, `LOGICALLY_REVOKED`, `AWAITING_EXPIRY` | flow statuses | Status | Phase under `ACTIVE` |
-| `NOTHING`                                        | sign-out status                            | Status sentinel       | Not a lifecycle state; pre-`start`                                                           |
+| `NOTHING`                                        | sign-out status                            | Status sentinel       | Not a lifecycle state; pre-`start`; id `0` kept as unreachable tombstone                     |
+| `status_id`                                      | all flow tables                            | Column                | `state_id` (target terminology; rename decided in the plan)                                  |
+| `*_flow_statuses`                                | reference tables                           | Table                 | `*_flow_states` (target terminology; rename decided in the plan)                             |
 | `DASHBOARD_PENDING`, `RETURN_PENDING`            | sign-in status                             | Legacy status         | Retire; post-auth navigation is not lifecycle                                                |
 | `COMPLETED`                                      | all flows                                  | Status                | `COMPLETED`                                                                                  |
 | `CANCELLED`                                      | sign-up status                             | Status                | `CANCELLED`                                                                                  |
@@ -314,6 +403,7 @@ Mappings marked "case by case" depend on the call site. No runtime rename is imp
 ## Related
 
 - `adr/idp-flow-lifecycle-vocabulary.md`
+- `adr/idp-flow-state-machine-lifecycle.md`
 - `plans/backlog/idp-flow-state-machine-unification.md`
 - `docs/security/sign-in-sequence.md`
 - `docs/security/sign-up-sequence.md`

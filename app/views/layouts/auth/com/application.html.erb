@@ -37,8 +37,9 @@
       </ul>
     </nav>
     <aside aria-label="Preferences">
-      <%= render "layouts/shared/footer_cookie_controls", scope: :com, base_host: base_authority_host %>
-      <%= render "layouts/shared/footer_theme_controls", scope: :com %>
+      <% preference_controls = PreferenceBrowserControlsRegistry.fetch(family: "auth", surface: "com") %>
+      <%= render "layouts/shared/footer_cookie_controls", scope: :com, endpoint_url: preference_controls.cookie_endpoint_path, base_host: base_authority_host %>
+      <%= render "layouts/shared/footer_theme_controls", scope: :com, endpoint_url: preference_controls.theme_endpoint_path %>
     </aside>
     <div>
       <%= render "layouts/shared/copyright" %>

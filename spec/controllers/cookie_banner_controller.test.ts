@@ -8,7 +8,7 @@ import { jsonResponse, noContentResponse, requestUrl, requestWithMethod } from "
 import { mountController } from "../support/stimulus";
 
 const MARKUP = `
-  <div data-controller="cookie-banner" data-cookie-banner-settings-url-value="/preferences/cookies">
+  <div data-controller="cookie-banner" data-cookie-banner-endpoint-url-value="/api/v0/preferences/cookie" data-cookie-banner-settings-url-value="/preferences/cookies">
     <button type="button" data-action="cookie-banner#accept">Accept</button>
     <button type="button" data-action="cookie-banner#reject">Reject</button>
     <button type="button" data-action="cookie-banner#invisible">Close</button>
@@ -84,7 +84,7 @@ describe("CookieBannerController", () => {
       fetchMock.mockResolvedValue(noContentResponse());
       vi.stubGlobal("fetch", fetchMock);
       const { controller } = await mount(`
-        <div data-controller="cookie-banner">
+        <div data-controller="cookie-banner" data-cookie-banner-endpoint-url-value="/api/v0/preferences/cookie">
           <button type="button" data-action="cookie-banner#accept">Accept</button>
         </div>
         <div data-controller="cookie-toggle">
@@ -115,7 +115,7 @@ describe("CookieBannerController", () => {
       fetchMock.mockResolvedValue(noContentResponse());
       vi.stubGlobal("fetch", fetchMock);
       const { controller } = await mount(`
-        <div data-controller="cookie-banner">
+        <div data-controller="cookie-banner" data-cookie-banner-endpoint-url-value="/api/v0/preferences/cookie">
           <button type="button" data-action="cookie-banner#accept">Accept</button>
         </div>
       `);
@@ -157,6 +157,33 @@ describe("CookieBannerController", () => {
   });
 
   describe("the endpoint it talks to", () => {
+    it("refuses to read consent when the layout declared no endpoint", async () => {
+      const fetchMock = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { controller } = await mount(
+        MARKUP.replace(' data-cookie-banner-endpoint-url-value="/api/v0/preferences/cookie"', ""),
+      );
+
+      await expect(controller.checkConsentState()).rejects.toThrow(/endpoint-url-value/u);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses an endpoint on another origin", async () => {
+      const fetchMock = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { controller } = await mount(
+        MARKUP.replace(
+          "/api/v0/preferences/cookie",
+          "https://base.example.test/api/v0/preferences/cookie",
+        ),
+      );
+
+      await expect(controller.checkConsentState()).rejects.toThrow(/same-origin/u);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it("carries the surface query parameters and nothing else", async () => {
       const fetchMock = vi
         .fn<typeof fetch>()
@@ -167,7 +194,7 @@ describe("CookieBannerController", () => {
       await controller.checkConsentState();
 
       const url = new URL(requestUrl(fetchMock));
-      expect(url.pathname).toBe("/web/v0/cookie");
+      expect(url.pathname).toBe("/api/v0/preferences/cookie");
       expect(url.searchParams.get("ri")).toBe("us");
       expect(url.searchParams.get("ct")).toBe("dr");
       expect(url.searchParams.has("unrelated")).toBe(false);

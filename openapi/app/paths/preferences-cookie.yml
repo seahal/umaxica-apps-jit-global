@@ -1,11 +1,18 @@
 # GET and PATCH /api/v0/preferences/cookie on the app surface.
 servers:
   - url: https://jp.umaxica.app
-    description: Canonical Core public host for the app (end-user application) surface.
+    description: Core public host for the app (end-user application) surface.
+  - url: https://www.umaxica.app
+    description: Base public host for the app (end-user application) surface.
+  - url: https://auth.umaxica.app
+    description: Auth public host for the app (end-user application) surface.
+  - url: https://www-jp.umaxica.app
+    description: Warp public host for the app (end-user application) surface.
 get:
   summary: Cookie-consent banner state
   description: >-
     Reports whether the cookie-consent banner should be shown. Open: no session is required.
+    Served host-locally by each listed host: each host reads and writes its own host-only preference credentials, and a browser calls only its current origin.
   operationId: getPreferencesCookie
   tags: [Preferences]
   security: []
@@ -28,11 +35,30 @@ get:
 patch:
   summary: Record cookie consent
   description: >-
-    Writes cookie-consent flags. Requires the preference access token; absence is 401 with a JSON
-    `error` member (not a problem document). Successful writes have no representation.
+    Records a cookie-consent decision. Open: a caller without a preference token records the
+    decision in the consent buffer only. `cookie.consented` is required; each present flag must be
+    a boolean or one of `1`, `0`, `"1"`, `"0"`, `"true"`, `"false"`, `"t"`, `"f"` (and the
+    upper-case forms), otherwise the request is a 422 naming each field. Successful writes have no
+    representation.
   operationId: patchPreferencesCookie
   tags: [Preferences]
   security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          required: [cookie]
+          properties:
+            cookie:
+              type: object
+              required: [consented]
+              properties:
+                consented: {}
+                functional: {}
+                performant: {}
+                targetable: {}
   responses:
     "204":
       description: Consent recorded. No body (RFC 9110 15.3.5).
@@ -41,13 +67,17 @@ patch:
           schema:
             type: string
             enum: [no-store]
+    "400":
+      $ref: "../../shared/components.yml#/responses/BadRequest"
     "401":
-      description: Preference write token is missing.
-      content:
-        application/json:
-          schema:
-            $ref: "../../shared/components.yml#/schemas/CookieConsentWriteError"
+      $ref: "../../shared/components.yml#/responses/ForeignPreferenceToken"
+    "403":
+      $ref: "../../shared/components.yml#/responses/CsrfVerificationFailed"
     "406":
       $ref: "../../shared/components.yml#/responses/NotAcceptable"
+    "415":
+      $ref: "../../shared/components.yml#/responses/UnsupportedMediaType"
+    "422":
+      $ref: "../../shared/components.yml#/responses/ValidationFailed"
     "429":
       $ref: "../../shared/components.yml#/responses/RateLimited"

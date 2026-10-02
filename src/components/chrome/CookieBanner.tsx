@@ -1,7 +1,7 @@
 // React port of the `cookie-banner` Stimulus controller.
 //
-// The consent decision itself stays on the server: this component only reports a choice to
-// /web/v0/cookie and reflects what the server answers. It never writes the consent cookie itself,
+// The consent decision itself stays on the server: this component only reports a choice to the
+// endpoint the server declared for this page and reflects what the server answers. It never writes the consent cookie itself,
 // because the verified preference JWT is minted server-side.
 import { useEffect, useRef, useState } from "react";
 
@@ -9,11 +9,11 @@ import Button from "@/components/ui/Button";
 import ButtonLink from "@/components/ui/ButtonLink";
 import { hasRecordedCookieConsent } from "@/lib/cookies";
 import { readBoolean } from "@/lib/payload";
-import { csrfToken, preferenceQueryParameters } from "@/lib/request";
+import { csrfToken, preferenceQueryParameters, sameOriginEndpoint } from "@/lib/request";
 import type { ChromeCookieControls } from "@/types/inertia";
 
-function cookieEndpointUrl(): string {
-  const endpoint = new URL("/web/v0/cookie", window.location.origin);
+function cookieEndpointUrl(endpointUrl: string): string {
+  const endpoint = sameOriginEndpoint(endpointUrl);
   for (const [key, value] of preferenceQueryParameters()) {
     endpoint.searchParams.set(key, value);
   }
@@ -44,6 +44,7 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
   // two reads race - one local, one over the network - and without this a slow cookie read could
   // raise a banner the server had already said to hide.
   const reconciled = useRef(false);
+  const endpointUrl = controls.endpoint_url;
 
   useEffect(() => {
     let active = true;
@@ -58,9 +59,11 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
       }
     };
 
+    const url = cookieEndpointUrl(endpointUrl);
+
     const readConsent = async () => {
       try {
-        const response = await fetch(cookieEndpointUrl());
+        const response = await fetch(url);
         if (!response.ok) {
           return;
         }
@@ -87,7 +90,7 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [endpointUrl]);
 
   if (!visible) {
     return null;
@@ -96,7 +99,7 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
   const submitConsent = async (consented: boolean) => {
     setSubmitting(true);
     try {
-      const response = await fetch(cookieEndpointUrl(), {
+      const response = await fetch(cookieEndpointUrl(endpointUrl), {
         method: "PATCH",
         headers: {
           Accept: "application/json",

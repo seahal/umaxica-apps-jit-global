@@ -111,8 +111,10 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     gateway = URI.parse(response.location)
+
     assert_equal "jump.umaxica.net", gateway.host
     payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(payload.fetch("url")).host
   end
 

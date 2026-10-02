@@ -11,7 +11,7 @@ import { mountController } from "../support/stimulus";
 const markup = (consented = false) => `
   <div data-controller="cookie-consent"
        data-cookie-consent-consented-value="${consented}"
-       data-cookie-consent-endpoint-value="/web/v0/cookie">
+       data-cookie-consent-endpoint-value="/api/v0/preferences/cookie">
     <div data-cookie-consent-target="banner" class="hidden">
       <button type="button" data-action="cookie-consent#accept">Accept</button>
       <button type="button" data-action="cookie-consent#reject">Reject</button>
@@ -57,7 +57,7 @@ describe("CookieConsentController", () => {
 
       await controller.accept(new Event("click"));
 
-      expect(requestWithMethod(fetchMock, "PATCH")?.url).toBe("/web/v0/cookie");
+      expect(requestWithMethod(fetchMock, "PATCH")?.url).toBe("/api/v0/preferences/cookie");
       expect(requestBody(fetchMock)).toEqual({
         preference_cookie: {
           consented: true,

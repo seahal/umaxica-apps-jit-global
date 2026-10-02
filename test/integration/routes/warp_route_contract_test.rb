@@ -45,24 +45,33 @@ class WarpRouteContractTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "Warp keeps public theme and cookie endpoint paths for every surface" do
+  test "Warp serves the preference API with GET and PATCH only and no legacy web paths" do
     with_boot_config(
       warp_service_host: "www-jp.umaxica.app",
       warp_corporate_host: "www-jp.umaxica.com",
       warp_staff_host: "www-jp.umaxica.org",
     ) do
-      {
-        "https://www-jp.umaxica.app/web/v0/theme" => "warp/app/web/v0/themes",
-        "https://www-jp.umaxica.app/web/v0/cookie" => "warp/app/web/v0/cookies",
-        "https://www-jp.umaxica.com/web/v0/theme" => "warp/com/web/v0/themes",
-        "https://www-jp.umaxica.com/web/v0/cookie" => "warp/com/web/v0/cookies",
-        "https://www-jp.umaxica.org/web/v0/theme" => "warp/org/web/v0/themes",
-        "https://www-jp.umaxica.org/web/v0/cookie" => "warp/org/web/v0/cookies",
-      }.each do |url, controller|
-        recognized = Rails.application.routes.recognize_path(url, method: :patch)
+      %w(app com org).each do |surface|
+        host = "www-jp.umaxica.#{surface}"
+        { "theme" => "themes", "cookie" => "cookies" }.each do |resource, controller|
+          url = "https://#{host}/api/v0/preferences/#{resource}"
+          expected = "warp/#{surface}/api/v0/preferences/#{controller}"
 
-        assert_equal controller, recognized[:controller], url
-        assert_equal "update", recognized[:action], url
+          assert_equal(
+            { controller: expected, action: "show" },
+            Rails.application.routes.recognize_path(url, method: :get).slice(:controller, :action), url,
+          )
+          assert_equal(
+            { controller: expected, action: "update" },
+            Rails.application.routes.recognize_path(url, method: :patch).slice(:controller, :action), url,
+          )
+          assert_raises(ActionController::RoutingError, "PUT #{url}") do
+            Rails.application.routes.recognize_path(url, method: :put)
+          end
+          assert_raises(ActionController::RoutingError, "legacy #{resource} on #{host}") do
+            Rails.application.routes.recognize_path("https://#{host}/web/v0/#{resource}", method: :patch)
+          end
+        end
       end
     end
   ensure

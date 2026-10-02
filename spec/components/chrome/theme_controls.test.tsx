@@ -14,6 +14,7 @@ import { jsonBody, jsonResponse, stubFetchAnswering, stubFetchByMethod } from ".
 // the system setting followed while "system" is selected.
 const controls: ChromeThemeControls = {
   hidden: false,
+  endpoint_url: "/api/v0/preferences/theme",
   title: "テーマ",
   description: "この端末の表示テーマを選びます。",
   options: { system: "システム", light: "ライト", dark: "ダーク" },
@@ -239,6 +240,23 @@ describe("ThemeControls mount", () => {
   });
 });
 
+describe("ThemeControls endpoint", () => {
+  // The path comes from the server-declared prop, so a family with a different endpoint is
+  // served without the component knowing which family it is on.
+  test("reads and writes the endpoint the chrome declared", async () => {
+    const fetchMock = stubFetch({ theme: "dr" });
+
+    await mount({ endpoint_url: "/declared/theme" });
+    await choose("dark");
+
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(new URL(url).pathname).toBe("/declared/theme");
+    }
+  });
+});
+
 describe("ThemeControls selection", () => {
   test("persists the choice and applies the theme the server stored", async () => {
     const fetchMock = stubFetch({ theme: "dr" });
@@ -248,15 +266,18 @@ describe("ThemeControls selection", () => {
 
     expect(selectedTheme()).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(fetchMock).toHaveBeenLastCalledWith("http://localhost:3000/web/v0/theme?ri=jp", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-CSRF-Token": "csrf-token",
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://localhost:3000/api/v0/preferences/theme?ri=jp",
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": "csrf-token",
+        },
+        body: JSON.stringify({ theme: "dark" }),
       },
-      body: JSON.stringify({ theme: "dark" }),
-    });
+    );
   });
 
   // The stored preference is the authority, so the control follows the server rather than the

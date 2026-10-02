@@ -36,9 +36,11 @@ class PreferenceCookieInvalidValuesTest < ActionDispatch::IntegrationTest
                   )
 
                   ["banana", ["true"], { value: true }, nil].each do |invalid_value|
-                    patch base_app_web_v0_cookie_path, params: { consented: invalid_value }, as: :json
+                    patch base_app_api_v0_preferences_cookie_path, params: { consented: invalid_value }, as: :json
 
-                    assert_response :bad_request
+                    # Well-formed JSON with an unreadable decision is a validation problem.
+                    assert_response :unprocessable_content
+                    assert_equal ["/consented"], response.parsed_body.fetch("errors").pluck("pointer")
                   end
                 end
               end

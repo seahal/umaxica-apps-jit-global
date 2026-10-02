@@ -93,6 +93,38 @@ responses:
         schema:
           $ref: "#/schemas/Problem"
 
+  BadRequest:
+    description: The request body is not well-formed JSON.
+    content:
+      application/problem+json:
+        schema:
+          $ref: "#/schemas/Problem"
+
+  ForeignPreferenceToken:
+    description: >-
+      The request presented a preference access token minted for another host or audience. A
+      request that presents no preference token is not refused.
+    content:
+      application/problem+json:
+        schema:
+          $ref: "#/schemas/Problem"
+
+  CsrfVerificationFailed:
+    description: The unsafe request did not pass this host's forgery protection.
+    content:
+      application/problem+json:
+        schema:
+          $ref: "#/schemas/Problem"
+
+  ValidationFailed:
+    description: >-
+      The body is well-formed JSON but a field is missing or not an accepted value. `errors` names
+      each field with an RFC 6901 JSON Pointer.
+    content:
+      application/problem+json:
+        schema:
+          $ref: "#/schemas/Problem"
+
   RateLimited:
     description: A rate limit was exceeded.
     headers:
@@ -209,16 +241,6 @@ schemas:
       show_banner:
         type: boolean
         description: True when the caller has not recorded cookie consent.
-
-  CookieConsentWriteError:
-    type: object
-    required: [error]
-    properties:
-      error:
-        type: string
-        description:
-          Machine-readable refusal. `missing_preference_access_token` when the write token is
-          absent.
 
   ColorTheme:
     type: object

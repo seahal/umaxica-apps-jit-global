@@ -81,10 +81,6 @@ module Edit
         "edit/org/publishing"
       end
 
-      def chrome_preference_surface?
-        false
-      end
-
       def oidc_client_id
         "edit-org"
       end

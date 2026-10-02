@@ -15,6 +15,11 @@ import { finishVisit, startVisit } from "../../support/visit";
 // the arguments Inertia actually passes rather than against `any`.
 const patch = vi.fn<typeof inertiaRouter.patch>();
 const deleteRequest = vi.fn<typeof inertiaRouter.delete>();
+const THEME_CHROME = { theme_controls: { endpoint_url: "/api/v0/preferences/theme" } };
+const pageProps: {
+  errors: Record<string, string>;
+  chrome: { theme_controls: { endpoint_url: string } | null };
+} = { errors: {}, chrome: THEME_CHROME };
 
 vi.mock("@/features/turnstile/TurnstileWidget", () => ({
   default: ({ onToken }: { onToken?: (token: string) => void }) => (
@@ -34,7 +39,8 @@ vi.mock("@inertiajs/react", () => ({
   router: { patch, delete: deleteRequest },
   // The server runs with `always_include_errors_hash`, so `errors` is present on every response;
   // a mock that omits it would let a component read `undefined` that production never sees.
-  usePage: () => ({ props: { errors: {} } }),
+  // Base pages always carry the chrome; the theme screen reads its declared theme endpoint from it.
+  usePage: () => ({ props: pageProps }),
 }));
 
 const { default: PreferenceSelect } = await import("@/features/preferences/PreferenceSelect");
@@ -63,6 +69,7 @@ afterEach(() => {
   container.remove();
   patch.mockClear();
   deleteRequest.mockClear();
+  pageProps.chrome = THEME_CHROME;
 });
 
 describe("PreferenceSelect interaction", () => {
@@ -217,6 +224,40 @@ describe("PreferenceSelect interaction", () => {
 
     expect(document.documentElement.dataset["theme"]).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses to apply a theme when the page chrome declares no theme endpoint", () => {
+    pageProps.chrome = { theme_controls: null };
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    mount(
+      <PreferenceSelect
+        {...props}
+        screen="theme"
+      />,
+    );
+    const form = container.querySelector<HTMLFormElement>("form")!;
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    const [, , options] = present(patch.mock.calls[0], "the first router.patch call");
+    expect(() =>
+      present(options, "the recorded visit options").onSuccess?.({
+        component: "base/app/preference/option",
+        props: { errors: {} },
+        url: "/preference/theme/edit?ri=jp",
+        version: "",
+        clearHistory: false,
+        encryptHistory: false,
+        rescuedProps: [],
+        flash: {},
+        rememberedState: {},
+      }),
+    ).toThrow(/theme endpoint/u);
+    expect(fetchMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 
