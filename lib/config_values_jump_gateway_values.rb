@@ -3,8 +3,8 @@
 module ConfigValues
   # PUBLIC_JUMP_GATEWAY_URL is the only Jump gateway setting: the browser-facing Jump origin. The
   # gateway JWKS URI and the Jump RT audience are derived from its normalized origin so they cannot
-  # drift from it. Rails has no private network path to Jump, so no PRIVATE_* counterpart exists
-  # (adr/jump-directed-rails-handoff-contract.md).
+  # drift from it. Rails has no private network path to Jump, so PRIVATE_JUMP_GATEWAY_URL is rejected
+  # at boot rather than ignored (adr/jump-directed-rails-handoff-contract.md).
   JumpGatewayValues =
     Data.define(:origin, :ttl_seconds, :revoked_kids) do
       def jwks_uri = "#{origin}#{ConfigValues::JumpGatewayValues::JWKS_PATH}"
@@ -18,12 +18,17 @@ ConfigValuesJumpGatewayValues = ConfigValues::JumpGatewayValues
 class << ConfigValues::JumpGatewayValues
   MAX_TTL_SECONDS = 30
   GATEWAY_URL_ENV = "PUBLIC_JUMP_GATEWAY_URL"
+  UNSUPPORTED_PRIVATE_ENV = "PRIVATE_JUMP_GATEWAY_URL"
   REMOVED_ENV = %w(
     JUMP_GATEWAY_URL PUBLIC_JUMP_GATEWAY_JWKS_URL JUMP_GATEWAY_JWKS_URL
     PUBLIC_JUMP_GATEWAY_AUDIENCE JUMP_GATEWAY_AUDIENCE
   ).freeze
 
   def build(env:)
+    if env.key?(UNSUPPORTED_PRIVATE_ENV)
+      raise ArgumentError,
+            "#{UNSUPPORTED_PRIVATE_ENV} is not supported because Rails has no private transport path to Jump"
+    end
     REMOVED_ENV.each do |name|
       next unless env.key?(name)
 

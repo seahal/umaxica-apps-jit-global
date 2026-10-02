@@ -32,15 +32,20 @@ class ConfigValuesJumpGatewayValuesTest < ActiveSupport::TestCase
     assert_match(/JUMP_GATEWAY_URL was removed/, error.message)
   end
 
-  # PRIVATE_JUMP_GATEWAY_URL is not a removed setting: Rails has no private path to Jump, so the
-  # name is simply undefined and never read.
-  test "PRIVATE_JUMP_GATEWAY_URL is not read and cannot change any derived Jump value" do
-    env = { "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net", "PRIVATE_JUMP_GATEWAY_URL" => "https://10.0.0.5" }
-    values = ConfigValues::JumpGatewayValues.build(env: env)
+  # Rails has no private path to Jump, so any presence of PRIVATE_JUMP_GATEWAY_URL fails boot
+  # instead of being silently ignored. Absence is covered by the accepted-origin tests above.
+  {
+    "a private address" => "https://10.0.0.5",
+    "the public gateway origin" => "https://jump.umaxica.net",
+    "an empty string" => "",
+  }.each do |label, value|
+    test "PRIVATE_JUMP_GATEWAY_URL set to #{label} fails boot" do
+      env = { "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net", "PRIVATE_JUMP_GATEWAY_URL" => value }
+      error = assert_raises(ArgumentError) { ConfigValues::JumpGatewayValues.build(env: env) }
 
-    assert_equal "https://jump.umaxica.net", values.origin
-    assert_equal "https://jump.umaxica.net", values.audience
-    assert_equal "https://jump.umaxica.net/.well-known/jwks.json", values.jwks_uri
+      assert_equal "PRIVATE_JUMP_GATEWAY_URL is not supported because Rails has no private transport path to Jump",
+                   error.message
+    end
   end
 
   test "JWKS URI and audience cannot be supplied separately from the gateway origin" do
