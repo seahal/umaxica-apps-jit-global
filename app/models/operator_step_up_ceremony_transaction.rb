@@ -42,4 +42,8 @@ class OperatorStepUpCeremonyTransaction < OrgTicketRecord
   include StepUpCeremonyTransactionable
 
   ceremony_surface "org"
+
+  private
+
+  def permitted_ceremony_methods = %w(passkey)
 end

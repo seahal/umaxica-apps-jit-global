@@ -157,7 +157,7 @@ CREATE TABLE public.app_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_app_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
+    CONSTRAINT chk_app_enforcement_appeals_state CHECK (((state)::text = ANY (ARRAY[('submitted'::character varying)::text, ('under_review'::character varying)::text, ('approved'::character varying)::text, ('rejected'::character varying)::text, ('redacted'::character varying)::text])))
 );
 
 
@@ -195,9 +195,9 @@ CREATE TABLE public.app_enforcement_authentication_method_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_app_enforcement_method_effects_effect CHECK (((effect)::text = ANY ((ARRAY['mutation_locked'::character varying, 'unusable'::character varying, 'permanently_frozen'::character varying])::text[]))),
-    CONSTRAINT chk_app_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying])::text[]))),
-    CONSTRAINT chk_app_enforcement_method_effects_no_social_freeze CHECK ((((effect)::text <> 'permanently_frozen'::text) OR ((authentication_method)::text <> ALL ((ARRAY['google'::character varying, 'apple'::character varying])::text[]))))
+    CONSTRAINT chk_app_enforcement_method_effects_effect CHECK (((effect)::text = ANY (ARRAY[('mutation_locked'::character varying)::text, ('unusable'::character varying)::text, ('permanently_frozen'::character varying)::text]))),
+    CONSTRAINT chk_app_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text]))),
+    CONSTRAINT chk_app_enforcement_method_effects_no_social_freeze CHECK ((((effect)::text <> 'permanently_frozen'::text) OR ((authentication_method)::text <> ALL (ARRAY[('google'::character varying)::text, ('apple'::character varying)::text]))))
 );
 
 
@@ -253,18 +253,18 @@ CREATE TABLE public.app_enforcement_cases (
     CONSTRAINT chk_app_enforcement_cases_approval_separation CHECK (((approved_by_operator_public_id IS NULL) OR ((approved_by_operator_public_id)::text <> (applied_by_operator_public_id)::text))),
     CONSTRAINT chk_app_enforcement_cases_break_glass_approver CHECK (((break_glass = false) OR (break_glass_approved_by_operator_public_id IS NOT NULL))),
     CONSTRAINT chk_app_enforcement_cases_cooldown_duration CHECK ((((kind)::text <> 'cooldown'::text) OR (((duration_mode)::text = 'timed'::text) AND (expires_at IS NOT NULL) AND (expires_at <= (effective_at + '30 days'::interval))))),
-    CONSTRAINT chk_app_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying, 'permanent'::character varying])::text[]))),
-    CONSTRAINT chk_app_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY ((ARRAY['expired'::character varying, 'revoked'::character varying, 'superseded'::character varying, 'corrected'::character varying, 'appeal_approved'::character varying, 'break_glass_released'::character varying, 'verification_completed'::character varying])::text[])))),
+    CONSTRAINT chk_app_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text, ('permanent'::character varying)::text]))),
+    CONSTRAINT chk_app_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY (ARRAY[('expired'::character varying)::text, ('revoked'::character varying)::text, ('superseded'::character varying)::text, ('corrected'::character varying)::text, ('appeal_approved'::character varying)::text, ('break_glass_released'::character varying)::text, ('verification_completed'::character varying)::text])))),
     CONSTRAINT chk_app_enforcement_cases_hidden CHECK ((((visibility)::text <> 'hidden'::text) OR ((kind)::text = 'permanent_ban'::text))),
     CONSTRAINT chk_app_enforcement_cases_indefinite_freeze_review CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text <> 'indefinite'::text) OR ((review_due_at IS NOT NULL) AND ((release_mode)::text = 'operator'::text)))),
-    CONSTRAINT chk_app_enforcement_cases_kind CHECK (((kind)::text = ANY ((ARRAY['security_lock'::character varying, 'cooldown'::character varying, 'temporary_freeze'::character varying, 'permanent_ban'::character varying, 'method_protection'::character varying])::text[]))),
+    CONSTRAINT chk_app_enforcement_cases_kind CHECK (((kind)::text = ANY (ARRAY[('security_lock'::character varying)::text, ('cooldown'::character varying)::text, ('temporary_freeze'::character varying)::text, ('permanent_ban'::character varying)::text, ('method_protection'::character varying)::text]))),
     CONSTRAINT chk_app_enforcement_cases_no_self_action CHECK (((principal_public_id)::text <> (applied_by_operator_public_id)::text)),
     CONSTRAINT chk_app_enforcement_cases_permanent_ban_duration CHECK ((((kind)::text <> 'permanent_ban'::text) OR (((duration_mode)::text = 'permanent'::text) AND (expires_at IS NULL)))),
-    CONSTRAINT chk_app_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY ((ARRAY['automatic'::character varying, 'operator'::character varying, 'verification_required'::character varying, 'break_glass_only'::character varying])::text[]))),
+    CONSTRAINT chk_app_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY (ARRAY[('automatic'::character varying)::text, ('operator'::character varying)::text, ('verification_required'::character varying)::text, ('break_glass_only'::character varying)::text]))),
     CONSTRAINT chk_app_enforcement_cases_security_lock_release CHECK ((((kind)::text <> 'security_lock'::text) OR ((release_mode)::text = 'verification_required'::text))),
-    CONSTRAINT chk_app_enforcement_cases_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'pending_approval'::character varying, 'active'::character varying, 'ended'::character varying, 'failed'::character varying])::text[]))),
-    CONSTRAINT chk_app_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying])::text[])))),
-    CONSTRAINT chk_app_enforcement_cases_visibility CHECK (((visibility)::text = ANY ((ARRAY['visible'::character varying, 'hidden'::character varying])::text[])))
+    CONSTRAINT chk_app_enforcement_cases_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('pending_approval'::character varying)::text, ('active'::character varying)::text, ('ended'::character varying)::text, ('failed'::character varying)::text]))),
+    CONSTRAINT chk_app_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text])))),
+    CONSTRAINT chk_app_enforcement_cases_visibility CHECK (((visibility)::text = ANY (ARRAY[('visible'::character varying)::text, ('hidden'::character varying)::text])))
 );
 
 
@@ -308,7 +308,7 @@ CREATE TABLE public.app_enforcement_identifier_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_app_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'google_subject'::character varying, 'apple_subject'::character varying, 'identity_id'::character varying])::text[])))
+    CONSTRAINT chk_app_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('google_subject'::character varying)::text, ('apple_subject'::character varying)::text, ('identity_id'::character varying)::text])))
 );
 
 
@@ -386,7 +386,7 @@ CREATE TABLE public.app_enforcement_principal_links (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_app_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY ((ARRAY['target_principal'::character varying, 'former_principal'::character varying, 'related_principal'::character varying, 'suspected_duplicate'::character varying, 'reinstated_principal'::character varying, 'false_positive'::character varying])::text[])))
+    CONSTRAINT chk_app_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY (ARRAY[('target_principal'::character varying)::text, ('former_principal'::character varying)::text, ('related_principal'::character varying)::text, ('suspected_duplicate'::character varying)::text, ('reinstated_principal'::character varying)::text, ('false_positive'::character varying)::text])))
 );
 
 
@@ -512,8 +512,8 @@ CREATE TABLE public.client_apple_notification_events (
     updated_at timestamp(6) with time zone NOT NULL,
     client_id bigint,
     CONSTRAINT chk_client_apple_notification_events_attempts CHECK ((processing_attempts >= 0)),
-    CONSTRAINT chk_client_apple_notification_events_status CHECK (((status)::text = ANY ((ARRAY['received'::character varying, 'retrying'::character varying, 'completed'::character varying, 'dead_letter'::character varying])::text[]))),
-    CONSTRAINT chk_client_apple_notification_events_type CHECK (((event_type)::text = ANY ((ARRAY['email-enabled'::character varying, 'email-disabled'::character varying, 'consent-revoked'::character varying, 'account-deleted'::character varying])::text[])))
+    CONSTRAINT chk_client_apple_notification_events_status CHECK (((status)::text = ANY (ARRAY[('received'::character varying)::text, ('retrying'::character varying)::text, ('completed'::character varying)::text, ('dead_letter'::character varying)::text]))),
+    CONSTRAINT chk_client_apple_notification_events_type CHECK (((event_type)::text = ANY (ARRAY[('email-enabled'::character varying)::text, ('email-disabled'::character varying)::text, ('consent-revoked'::character varying)::text, ('account-deleted'::character varying)::text])))
 );
 
 
@@ -692,7 +692,11 @@ CREATE TABLE public.client_emails (
     notifiable boolean DEFAULT true NOT NULL,
     subscribable boolean DEFAULT true NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    step_up_otp_failures integer DEFAULT 0 NOT NULL,
+    step_up_otp_locked_until timestamp(6) with time zone,
+    step_up_otp_last_issued_at timestamp(6) with time zone,
+    CONSTRAINT client_email_step_up_failures_nonnegative CHECK ((step_up_otp_failures >= 0))
 );
 
 
@@ -772,8 +776,8 @@ CREATE TABLE public.client_external_identities (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     last_provider_event_at timestamp(6) with time zone,
-    CONSTRAINT chk_client_external_identities_provider CHECK (((provider)::text = ANY ((ARRAY['apple'::character varying, 'google'::character varying])::text[]))),
-    CONSTRAINT chk_client_external_identities_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'consent_revoked'::character varying, 'account_deleted'::character varying])::text[])))
+    CONSTRAINT chk_client_external_identities_provider CHECK (((provider)::text = ANY (ARRAY[('apple'::character varying)::text, ('google'::character varying)::text]))),
+    CONSTRAINT chk_client_external_identities_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('consent_revoked'::character varying)::text, ('account_deleted'::character varying)::text])))
 );
 
 
@@ -1286,6 +1290,39 @@ ALTER SEQUENCE public.client_persona_administration_grants_id_seq OWNED BY publi
 
 
 --
+-- Name: client_persona_authority_cutovers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_persona_authority_cutovers (
+    id bigint NOT NULL,
+    cutover_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_persona_authority_cutovers_finite_time CHECK (isfinite(cutover_at)),
+    CONSTRAINT chk_client_persona_authority_cutovers_singleton CHECK ((id = 1))
+);
+
+
+--
+-- Name: client_persona_authority_cutovers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_persona_authority_cutovers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_persona_authority_cutovers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_persona_authority_cutovers_id_seq OWNED BY public.client_persona_authority_cutovers.id;
+
+
+--
 -- Name: client_persona_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1318,6 +1355,40 @@ ALTER SEQUENCE public.client_persona_delegation_grants_id_seq OWNED BY public.cl
 
 
 --
+-- Name: client_persona_lifecycles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_persona_lifecycles (
+    id bigint NOT NULL,
+    client_persona_id bigint NOT NULL,
+    state character varying NOT NULL,
+    state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_client_persona_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+);
+
+
+--
+-- Name: client_persona_lifecycles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_persona_lifecycles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_persona_lifecycles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_persona_lifecycles_id_seq OWNED BY public.client_persona_lifecycles.id;
+
+
+--
 -- Name: client_persona_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1340,7 +1411,7 @@ CREATE TABLE public.client_persona_ownership_transfer_requests (
     CONSTRAINT chk_client_persona_transfer_requests_distinct_parties CHECK ((source_client_id <> destination_client_id)),
     CONSTRAINT chk_client_persona_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_client_persona_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_client_persona_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_client_persona_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -2273,7 +2344,7 @@ CREATE TABLE public.client_processor_erasure_notification_attempts (
     CONSTRAINT chk_client_proc_erase_attempt_generation_positive CHECK ((delivery_generation > 0)),
     CONSTRAINT chk_client_proc_erase_attempt_idempotency_digest CHECK (((idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT chk_client_proc_erase_attempt_number_positive CHECK ((attempt_number > 0)),
-    CONSTRAINT chk_client_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY ((ARRAY['IN_FLIGHT'::character varying, 'ACCEPTED_PENDING'::character varying, 'SUCCEEDED'::character varying, 'RETRYABLE_FAILURE'::character varying, 'PERMANENT_FAILURE'::character varying])::text[])))
+    CONSTRAINT chk_client_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY (ARRAY[('IN_FLIGHT'::character varying)::text, ('ACCEPTED_PENDING'::character varying)::text, ('SUCCEEDED'::character varying)::text, ('RETRYABLE_FAILURE'::character varying)::text, ('PERMANENT_FAILURE'::character varying)::text])))
 );
 
 
@@ -2606,6 +2677,8 @@ CREATE TABLE public.client_secret_credentials (
     revoked_at timestamp(6) with time zone,
     locked_at timestamp(6) with time zone,
     last_failed_at timestamp(6) with time zone,
+    claim_operation_id uuid,
+    claimed_at timestamp(6) with time zone,
     CONSTRAINT chk_user_secrets_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -2998,8 +3071,8 @@ CREATE TABLE public.clients (
     token_valid_after_at timestamp(6) with time zone,
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
-    CONSTRAINT chk_clients_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
-    CONSTRAINT chk_clients_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT chk_clients_access_state CHECK (((access_state)::text = ANY (ARRAY[('enabled'::character varying)::text, ('admin_locked'::character varying)::text]))),
+    CONSTRAINT chk_clients_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY (ARRAY[('abuse'::character varying)::text, ('security_incident'::character varying)::text, ('chargeback'::character varying)::text, ('terms_violation'::character varying)::text, ('support_request'::character varying)::text, ('legal_hold'::character varying)::text, ('operator_error_recovery'::character varying)::text, ('other'::character varying)::text])))),
     CONSTRAINT chk_clients_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
     CONSTRAINT chk_users_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
@@ -3093,6 +3166,39 @@ ALTER SEQUENCE public.enterprise_administration_grants_id_seq OWNED BY public.en
 
 
 --
+-- Name: enterprise_authority_cutovers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.enterprise_authority_cutovers (
+    id bigint NOT NULL,
+    cutover_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_enterprise_authority_cutovers_finite_time CHECK (isfinite(cutover_at)),
+    CONSTRAINT chk_enterprise_authority_cutovers_singleton CHECK ((id = 1))
+);
+
+
+--
+-- Name: enterprise_authority_cutovers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.enterprise_authority_cutovers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: enterprise_authority_cutovers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.enterprise_authority_cutovers_id_seq OWNED BY public.enterprise_authority_cutovers.id;
+
+
+--
 -- Name: enterprise_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3125,6 +3231,40 @@ ALTER SEQUENCE public.enterprise_delegation_grants_id_seq OWNED BY public.enterp
 
 
 --
+-- Name: enterprise_lifecycles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.enterprise_lifecycles (
+    id bigint NOT NULL,
+    enterprise_id bigint NOT NULL,
+    state character varying NOT NULL,
+    state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_enterprise_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+);
+
+
+--
+-- Name: enterprise_lifecycles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.enterprise_lifecycles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: enterprise_lifecycles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.enterprise_lifecycles_id_seq OWNED BY public.enterprise_lifecycles.id;
+
+
+--
 -- Name: enterprise_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3147,7 +3287,7 @@ CREATE TABLE public.enterprise_ownership_transfer_requests (
     CONSTRAINT chk_enterprise_transfer_requests_distinct_parties CHECK ((source_client_id <> destination_client_id)),
     CONSTRAINT chk_enterprise_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_enterprise_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_enterprise_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_enterprise_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -4199,10 +4339,24 @@ ALTER TABLE ONLY public.client_persona_administration_grants ALTER COLUMN id SET
 
 
 --
+-- Name: client_persona_authority_cutovers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_persona_authority_cutovers ALTER COLUMN id SET DEFAULT nextval('public.client_persona_authority_cutovers_id_seq'::regclass);
+
+
+--
 -- Name: client_persona_delegation_grants id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_persona_delegation_grants ALTER COLUMN id SET DEFAULT nextval('public.client_persona_delegation_grants_id_seq'::regclass);
+
+
+--
+-- Name: client_persona_lifecycles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_persona_lifecycles ALTER COLUMN id SET DEFAULT nextval('public.client_persona_lifecycles_id_seq'::regclass);
 
 
 --
@@ -4570,10 +4724,24 @@ ALTER TABLE ONLY public.enterprise_administration_grants ALTER COLUMN id SET DEF
 
 
 --
+-- Name: enterprise_authority_cutovers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.enterprise_authority_cutovers ALTER COLUMN id SET DEFAULT nextval('public.enterprise_authority_cutovers_id_seq'::regclass);
+
+
+--
 -- Name: enterprise_delegation_grants id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.enterprise_delegation_grants ALTER COLUMN id SET DEFAULT nextval('public.enterprise_delegation_grants_id_seq'::regclass);
+
+
+--
+-- Name: enterprise_lifecycles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.enterprise_lifecycles ALTER COLUMN id SET DEFAULT nextval('public.enterprise_lifecycles_id_seq'::regclass);
 
 
 --
@@ -5064,11 +5232,27 @@ ALTER TABLE ONLY public.client_persona_administration_grants
 
 
 --
+-- Name: client_persona_authority_cutovers client_persona_authority_cutovers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_persona_authority_cutovers
+    ADD CONSTRAINT client_persona_authority_cutovers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_persona_delegation_grants client_persona_delegation_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_persona_delegation_grants
     ADD CONSTRAINT client_persona_delegation_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_persona_lifecycles client_persona_lifecycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_persona_lifecycles
+    ADD CONSTRAINT client_persona_lifecycles_pkey PRIMARY KEY (id);
 
 
 --
@@ -5488,11 +5672,27 @@ ALTER TABLE ONLY public.enterprise_administration_grants
 
 
 --
+-- Name: enterprise_authority_cutovers enterprise_authority_cutovers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.enterprise_authority_cutovers
+    ADD CONSTRAINT enterprise_authority_cutovers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: enterprise_delegation_grants enterprise_delegation_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.enterprise_delegation_grants
     ADD CONSTRAINT enterprise_delegation_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: enterprise_lifecycles enterprise_lifecycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.enterprise_lifecycles
+    ADD CONSTRAINT enterprise_lifecycles_pkey PRIMARY KEY (id);
 
 
 --
@@ -5788,6 +5988,13 @@ CREATE UNIQUE INDEX idx_client_persona_delegate_grants_unique ON public.client_p
 
 
 --
+-- Name: idx_client_persona_lifecycles_one_client_persona; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_client_persona_lifecycles_one_client_persona ON public.client_persona_lifecycles USING btree (client_persona_id);
+
+
+--
 -- Name: idx_client_persona_ownerships_on_client_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5939,6 +6146,13 @@ CREATE INDEX idx_enterprise_delegate_grants_on_client_id ON public.enterprise_de
 --
 
 CREATE UNIQUE INDEX idx_enterprise_delegate_grants_unique ON public.enterprise_delegation_grants USING btree (enterprise_id, client_id);
+
+
+--
+-- Name: idx_enterprise_lifecycles_one_enterprise; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_enterprise_lifecycles_one_enterprise ON public.enterprise_lifecycles USING btree (enterprise_id);
 
 
 --
@@ -6779,6 +6993,13 @@ CREATE UNIQUE INDEX index_client_retention_holds_on_public_id ON public.client_r
 --
 
 CREATE INDEX index_client_retention_holds_on_purge_eligible_at ON public.client_retention_holds USING btree (purge_eligible_at) WHERE (purge_eligible_at < 'infinity'::timestamp with time zone);
+
+
+--
+-- Name: index_client_secret_credentials_on_claim_operation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_secret_credentials_on_claim_operation_id ON public.client_secret_credentials USING btree (claim_operation_id);
 
 
 --
@@ -8211,6 +8432,14 @@ ALTER TABLE ONLY public.client_external_identities
 
 
 --
+-- Name: enterprise_lifecycles fk_rails_ac12e249af; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.enterprise_lifecycles
+    ADD CONSTRAINT fk_rails_ac12e249af FOREIGN KEY (enterprise_id) REFERENCES public.enterprises(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: user_client_impersonations fk_rails_b0deaee0e3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8507,6 +8736,14 @@ ALTER TABLE ONLY public.client_persona_administration_grants
 
 
 --
+-- Name: client_persona_lifecycles fk_rails_fc7a83d40a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_persona_lifecycles
+    ADD CONSTRAINT fk_rails_fc7a83d40a FOREIGN KEY (client_persona_id) REFERENCES public.personas(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: user_client_revocations fk_rails_fdc3477c5a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8585,6 +8822,10 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261003202225'),
+('20260926170000'),
+('20260923180000'),
+('20260923170000'),
 ('20260923160000'),
 ('20260923150000'),
 ('20260923140000'),
@@ -8949,3 +9190,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20240830171634'),
 ('20240827130201'),
 ('20240627130203');
+

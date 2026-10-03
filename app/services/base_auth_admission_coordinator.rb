@@ -41,21 +41,33 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     "org" => OperatorAuthCeremonySession,
   }.freeze
 
+  LOCAL_SIGN_IN_FLOW = {
+    "app" => ClientSignInFlow,
+    "com" => VisitorSignInFlow,
+    "org" => OperatorSignInFlow,
+  }.freeze
+
+  STEP_UP_TRANSACTION = {
+    "app" => ClientStepUpCeremonyTransaction,
+    "com" => VisitorStepUpCeremonyTransaction,
+    "org" => OperatorStepUpCeremonyTransaction,
+  }.freeze
+
   Issuance = Data.define(:transaction, :code, :reference)
 
   class << self
     public
 
-    def issue_handoff!(transaction:, store: default_store)
+    def issue_handoff!(transaction:, reference: transaction.transaction_id, store: default_store)
       purpose = handoff_purpose_for(transaction.intent)
       code = store.issue!(
         purpose: purpose,
         actor_type: SURFACE_ACTOR.fetch(transaction.surface),
         surface: transaction.surface,
         subject_ref: transaction.transaction_id,
-        reference: transaction.transaction_id,
+        reference: reference,
       )
-      Issuance.new(transaction: transaction, code: code, reference: transaction.transaction_id)
+      Issuance.new(transaction: transaction, code: code, reference: reference)
     end
 
     def consume_handoff!(raw_code:, surface:, expected_intent:, store: default_store)
@@ -68,9 +80,19 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       )
     end
 
-    def issue_local_entry!(surface:, intent:, store: default_store)
+    def issue_local_entry!(surface:, intent:, nonce_digest: nil, store: default_store)
       purpose = local_entry_purpose_for(intent)
-      reference = SecureRandom.uuid
+      model = LOCAL_SIGN_IN_FLOW.fetch(surface.to_s)
+      transaction =
+        model.connection_class_for_self.connected_to(role: :writing) do
+          now = model.database_now
+          model.create!(
+            step: "primary", status_id: model.status_id_for("PRIMARY_PENDING"),
+            nonce_digest: nonce_digest || model.digest_nonce(SecureRandom.urlsafe_base64(32)),
+            issued_at: now, expires_at: now + model.default_ttl,
+          )
+        end
+      reference = transaction.public_id
       code = store.issue!(
         purpose: purpose,
         actor_type: SURFACE_ACTOR.fetch(surface.to_s),
@@ -78,7 +100,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         subject_ref: reference,
         reference: reference,
       )
-      Issuance.new(transaction: nil, code: code, reference: reference)
+      Issuance.new(transaction: transaction, code: code, reference: reference)
     end
 
     def consume_local_entry!(raw_code:, surface:, expected_intent:, store: default_store)
@@ -139,6 +161,30 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       Issuance.new(transaction: transaction, code: code, reference: reference)
     end
 
+    def resolve_step_up_admission!(payload:, surface:, expected_intent:)
+      unless %w(step_up reauthentication).include?(expected_intent.to_s)
+        raise Denied, "unsupported ceremony purpose"
+      end
+
+      validate_payload!(payload, surface: surface)
+      unless payload.fetch("purpose") == handoff_purpose_for(expected_intent)
+        raise Denied, "admission purpose mismatch"
+      end
+
+      model = STEP_UP_TRANSACTION.fetch(surface.to_s)
+      model.connection_owner.connected_to(role: :writing) do
+        transaction = model.find_by!(transaction_id: payload.fetch("subject_ref"), surface: surface.to_s)
+        unless transaction.purpose == expected_intent.to_s && %w(pending verified).include?(transaction.status) &&
+            !transaction.expired?(now: model.database_now)
+          raise Denied, "ceremony is unavailable"
+        end
+
+        transaction
+      end
+    rescue KeyError, ActiveRecord::RecordNotFound
+      raise Denied, "admission transaction missing"
+    end
+
     def read_result!(raw_code:, surface:, transaction_ref:, expected_intent:, store: default_store)
       raise Denied, "admission binding mismatch" if transaction_ref.to_s.blank?
 
@@ -150,9 +196,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied, "admission purpose mismatch" unless payload.fetch("purpose") == purpose
       raise Denied, "admission binding mismatch" unless payload.fetch("subject_ref") == transaction_ref.to_s
 
-      transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-        surface: surface,
-        transaction_id: transaction_ref,
+      transaction = result_transaction!(
+        surface: surface, transaction_ref: transaction_ref,
+        expected_intent: expected_intent,
       )
       generation = Integer(payload.fetch("result_generation").to_s, 10)
       digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose:, raw_code: raw_code)
@@ -207,7 +253,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def local_entry_purpose?(payload:, intent:)
-      payload.fetch("purpose").to_s == local_entry_purpose_for(intent)
+      purpose = LOCAL_ENTRY_PURPOSE[intent.to_s]
+      purpose.present? && payload.fetch("purpose").to_s == purpose
     end
 
     private
@@ -228,6 +275,24 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       payload = result.payload
       validate_payload!(payload, surface: surface)
       payload
+    end
+
+    def result_transaction!(surface:, transaction_ref:, expected_intent:)
+      if %w(step_up reauthentication).include?(expected_intent.to_s)
+        model = STEP_UP_TRANSACTION.fetch(surface.to_s)
+        model.connection_owner.connected_to(role: :writing) do
+          transaction = model.find_by!(transaction_id: transaction_ref, surface: surface.to_s)
+          raise Denied, "admission purpose mismatch" unless transaction.purpose == expected_intent.to_s
+
+          transaction
+        end
+      else
+        OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+          surface: surface, transaction_id: transaction_ref,
+        )
+      end
+    rescue ActiveRecord::RecordNotFound
+      raise Denied, "admission transaction missing"
     end
 
     def validate_payload!(payload, surface:)

@@ -86,6 +86,31 @@ The Base OIDC resume keeps its `ClientSessionLimitResolutionTransaction` challen
 path uses the flow locator on the Base host that ran the completion. Cancelling fails only that
 flow. A pending flow does not block other sign-ins of the account.
 
+### Local Auth credential results
+
+Base creates the actor-specific sign-in flow and retains its browser nonce before admitting a
+local Auth ceremony. Auth stores the admission purpose, binds the verified principal and records
+the authentication method, original event time and authentication context. Auth does not call the
+root issuance boundary. Its POST handoff returns an opaque result to Base's POST completion.
+
+Base validates the browser nonce, flow, actor, surface, result digest and generation, delivery
+deadline, and Auth continuity under the existing actor-before-ticket lock order. The existing
+`log_in` boundary remains the issuer. Flow finalization and Auth completion share its outer ticket
+transaction. Emergency evidence on org retains the Emergency context; app/com accept Normal
+evidence through their existing token contracts.
+
+A result's short transport deadline bounds receipt by Base. If that receipt reaches the session
+limit, the durable `SESSION_LIMIT_PENDING` flow and its existing `expires_at` become the authority
+and deadline for Base's limitation ceremony. Resuming that accepted pending flow does not require
+the expired transport code, renew either deadline, or replace the authentication event time. It
+still validates the Base nonce, active Auth evidence, principal, flow deadline and final issuance
+constraints. Auth redirects this pending local limitation to Base.
+
+After finalization, replay can only return the browser already holding the issued session to the
+success page; it cannot issue a token. If the post-commit response was lost and the browser lacks
+that session, completion refuses with conflict. Recovery requires a new Base entry and remains
+subject to the login cooldown; result possession alone never recovers a Browser Session.
+
 `RESTRICTED` tokens are no longer issued. The resolver authenticates only `ACTIVE`, unexpired,
 unrotated tokens, so an existing `RESTRICTED` row and its cookies authenticate nothing and are
 refused by refresh as before.

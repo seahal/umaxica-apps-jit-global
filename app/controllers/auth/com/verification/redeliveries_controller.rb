@@ -1,39 +1,25 @@
-# typed: false
 # frozen_string_literal: true
 
-# Dedicated OTP redelivery (resend) endpoint for step-up email verification (com surface).
-# The `resend` action was split out of Auth::Com::Verification::EmailsController into this
-# RESTful redelivery resource: POST /verification/emails/:email_id/redelivery.
-# It reuses the parent's resend flow; the route exposes the email nonce as :email_id,
-# which the parent logic reads as params[:id].
-class Auth::Com::Verification::RedeliveriesController < ::Auth::Com::Verification::BaseController
-  include ::SignEmailOtpRedeliveryEndpoint
+class Auth::Com::Verification::RedeliveriesController < Auth::Com::Verification::EmailsController
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
-  AUTHENTICATION_MODE = :private
-
-  before_action :set_verification_redelivery_navigation_context
+  public
 
   def create
-    params[:id] = params[:email_id]
-    resend_email_otp_redelivery
-  end
+    return unless load_email_ceremony!
+    unless params[:email_id] == @step_up_ceremony_transaction.transaction_id &&
+        @step_up_ceremony_session.email_code_generation.positive?
+      return render_invalid_step_up_context!
+    end
 
-  private
-
-  def verification_email_edit_path
-    edit_auth_com_verification_email_path(
-      params[:id],
-      ri: params[:ri],
-      scope: @verification_scope,
-      pt: @verification_pt,
+    IdentityStepUpEmailCodeIssuer.call!(
+      actor: @step_up_ceremony_actor, credential: ceremony_email_credential,
+      transaction: @step_up_ceremony_transaction, session_record: @step_up_ceremony_session,
     )
-  end
-
-  def verification_recovery_path
-    auth_com_verification_path(verification_recovery_redirect_params)
-  end
-
-  def verification_recovery_fallback_path
-    auth_com_verification_path(ri: params[:ri])
+    redirect_to(edit_auth_com_verification_email_path(@step_up_ceremony_transaction.transaction_id, ri: params[:ri]))
+  rescue IdentityStepUpEmailCodeIssuer::Unavailable, IdentityStepUpCeremonyContract::Error
+    @verification_errors = [t("otp.resend.failed")]
+    render inertia: EDIT_COMPONENT, props: edit_page_props, status: :unprocessable_content
   end
 end

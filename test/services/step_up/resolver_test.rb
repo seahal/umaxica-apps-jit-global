@@ -17,6 +17,7 @@ module StepUp
         :last_step_up_session_public_id,
         :last_step_up_purpose,
         :last_step_up_audience,
+        :last_step_up_phishing_resistant,
         keyword_init: true,
       ) do
         def currently_usable? = currently_usable
@@ -51,6 +52,58 @@ module StepUp
       assert_equal "profile", step_up.scope
       assert_nil step_up.required_aal
       assert_equal now + 10.minutes, step_up.expires_at
+    end
+
+    test "phishing resistance requires recorded evidence even when method and AAL match" do
+      now = Time.utc(2026, 10, 3, 12)
+      requirement = StepUpRequirement.new(
+        scope: "settings_passkey", required_aal: :aal2,
+        allowed_methods: [:passkey], phishing_resistant_required: true,
+      )
+      token = Token.new(
+        currently_usable: true, public_id: "token_1",
+        last_step_up_at: now - 1.minute, last_step_up_scope: "settings_passkey",
+        last_step_up_aal: "aal2", last_step_up_method: "passkey",
+      )
+
+      [nil, false, "true", 1].each do |recorded|
+        token.last_step_up_phishing_resistant = recorded
+
+        assert_not StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?,
+                   "recorded phishing resistance #{recorded.inspect} must not grant access"
+      end
+      token.last_step_up_phishing_resistant = true
+
+      assert_predicate StepUpResolver.call(token: token, requirement: requirement, now: now), :satisfied?
+    end
+
+    test "freshness rejects a verification time one microsecond in the future" do
+      now = Time.utc(2026, 10, 3, 12)
+      token = Token.new(
+        currently_usable: true, public_id: "token_1", last_step_up_scope: "profile",
+        last_step_up_method: "totp", last_step_up_aal: "aal2",
+      )
+
+      [-1, 0, 1].each do |microseconds|
+        token.last_step_up_at = now + Rational(microseconds, 1_000_000)
+
+        assert_equal microseconds <= 0,
+                     StepUpResolver.call(token: token, scope: "profile", now: now).satisfied?
+      end
+    end
+
+    test "freshness rejects exactly at and one microsecond after expiry" do
+      verified_at = Time.utc(2026, 10, 3, 12)
+      token = Token.new(
+        currently_usable: true, public_id: "token_1", last_step_up_scope: "profile",
+        last_step_up_method: "totp", last_step_up_aal: "aal2", last_step_up_at: verified_at,
+      )
+      [-1, 0, 1].each do |microseconds|
+        now = verified_at + 15.minutes + Rational(microseconds, 1_000_000)
+
+        assert_equal microseconds < 0,
+                     StepUpResolver.call(token: token, scope: "profile", now: now).satisfied?
+      end
     end
 
     test "returns unsatisfied when token is expired, unusable, or scope mismatched" do

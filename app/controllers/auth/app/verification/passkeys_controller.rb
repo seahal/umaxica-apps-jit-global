@@ -1,74 +1,61 @@
-# typed: false
 # frozen_string_literal: true
 
-class Auth::App::Verification::PasskeysController < ::Auth::App::Verification::BaseController
-  include ::SurfaceInertiaPage
-  include SignVerificationPasskeyActions
+class Auth::App::Verification::PasskeysController < ::Auth::App::ApplicationController
+  include CloudflareTurnstile
+  include SurfaceInertiaPage
+  include AuthStepUpCeremonyContext
+  include AuthStepUpPasskeyCeremony
 
-  AUTHENTICATION_MODE = :private
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
-  NEW_COMPONENT = "auth/app/verification/passkeys/new"
-
-  # The two actions repeat SignVerificationPasskeyActions guard for guard. Only the render differs:
-  # this surface answers with an Inertia page instead of the ERB template, and the assertion is
-  # still posted back as a document submission, so the failure path keeps its 422.
-  def new
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_get!
-    return unless require_method_available!(:passkey)
-
-    prepare_passkey_challenge!
-
-    render inertia: NEW_COMPONENT, props: new_page_props
-  end
-
-  def create
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_post!
-    return unless require_method_available!(:passkey)
-
-    if verify_passkey!
-      consume_step_up_session!(method: :passkey)
-    else
-      record_failed_step_up_attempt!(:passkey)
-      prepare_passkey_challenge!
-      render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
-    end
-  end
+  rate_limit to: 5, within: 1.minute, by: -> { request.remote_ip },
+             scope: "auth_app_step_up", name: "passkey_options_ip_burst", only: :options,
+             store: rate_limit_store, with: -> { render_rate_limited(retry_after: 60) }
+  rate_limit to: 20, within: 15.minutes, by: -> { request.remote_ip },
+             scope: "auth_app_step_up", name: "passkey_options_ip_sustained", only: :options,
+             store: rate_limit_store, with: -> { render_rate_limited(retry_after: 900) }
 
   private
 
-  def new_page_props
-    scope = incoming_scope.presence
-    pt = incoming_pt.presence
+  def ceremony_actor_model = Client
 
-    {
+  def ceremony_step_up_session_model = ClientStepUpSession
+
+  def ceremony_session_token(record) = record.user_token
+
+  def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
+
+  def ceremony_supported_methods = %i(passkey totp email_otp)
+
+  def ceremony_passkey_scope = @step_up_ceremony_actor.client_passkeys.active
+
+  def ceremony_passkey_handoff_path = auth_app_verification_handoff_path(ri: params[:ri])
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
+  end
+
+  def render_step_up_passkey_page
+    render inertia: "auth/app/verification/passkeys/new", props: {
       title: t("sign.app.verification.edit.title"),
       heading: t("sign.app.verification.edit.title"),
       description: t("sign.app.verification.edit.description"),
-      errors: Array(@verification_errors),
-      form: {
-        action: auth_app_verification_passkey_path(ri: params[:ri]),
-        csrf_token: form_authenticity_token,
-        scope: scope,
-        pt: pt,
-        challenge_id: @passkey_challenge_id.to_s,
-        # The challenge the server just issued for this actor. The ERB embedded the same payload;
-        # it is what `navigator.credentials.get` consumes and it carries no secret of its own.
-        request_options: passkey_request_options_payload,
+      errors: [],
+      panel: {
+        options_url: auth_app_verification_passkey_options_path(ri: params[:ri]),
+        verification_url: auth_app_verification_passkey_path(ri: params[:ri]),
+        region: current_region_identifier.to_s,
+        identifier_param: nil,
+        field: nil,
+        turnstile_site_key: JitSecurityTurnstileConfig.stealth_site_key.to_s,
+        turnstile_error_message: t("turnstile_error"),
         submit_label: t("sign.app.verification.edit.authenticate_with_passkey"),
       },
-      cancel: step_up_cancellation_props,
-      back: {
-        label: t("sign.app.verification.edit.back"),
-        href: auth_app_verification_path(ri: params[:ri], scope: scope, pt: pt),
-      },
+      back: { label: t("sign.app.verification.edit.back"), href: auth_app_verification_path(ri: params[:ri]) },
+      cancel: { label: t("actions.cancel"),
+                action: auth_app_verification_cancellation_path(ri: params[:ri]),
+                method: "post", },
     }
-  end
-
-  def passkey_request_options_payload
-    return nil if @passkey_request_options.blank?
-
-    JSON.parse(@passkey_request_options.to_json)
   end
 end

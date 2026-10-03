@@ -59,6 +59,17 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @original_login_cooldown = login_cooldown
     self.login_cooldown = 0.seconds
+
+    # These are Auth endpoint tests. Base issuance and browser binding are exercised separately
+    # in local_authentication_boundary_test; this admission grants only the credential ceremony.
+    @local_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    get auth_app_sign_in_url(ri: "jp", entry_ref: @local_admission.reference), headers: { "Host" => @host }
+    admission_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_sign_in_url(ri: "jp"),
+         params: { entry_ref: @local_admission.reference, authenticity_token: admission_csrf },
+         headers: { "Host" => @host }
+
+    assert_response :see_other
   end
 
   teardown do
@@ -107,13 +118,24 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     existing_email = user.client_emails.create!(address: "enum_test@example.com")
 
     existing_session = open_session
+    missing_session = open_session
+    [existing_session, missing_session].each do |browser|
+      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+      browser.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host })
+      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      browser.post(
+        auth_app_sign_in_url(ri: "jp"),
+        params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: { "Host" => @host },
+      )
+
+      assert_equal 303, browser.response.status
+    end
     existing_session.post(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { user_email: { address: existing_email.address } },
       headers: { "Host" => @host },
     )
 
-    missing_session = open_session
     missing_session.post(
       auth_app_sign_in_email_url(ri: "jp"),
       params: { user_email: { address: "missing-enum@example.com" } },
@@ -121,6 +143,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     )
 
     assert_equal existing_session.response.status, missing_session.response.status
+    assert_equal edit_auth_app_sign_in_email_url(ri: "jp"), existing_session.response.location
     assert_equal existing_session.response.location, missing_session.response.location
     assert_equal existing_session.response.body, missing_session.response.body
 
@@ -241,7 +264,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   # Login Tests
 
-  test "successful OTP verification redirects to dashboard" do
+  test "successful OTP verification advances the admitted flow to the checkpoint without a root session" do
     # Create email with user association
     user = clients(:one)
     test_email = user.client_emails.create!(
@@ -282,7 +305,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     cycle = ClientSignInFlow.where(principal_id: user.id).recent_first.first
 
     assert_equal "CHECKPOINT_PENDING", cycle.state
-    assert_equal cycle.public_id, session.dig(:app_sign_in_flow_locator, "public_id")
+    assert_equal @local_admission.transaction.public_id, cycle.public_id
+    assert_nil session.dig(:app_sign_in_flow_locator, "public_id")
+    assert_nil cycle.token_id
   end
 
   test "patch with a correct otp and missing or invalid Turnstile does not authenticate" do
@@ -512,7 +537,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
   end
 
-  test "successful OTP verification sets host-only auth cookies" do
+  test "successful OTP verification issues no root authentication cookies on Auth" do
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "cookie_domain_in_#{SecureRandom.hex(4)}@example.com",
@@ -539,12 +564,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
         line.start_with?("#{AuthenticationCookieName.access}=", "#{AuthenticationCookieName.refresh}=")
       end
 
-    assert_equal 2, auth_cookie_lines.size
-    auth_cookie_lines.each do |line|
-      assert_includes line, "path=/"
-      assert_match(/httponly/i, line)
-      assert_no_match(/domain=/i, line)
-    end
+    assert_empty auth_cookie_lines
+    assert_equal "email", @local_admission.transaction.reload.authentication_method
   end
 
   test "email sign-in redirects to MFA challenge when MFA is enabled" do
@@ -726,7 +747,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_redirected_to %r{/sign/in/email/edit}
   end
 
-  test "successful OTP verification records login audit event" do
+  test "successful OTP verification records ceremony evidence before Base login audit" do
     user = clients(:one)
     test_email = user.client_emails.create!(address: "audit_login_#{SecureRandom.hex(4)}@example.com")
 
@@ -745,16 +766,15 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     valid_pass_code = hotp.at(otp_counter).to_s
     test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
 
-    assert_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::LOGGED_IN).count }, 1 do
+    assert_no_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::LOGGED_IN).count } do
       patch auth_app_sign_in_email_url(ri: "jp"),
             params: { user_email: { pass_code: valid_pass_code } },
             headers: { "Host" => @host }
     end
 
-    audit = ClientChronicle.order(created_at: :desc).first
-
-    assert_equal ClientChronicleEvent::LOGGED_IN, audit.event_id
-    assert_equal user, audit.user
+    assert_equal user.id, @local_admission.transaction.reload.principal_id
+    assert_equal "email", @local_admission.transaction.authentication_method
+    assert_not_nil @local_admission.transaction.authentication_event_at
   end
 
   test "invalid OTP code returns error message" do
@@ -981,7 +1001,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_equal old_session_id, session.id
   end
 
-  test "email login with session limit exceeded redirects to session management" do
+  test "Auth verifies email at the session limit and leaves limit evaluation to Base" do
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
 
@@ -1015,15 +1035,15 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_session_path(ri: "jp")
+    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
 
     # The current session-limit gate keeps the pending login in session state.
     restricted = ClientToken.where(user_id: user.id, user_token_status_id: ClientTokenStatus::RESTRICTED)
 
     assert_equal 0, restricted.count
 
-    # Session limit gate should be issued
-    assert_predicate session[SessionLimitGate::GATE_SESSION_KEY], :present?
+    assert_nil session[SessionLimitGate::GATE_SESSION_KEY]
+    assert_nil @local_admission.transaction.reload.token_id
   end
 
   test "email login at the limit beside a leftover restricted session waits without issuing anything" do
@@ -1058,9 +1078,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: { "Host" => @host }
 
     assert_response :redirect
-    assert_equal "/sign/in/session", URI.parse(response.location).path
+    assert_equal "/sign/in/check", URI.parse(response.location).path
     assert_equal 1, ClientToken.where(user_id: user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
-    assert_predicate ClientSignInFlow.where(principal_id: user.id).recent_first.first, :sign_in_session_limit_pending?
+    assert_predicate @local_admission.transaction.reload, :sign_in_checkpoint_pending?
   end
 
   test "email login (JSON) with session limit exceeded returns session_limit_pending" do

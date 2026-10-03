@@ -17,6 +17,8 @@ module AuthCeremonySession
   SID_BYTES = 32
   DEFAULT_TTL = 30.minutes
   AUTHENTICATION_METHODS = %w(email telephone secret passkey totp google apple entra).freeze
+  ADMISSION_PURPOSES = %w(local_sign_in local_sign_up authentication_handoff invitation_handoff
+                          step_up_handoff reauthentication_handoff).freeze
 
   module ClassMethods
     public
@@ -40,7 +42,13 @@ module AuthCeremonySession
     # Replace the previous browser ceremony and admit the replacement in one
     # database transaction. The old row is never revoked unless the new row
     # can also be created successfully.
-    def rotate_and_admit!(previous_raw_sid: nil, authorization_transaction_ref: nil, ttl: DEFAULT_TTL, now: nil)
+    def rotate_and_admit!(admission_purpose:, previous_raw_sid: nil, authorization_transaction_ref: nil,
+                          local_sign_in_flow_ref: nil, local_sign_up_flow_ref: nil,
+                          step_up_ceremony_transaction_ref: nil, ttl: DEFAULT_TTL, now: nil)
+      unless ADMISSION_PURPOSES.include?(admission_purpose)
+        raise InvalidTransition, "unsupported admission purpose"
+      end
+
       raw_sid = SecureRandom.random_bytes(SID_BYTES)
       digest = digest_for(raw_sid)
       previous_digest = digest_for(decode_sid(previous_raw_sid)) if previous_raw_sid.present?
@@ -62,6 +70,10 @@ module AuthCeremonySession
               sid_digest: digest,
               previous_sid_digest: previous_digest,
               authorization_transaction_ref: authorization_transaction_ref.to_s.presence,
+              local_sign_in_flow_ref: local_sign_in_flow_ref,
+              local_sign_up_flow_ref: local_sign_up_flow_ref,
+              step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
+              admission_purpose: admission_purpose,
               admitted_at: decision_time,
               expires_at: decision_time + ttl,
               created_at: decision_time,
@@ -166,7 +178,9 @@ module AuthCeremonySession
     revoked_at.present? || completed? || cancelled?
   end
 
-  def admit!(authorization_transaction_ref: nil, now: nil)
+  def admit!(admission_purpose:, authorization_transaction_ref: nil, now: nil)
+    raise InvalidTransition, "unsupported admission purpose" unless ADMISSION_PURPOSES.include?(admission_purpose)
+
     self.class.writing_connection do
       with_lock do
         decision_time = now || self.class.database_now
@@ -175,6 +189,7 @@ module AuthCeremonySession
 
         update!(
           authorization_transaction_ref: authorization_transaction_ref.to_s.presence,
+          admission_purpose: admission_purpose,
           admitted_at: decision_time,
           updated_at: decision_time,
         )

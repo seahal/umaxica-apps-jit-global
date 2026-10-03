@@ -428,7 +428,7 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/base/org/oauth/revocations_controller.rb: 1
   app/controllers/base/org/oauth/userinfos_controller.rb: 1
   app/controllers/base/org/oidc/logouts_controller.rb: 1
-  app/controllers/base/org/organizations/memberships_controller.rb: 7
+  app/controllers/base/org/organizations/memberships_controller.rb: 2
   app/controllers/base/org/organizations_controller.rb: 2
   app/controllers/base/org/preference/customizations_controller.rb: 2
   app/controllers/base/org/preference/emails_controller.rb: 1
@@ -447,7 +447,7 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/concerns/actor_support.rb: 1
   app/controllers/concerns/application_revision_rendering.rb: 2
   app/controllers/concerns/authentication_audit_writer.rb: 3
-  app/controllers/concerns/authentication_base.rb: 36
+  app/controllers/concerns/authentication_base.rb: 34
   app/controllers/concerns/authentication_bulletin_gate.rb: 7
   app/controllers/concerns/authentication_client.rb: 8
   app/controllers/concerns/authentication_cookie_service.rb: 7
@@ -835,7 +835,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/app_preference_timezone_option.rb: 2
   app/models/application_record.rb: 2
   app/models/area_occurrence_status.rb: 1
-  app/models/avatar.rb: 4
+  app/models/avatar.rb: 3
   app/models/avatar_group.rb: 2
   app/models/avatar_group_ownership_period.rb: 1
   app/models/avatar_ownership_period.rb: 1
@@ -957,7 +957,6 @@ Umaxica/ExplicitMethodVisibility:
   app/models/concerns/signed_session_reference.rb: 1
   app/models/concerns/single_use_token.rb: 2
   app/models/concerns/social_ceremony_transactionable.rb: 4
-  app/models/concerns/step_up_ceremony_transactionable.rb: 7
   app/models/concerns/telephone.rb: 1
   app/models/concerns/telephone_ceremony_transactionable.rb: 4
   app/models/concerns/telephone_normalization.rb: 1
@@ -977,7 +976,7 @@ Umaxica/ExplicitMethodVisibility:
   app/models/ip_occurrence_status.rb: 1
   app/models/jwt_occurrence_status.rb: 1
   app/models/logout_transaction.rb: 9
-  app/models/operator.rb: 5
+  app/models/operator.rb: 4
   app/models/operator_banner.rb: 1
   app/models/operator_bulletin.rb: 2
   app/models/operator_chronicle.rb: 5
@@ -1186,7 +1185,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/client_external_identity_policy.rb: 1
   app/policies/client_oidc_connection_policy.rb: 2
   app/policies/client_passkey_policy.rb: 7
-  app/policies/client_policy.rb: 6
+  app/policies/client_policy.rb: 5
   app/policies/client_preference_policy.rb: 1
   app/policies/client_secret_credential_policy.rb: 8
   app/policies/client_telephone_policy.rb: 4
@@ -1204,7 +1203,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/operator_lifecycle_request_policy.rb: 6
   app/policies/operator_oidc_connection_policy.rb: 2
   app/policies/operator_passkey_policy.rb: 7
-  app/policies/operator_policy.rb: 7
+  app/policies/operator_policy.rb: 6
   app/policies/operator_preference_policy.rb: 1
   app/policies/operator_secret_credential_policy.rb: 7
   app/policies/operator_telephone_policy.rb: 4
@@ -1227,7 +1226,7 @@ Umaxica/ExplicitMethodVisibility:
   app/policies/visitor_email_policy.rb: 4
   app/policies/visitor_oidc_connection_policy.rb: 2
   app/policies/visitor_passkey_policy.rb: 7
-  app/policies/visitor_policy.rb: 3
+  app/policies/visitor_policy.rb: 2
   app/policies/visitor_preference_policy.rb: 1
   app/policies/visitor_secret_credential_policy.rb: 8
   app/policies/visitor_telephone_policy.rb: 4

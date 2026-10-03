@@ -65,7 +65,7 @@ module FlowSignIn
     transition_sign_in_to!(
       "SESSION_LIMIT_PENDING",
       step: "session_limit",
-      allowed_from: ["PRIMARY_PENDING", "MFA_PENDING"],
+      allowed_from: %w(PRIMARY_PENDING MFA_PENDING SESSION_ISSUANCE_PENDING),
       now: now,
     )
   end
@@ -128,7 +128,10 @@ module FlowSignIn
 
     transition_cycle_to!(
       status_id_for("COMPLETED"),
-      allowed_from: status_ids_for("SESSION_ISSUANCE_PENDING", "DASHBOARD_PENDING", "RETURN_PENDING"),
+      allowed_from: status_ids_for(
+        "SESSION_ISSUANCE_PENDING", "SESSION_LIMIT_PENDING", "DASHBOARD_PENDING",
+        "RETURN_PENDING",
+      ),
       changes: changes,
       now: now,
     )

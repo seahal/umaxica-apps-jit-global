@@ -24,6 +24,12 @@ module Base
 
         private
 
+        def cancellation_step_up_transaction(reference)
+          VisitorStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
+            VisitorStepUpCeremonyTransaction.find_by!(transaction_id: reference)
+          end
+        end
+
         def actor_verification_path(**args)
           base_com_verification_path(**args)
         end

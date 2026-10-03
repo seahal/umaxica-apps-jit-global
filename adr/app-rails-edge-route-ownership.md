@@ -46,9 +46,18 @@ S256, state, nonce, CSRF protection, and host constraints remain mandatory. GET 
 may establish protocol-derived session state, but GET navigation does not execute logout, token
 refresh, or ordinary application mutations.
 
-Edge owns presentation paths only after the deployment boundary assigns those paths to Edge. Edge
-calls the explicit Rails endpoints for authentication state and domain operations; it does not infer
-identity from browser-submitted identity fields or receive tokens in URLs.
+This prohibition applies equally to `auth_refresh` and Preference `feel_refresh`: GET may read and
+validate `auth_access` or `feel_access`, but must not consume refresh credentials to issue new
+access credentials, rotate tokens, or extend their lifetime. Renaming Preference transport creates
+no exception. Confirmed invalid or expired cookie detachment/deletion on GET follows
+`adr/invalid-browser-credential-recovery.md`; it is recovery, not refresh, and issues no replacement
+credential. System failures remain errors rather than anonymous recovery.
+
+Edge owns presentation paths only after the deployment boundary assigns those paths to Edge. The
+browser calls explicit Rails endpoints for authentication state and domain operations. Core
+Workers/TanStack do not call or proxy Rails, as specified in `adr/core-canonical-public-host.md`.
+The UI does not infer identity from browser-submitted identity fields or receive tokens in URLs;
+its zero-cookie boundary is specified in `adr/tanstack-start-zero-cookie-ui-origin-boundary.md`.
 
 ## Consequences
 

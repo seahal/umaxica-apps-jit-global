@@ -4,6 +4,10 @@
 > `jpx.*` Host Authorization aliases now. Stored bridge defaults/rows still require a separate
 > persistence migration; that migration is not part of the Jump graph freeze.
 
+> Amended 2026-10-03: the target Core serving topology excludes Workers-to-Rails calls and proxies.
+> This supersedes the former Core Router Worker / Workers VPC Host-header decision below.
+> Implementation and deployment verification remain deferred.
+
 ## Status
 
 Accepted (2026-08-09). Supersedes the Open revision of the same date, which recorded the conflict
@@ -39,23 +43,28 @@ all three now avoids a second revision of this ADR when the corporate and staff 
 `jpx.umaxica.*` and `core-jp.umaxica.*` become legacy and are removed once the migration steps below
 complete.
 
-### Workers VPC Host header
+### Core browser-to-Rails boundary
 
-The Core Router Worker sends a `Host` from the `PUBLIC_*` family and does **not** set
-`X-Forwarded-Host`.
+For Core user-facing work, the target serving topology has the browser independently request
+Workers/TanStack content and Rails Core APIs. Workers must not call or proxy Rails through Workers
+VPC or public HTTP, including to supply Core SSR data. Rails retains authentication, session and
+refresh-token processing, final authorization, and complex business logic.
 
-Cloudflare documents that a Workers VPC Service's configured host and port determine routing, and
-that the host in the Worker's `fetch()` URL "is not used to route requests, and instead only
-populates the `Host` field". The `Host` is therefore a free choice. Choosing `PUBLIC_*` keeps
-production `config.hosts` a single family and matches the surface route constraints in
-`config/routes/core.rb`, which are `PUBLIC_CORE_*`-derived. Choosing `PRIVATE_*` would force
-production `config.hosts` to become a `PUBLIC_* ∪ PRIVATE_*` union solely to admit this one caller.
+The former Core Router Worker-to-Rails connection is excluded from this target topology. Its
+previous requirement to send a `PUBLIC_*` Host without `X-Forwarded-Host` is superseded. That
+requirement originally kept the Rails host allowlist aligned with public route constraints without
+adding private hosts solely for a Worker caller.
 
-`X-Forwarded-Host` is excluded because `ActionDispatch::HostAuthorization` checks **both** the raw
-`HTTP_HOST` **and** the last value of `X-Forwarded-Host`, rejecting the request if either is
-disallowed. A Worker that forwarded a public name in `X-Forwarded-Host` while connecting under a
-private `Host` would make a `config.hosts` union mandatory regardless of the family decision. This
-constraint is recorded in `docs/architecture/cloudflare-request-paths.md`.
+The canonical public host decision remains in force. Concrete browser-to-Rails routing and the
+reviewed host/proxy configuration still require verification. DNS selects hosts; same-host path
+selection requires an HTTP routing mechanism. The serving path must satisfy the accepted AWS
+ingress restrictions in `adr/dos-and-firewall-controls-at-cdn-aws-edge-not-in-rails.md`.
+
+This amendment records the target architecture only; it does not establish that the connection has
+been removed from infrastructure or authorize runtime configuration changes. Other surfaces,
+including Info, retain their separate contracts. The separately accepted TanStack cookie/SSR policy
+is specified in `adr/tanstack-start-zero-cookie-ui-origin-boundary.md`; other deferred concerns in
+the related Core memo are not adopted by this topology amendment.
 
 ### Path ownership
 
@@ -113,6 +122,8 @@ repository. Do not conflate the two.
 
 ## Related
 
+- `memos/2026-10-04-codex-core-cloudfront-browser-boundary-considerations.md`
+- `adr/dos-and-firewall-controls-at-cdn-aws-edge-not-in-rails.md`
 - `docs/operations/core-nextjs-zero-cookie-edge-contract.md`
 - `docs/architecture/cloudflare-request-paths.md`
 - `adr/public-private-url-boundaries.md`

@@ -199,9 +199,22 @@ module Base
           end
 
           def complete_social_resolution
+            if @pending_sign_in_flow.authentication_event_at
+              authorize!(@pending_sign_in_flow, to: :manage_session_limit?, context: { user: @actor })
+              locator = session[SignInCycleLocator::SESSION_KEYS.fetch(:app)]
+              result = LocalAuthenticationSessionCommitter.resume_pending!(
+                controller: self, flow: @pending_sign_in_flow, actor: @actor, nonce: locator.fetch("nonce"),
+              )
+              return render_invalid_resolution unless result.fetch(:status) == :success
+
+              return redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
+            end
             return render_invalid_resolution unless promote_current_session_limit_cycle!(@actor)
 
             redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
+          rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
+                 ActiveRecord::SoleRecordExceeded, AuthCeremonySession::InvalidTransition
+            render_invalid_resolution
           end
 
           def resume_authorization_after_resolution

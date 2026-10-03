@@ -58,6 +58,7 @@ scope(module: :auth, as: :auth) do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
@@ -206,12 +207,14 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
         resource :setup, only: :new
+        resource :handoff, only: %i(show create)
+        post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
         resource :totp, only: %i(new create)
 
@@ -294,6 +297,7 @@ scope(module: :auth, as: :auth) do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
@@ -386,12 +390,14 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
         resource :setup, only: :new
+        resource :handoff, only: %i(show create)
+        post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
 
         resources :emails, only: %i(new create edit update) do
@@ -471,6 +477,7 @@ scope(module: :auth, as: :auth) do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
@@ -568,12 +575,14 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
         resource :setup, only: :new
+        resource :handoff, only: %i(show create)
+        post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
       end
 

@@ -11,6 +11,13 @@ The superseded record is kept for history; where the two disagree, this record g
 
 ## Principle
 
+The `auth_*` / `feel_*` naming preserves the GET refresh prohibition. Reading validated access and
+detaching/deleting confirmed invalid or expired cookies on GET are distinct from consuming
+`auth_refresh` or `feel_refresh` to issue new access credentials. Recovery creates no GET refresh
+exception and retains each endpoint's refusal and concurrency rules. TanStack's zero-cookie UI
+origin never performs these Rails recovery operations; see
+`adr/tanstack-start-zero-cookie-ui-origin-boundary.md`.
+
 **INVALID CREDENTIAL MUST NOT BECOME A BROKEN SESSION, AND A SYSTEM FAILURE MUST NOT BECOME AN
 INVALID CREDENTIAL.** A refused credential grants no authentication or preference authority. Its
 refusal reason stays internal: it is not reflected in a status, redirect, response body, or public

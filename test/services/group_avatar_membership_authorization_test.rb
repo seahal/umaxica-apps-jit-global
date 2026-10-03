@@ -90,16 +90,20 @@ class GroupAvatarMembershipAuthorizationTest < ActiveSupport::TestCase
     stranger_account_public_id =
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: stranger).account.public_id
 
-    assert_raises(GroupAvatarMemberships::Detach::AuthorizationDenied) do
-      GroupAvatarMemberships::Detach.call(
-        membership: @membership,
-        actor: stranger,
-        surface: "app",
-        subject_public_id: stranger_account_public_id,
-        account_public_id: stranger_account_public_id,
-      )
-    end
+    error =
+      assert_raises(GroupAvatarMemberships::Detach::AuthorizationDenied) do
+        GroupAvatarMemberships::Detach.call(
+          membership: @membership,
+          actor: stranger,
+          surface: "app",
+          subject_public_id: stranger_account_public_id,
+          account_public_id: stranger_account_public_id,
+        )
+      end
 
+    # The stranger is an active client on the right surface, so the refusal must be the missing
+    # permission on the owning collective and not an earlier actor or surface check.
+    assert_match(/permission required/, error.message)
     assert_equal "active", @membership.reload.state
   end
 
@@ -185,10 +189,12 @@ class GroupAvatarMembershipAuthorizationTest < ActiveSupport::TestCase
     assert_equal 0, @membership.reload.position
   end
 
+  # Which error class a non-integer position raises is not a contract; that the request is refused
+  # and the stored position stays put is.
   test "reorder rejects a position that is not an integer before touching the membership" do
     position = @membership.position
 
-    assert_raises(ArgumentError) do
+    assert_raises(ArgumentError, TypeError) do
       GroupAvatarMemberships::Reorder.call(
         membership: @membership,
         position: "first",
@@ -198,7 +204,7 @@ class GroupAvatarMembershipAuthorizationTest < ActiveSupport::TestCase
         account_public_id: @account_public_id,
       )
     end
-    assert_raises(TypeError) do
+    assert_raises(ArgumentError, TypeError) do
       GroupAvatarMemberships::Reorder.call(
         membership: @membership,
         position: nil,

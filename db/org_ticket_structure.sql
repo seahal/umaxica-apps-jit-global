@@ -73,10 +73,17 @@ CREATE TABLE public.operator_auth_ceremony_sessions (
     cancelled_at timestamp(6) with time zone,
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
+    local_sign_in_flow_ref character varying,
+    local_sign_up_flow_ref character varying,
+    admission_purpose character varying,
+    step_up_ceremony_transaction_ref character varying,
+    CONSTRAINT operator_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying])::text[])))),
+    CONSTRAINT operator_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
     CONSTRAINT operator_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT operator_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
     CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
-    CONSTRAINT operator_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1))
+    CONSTRAINT operator_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
+    CONSTRAINT operator_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
 );
 
 
@@ -556,8 +563,22 @@ CREATE TABLE public.operator_sign_in_flows (
     selected_persona_id bigint,
     selector_completed_at timestamp(6) with time zone,
     session_issued_at timestamp(6) with time zone,
+    result_digest character varying(64),
+    result_generation integer DEFAULT 0 NOT NULL,
+    result_expires_at timestamp(6) with time zone,
+    base_finalized_at timestamp(6) with time zone,
+    authentication_method character varying,
+    authentication_event_at timestamp(6) with time zone,
+    authentication_context character varying,
     CONSTRAINT chk_org_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
-    CONSTRAINT chk_org_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at))
+    CONSTRAINT chk_org_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT operator_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
+    CONSTRAINT operator_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT operator_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
+    CONSTRAINT operator_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
+    CONSTRAINT operator_sign_in_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
+    CONSTRAINT operator_sign_in_flows_result_delivery_valid CHECK ((((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((length((result_digest)::text) = 64) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (authentication_event_at IS NOT NULL)))),
+    CONSTRAINT operator_sign_in_flows_result_generation_valid CHECK ((result_generation >= 0))
 );
 
 
@@ -734,8 +755,20 @@ CREATE TABLE public.operator_sign_up_flows (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     status_id bigint DEFAULT 10 NOT NULL,
+    result_digest character varying(64),
+    result_generation integer DEFAULT 0 NOT NULL,
+    result_expires_at timestamp(6) with time zone,
+    base_finalized_at timestamp(6) with time zone,
+    authentication_method character varying,
+    authentication_event_at timestamp(6) with time zone,
     CONSTRAINT chk_org_sign_up_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
-    CONSTRAINT chk_org_sign_up_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at))
+    CONSTRAINT chk_org_sign_up_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT operator_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT operator_sign_up_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
+    CONSTRAINT operator_sign_up_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
+    CONSTRAINT operator_sign_up_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
+    CONSTRAINT operator_sign_up_flows_result_delivery_valid CHECK ((((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((length((result_digest)::text) = 64) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (authentication_event_at IS NOT NULL)))),
+    CONSTRAINT operator_sign_up_flows_result_generation_valid CHECK ((result_generation >= 0))
 );
 
 
@@ -785,7 +818,19 @@ CREATE TABLE public.operator_step_up_ceremony_transactions (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     phishing_resistant_required boolean DEFAULT false NOT NULL,
-    phishing_resistant boolean DEFAULT false NOT NULL
+    phishing_resistant boolean DEFAULT false NOT NULL,
+    purpose character varying DEFAULT 'step_up'::character varying NOT NULL,
+    result_digest character varying(64),
+    result_generation integer DEFAULT 0 NOT NULL,
+    result_expires_at timestamp(6) with time zone,
+    canceled_at timestamp(6) with time zone,
+    revoked_at timestamp(6) with time zone,
+    verified_credential_ref character varying,
+    CONSTRAINT operator_step_up_purpose_valid CHECK (((purpose)::text = ANY ((ARRAY['step_up'::character varying, 'reauthentication'::character varying, 'bootstrap'::character varying, 'credential_registration'::character varying, 'credential_change'::character varying])::text[]))),
+    CONSTRAINT operator_step_up_result_valid CHECK (((result_generation >= 0) AND (((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((result_digest IS NOT NULL) AND ((result_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (verified_at IS NOT NULL))))),
+    CONSTRAINT operator_step_up_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'verified'::character varying, 'consumed'::character varying, 'canceled'::character varying, 'expired'::character varying, 'revoked'::character varying])::text[]))),
+    CONSTRAINT operator_step_up_terminal_valid CHECK ((((canceled_at IS NULL) OR ((status)::text = 'canceled'::text)) AND ((revoked_at IS NULL) OR ((status)::text = 'revoked'::text)) AND (((status)::text <> 'revoked'::text) OR (revoked_at IS NOT NULL)) AND (((status)::text <> 'verified'::text) OR ((verified_at IS NOT NULL) AND (method IS NOT NULL) AND (aal IS NOT NULL))))),
+    CONSTRAINT operator_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR ((verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
 );
 
 
@@ -824,7 +869,15 @@ CREATE TABLE public.operator_step_up_sessions (
     staff_token_id bigint NOT NULL,
     status character varying NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    verified_at timestamp(6) with time zone
+    verified_at timestamp(6) with time zone,
+    step_up_ceremony_transaction_ref character varying,
+    passkey_challenge text,
+    passkey_challenge_ref character varying,
+    passkey_rp_id character varying,
+    passkey_origin character varying,
+    passkey_challenge_expires_at timestamp(6) with time zone,
+    passkey_challenge_consumed_at timestamp(6) with time zone,
+    CONSTRAINT operator_step_up_challenge_bound CHECK (((passkey_challenge IS NULL) OR ((step_up_ceremony_transaction_ref IS NOT NULL) AND (passkey_challenge_ref IS NOT NULL) AND (passkey_rp_id IS NOT NULL) AND (passkey_origin IS NOT NULL) AND (passkey_challenge_expires_at IS NOT NULL) AND (passkey_challenge_expires_at <= discard_at))))
 );
 
 
@@ -1744,6 +1797,13 @@ CREATE UNIQUE INDEX idx_on_result_jti_6830d7796f ON public.operator_secret_crede
 
 
 --
+-- Name: idx_on_step_up_ceremony_transaction_ref_fea762a569; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_step_up_ceremony_transaction_ref_fea762a569 ON public.operator_step_up_sessions USING btree (step_up_ceremony_transaction_ref);
+
+
+--
 -- Name: idx_on_transaction_id_45064136d6; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2017,6 +2077,13 @@ CREATE UNIQUE INDEX index_operator_sign_in_flows_on_public_id ON public.operator
 
 
 --
+-- Name: index_operator_sign_in_flows_on_result_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_sign_in_flows_on_result_digest ON public.operator_sign_in_flows USING btree (result_digest);
+
+
+--
 -- Name: index_operator_sign_in_flows_on_selected_persona_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2157,6 +2224,13 @@ CREATE UNIQUE INDEX index_operator_sign_up_flows_on_public_id ON public.operator
 
 
 --
+-- Name: index_operator_sign_up_flows_on_result_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_sign_up_flows_on_result_digest ON public.operator_sign_up_flows USING btree (result_digest);
+
+
+--
 -- Name: index_operator_sign_up_flows_on_state; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2199,6 +2273,13 @@ CREATE INDEX index_operator_step_up_ceremony_transactions_on_required_scope ON p
 
 
 --
+-- Name: index_operator_step_up_ceremony_transactions_on_result_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_step_up_ceremony_transactions_on_result_digest ON public.operator_step_up_ceremony_transactions USING btree (result_digest);
+
+
+--
 -- Name: index_operator_step_up_ceremony_transactions_on_result_jti; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2210,6 +2291,13 @@ CREATE UNIQUE INDEX index_operator_step_up_ceremony_transactions_on_result_jti O
 --
 
 CREATE UNIQUE INDEX index_operator_step_up_ceremony_transactions_on_transaction_id ON public.operator_step_up_ceremony_transactions USING btree (transaction_id);
+
+
+--
+-- Name: index_operator_step_up_sessions_on_passkey_challenge_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_step_up_sessions_on_passkey_challenge_ref ON public.operator_step_up_sessions USING btree (passkey_challenge_ref);
 
 
 --
@@ -2491,6 +2579,14 @@ ALTER TABLE ONLY public.operator_sign_out_flows
 
 
 --
+-- Name: operator_step_up_sessions fk_rails_100937c5e6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_step_up_sessions
+    ADD CONSTRAINT fk_rails_100937c5e6 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.operator_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
+
+
+--
 -- Name: operator_sign_up_flows fk_rails_10f95a7068; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2504,6 +2600,22 @@ ALTER TABLE ONLY public.operator_sign_up_flows
 
 ALTER TABLE ONLY public.operator_tokens
     ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
+-- Name: operator_auth_ceremony_sessions fk_rails_562d790641; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_auth_ceremony_sessions
+    ADD CONSTRAINT fk_rails_562d790641 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.operator_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_auth_ceremony_sessions fk_rails_5ea4994c1a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_auth_ceremony_sessions
+    ADD CONSTRAINT fk_rails_5ea4994c1a FOREIGN KEY (local_sign_up_flow_ref) REFERENCES public.operator_sign_up_flows(public_id) ON DELETE RESTRICT;
 
 
 --
@@ -2555,6 +2667,14 @@ ALTER TABLE ONLY public.operator_sign_out_flows
 
 
 --
+-- Name: operator_auth_ceremony_sessions fk_rails_ed41a3bf04; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_auth_ceremony_sessions
+    ADD CONSTRAINT fk_rails_ed41a3bf04 FOREIGN KEY (local_sign_in_flow_ref) REFERENCES public.operator_sign_in_flows(public_id) ON DELETE RESTRICT;
+
+
+--
 -- Name: operator_tokens fk_rails_f211b6bc2e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2593,6 +2713,10 @@ ALTER TABLE ONLY public.operator_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261003185508'),
+('20261003183915'),
+('20261003181725'),
+('20261003175658'),
 ('20261002120000'),
 ('20260924177000'),
 ('20260924156000'),

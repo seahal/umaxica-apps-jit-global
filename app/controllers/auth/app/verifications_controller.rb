@@ -1,17 +1,39 @@
 # typed: false
 # frozen_string_literal: true
 
-class Auth::App::VerificationsController < ::Auth::App::Verification::BaseController
+class Auth::App::VerificationsController < ::Auth::App::ApplicationController
   include ::SurfaceInertiaPage
-  include SignVerificationEntry
+  include AuthCeremonyAdmission
+  include AuthStepUpCeremonyContext
+  include AuthStepUpCeremonyEntry
 
-  AUTHENTICATION_MODE = :private
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
   private
 
-  # The entry screen only lists the step-up methods the actor may actually use. The guards, the
-  # session handling and the redirects stay in SignVerificationEntry; this surface only answers with
-  # an Inertia component instead of the ERB template.
+  def ceremony_actor_model = Client
+
+  def ceremony_step_up_session_model = ClientStepUpSession
+
+  def ceremony_session_token(session_record) = session_record.user_token
+
+  def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
+  end
+
+  def ceremony_supported_methods = %i(passkey totp email_otp)
+
+  def auth_step_up_ceremony_clean_url = auth_app_verification_path(ri: params[:ri])
+
+  def step_up_cancellation_props
+    { label: t("actions.cancel"), action: auth_app_verification_cancellation_path(ri: params[:ri]), method: "post" }
+  end
+
+  # The entry screen only lists the step-up methods the actor may actually use. Admission and ownership checks are performed by
+  # AuthStepUpCeremonyEntry; the surface supplies its method links and presentation.
   def render_verification_entry_page
     render inertia: true, props: verification_entry_props
   end
@@ -24,42 +46,34 @@ class Auth::App::VerificationsController < ::Auth::App::Verification::BaseContro
       description: t("sign.app.verification.new.description"),
       methods: verification_entry_methods,
       no_methods_notice: @available_methods.blank? ? t("views.sign.app.verifications.show.no_methods") : nil,
-      notice: flash[:notice].presence,
+      notice: nil,
       cancel: step_up_cancellation_props,
     }
   end
 
   def verification_entry_methods
-    return [] if @available_methods.blank?
-
     [
-      [:passkey, "sign.app.verification.new.methods.passkey", :new_auth_app_verification_passkey_path],
-      [:totp, "sign.app.verification.new.methods.totp", :new_auth_app_verification_totp_path],
-      [:email_otp, "sign.app.verification.new.methods.email_otp", :new_auth_app_verification_email_path],
-    ].filter_map do |method, label_key, path_helper|
-      next unless @available_methods.include?(method)
-
-      { key: method.to_s, label: t(label_key), href: public_send(path_helper, verification_method_params) }
-    end
-  end
-
-  def verification_method_params
-    @verification_method_params ||=
-      begin
-        scope = current_step_up_scope
-        pt = current_step_up_pt_param
-        attrs = { ri: params[:ri] }
-        attrs[:scope] = scope if scope.present?
-        attrs[:pt] = pt if pt.present?
-        attrs
-      end
-  end
-
-  def verification_success_notice_key
-    "sign.app.verification.success.complete"
-  end
-
-  def verification_invalid_request_redirect_path(ri:)
-    auth_app_settings_path(ri: ri)
+      (
+        if @available_methods.include?(:passkey)
+          { key: "passkey",
+            label: t("sign.app.verification.new.methods.passkey"),
+            href: new_auth_app_verification_passkey_path(ri: params[:ri]), }
+        end
+      ),
+      (
+        if @available_methods.include?(:totp)
+          { key: "totp",
+            label: t("sign.app.verification.new.methods.totp"),
+            href: new_auth_app_verification_totp_path(ri: params[:ri]), }
+        end
+      ),
+      (
+        if @available_methods.include?(:email_otp)
+          { key: "email_otp",
+            label: t("sign.app.verification.new.methods.email_otp"),
+            href: new_auth_app_verification_email_path(ri: params[:ri]), }
+        end
+      ),
+    ].compact
   end
 end

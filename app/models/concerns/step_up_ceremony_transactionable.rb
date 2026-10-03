@@ -6,9 +6,12 @@ module StepUpCeremonyTransactionable
 
   DEFAULT_TTL = 15.minutes
   STATUS_PENDING = "pending"
+  STATUS_VERIFIED = "verified"
   STATUS_CONSUMED = "consumed"
   STATUS_CANCELED = "canceled"
-  STATUSES = [STATUS_PENDING, STATUS_CONSUMED, STATUS_CANCELED].freeze
+  STATUSES = %w(pending verified consumed canceled expired revoked).freeze
+  PURPOSES = %w(step_up reauthentication bootstrap credential_registration credential_change).freeze
+  METHOD_AALS = { "passkey" => "aal1", "totp" => "aal1", "email_otp" => "none" }.freeze
   RETENTION_PERIOD = 7.days
 
   included do
@@ -46,6 +49,8 @@ module StepUpCeremonyTransactionable
   end
 
   class_methods do
+    public
+
     def ceremony_surface(value = nil)
       self.ceremony_surface_name = value.to_s if value
       ceremony_surface_name
@@ -53,9 +58,13 @@ module StepUpCeremonyTransactionable
 
     def create_transaction!(surface: ceremony_surface, actor_ref:, session_ref:, required_scope:, required_aal:,
                             allowed_methods:, phishing_resistant_required: false, resource_ref: nil, return_to: nil,
-                            transaction_id: nil, grant_jti: nil, expires_at: nil, now: Time.current)
+                            transaction_id: nil, grant_jti: nil, expires_at: nil, now: nil, purpose: "step_up")
+      raise ArgumentError, "unsupported ceremony purpose" unless PURPOSES.include?(purpose)
+
       connection_owner.connected_to(role: :writing) do
+        now ||= database_now
         create!(
+          purpose: purpose,
           transaction_id: transaction_id.presence || SecureRandom.uuid,
           surface: surface.to_s,
           actor_ref: actor_ref,
@@ -101,6 +110,76 @@ module StepUpCeremonyTransactionable
     end
   end
 
+  public
+
+  def intent = purpose
+
+  def verified? = status == STATUS_VERIFIED
+
+  def record_verification!(method:, aal:, phishing_resistant:, verified_at:, verified_credential_ref:)
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        unless status == STATUS_PENDING && !expired?(now: now)
+          raise IdentityStepUpCeremonyContract::Error, "step-up transaction is not pending"
+        end
+        unless allowed_methods_array.include?(method.to_s) && permitted_ceremony_methods.include?(method.to_s)
+          raise IdentityStepUpCeremonyContract::Error, "step-up method is unavailable"
+        end
+
+        validate_verification_evidence!(
+          method: method, aal: aal, phishing_resistant: phishing_resistant,
+          verified_at: verified_at, verified_credential_ref: verified_credential_ref, now: now,
+        )
+
+        requirement_rank = IdentityStepUpCeremonyContract::AALS.index(required_aal)
+        achieved_rank = IdentityStepUpCeremonyContract::AALS.index(aal.to_s)
+        unless requirement_rank && achieved_rank && achieved_rank >= requirement_rank
+          raise IdentityStepUpCeremonyContract::Error, "step-up assurance is insufficient"
+        end
+
+        update!(
+          status: STATUS_VERIFIED, method: method.to_s, aal: aal.to_s,
+          phishing_resistant: phishing_resistant, verified_at: verified_at, result_jti: SecureRandom.uuid,
+          verified_credential_ref: verified_credential_ref,
+        )
+        self
+      end
+    end
+  end
+
+  def prepare_result_delivery!(result_digest:, ttl:)
+    raise ArgumentError, "invalid result digest" unless result_digest.is_a?(String) &&
+      result_digest.match?(/\A[0-9a-f]{64}\z/)
+    raise ArgumentError, "result TTL must be positive" unless ttl.positive?
+
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        unless verified? && !expired?(now: now)
+          raise IdentityStepUpCeremonyContract::Error, "step-up result is unavailable"
+        end
+
+        update!(
+          result_digest: result_digest, result_generation: result_generation + 1,
+          result_expires_at: [now + ttl, expires_at].min,
+        )
+        [self, result_generation]
+      end
+    end
+  end
+
+  def result_delivery_matches?(result_digest:, result_generation:, now: nil)
+    now ||= self.class.database_now
+    return false unless verified? || consumed?
+    return false unless result_digest.is_a?(String) && result_digest.match?(/\A[0-9a-f]{64}\z/)
+    return false unless result_generation.is_a?(Integer) && result_generation.positive?
+    return false unless self.result_digest && result_expires_at && result_expires_at > now && !expired?(now: now)
+
+    self.result_generation == result_generation &&
+      ActiveSupport::SecurityUtils.secure_compare(self.result_digest, result_digest)
+  end
+
   def grant_claims(now: Time.current)
     {
       "surface" => surface,
@@ -124,7 +203,7 @@ module StepUpCeremonyTransactionable
   end
 
   def expired?(now: Time.current)
-    expires_at.to_i <= now.to_i
+    expires_at <= now
   end
 
   def consumed? = status == STATUS_CONSUMED
@@ -168,6 +247,17 @@ module StepUpCeremonyTransactionable
   end
 
   private
+
+  def validate_verification_evidence!(method:, aal:, phishing_resistant:, verified_at:, verified_credential_ref:, now:)
+    unless verified_credential_ref.is_a?(String) && verified_credential_ref.present? &&
+        verified_at && verified_at >= created_at && verified_at <= now && verified_at < expires_at &&
+        [true, false].include?(phishing_resistant) &&
+        phishing_resistant == (method.to_s == "passkey") && METHOD_AALS.fetch(method.to_s) == aal.to_s &&
+        (!phishing_resistant_required || phishing_resistant == true)
+      raise IdentityStepUpCeremonyContract::Error, "step-up evidence is invalid"
+    end
+
+  end
 
   def surface_matches_transaction_class
     return if self.class.ceremony_surface.blank? || surface == self.class.ceremony_surface

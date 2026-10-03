@@ -13,6 +13,13 @@ module AuthCeremonyContext
 
   private
 
+  def require_sign_in_ceremony_admission!
+    return render_sign_in_unavailable_while_authenticated if logged_in?
+    return if auth_ceremony_matches_intent?("sign_in")
+
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
+
   def auth_ceremony_surface
     self.class.const_get(:AUTH_CEREMONY_SURFACE)
   end
@@ -36,6 +43,8 @@ module AuthCeremonyContext
 
   def auth_ceremony_authorization_transaction
     record = admitted_auth_ceremony_session
+    return nil unless record&.admission_purpose == "authentication_handoff"
+
     transaction_ref = record&.authorization_transaction_ref
     return nil if transaction_ref.blank?
 
@@ -49,6 +58,43 @@ module AuthCeremonyContext
 
   def oidc_authorization_login_challenge
     auth_ceremony_authorization_transaction&.login_challenge
+  end
+
+  def auth_ceremony_local_sign_in_flow
+    record = admitted_auth_ceremony_session
+    return nil unless record&.local_sign_in_flow_ref
+    return nil unless %w(local_sign_in local_sign_up).include?(record.admission_purpose)
+
+    model = BaseAuthAdmissionCoordinator::LOCAL_SIGN_IN_FLOW.fetch(auth_ceremony_surface)
+    model.connection_class_for_self.connected_to(role: :writing) do
+      flow = model.find_by!(public_id: record.local_sign_in_flow_ref)
+      return nil if flow.expired?(model.database_now) || flow.sign_in_failed?
+
+      flow
+    end
+  end
+
+  def auth_ceremony_step_up_transaction
+    record = admitted_auth_ceremony_session
+    return nil if record&.step_up_ceremony_transaction_ref.blank?
+
+    intent =
+      case record.admission_purpose
+      when "step_up_handoff" then "step_up"
+      when "reauthentication_handoff" then "reauthentication"
+      else return nil
+      end
+    BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+      payload: {
+        "purpose" => record.admission_purpose,
+        "surface" => auth_ceremony_surface,
+        "actor_type" => BaseAuthAdmissionCoordinator::SURFACE_ACTOR.fetch(auth_ceremony_surface),
+        "subject_ref" => record.step_up_ceremony_transaction_ref,
+      },
+      surface: auth_ceremony_surface, expected_intent: intent,
+    )
+  rescue BaseAuthAdmissionCoordinator::Denied
+    nil
   end
 
   def complete_auth_ceremony_session!
@@ -73,8 +119,16 @@ module AuthCeremonyContext
   end
 
   def auth_ceremony_matches_intent?(expected_intent)
+    if %w(step_up reauthentication).include?(expected_intent.to_s)
+      return auth_ceremony_step_up_transaction&.purpose == expected_intent.to_s
+    end
+
     transaction = auth_ceremony_authorization_transaction
-    return true if transaction.nil?
+    if transaction.nil?
+      expected_purpose = BaseAuthAdmissionCoordinator::LOCAL_ENTRY_PURPOSE[expected_intent.to_s]
+      return expected_purpose.present? && admitted_auth_ceremony_session&.admission_purpose == expected_purpose &&
+          auth_ceremony_local_sign_in_flow.present?
+    end
 
     transaction.intent.to_s == expected_intent.to_s ||
       (ORDINARY_AUTHENTICATION_INTENTS.include?(transaction.intent.to_s) &&

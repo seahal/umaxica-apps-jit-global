@@ -20,6 +20,10 @@ module Auth
 
             AUTHENTICATION_MODE = :guest
 
+            prepend_before_action :require_sign_in_ceremony_admission!
+            ensure_fqdn_gate_first!
+            prepend_before_action :apply_default_no_store
+
             rate_limit(
               to: 5,
               within: 1.minute,

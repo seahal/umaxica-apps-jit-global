@@ -41,7 +41,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
       model.stub(:database_now, database_now) do
         record, = model.issue!
-        record.admit!(authorization_transaction_ref: "clock-#{model.name}")
+        record.admit!(admission_purpose: "authentication_handoff", authorization_transaction_ref: "clock-#{model.name}")
         record.complete!
       end
 
@@ -57,7 +57,10 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
     test "#{model.name} admits one authorization transaction and has irreversible terminal states" do
       record, = model.issue!
 
-      record.admit!(authorization_transaction_ref: "transaction-#{model.name}")
+      record.admit!(
+        admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: "transaction-#{model.name}",
+      )
 
       assert_predicate record.reload, :admitted?
       assert_equal "transaction-#{model.name}", record.authorization_transaction_ref
@@ -75,10 +78,13 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
     test "#{model.name} does not allow a second admission binding" do
       record, = model.issue!
-      record.admit!(authorization_transaction_ref: "transaction-#{model.name}")
+      record.admit!(
+        admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: "transaction-#{model.name}",
+      )
 
       assert_raises(AuthCeremonySession::InvalidTransition) do
-        record.admit!(authorization_transaction_ref: "another-transaction")
+        record.admit!(admission_purpose: "authentication_handoff", authorization_transaction_ref: "another-transaction")
       end
 
       assert_equal "transaction-#{model.name}", record.reload.authorization_transaction_ref
@@ -87,7 +93,10 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
     test "#{model.name} records one-time authentication evidence without granting authority" do
       database_now = Time.utc(2026, 9, 21, 13, 14, 15)
       record, = model.issue!(now: database_now)
-      record.admit!(authorization_transaction_ref: "evidence-#{model.name}", now: database_now)
+      record.admit!(
+        admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: "evidence-#{model.name}", now: database_now,
+      )
 
       record.class.stub(:database_now, database_now) do
         record.record_authentication_evidence!(method: "secret")
@@ -111,18 +120,22 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       second, = model.issue!
       ref = "shared-transaction-#{model.name}"
 
-      first.admit!(authorization_transaction_ref: ref)
+      first.admit!(admission_purpose: "authentication_handoff", authorization_transaction_ref: ref)
 
       assert_raises(ActiveRecord::RecordNotUnique) do
-        second.admit!(authorization_transaction_ref: ref)
+        second.admit!(admission_purpose: "authentication_handoff", authorization_transaction_ref: ref)
       end
     end
 
     test "#{model.name} atomically replaces the previous admitted session" do
       previous, previous_sid = model.issue!
-      previous.admit!(authorization_transaction_ref: "previous-#{model.name}")
+      previous.admit!(
+        admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: "previous-#{model.name}",
+      )
 
       replacement, replacement_sid = model.rotate_and_admit!(
+        admission_purpose: "authentication_handoff",
         previous_raw_sid: previous_sid,
         authorization_transaction_ref: "replacement-#{model.name}",
       )
@@ -138,14 +151,19 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
     test "#{model.name} rejects a second replacement from the same previous session" do
       previous, previous_sid = model.issue!
-      previous.admit!(authorization_transaction_ref: "previous-#{model.name}")
+      previous.admit!(
+        admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: "previous-#{model.name}",
+      )
       model.rotate_and_admit!(
+        admission_purpose: "authentication_handoff",
         previous_raw_sid: previous_sid,
         authorization_transaction_ref: "replacement-#{model.name}",
       )
 
       assert_raises(AuthCeremonySession::InvalidTransition) do
         model.rotate_and_admit!(
+          admission_purpose: "authentication_handoff",
           previous_raw_sid: previous_sid,
           authorization_transaction_ref: "racing-replacement-#{model.name}",
         )
@@ -163,10 +181,11 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
     test "#{model.name} keeps the previous session when replacement admission conflicts" do
       previous, previous_sid = model.issue!
       transaction_ref = "conflicting-#{model.name}"
-      previous.admit!(authorization_transaction_ref: transaction_ref)
+      previous.admit!(admission_purpose: "authentication_handoff", authorization_transaction_ref: transaction_ref)
 
       assert_raises(ActiveRecord::RecordNotUnique) do
         model.rotate_and_admit!(
+          admission_purpose: "authentication_handoff",
           previous_raw_sid: previous_sid,
           authorization_transaction_ref: transaction_ref,
         )
@@ -196,7 +215,7 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
 
     test "#{model.name} cancellation is terminal and cannot be followed by completion" do
       record, = model.issue!
-      record.admit!
+      record.admit!(admission_purpose: "authentication_handoff")
 
       record.cancel!
 

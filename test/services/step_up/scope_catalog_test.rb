@@ -6,11 +6,17 @@ require "test_helper"
 
 class StepUpScopeCatalogTest < ActiveSupport::TestCase
   test "settings mfa uses the mfa challenge path on every surface" do
-    path = "/settings/mfa/challenge"
+    path = "/identity/mfa/challenge"
 
     assert_match StepUpScopeCatalog::APP.fetch("settings_mfa"), path
     assert_match StepUpScopeCatalog::COM.fetch("settings_mfa"), path
     assert_match StepUpScopeCatalog::ORG.fetch("settings_mfa"), path
+    [StepUpScopeCatalog::APP, StepUpScopeCatalog::COM, StepUpScopeCatalog::ORG].each do |catalog|
+      assert_match catalog.fetch("settings_mfa"), "#{path}?ri=jp"
+      assert_no_match catalog.fetch("settings_mfa"), "#{path}-extra"
+      assert_no_match catalog.fetch("settings_mfa"), "#{path}/extra"
+      assert_no_match catalog.fetch("settings_mfa"), "/settings/mfa/challenge"
+    end
   end
 
   test "later step up scopes remain registered" do
@@ -20,7 +26,7 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     assert_match StepUpScopeCatalog::ORG.fetch("operator_lifecycle"), "/settings/operator_lifecycle_requests"
   end
 
-  test "social link scope is offered on app and org and matches social settings pages" do
+  test "social link scope is offered only on app and matches its provider settings pages" do
     app_pattern = StepUpScopeCatalog::APP.fetch("social_link")
 
     assert_match app_pattern, "/settings/google"
@@ -30,14 +36,10 @@ class StepUpScopeCatalogTest < ActiveSupport::TestCase
     assert_no_match app_pattern, "/social/auth/google_app/continue"
     assert_no_match app_pattern, "/settings/emails"
 
-    # Org links Google only (no Apple); com offers no social linking.
-    org_pattern = StepUpScopeCatalog::ORG.fetch("social_link")
-
-    assert_match org_pattern, "/settings/google"
-    assert_match org_pattern, "/settings/google?ri=jp"
-    assert_no_match org_pattern, "/settings/apple"
-    assert_no_match org_pattern, "/social/auth/google_#{"org"}/continue"
+    assert_not StepUpScopeCatalog::ORG.key?("social_link")
+    assert_not StepUpScopeCatalog::ORG.key?("social_unlink")
     assert_not StepUpScopeCatalog::COM.key?("social_link")
+    assert_not StepUpScopeCatalog::COM.key?("social_unlink")
   end
 
   test "social unlink scope matches only provider settings pages" do

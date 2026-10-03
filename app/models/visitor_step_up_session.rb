@@ -30,6 +30,7 @@
 class VisitorStepUpSession < ComTicketRecord
   include Retainable
   include StepUpSessionConsumable
+  include StepUpEmailChallenge
 
   STATUSES = %w(PENDING VERIFIED).freeze
   METHODS = %w(passkey email_otp).freeze
@@ -51,4 +52,14 @@ class VisitorStepUpSession < ComTicketRecord
   def expired?
     discard_at <= Time.current
   end
+
+  private
+
+  def email_transaction_model = VisitorStepUpCeremonyTransaction
+
+  def email_session_token = visitor_token
+
+  def passkey_transaction_model = VisitorStepUpCeremonyTransaction
+
+  def passkey_session_token = visitor_token
 end

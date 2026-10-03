@@ -104,6 +104,10 @@ module AuthenticationSequenceGate
         return
       end
 
+      if local_authentication_ceremony?
+        return redirect_local_checkpoint_result!(cycle)
+      end
+
       with_sign_in_flow_writing(cycle) do
         changes = {
           status_id: cycle.status_id_for("DASHBOARD_PENDING"),
@@ -136,12 +140,19 @@ module AuthenticationSequenceGate
     redirect_after_checkpoint_sequence!(pt: signed_pt_param)
   end
 
+  def redirect_local_checkpoint_result!(cycle)
+    with_sign_in_flow_writing(cycle) do
+      SignInSelectorParticipant.new(cycle: cycle, actor: sign_in_flow_actor(cycle)).auto_commit_single!
+    end
+    redirect_to(after_login_path, status: :see_other)
+  end
+
   # OIDC credentials are established by Auth's ceremony, not by an Auth root
   # session. Resolve the actor from the DB-backed sign-in cycle when the
   # transaction challenge is present; a browser credential is only a normal
   # fallback for non-OIDC checkpoint entry.
   def authenticate_sign_in_sequence_actor!
-    return authenticate! unless oidc_authorization_login_challenge_present?
+    return authenticate! unless oidc_authorization_login_challenge_present? || local_authentication_ceremony?
 
     cycle = current_db_sign_in_flow_for_sequence
     actor = cycle && sign_in_flow_actor(cycle)
@@ -399,6 +410,8 @@ module AuthenticationSequenceGate
   end
 
   def current_db_sign_in_flow_for_sequence
+    return auth_ceremony_local_sign_in_flow if local_authentication_ceremony?
+
     @current_db_sign_in_flow_for_sequence ||=
       begin
         token = respond_to?(:current_session, true) ? current_session : nil
@@ -446,6 +459,25 @@ module AuthenticationSequenceGate
   private
 
   def start_sign_in_flow_for!(resource, pt:)
+    if local_authentication_ceremony?
+      cycle = auth_ceremony_local_sign_in_flow
+      raise AuthCeremonySession::InvalidTransition, "local authentication admission is missing" unless cycle
+      unless cycle.is_a?(sign_in_flow_class_for(resource))
+        raise AuthCeremonySession::InvalidTransition, "local authentication surface mismatch"
+      end
+
+      with_sign_in_flow_writing(cycle) do
+        cycle.with_lock do
+          unless cycle.sign_in_primary_pending? && cycle.principal_id.nil?
+            raise AuthCeremonySession::InvalidTransition, "local authentication flow is already bound"
+          end
+
+          cycle.update!(principal_id: resource.id)
+        end
+      end
+      return cycle
+    end
+
     cycle_class = sign_in_flow_class_for(resource)
     nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
     cycle_class.create!(
@@ -463,14 +495,14 @@ module AuthenticationSequenceGate
     case result[:status]
     when :session_limit_pending
       cycle.advance_sign_in_to_session_limit! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
-      sign_in_flow_locator_for(actor: resource).issue!(cycle)
+      sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     when :success, :authentication_evidence_recorded
       cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
       if cycle.sign_in_guardrail_pending?
         guardrail = SignInGuardrailParticipant.new(cycle: cycle, actor: resource)
         guardrail.advance_if_clear!
       end
-      sign_in_flow_locator_for(actor: resource).issue!(cycle.reload)
+      sign_in_flow_locator_for(actor: resource).issue!(cycle.reload) unless local_authentication_ceremony?
     else
       cycle.fail_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed?
       sign_in_flow_locator_for(actor: resource).issue!(cycle) if result[:status] == :session_limit_hard_reject
@@ -556,6 +588,13 @@ module AuthenticationSequenceGate
   end
 
   def pending_mfa_sign_in_flow_for(resource)
+    if local_authentication_ceremony?
+      cycle = auth_ceremony_local_sign_in_flow
+      return cycle if cycle&.principal_id == resource.id
+
+      return nil
+    end
+
     sign_in_flow_locator_for(actor: resource).current
   end
 
@@ -610,7 +649,7 @@ module AuthenticationSequenceGate
     true
   end
 
-  private :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?,
+  private :redirect_local_checkpoint_result!, :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?,
           :authorize_sign_in_sequence!, :authenticate_sign_in_sequence_actor!,
           :authenticate_oidc_result_actor!, :oidc_authorization_login_challenge_present?
 end

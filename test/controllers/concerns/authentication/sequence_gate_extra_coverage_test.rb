@@ -106,6 +106,10 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     def current_authentication_event_at = nil
 
+    # This harness exercises the Base/OIDC sequence contract. Auth-local admission is covered by
+    # local_authentication_boundary_test through the HTTP boundary.
+    def local_authentication_ceremony? = false
+
     def current_session
       @current_session_value
     end

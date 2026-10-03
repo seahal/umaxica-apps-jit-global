@@ -1,18 +1,45 @@
-# typed: false
 # frozen_string_literal: true
 
-class Auth::Com::Verification::CancellationsController < ::Auth::Com::Verification::BaseController
-  include SignVerificationCancellation
+class Auth::Com::Verification::CancellationsController < Auth::Com::ApplicationController
+  include AuthStepUpCeremonyContext
 
-  AUTHENTICATION_MODE = :private
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
-  # Cancelling only ends state. An actor with no Step-Up method reaches it from the setup page, so
-  # the method prerequisite, which would send them back to setup, does not apply here.
-  skip_before_action :enforce_step_up_prereqs!
+  public
+
+  def create
+    return unless load_step_up_ceremony_context!
+
+    canceled = IdentityStepUpCeremonyCancellationCommitter.call!(
+      actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+      transaction: @step_up_ceremony_transaction,
+    )
+    return render_invalid_step_up_context! unless canceled
+
+    cookies.delete(auth_ceremony_sid_cookie_name, path: "/")
+    reset_session
+    redirect_to(
+      base_com_dashboard_url(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ri: params[:ri]),
+      status: :see_other,
+    )
+  rescue IdentityStepUpCeremonyContract::Error, ActiveRecord::RecordNotFound
+    render_invalid_step_up_context!
+  end
 
   private
 
-  def verification_cancellation_destination_path
-    auth_com_settings_path(ri: params[:ri])
+  def ceremony_actor_model = Visitor
+
+  def ceremony_step_up_session_model = VisitorStepUpSession
+
+  def ceremony_session_token(record) = record.visitor_token
+
+  def ceremony_token_owned_by?(token, actor) = token.visitor_id == actor.id
+
+  def ceremony_supported_methods = %i(passkey email_otp)
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
   end
 end

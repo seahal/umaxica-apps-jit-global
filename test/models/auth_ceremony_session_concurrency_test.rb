@@ -27,7 +27,7 @@ class AuthCeremonySessionConcurrencyTest < ActiveSupport::TestCase
       previous, previous_sid = model.issue!
       @created_records << [model, previous.id]
       previous_ref = "concurrent-previous-#{model.name}-#{SecureRandom.uuid}"
-      previous.admit!(authorization_transaction_ref: previous_ref)
+      previous.admit!(admission_purpose: "authentication_handoff", authorization_transaction_ref: previous_ref)
 
       ready = Queue.new
       release = Queue.new
@@ -47,6 +47,7 @@ class AuthCeremonySessionConcurrencyTest < ActiveSupport::TestCase
               release.pop
 
               replacement, = model.rotate_and_admit!(
+                admission_purpose: "authentication_handoff",
                 previous_raw_sid: previous_sid,
                 authorization_transaction_ref: "concurrent-replacement-#{index}-#{model.name}-#{SecureRandom.uuid}",
               )

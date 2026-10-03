@@ -35,6 +35,7 @@ module Security
       PUBLIC_WEB_EDGE
       PUBLIC_OAUTH_OIDC_SSO
       PUBLIC_SIGN_IN_UP
+      PUBLIC_AUTH_STEP_UP
       PUBLIC_SIGN_OUT
       PUBLIC_WITHDRAWAL
       PUBLIC_IDENTITY_RECOVERY
@@ -190,6 +191,7 @@ module Security
     def documented_public_auth?(entry)
       public_oauth_oidc_or_sso?(entry) ||
         public_sign_in_or_up?(entry) ||
+        public_auth_step_up?(entry) ||
         public_sign_out?(entry) ||
         public_withdrawal?(entry) ||
         public_identity_recovery?(entry) ||
@@ -270,12 +272,44 @@ module Security
     end
 
     def public_sign_in_or_up?(entry)
+      if entry.path == "/sign/completion"
+        return post?(entry) && entry.action == "create" &&
+            entry.controller_path.match?(%r{\Abase/(app|com|org)/sign/completions\z})
+      end
+      if entry.path == "/sign/handoff"
+        return %w(GET POST).include?(entry.verb) && %w(show create).include?(entry.action) &&
+            entry.controller_path.match?(%r{\Aauth/(app|com|org)/sign/handoffs\z})
+      end
+
       entry.path == "/sign" || entry.path == "/oidc/callback" ||
         entry.path.start_with?("/sign/in", "/sign/up", "/web/v0/in/")
     end
 
     def public_sign_out?(entry)
       entry.path.start_with?("/sign/out") || entry.controller_path.end_with?("/sign_outs", "/sign/outs")
+    end
+
+    def public_auth_step_up?(entry)
+      path_pattern, actions =
+        case entry.controller_path
+        when %r{\Aauth/(app|com|org)/verifications\z}
+          [%r{\A/verification\z}, { "show" => %w(GET), "create" => %w(POST) }]
+        when %r{\Aauth/(app|com|org)/verification/handoffs\z}
+          [%r{\A/verification/handoff\z}, { "show" => %w(GET), "create" => %w(POST) }]
+        when %r{\Aauth/(app|com|org)/verification/cancellations\z}
+          [%r{\A/verification/cancellation\z}, { "create" => %w(POST) }]
+        when %r{\Aauth/(app|com|org)/verification/passkeys\z}
+          [%r{\A/verification/passkey(?:/(?:new|options))?\z},
+           { "new" => %w(GET), "options" => %w(POST), "create" => %w(POST) },]
+        when %r{\Aauth/(app|com)/verification/emails\z}
+          [%r{\A/verification/emails(?:/new|/:id(?:/edit)?)?\z},
+           { "new" => %w(GET), "edit" => %w(GET), "create" => %w(POST), "update" => %w(PATCH PUT) },]
+        when %r{\Aauth/(app|com)/verification/redeliveries\z}
+          [%r{\A/verification/emails/:email_id/redelivery\z}, { "create" => %w(POST) }]
+        else
+          return false
+        end
+      entry.path.match?(path_pattern) && actions.fetch(entry.action, []).include?(entry.verb)
     end
 
     def public_withdrawal?(entry)

@@ -54,10 +54,39 @@ module AuthCeremonyAdmission
       expected_intent: expected_intent,
     )
     if BaseAuthAdmissionCoordinator.local_entry_purpose?(payload: payload, intent: expected_intent)
-      rotate_auth_ceremony_session!
-      return redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
+      admit_local_entry_payload!(payload)
+    elsif %w(step_up reauthentication).include?(expected_intent.to_s)
+      transaction = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+        payload: payload, surface: auth_ceremony_surface, expected_intent: expected_intent,
+      )
+      rotate_auth_ceremony_session!(
+        admission_purpose: payload.fetch("purpose"),
+        step_up_ceremony_transaction_ref: transaction.transaction_id,
+      )
+    else
+      admit_oidc_payload!(payload, expected_intent: expected_intent)
     end
+    redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
+         AuthCeremonySession::InvalidTransition
+    render_invalid_admission_request!
+  end
 
+  def admit_local_entry_payload!(payload)
+    model = BaseAuthAdmissionCoordinator::LOCAL_SIGN_IN_FLOW.fetch(auth_ceremony_surface)
+    model.connection_class_for_self.connected_to(role: :writing) do
+      flow = model.find_by!(public_id: payload.fetch("subject_ref"))
+      unless flow.sign_in_primary_pending? && !flow.expired?(model.database_now) && flow.principal_id.nil?
+        raise BaseAuthAdmissionCoordinator::Denied, "local entry is not pending"
+      end
+
+      rotate_auth_ceremony_session!(
+        admission_purpose: payload.fetch("purpose"), local_sign_in_flow_ref: flow.public_id,
+      )
+    end
+  end
+
+  def admit_oidc_payload!(payload, expected_intent:)
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
       surface: auth_ceremony_surface,
       transaction_id: payload.fetch("subject_ref"),
@@ -75,18 +104,21 @@ module AuthCeremonyAdmission
       raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction intent mismatch"
     end
 
-    rotate_auth_ceremony_session!(authorization_transaction_ref: transaction.transaction_id)
-    redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
-         AuthCeremonySession::InvalidTransition
-    render_invalid_admission_request!
+    rotate_auth_ceremony_session!(
+      admission_purpose: payload.fetch("purpose"),
+      authorization_transaction_ref: transaction.transaction_id,
+    )
   end
 
-  def rotate_auth_ceremony_session!(authorization_transaction_ref: nil)
+  def rotate_auth_ceremony_session!(admission_purpose:, authorization_transaction_ref: nil, local_sign_in_flow_ref: nil,
+                                    step_up_ceremony_transaction_ref: nil)
     model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
     record, sid = model.rotate_and_admit!(
+      admission_purpose: admission_purpose,
       previous_raw_sid: read_auth_ceremony_sid_cookie,
       authorization_transaction_ref: authorization_transaction_ref,
+      local_sign_in_flow_ref: local_sign_in_flow_ref,
+      step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
     )
     write_auth_ceremony_sid_cookie!(sid)
     record
@@ -142,6 +174,8 @@ module AuthCeremonyAdmission
   end
 
   def auth_ceremony_clean_url(expected_intent:)
+    return auth_step_up_ceremony_clean_url if %w(step_up reauthentication).include?(expected_intent.to_s)
+
     ri = params[:ri]
     path = (expected_intent.to_s == "sign_up") ? "sign_up" : "sign_in"
     case auth_ceremony_surface
@@ -152,6 +186,10 @@ module AuthCeremonyAdmission
     else
       (path == "sign_up") ? auth_org_sign_up_path(ri: ri) : auth_org_sign_in_path(ri: ri)
     end
+  end
+
+  def auth_step_up_ceremony_clean_url
+    raise NotImplementedError, "#{self.class} must define #auth_step_up_ceremony_clean_url"
   end
 
   def auth_ceremony_intent_matches?(actual, expected)

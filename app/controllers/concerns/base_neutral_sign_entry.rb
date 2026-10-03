@@ -21,7 +21,12 @@ module BaseNeutralSignEntry
     return render_sign_in_unavailable_while_authenticated if logged_in?
 
     response.set_header("Cache-Control", "no-store")
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: base_sign_surface, intent: "sign_in")
+    nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
+    model = BaseAuthAdmissionCoordinator::LOCAL_SIGN_IN_FLOW.fetch(base_sign_surface)
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: base_sign_surface, intent: "sign_in", nonce_digest: model.digest_nonce(nonce),
+    )
+    SignInCycleLocator.new(session, surface: base_sign_surface).issue!(admission.transaction, nonce: nonce)
     redirect_to_jump_url(auth_sign_in_url_for(admission), status: :see_other)
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e
     Rails.logger.error(

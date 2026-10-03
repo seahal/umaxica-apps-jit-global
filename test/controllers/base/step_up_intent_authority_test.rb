@@ -8,40 +8,51 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
   fixtures :clients, :operators, :client_statuses, :client_token_kinds, :client_token_statuses,
            :operator_tokens, :operator_passkeys
 
-  test "app base verification intent creates transaction and redirects to sign ceremony with grant" do
+  test "app Base verification GET displays a nonconsuming start and POST issues opaque admission" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
     ClientEmail.create!(
-      user: user,
-      address: "step-up-intent-#{SecureRandom.hex(4)}@example.com",
+      user: user, address: "step-up-intent-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: "otp_private_key",
-      otp_counter: "0",
+      otp_private_key: "otp_private_key", otp_counter: "0",
     )
     token = create_client_token!(user)
     pt = signed_step_up_pt_for(
-      base_app_identity_emails_path(ri: "jp"), surface: "app",
-                                               session_nonce: session_nonce_for(token),
+      base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: session_nonce_for(token),
     )
 
-    assert_difference -> { ClientStepUpCeremonyTransaction.count }, 1 do
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
       get base_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
           headers: app_session_headers(host, token, user)
     end
+    assert_response :success
+    assert_equal "base/app/verifications/show", inertia_component
+    form = inertia_props.fetch("form")
 
+    assert_equal "settings_email", form.fetch("scope")
+    assert_equal pt, form.fetch("pt")
+    assert_equal base_app_verification_path(ri: "jp"), form.fetch("action")
+
+    assert_difference -> { ClientStepUpCeremonyTransaction.count }, 1 do
+      post base_app_verification_url(ri: "jp", host: host),
+           params: { scope: form.fetch("scope"), pt: form.fetch("pt") },
+           headers: app_session_headers(host, token, user)
+    end
     assert_response :see_other
     query = redirect_query
 
-    assert_equal "settings_email", query["scope"]
-    assert_equal pt, query["pt"]
-    assert_predicate query["step_up_ceremony_grant"], :present?
-    assert_predicate query["step_up_completion_csrf"], :present?
+    assert_predicate query["entry_ref"], :present?
+    assert_nil query["step_up_ceremony_grant"]
+    assert_nil query["scope"]
+    assert_nil query["pt"]
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: query.fetch("entry_ref"), surface: "app", expected_intent: "step_up",
+    )
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: payload.fetch("subject_ref"))
 
-    grant = decode_grant(query["step_up_ceremony_grant"], surface: "app")
-    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: grant["transaction_id"])
-
-    assert_equal user.public_id, grant["actor_ref"]
-    assert_equal token.public_id, grant["session_ref"]
+    assert_equal transaction.transaction_id, session[:base_step_up_transaction_ref]
+    assert_equal user.public_id, transaction.actor_ref
+    assert_equal token.public_id, transaction.session_ref
     assert_equal "settings_email", transaction.required_scope
     assert_equal StepUpRequirement::NO_AAL, transaction.required_aal
     assert_nil token.reload.last_step_up_at

@@ -66,11 +66,13 @@ class StepUpResolver
     usable_token? &&
       requirement.aal_supported? &&
       satisfied_at.present? &&
+      satisfied_at <= now &&
       expires_at.present? &&
       expires_at > now &&
       scope_matches? &&
       aal_matches? &&
       method_matches? &&
+      phishing_resistance_matches? &&
       session_bound? &&
       token_bound? &&
       purpose_bound? &&
@@ -108,6 +110,10 @@ class StepUpResolver
 
   def method_matches?
     requirement.method_allowed?(step_up_method)
+  end
+
+  def phishing_resistance_matches?
+    !requirement.phishing_resistant_required? || token_attribute(:last_step_up_phishing_resistant) == true
   end
 
   def step_up_method

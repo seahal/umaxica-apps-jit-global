@@ -8,6 +8,13 @@ their established values.
 
 Accepted (2026-06-14)
 
+## TanStack UI-Origin Supersession (2026-10-03)
+
+`adr/tanstack-start-zero-cookie-ui-origin-boundary.md` supersedes this record's Core UI-origin and
+SSR portions for TanStack Start. It resolves the deferred follow-up by inheriting the complete
+zero-cookie boundary. Rails credential authority and transport binding retain their existing
+contracts. This supersession performs no runtime migration.
+
 ## RP Credential Authority Amendment (2026-09-20)
 
 The Base/Auth/RP authority decision supersedes the credential issuance and audience portions of
@@ -22,8 +29,8 @@ The old `core-browser` audience/root-browser-cookie contract below is historical
 path and is not an accepted credential for the current Core browser API. The Core API still keeps
 cookie-only transport, rejects `Authorization: Bearer`, keeps Rails CSRF protection, uses
 `Cache-Control: no-store`, and validates the exact RP issuer/audience/client binding. Palm remains
-an independent bearer-token boundary. The zero-cookie Next.js/edge contract is unchanged and its
-TanStack SSR boundary remains a separate follow-up decision.
+an independent bearer-token boundary. The zero-cookie invariant is retained for TanStack Start by
+the 2026-10-03 supersession above; its SSR boundary is no longer an unresolved follow-up.
 
 ## Amendment (2026-08-09)
 

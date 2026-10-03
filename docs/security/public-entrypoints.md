@@ -58,6 +58,27 @@ updating this document and the test together.
 
 ## Default Rule
 
+`PUBLIC_AUTH_STEP_UP` covers Auth app/com/org `GET` and `POST /verification`. GET with an opaque
+reference displays the continuation form without consuming admission. CSRF-protected POST redeems
+the purpose-bound admission and rotates Auth-local continuity. The clean entry page requires that
+continuity and the matching, unexpired Base transaction; it uses the transaction's actor only for
+ceremony ownership authorization. It does not accept an Auth root login as admission.
+
+The same classification includes the admitted Passkey display, POST options and assertion,
+GET/POST opaque result handoff on all three surfaces, and APP/COM Email OTP display,
+issuance, verification and POST redelivery. Every action resolves the exact admitted actor,
+session and transaction and retains business authorization. Display GET requests create no
+challenge or email generation. ORG has no Email OTP endpoint.
+Auth cancellation POST closes the admitted transaction and its continuity, then uses the
+existing Jump redirect to that surface's fixed Base dashboard. It grants no freshness and
+does not resume the protected change request.
+
+`PUBLIC_SIGN_IN_UP` also covers Auth app/com/org `GET` and `POST /sign/handoff` and
+Base app/com/org `POST /sign/completion`. Auth requires a matching admitted local flow and only
+returns its credential evidence. Base requires the issuing browser's flow binding and the exact
+Auth origin before consuming the short-lived opaque result through its existing session issuance
+boundary. Public reachability of these transport endpoints grants no session authority.
+
 Routes not covered above must require authentication or fail closed. In code, that means the route
 must resolve to `:private` or `:deny_all`, and its concrete controller/action must declare that
 classification locally.

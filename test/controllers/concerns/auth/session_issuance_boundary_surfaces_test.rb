@@ -4,13 +4,13 @@
 require "test_helper"
 
 # The final session issuance boundary (AuthenticationBase#log_in) is shared by app, com, and org.
-# Each surface is exercised through its real Auth application controller so the surface's own token
+# Each surface is exercised through its real Base application controller so the surface's own token
 # table, limit, and cookies are used (adr/root-login-establishment-boundary.md).
 class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
   SURFACES = {
     app: {
-      controller: "Auth::App::ApplicationController",
-      host: "PUBLIC_AUTH_SERVICE_URL",
+      controller: Base::App::ApplicationController,
+      host: "PUBLIC_BASE_SERVICE_URL",
       token_class: ClientToken,
       foreign_key: :user_id,
       limit: ClientToken::MAX_SESSIONS_PER_USER,
@@ -18,8 +18,8 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       resource: -> { Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01") },
     },
     com: {
-      controller: "Auth::Com::ApplicationController",
-      host: "PUBLIC_AUTH_CORPORATE_URL",
+      controller: Base::Com::ApplicationController,
+      host: "PUBLIC_BASE_CORPORATE_URL",
       token_class: VisitorToken,
       foreign_key: :visitor_id,
       limit: VisitorToken::MAX_SESSIONS_PER_VISITOR,
@@ -27,8 +27,8 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       resource: -> { Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR) },
     },
     org: {
-      controller: "Auth::Org::ApplicationController",
-      host: "PUBLIC_AUTH_STAFF_URL",
+      controller: Base::Org::ApplicationController,
+      host: "PUBLIC_BASE_STAFF_URL",
       token_class: OperatorToken,
       foreign_key: :staff_id,
       limit: OperatorToken::MAX_SESSIONS_PER_STAFF,
@@ -39,7 +39,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
   SURFACES.each do |surface, config|
     test "#{surface}: one below the limit commits one ACTIVE root session with cookies and context" do
-      resource = instance_exec(&config[:resource])
+      resource = config[:resource].call
       fill_sessions(config, resource, config[:limit] - 1)
       controller = build_controller(config)
 
@@ -59,7 +59,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     end
 
     test "#{surface}: at the limit nothing is issued, no cookie is set, and the existing context is kept" do
-      resource = instance_exec(&config[:resource])
+      resource = config[:resource].call
       existing = fill_sessions(config, resource, config[:limit])
       controller = build_controller(config)
       controller.session[:unrelated_marker] = "kept"
@@ -80,7 +80,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     end
 
     test "#{surface}: a flow that already carries a session is refused at the final boundary" do
-      resource = instance_exec(&config[:resource])
+      resource = config[:resource].call
       prior = fill_sessions(config, resource, 1).first
       flow = issuance_pending_flow(config, resource, token: prior)
 
@@ -93,8 +93,8 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     end
 
     test "#{surface}: a flow bound to a different actor is refused at the final boundary" do
-      resource = instance_exec(&config[:resource])
-      other = instance_exec(&config[:resource])
+      resource = config[:resource].call
+      other = config[:resource].call
       flow = issuance_pending_flow(config, other)
 
       result = nil
@@ -107,7 +107,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     end
 
     test "#{surface}: an issuance-pending flow is completed in the same commit and bound to the session" do
-      resource = instance_exec(&config[:resource])
+      resource = config[:resource].call
       flow = issuance_pending_flow(config, resource)
 
       result = build_controller(config).log_in(resource, establishment: :root_login, sign_in_flow: flow)
@@ -120,7 +120,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     end
 
     test "#{surface}: a database failure while creating the device session rolls the token back" do
-      resource = instance_exec(&config[:resource])
+      resource = config[:resource].call
       controller = build_controller(config)
 
       controller.stub(:ensure_device_session_for!, ->(*) { raise ActiveRecord::StatementInvalid, "injected" }) do
@@ -133,7 +133,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     end
 
     test "#{surface}: an unknown establishment is refused before any check" do
-      resource = instance_exec(&config[:resource])
+      resource = config[:resource].call
 
       assert_raises(ArgumentError) { build_controller(config).log_in(resource, establishment: :bootstrap) }
       assert_raises(ArgumentError) { build_controller(config).log_in(resource, establishment: nil) }
@@ -166,7 +166,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     request = ActionDispatch::TestRequest.create
     request.host = ENV.fetch(config[:host])
     request.session = ActionController::TestSession.new
-    controller_class = config[:controller].constantize
+    controller_class = config[:controller]
     controller = controller_class.new
     controller.set_request!(request)
     controller.set_response!(controller_class.make_response!(request))

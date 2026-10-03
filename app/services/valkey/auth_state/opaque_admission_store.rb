@@ -18,6 +18,7 @@ module Valkey
         step_up_handoff step_up_result
         reauthentication_handoff reauthentication_result
         local_sign_in local_sign_up
+        local_sign_in_result
       ).freeze
       BINDING_FIELDS = %w(
         actor_type surface subject_ref base_session_ref ceremony_session_ref

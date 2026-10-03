@@ -8,6 +8,7 @@ module Base
       include ::SessionBoundaryNotFound
 
       AUTHENTICATION_MODE = :open
+      declare_authentication_mode! :private, only: :show
       skip_before_action :set_preferences_cookie, only: %i(index show)
 
       public
@@ -22,10 +23,9 @@ module Base
 
       def show
         response.headers["Cache-Control"] = "private, no-store"
-        return render_session_boundary_not_found unless logged_in?
+        authorize!(current_client, to: :show?)
         return unless require_selected_actor_context_for_dashboard!
 
-        authorize!(current_client, to: :show?)
         render inertia: "base/app/dashboards/show", props: dashboard_page_props
       end
 

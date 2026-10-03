@@ -4,6 +4,86 @@
 require "test_helper"
 
 class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
+  test "step-up admission resolves only its purpose-bound pending transaction" do
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
+      required_aal: "none", allowed_methods: ["passkey"],
+    )
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction)
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "step_up",
+    )
+    resolved = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+      payload: payload, surface: "app", expected_intent: "step_up",
+    )
+
+    assert_equal transaction.id, resolved.id
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+        payload: payload, surface: "com", expected_intent: "step_up",
+      )
+    end
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+        payload: payload, surface: "app", expected_intent: "reauthentication",
+      )
+    end
+    transaction.update!(status: "canceled")
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+        payload: payload, surface: "app", expected_intent: "step_up",
+      )
+    end
+  end
+
+  test "step-up admission is not classified as a local sign-in entry" do
+    assert_not BaseAuthAdmissionCoordinator.local_entry_purpose?(
+      payload: { "purpose" => "step_up_handoff" }, intent: "step_up",
+    )
+  end
+
+  test "step-up result reads its concrete ticket without resolving an OIDC transaction" do
+    transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
+      required_aal: "none", allowed_methods: ["passkey"],
+    )
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true, verified_credential_ref: "key",
+      verified_at: ClientStepUpCeremonyTransaction.database_now,
+    )
+    issuance = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction)
+
+    payload = BaseAuthAdmissionCoordinator.read_result!(
+      raw_code: issuance.code, surface: "app", transaction_ref: transaction.transaction_id,
+      expected_intent: "step_up",
+    )
+
+    assert_equal transaction.transaction_id, payload.fetch("subject_ref")
+    assert_equal "step_up_result", payload.fetch("purpose")
+    assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+      BaseAuthAdmissionCoordinator.read_result!(
+        raw_code: issuance.code, surface: "app", transaction_ref: transaction.transaction_id,
+        expected_intent: "sign_in",
+      )
+    end
+  end
+
+  test "local admission names an existing pending flow without issuing a session" do
+    nonce_digest = ClientSignInFlow.digest_nonce("base-browser-nonce")
+    issuance = nil
+    assert_no_difference("ClientToken.count") do
+      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: "app", intent: "sign_in", nonce_digest: nonce_digest,
+      )
+    end
+    assert_instance_of ClientSignInFlow, issuance.transaction
+    assert_equal issuance.reference, issuance.transaction.public_id
+    assert_equal nonce_digest, issuance.transaction.nonce_digest
+    assert_nil issuance.transaction.principal_id
+    assert_nil issuance.transaction.token_id
+    assert_predicate issuance.transaction, :sign_in_primary_pending?
+  end
+
   test "handoff consume is one-shot and bound to surface" do
     transaction = issue_transaction!
 

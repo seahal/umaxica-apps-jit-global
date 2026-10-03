@@ -11,6 +11,10 @@ module Auth
             include ::AuthenticationModeSwitchGuard
 
             AUTHENTICATION_MODE = :guest
+
+            prepend_before_action :require_sign_in_ceremony_admission!
+            ensure_fqdn_gate_first!
+            prepend_before_action :apply_default_no_store
             declare_authentication_mode! :guest
             before_action :start_minimum_response_budget
             after_action :enforce_minimum_response_budget

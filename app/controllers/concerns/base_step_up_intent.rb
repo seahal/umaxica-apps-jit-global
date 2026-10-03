@@ -6,33 +6,41 @@ module BaseStepUpIntent
 
   private
 
-  def redirect_to_step_up_ceremony!(surface:, actor:, token:, allowed_scopes:, sign_url_builder:)
+  def render_step_up_start!(actor:, token:, allowed_scopes:, title:, description:, action:, cancel:)
     scope = requested_step_up_scope(allowed_scopes)
     return_to = requested_step_up_return_to(scope: scope, allowed_scopes: allowed_scopes)
-    methods = requested_step_up_methods(actor)
+    requirement = step_up_requirement(scope: scope, allowed_methods: requested_step_up_methods(actor))
+    if StepUpResolver.call(token: token, requirement: requirement).satisfied?
+      return redirect_to(return_to, status: :see_other, allow_other_host: false)
+    end
 
-    issuance = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: surface,
-      actor_ref: actor.public_id,
-      session_ref: token.public_id,
-      required_scope: scope,
-      required_aal: verification_required_aal,
-      allowed_methods: methods,
-      return_to: return_to,
-      expires_at: self.class::STEP_UP_TTL.from_now,
+    render inertia: true, props: {
+      title: title,
+      description: description,
+      form: { action: action, scope: scope, pt: params[:pt], submit_label: t("actions.continue") },
+      cancel: { href: cancel, label: t("actions.cancel") },
+    }
+  end
+
+  def redirect_to_step_up_ceremony!(actor:, token:, allowed_scopes:, sign_url_builder:)
+    scope = requested_step_up_scope(allowed_scopes)
+    return_to = requested_step_up_return_to(scope: scope, allowed_scopes: allowed_scopes)
+    requirement = step_up_requirement(scope: scope, allowed_methods: requested_step_up_methods(actor))
+    if StepUpResolver.call(token: token, requirement: requirement).satisfied?
+      return redirect_to(return_to, status: :see_other, allow_other_host: false)
+    end
+
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: return_to,
     )
-
+    session[:base_step_up_transaction_ref] = issuance.transaction.transaction_id
     redirect_to_surface_url(
-      sign_url_builder.call(
-        scope: scope,
-        pt: params[:pt],
-        ri: params[:ri],
-        step_up_ceremony_grant: issuance.grant,
-        step_up_completion_csrf: form_authenticity_token,
-      ),
-      status: :see_other,
-      preserve_query_keys: ["pt"],
+      sign_url_builder.call(entry_ref: issuance.reference, ri: params[:ri]), status: :see_other,
     )
+  rescue BaseAuthAdmissionCoordinator::Denied
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
   def requested_step_up_scope(allowed_scopes)

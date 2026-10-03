@@ -2,9 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The passkey step-up screen is the one verification page that runs a ceremony in the browser.
-// These tests mount it and click the button, so the branches the Stimulus controller used to own -
-// unsupported browser, missing challenge, cancelled assertion, success - are exercised here.
+// Mount the real step-up screen and exercise its same-origin options and assertion requests.
 import type { getAssertion as realGetAssertion } from "@/features/auth/passkeys/webauthn";
 
 const STEP_UP_CANCEL = {
@@ -17,6 +15,10 @@ const STEP_UP_CANCEL = {
 // a failure here rather than an `any` flowing into the component under test.
 const getAssertion = vi.fn<typeof realGetAssertion>();
 const passkeysSupported = vi.fn<() => boolean>();
+const solveInvisibleTurnstile = vi.fn<() => Promise<string>>();
+vi.mock("@/features/auth/passkeys/invisibleTurnstile", () => ({
+  solveInvisibleTurnstile: () => solveInvisibleTurnstile(),
+}));
 
 vi.mock("@/features/auth/passkeys/webauthn", () => ({
   getAssertion: (options: unknown) => getAssertion(options),
@@ -48,13 +50,11 @@ const props = {
   heading: "検証",
   description: "パスキーで認証してください。",
   errors: [],
-  form: {
-    action: "/verification/passkey?ri=jp",
-    csrf_token: "csrf-token",
-    scope: "settings_passkey",
-    pt: "pt-value",
-    challenge_id: "challenge-1",
-    request_options: { challenge: "abc" },
+  panel: {
+    options_url: "/verification/passkey/options?ri=jp",
+    verification_url: "/verification/passkey?ri=jp",
+    region: "jp", identifier_param: null, field: null,
+    turnstile_site_key: "public-key", turnstile_error_message: "Turnstile failed",
     submit_label: "パスキーで認証",
   },
   back: { label: "戻る", href: "/verification?ri=jp" },
@@ -62,11 +62,6 @@ const props = {
 
 let container: HTMLDivElement;
 let root: Root;
-const requestSubmit = vi.fn();
-// What the field held at the moment the form was submitted is the invariant that matters: the
-// assertion must be in the DOM before the document submission leaves, not one render later.
-let submittedCredential = "";
-
 const mount = (element: React.ReactElement) => {
   container = document.createElement("div");
   document.body.append(container);
@@ -84,14 +79,9 @@ const click = async () => {
   });
 };
 
-const credentialField = () =>
-  container.querySelector<HTMLInputElement>('input[name="verification[credential_json]"]');
-
 beforeEach(() => {
-  vi.spyOn(HTMLFormElement.prototype, "requestSubmit").mockImplementation(() => {
-    submittedCredential = credentialField()?.value ?? "";
-    requestSubmit();
-  });
+  solveInvisibleTurnstile.mockResolvedValue("test-only");
+  vi.stubGlobal("location", { href: "", reload: vi.fn() });
 });
 
 afterEach(() => {
@@ -102,21 +92,27 @@ afterEach(() => {
   vi.restoreAllMocks();
   getAssertion.mockReset();
   passkeysSupported.mockReset();
-  requestSubmit.mockClear();
-  submittedCredential = "";
+  solveInvisibleTurnstile.mockReset();
+  vi.unstubAllGlobals();
 });
 
 describe("PasskeyVerification interaction", () => {
   it("submits the serialized assertion when the authenticator answers", async () => {
     passkeysSupported.mockReturnValue(true);
     getAssertion.mockResolvedValue(SERIALIZED_ASSERTION);
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ options: { challenge: "abc" }, challenge_id: "challenge-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "ok", redirect_url: "/verification/handoff?ri=jp" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
     mount(<PasskeyVerification {...props} />);
-
     await click();
-
     expect(getAssertion).toHaveBeenCalledWith({ challenge: "abc" });
-    expect(submittedCredential).toBe(JSON.stringify(SERIALIZED_ASSERTION));
-    expect(requestSubmit).toHaveBeenCalled();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(props.panel.options_url);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(props.panel.verification_url);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      challenge_id: "challenge-1", credential: SERIALIZED_ASSERTION, ri: "jp",
+    });
+    expect(window.location.href).toBe("/verification/handoff?ri=jp");
   });
 
   it("refuses to start when the browser has no WebAuthn support", async () => {
@@ -126,33 +122,29 @@ describe("PasskeyVerification interaction", () => {
     await click();
 
     expect(getAssertion).not.toHaveBeenCalled();
-    expect(requestSubmit).not.toHaveBeenCalled();
+    expect(solveInvisibleTurnstile).not.toHaveBeenCalled();
     expect(container.textContent).toContain("このブラウザはPasskeyに対応していません");
   });
 
-  it("refuses to start when the server issued no challenge", async () => {
+  it("refuses an options response with a missing challenge", async () => {
     passkeysSupported.mockReturnValue(true);
-    mount(
-      <PasskeyVerification
-        {...props}
-        form={{ ...props.form, challenge_id: "", request_options: null }}
-      />,
-    );
-
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ options: {} }), { status: 200 })));
+    mount(<PasskeyVerification {...props} />);
     await click();
-
     expect(getAssertion).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("認証オプションの取得に失敗しました");
+    expect(container.textContent).toContain("オプションの取得に失敗しました");
   });
 
   it("reports a cancelled ceremony without submitting", async () => {
     passkeysSupported.mockReturnValue(true);
     getAssertion.mockRejectedValue(new DOMException("cancelled", "NotAllowedError"));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ options: { challenge: "abc" }, challenge_id: "challenge-1" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
     mount(<PasskeyVerification {...props} />);
 
     await click();
 
-    expect(requestSubmit).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("認証がキャンセルされました");
   });
 });

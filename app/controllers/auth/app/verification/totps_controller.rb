@@ -1,30 +1,27 @@
 # typed: false
 # frozen_string_literal: true
 
-class Auth::App::Verification::TotpsController < ::Auth::App::Verification::BaseController
+class Auth::App::Verification::TotpsController < ::Auth::App::ApplicationController
   include ::SurfaceInertiaPage
   include ::TurnstilePageProps
-  include SignVerificationTotpActions
+  include CloudflareTurnstile
+  include AuthStepUpCeremonyContext
 
-  AUTHENTICATION_MODE = :private
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
   NEW_COMPONENT = "auth/app/verification/totps/new"
 
-  # The two actions repeat SignVerificationTotpActions guard for guard, Turnstile check included.
-  # Only the render differs: this surface answers with an Inertia page instead of the ERB template,
-  # and the code is still posted back as a document submission, so the failure path keeps its 422.
+  public
+
   def new
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_get!
-    return unless require_method_available!(:totp)
+    return unless load_totp_ceremony!
 
     render inertia: NEW_COMPONENT, props: new_page_props
   end
 
   def create
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_post!
-    return unless require_method_available!(:totp)
+    return unless load_totp_ceremony!
 
     unless cloudflare_turnstile_stealth_validation["success"]
       @verification_errors = [t("turnstile_error")]
@@ -32,19 +29,26 @@ class Auth::App::Verification::TotpsController < ::Auth::App::Verification::Base
       return
     end
 
-    if verify_totp!
-      consume_step_up_session!(method: :totp)
+    input = params.expect(verification: %i(code credential_public_id))
+    if IdentityStepUpTotpVerificationCommitter.call!(
+      actor: @step_up_ceremony_actor, transaction: @step_up_ceremony_transaction,
+      session_record: @step_up_ceremony_session, code: input[:code], credential_public_id: input[:credential_public_id],
+    )
+      redirect_to(auth_app_verification_handoff_path(ri: params[:ri]))
     else
-      record_failed_step_up_attempt!(:totp)
+      @verification_errors = [t("sign.app.verification.errors.incorrect_code")]
       render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
     end
+  rescue IdentityStepUpCeremonyContract::Error
+    @verification_errors = [t("sign.app.verification.errors.incorrect_code")]
+    render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
   end
 
   private
 
   def new_page_props
-    scope = incoming_scope.presence
-    pt = incoming_pt.presence
+    scope = @step_up_ceremony_transaction.required_scope
+    pt = nil
 
     {
       title: t("sign.app.verification.edit.title"),
@@ -86,4 +90,36 @@ class Auth::App::Verification::TotpsController < ::Auth::App::Verification::Base
       end,
     }
   end
+
+  def load_totp_ceremony!
+    return false unless load_step_up_ceremony_context!
+    return render_invalid_step_up_context! unless admitted_step_up_methods.include?(:totp)
+
+    true
+  end
+
+  def active_totp_credentials
+    @step_up_ceremony_actor.client_totp_credentials.where(
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+  end
+
+  def ceremony_actor_model = Client
+
+  def ceremony_step_up_session_model = ClientStepUpSession
+
+  def ceremony_session_token(record) = record.user_token
+
+  def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
+
+  def ceremony_supported_methods = %i(passkey totp email_otp)
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
+  end
+
+  def step_up_cancellation_props
+    { label: t("actions.cancel"), action: auth_app_verification_cancellation_path(ri: params[:ri]), method: "post" }
+  end
+
 end

@@ -299,6 +299,14 @@ module AuthenticationBase
   # value and no bypass: every caller states which one it is.
   SESSION_ESTABLISHMENTS = %i(root_login rp_session).freeze
 
+  def auth_credential_ceremony?
+    false
+  end
+
+  def local_authentication_ceremony?
+    auth_credential_ceremony? && !oidc_authentication_ceremony?
+  end
+
   # Issues a session only when every precondition holds at the final boundary.
   #
   # The decision (cooldown, session limit, flow binding) and the writes that
@@ -316,6 +324,7 @@ module AuthenticationBase
   def log_in(resource, establishment:, record_login_audit: true, token_kind_id: "BROWSER_WEB",
              require_totp_check: true, audit_context: {}, established_authentication_method: nil,
              authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil)
+    raise SignInFlowIssuanceRejected, "Auth cannot establish a browser session" if auth_credential_ceremony?
     unless SESSION_ESTABLISHMENTS.include?(establishment)
       raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
     end
@@ -578,7 +587,7 @@ module AuthenticationBase
     changes = { token: token_record }
     changes[:session_issued_at] = now if flow.has_attribute?(:session_issued_at)
     flow.update!(changes)
-    if flow.sign_in_session_limit_pending?
+    if flow.sign_in_session_limit_pending? && flow.authentication_event_at.nil?
       flow.advance_sign_in_to_guardrail!(now: now)
     else
       flow.complete_sign_in!(now: now)
@@ -2572,12 +2581,15 @@ module AuthenticationBase
         authentication_event_at: authentication_event_at,
       )
       advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
+      if local_authentication_ceremony? && result[:status] == :authentication_evidence_recorded
+        result[:redirect_path] = sign_in_sequence_redirect_path(pt: pt)
+      end
       return result
     end
 
     resolved_pt = resolve_mfa_pt(pt)
     cycle.advance_sign_in_to_mfa!
-    sign_in_flow_locator_for(actor: resource).issue!(cycle)
+    sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     set_pending_mfa!(
       resource: resource, primary: auth_method, pt: resolved_pt, ri: ri,
       auth_method: auth_method,
@@ -2611,6 +2623,21 @@ module AuthenticationBase
         pt: pt,
         established_authentication_method: established_authentication_method,
       )
+    end
+
+    if local_authentication_ceremony?
+      ceremony = admitted_auth_ceremony_session
+      unless ceremony && ceremony.local_sign_in_flow_ref == cycle.public_id
+        raise AuthCeremonySession::InvalidTransition, "local authentication admission is missing"
+      end
+
+      cycle.record_local_authentication_evidence!(
+        method: established_authentication_method,
+        authenticated_at: authentication_event_at,
+        authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+      )
+      ceremony.record_authentication_evidence!(method: established_authentication_method)
+      return { status: :authentication_evidence_recorded }
     end
 
     # A non-authoritative early answer: the final count happens again under

@@ -37,6 +37,26 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       description: "Emergency Key",
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
+
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    destination = nil
+    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
+      RedirectsJumpGatewayUrl.stub(
+        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
+      ) do
+        post base_org_sign_show_path, params: { ri: "jp" }
+      end
+    end
+
+    assert_response :see_other
+    entry_ref = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
+    @flow = OperatorSignInFlow.find_by!(public_id: entry_ref)
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    get auth_org_sign_in_path, params: { entry_ref: entry_ref, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_org_sign_in_path, params: { entry_ref: entry_ref, authenticity_token: csrf, ri: "jp" }
+
+    assert_response :see_other
   end
 
   teardown do
@@ -78,7 +98,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_equal "org:#{@staff.id}", challenge["actor_global_key"]
   end
 
-  test "an emergency assertion establishes a session in the emergency authentication context" do
+  test "an emergency assertion records emergency evidence without issuing a root session on Auth" do
     challenge_id = issue_emergency_challenge!
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
@@ -89,18 +109,14 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
 
-    token = OperatorToken.where(staff_id: @staff.id).order(:id).last
-
-    assert_equal "emergency", token.authentication_context
-    assert_predicate token, :emergency_authentication_context?
-
-    claims = decoded_access_token(response.parsed_body.fetch("access_token"))
-
-    assert_equal "emergency", claims.fetch(AuthenticationContextValue::CLAIM)
-    assert_predicate AuthorizationTokenClaims.authentication_context(claims), :emergency?
+    assert_equal "emergency", @flow.reload.authentication_context
+    assert_equal "passkey", @flow.authentication_method
+    assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
+    assert_nil response.parsed_body["access_token"]
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "the emergency access token carries a narrowed scope set" do
+  test "Base finalizes emergency evidence as an emergency session with narrowed scopes using a stubbed assertion" do
     challenge_id = issue_emergency_challenge!
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
@@ -108,7 +124,32 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       post auth_org_sign_in_emergency_passkey_verification_url(ri: "jp"), params: verification_params(challenge_id)
     end
 
-    claims = decoded_access_token(response.parsed_body.fetch("access_token"))
+    get response.parsed_body.fetch("redirect_url")
+    follow_redirect!
+
+    assert_response :success
+    post auth_org_sign_handoff_path, params: { ri: "jp" }
+
+    assert_response :success
+    result = response.parsed_body.at_css('input[name="result"]')["value"]
+
+    assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    post base_org_sign_completion_path,
+         params: { result: result, transaction_ref: @flow.public_id, ri: "jp" },
+         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-site" }
+
+    assert_response :see_other
+    token = @flow.reload.token
+
+    assert_equal "emergency", token.authentication_context
+    assert_predicate token, :emergency_authentication_context?
+    claims = AuthenticationToken.decode(
+      cookies[AuthenticationBase::ACCESS_COOKIE_KEY], host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+                                                      resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+    )
+
+    assert_equal "emergency", claims.fetch(AuthenticationContextValue::CLAIM)
     scopes = AuthorizationTokenClaims.scopes(claims)
 
     assert_includes scopes, "read:org"

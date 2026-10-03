@@ -64,4 +64,27 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     assert_predicate @flow.reload, :sign_in_failed?
     assert(@existing.all? { |token| token.reload.active_status? })
   end
+
+  test "local result waiting on capacity resumes on Base without renewing its authentication time" do
+    @flow.record_local_authentication_evidence!(method: "email")
+    event_at = @flow.authentication_event_at
+    @flow.prepare_local_result_delivery!(digest: "a" * 64, ttl: 1.minute)
+    @flow.update!(result_expires_at: 1.second.ago)
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "local_sign_in",
+      local_sign_in_flow_ref: @flow.public_id,
+    )
+    ceremony.record_authentication_evidence!(method: "email")
+    ref = SessionLimitResolutionTokenRef.issue(@existing.first)
+
+    assert_difference(-> { ClientToken.where(user_id: @actor.id).count }, 1) do
+      patch :update, params: { ri: "jp", session_ref: ref }, session: { app_sign_in_flow_locator: @locator }
+    end
+
+    assert_response :see_other
+    assert_not_nil @flow.reload.base_finalized_at
+    assert_equal event_at, @flow.token.authentication_event_at
+    assert_equal "email", @flow.token.established_authentication_method
+    assert_not_nil ceremony.reload.completed_at
+  end
 end

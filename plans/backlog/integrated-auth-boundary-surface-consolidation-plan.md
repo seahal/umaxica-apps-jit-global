@@ -1029,6 +1029,12 @@ block plan approval:
 
 ## Security invariants required for completion
 
+The OTP delivery-event/DEBUG disclosure identified on 2026-10-03 is escalated as mandatory
+comprehensive remediation in the [active plan](../active/otp-observability-secret-exposure-remediation.md),
+under its [accepted handling decision](../../adr/otp-observability-secret-exposure-remediation.md).
+The R15 secret-protection work remains open until that plan's relevant completion criteria are
+verified; recording the issue is not its resolution.
+
 - **AUTHORITY-1:** Auth may execute credential ceremonies, but cannot independently grant an
   Identity, Base Browser Session, RP Session, authorization policy decision, or authoritative AAL.
 - **AUTHORITY-2:** An Auth ceremony-session cookie alone cannot start a protected new ceremony; a

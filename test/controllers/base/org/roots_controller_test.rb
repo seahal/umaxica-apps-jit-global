@@ -84,18 +84,14 @@ class Base::Org::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "anonymous Dashboard answers 404 as a rendered response, not a raised exception" do
-    host! ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+  # The anonymous Dashboard contract supersedes the former rendered 404.
+  test "anonymous Dashboard redirects to the passive same-surface Sign entry" do
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    get base_org_dashboard_url(ri: "jp")
 
-    controller_exception =
-      capture_controller_exception do
-        get(base_org_dashboard_url(ri: "jp"))
-      end
-
-    assert_response :not_found
-    assert_nil controller_exception
-    assert_nil response.location
-    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_response :redirect
+    assert_equal "/sign", URI.parse(response.location).path
+    assert_equal "no-store", response.headers["Cache-Control"]
   end
   private
 

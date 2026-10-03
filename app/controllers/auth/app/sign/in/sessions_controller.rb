@@ -115,6 +115,15 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
   # Only a verified sign-in flow waiting on the session limit opens this page.
   # A signed-in browser has nothing pending here.
   def require_authentication_or_gate
+    flow = current_db_sign_in_flow_for_sequence
+    if flow&.sign_in_session_limit_pending? && flow.authentication_event_at
+      redirect_to_surface_url(
+        base_app_sign_in_limitation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https", ri: params[:ri]),
+        status: :see_other,
+      )
+      convert_redirect_to_inertia_location!
+      return
+    end
     return if pending_session_limit_cycle?
 
     if logged_in?

@@ -93,7 +93,7 @@ CREATE TABLE public.com_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY (ARRAY[('submitted'::character varying)::text, ('under_review'::character varying)::text, ('approved'::character varying)::text, ('rejected'::character varying)::text, ('redacted'::character varying)::text])))
 );
 
 
@@ -131,8 +131,8 @@ CREATE TABLE public.com_enforcement_authentication_method_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_method_effects_effect CHECK (((effect)::text = ANY ((ARRAY['mutation_locked'::character varying, 'unusable'::character varying, 'permanently_frozen'::character varying])::text[]))),
-    CONSTRAINT chk_com_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_method_effects_effect CHECK (((effect)::text = ANY (ARRAY[('mutation_locked'::character varying)::text, ('unusable'::character varying)::text, ('permanently_frozen'::character varying)::text]))),
+    CONSTRAINT chk_com_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text])))
 );
 
 
@@ -188,18 +188,18 @@ CREATE TABLE public.com_enforcement_cases (
     CONSTRAINT chk_com_enforcement_cases_approval_separation CHECK (((approved_by_operator_public_id IS NULL) OR ((approved_by_operator_public_id)::text <> (applied_by_operator_public_id)::text))),
     CONSTRAINT chk_com_enforcement_cases_break_glass_approver CHECK (((break_glass = false) OR (break_glass_approved_by_operator_public_id IS NOT NULL))),
     CONSTRAINT chk_com_enforcement_cases_cooldown_duration CHECK ((((kind)::text <> 'cooldown'::text) OR (((duration_mode)::text = 'timed'::text) AND (expires_at IS NOT NULL) AND (expires_at <= (effective_at + '30 days'::interval))))),
-    CONSTRAINT chk_com_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying, 'permanent'::character varying])::text[]))),
-    CONSTRAINT chk_com_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY ((ARRAY['expired'::character varying, 'revoked'::character varying, 'superseded'::character varying, 'corrected'::character varying, 'appeal_approved'::character varying, 'break_glass_released'::character varying, 'verification_completed'::character varying])::text[])))),
+    CONSTRAINT chk_com_enforcement_cases_duration_mode CHECK (((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text, ('permanent'::character varying)::text]))),
+    CONSTRAINT chk_com_enforcement_cases_end_reason CHECK (((end_reason IS NULL) OR ((end_reason)::text = ANY (ARRAY[('expired'::character varying)::text, ('revoked'::character varying)::text, ('superseded'::character varying)::text, ('corrected'::character varying)::text, ('appeal_approved'::character varying)::text, ('break_glass_released'::character varying)::text, ('verification_completed'::character varying)::text])))),
     CONSTRAINT chk_com_enforcement_cases_hidden CHECK ((((visibility)::text <> 'hidden'::text) OR ((kind)::text = 'permanent_ban'::text))),
     CONSTRAINT chk_com_enforcement_cases_indefinite_freeze_review CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text <> 'indefinite'::text) OR ((review_due_at IS NOT NULL) AND ((release_mode)::text = 'operator'::text)))),
-    CONSTRAINT chk_com_enforcement_cases_kind CHECK (((kind)::text = ANY ((ARRAY['security_lock'::character varying, 'cooldown'::character varying, 'temporary_freeze'::character varying, 'permanent_ban'::character varying, 'method_protection'::character varying])::text[]))),
+    CONSTRAINT chk_com_enforcement_cases_kind CHECK (((kind)::text = ANY (ARRAY[('security_lock'::character varying)::text, ('cooldown'::character varying)::text, ('temporary_freeze'::character varying)::text, ('permanent_ban'::character varying)::text, ('method_protection'::character varying)::text]))),
     CONSTRAINT chk_com_enforcement_cases_no_self_action CHECK (((principal_public_id)::text <> (applied_by_operator_public_id)::text)),
     CONSTRAINT chk_com_enforcement_cases_permanent_ban_duration CHECK ((((kind)::text <> 'permanent_ban'::text) OR (((duration_mode)::text = 'permanent'::text) AND (expires_at IS NULL)))),
-    CONSTRAINT chk_com_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY ((ARRAY['automatic'::character varying, 'operator'::character varying, 'verification_required'::character varying, 'break_glass_only'::character varying])::text[]))),
+    CONSTRAINT chk_com_enforcement_cases_release_mode CHECK (((release_mode)::text = ANY (ARRAY[('automatic'::character varying)::text, ('operator'::character varying)::text, ('verification_required'::character varying)::text, ('break_glass_only'::character varying)::text]))),
     CONSTRAINT chk_com_enforcement_cases_security_lock_release CHECK ((((kind)::text <> 'security_lock'::text) OR ((release_mode)::text = 'verification_required'::text))),
-    CONSTRAINT chk_com_enforcement_cases_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'pending_approval'::character varying, 'active'::character varying, 'ended'::character varying, 'failed'::character varying])::text[]))),
-    CONSTRAINT chk_com_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY ((ARRAY['timed'::character varying, 'indefinite'::character varying])::text[])))),
-    CONSTRAINT chk_com_enforcement_cases_visibility CHECK (((visibility)::text = ANY ((ARRAY['visible'::character varying, 'hidden'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_cases_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('pending_approval'::character varying)::text, ('active'::character varying)::text, ('ended'::character varying)::text, ('failed'::character varying)::text]))),
+    CONSTRAINT chk_com_enforcement_cases_temp_freeze_duration_mode CHECK ((((kind)::text <> 'temporary_freeze'::text) OR ((duration_mode)::text = ANY (ARRAY[('timed'::character varying)::text, ('indefinite'::character varying)::text])))),
+    CONSTRAINT chk_com_enforcement_cases_visibility CHECK (((visibility)::text = ANY (ARRAY[('visible'::character varying)::text, ('hidden'::character varying)::text])))
 );
 
 
@@ -243,7 +243,7 @@ CREATE TABLE public.com_enforcement_identifier_effects (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'identity_id'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_identifier_effects_kind CHECK (((identifier_kind)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('identity_id'::character varying)::text])))
 );
 
 
@@ -321,7 +321,7 @@ CREATE TABLE public.com_enforcement_principal_links (
     ended_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY ((ARRAY['target_principal'::character varying, 'former_principal'::character varying, 'related_principal'::character varying, 'suspected_duplicate'::character varying, 'reinstated_principal'::character varying, 'false_positive'::character varying])::text[])))
+    CONSTRAINT chk_com_enforcement_principal_links_relationship_kind CHECK (((relationship_kind)::text = ANY (ARRAY[('target_principal'::character varying)::text, ('former_principal'::character varying)::text, ('related_principal'::character varying)::text, ('suspected_duplicate'::character varying)::text, ('reinstated_principal'::character varying)::text, ('false_positive'::character varying)::text])))
 );
 
 
@@ -411,6 +411,39 @@ ALTER SEQUENCE public.company_administration_grants_id_seq OWNED BY public.compa
 
 
 --
+-- Name: company_authority_cutovers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.company_authority_cutovers (
+    id bigint NOT NULL,
+    cutover_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_company_authority_cutovers_finite_time CHECK (isfinite(cutover_at)),
+    CONSTRAINT chk_company_authority_cutovers_singleton CHECK ((id = 1))
+);
+
+
+--
+-- Name: company_authority_cutovers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.company_authority_cutovers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: company_authority_cutovers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.company_authority_cutovers_id_seq OWNED BY public.company_authority_cutovers.id;
+
+
+--
 -- Name: company_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -443,6 +476,40 @@ ALTER SEQUENCE public.company_delegation_grants_id_seq OWNED BY public.company_d
 
 
 --
+-- Name: company_lifecycles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.company_lifecycles (
+    id bigint NOT NULL,
+    company_id bigint NOT NULL,
+    state character varying NOT NULL,
+    state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_company_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+);
+
+
+--
+-- Name: company_lifecycles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.company_lifecycles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: company_lifecycles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.company_lifecycles_id_seq OWNED BY public.company_lifecycles.id;
+
+
+--
 -- Name: company_ownership_transfer_requests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -465,7 +532,7 @@ CREATE TABLE public.company_ownership_transfer_requests (
     CONSTRAINT chk_company_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_company_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_company_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -728,6 +795,39 @@ ALTER SEQUENCE public.individual_assignments_id_seq OWNED BY public.individual_a
 
 
 --
+-- Name: individual_authority_cutovers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.individual_authority_cutovers (
+    id bigint NOT NULL,
+    cutover_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_individual_authority_cutovers_finite_time CHECK (isfinite(cutover_at)),
+    CONSTRAINT chk_individual_authority_cutovers_singleton CHECK ((id = 1))
+);
+
+
+--
+-- Name: individual_authority_cutovers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.individual_authority_cutovers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: individual_authority_cutovers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.individual_authority_cutovers_id_seq OWNED BY public.individual_authority_cutovers.id;
+
+
+--
 -- Name: individual_delegation_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -757,6 +857,40 @@ CREATE SEQUENCE public.individual_delegation_grants_id_seq
 --
 
 ALTER SEQUENCE public.individual_delegation_grants_id_seq OWNED BY public.individual_delegation_grants.id;
+
+
+--
+-- Name: individual_lifecycles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.individual_lifecycles (
+    id bigint NOT NULL,
+    individual_id bigint NOT NULL,
+    state character varying NOT NULL,
+    state_changed_at timestamp(6) with time zone DEFAULT clock_timestamp() NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_individual_lifecycles_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'inactive'::character varying, 'discarded'::character varying, 'deleted'::character varying, 'retained'::character varying])::text[])))
+);
+
+
+--
+-- Name: individual_lifecycles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.individual_lifecycles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: individual_lifecycles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.individual_lifecycles_id_seq OWNED BY public.individual_lifecycles.id;
 
 
 --
@@ -910,7 +1044,7 @@ CREATE TABLE public.individual_ownership_transfer_requests (
     CONSTRAINT chk_individual_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_individual_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_individual_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
+    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('rejected'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text, ('invalidated'::character varying)::text])))
 );
 
 
@@ -1228,7 +1362,11 @@ CREATE TABLE public.visitor_emails (
     notifiable boolean DEFAULT true NOT NULL,
     subscribable boolean DEFAULT true NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    step_up_otp_failures integer DEFAULT 0 NOT NULL,
+    step_up_otp_locked_until timestamp(6) with time zone,
+    step_up_otp_last_issued_at timestamp(6) with time zone,
+    CONSTRAINT visitor_email_step_up_failures_nonnegative CHECK ((step_up_otp_failures >= 0))
 );
 
 
@@ -2301,7 +2439,7 @@ CREATE TABLE public.visitor_processor_erasure_notification_attempts (
     CONSTRAINT chk_visitor_proc_erase_attempt_generation_positive CHECK ((delivery_generation > 0)),
     CONSTRAINT chk_visitor_proc_erase_attempt_idempotency_digest CHECK (((idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT chk_visitor_proc_erase_attempt_number_positive CHECK ((attempt_number > 0)),
-    CONSTRAINT chk_visitor_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY ((ARRAY['IN_FLIGHT'::character varying, 'ACCEPTED_PENDING'::character varying, 'SUCCEEDED'::character varying, 'RETRYABLE_FAILURE'::character varying, 'PERMANENT_FAILURE'::character varying])::text[])))
+    CONSTRAINT chk_visitor_proc_erase_attempt_outcome CHECK (((outcome)::text = ANY (ARRAY[('IN_FLIGHT'::character varying)::text, ('ACCEPTED_PENDING'::character varying)::text, ('SUCCEEDED'::character varying)::text, ('RETRYABLE_FAILURE'::character varying)::text, ('PERMANENT_FAILURE'::character varying)::text])))
 );
 
 
@@ -2895,8 +3033,8 @@ CREATE TABLE public.visitors (
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
     CONSTRAINT chk_customers_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
-    CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY (ARRAY[('enabled'::character varying)::text, ('admin_locked'::character varying)::text]))),
+    CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY (ARRAY[('abuse'::character varying)::text, ('security_incident'::character varying)::text, ('chargeback'::character varying)::text, ('terms_violation'::character varying)::text, ('support_request'::character varying)::text, ('legal_hold'::character varying)::text, ('operator_error_recovery'::character varying)::text, ('other'::character varying)::text])))),
     CONSTRAINT chk_visitors_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000)))
 );
 
@@ -2984,10 +3122,24 @@ ALTER TABLE ONLY public.company_administration_grants ALTER COLUMN id SET DEFAUL
 
 
 --
+-- Name: company_authority_cutovers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_authority_cutovers ALTER COLUMN id SET DEFAULT nextval('public.company_authority_cutovers_id_seq'::regclass);
+
+
+--
 -- Name: company_delegation_grants id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.company_delegation_grants ALTER COLUMN id SET DEFAULT nextval('public.company_delegation_grants_id_seq'::regclass);
+
+
+--
+-- Name: company_lifecycles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_lifecycles ALTER COLUMN id SET DEFAULT nextval('public.company_lifecycles_id_seq'::regclass);
 
 
 --
@@ -3047,10 +3199,24 @@ ALTER TABLE ONLY public.individual_assignments ALTER COLUMN id SET DEFAULT nextv
 
 
 --
+-- Name: individual_authority_cutovers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.individual_authority_cutovers ALTER COLUMN id SET DEFAULT nextval('public.individual_authority_cutovers_id_seq'::regclass);
+
+
+--
 -- Name: individual_delegation_grants id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.individual_delegation_grants ALTER COLUMN id SET DEFAULT nextval('public.individual_delegation_grants_id_seq'::regclass);
+
+
+--
+-- Name: individual_lifecycles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.individual_lifecycles ALTER COLUMN id SET DEFAULT nextval('public.individual_lifecycles_id_seq'::regclass);
 
 
 --
@@ -3623,11 +3789,27 @@ ALTER TABLE ONLY public.company_administration_grants
 
 
 --
+-- Name: company_authority_cutovers company_authority_cutovers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_authority_cutovers
+    ADD CONSTRAINT company_authority_cutovers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: company_delegation_grants company_delegation_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.company_delegation_grants
     ADD CONSTRAINT company_delegation_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: company_lifecycles company_lifecycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_lifecycles
+    ADD CONSTRAINT company_lifecycles_pkey PRIMARY KEY (id);
 
 
 --
@@ -3695,11 +3877,27 @@ ALTER TABLE ONLY public.individual_assignments
 
 
 --
+-- Name: individual_authority_cutovers individual_authority_cutovers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.individual_authority_cutovers
+    ADD CONSTRAINT individual_authority_cutovers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: individual_delegation_grants individual_delegation_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.individual_delegation_grants
     ADD CONSTRAINT individual_delegation_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: individual_lifecycles individual_lifecycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.individual_lifecycles
+    ADD CONSTRAINT individual_lifecycles_pkey PRIMARY KEY (id);
 
 
 --
@@ -4271,6 +4469,13 @@ CREATE UNIQUE INDEX idx_company_delegate_grants_unique ON public.company_delegat
 
 
 --
+-- Name: idx_company_lifecycles_one_company; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_company_lifecycles_one_company ON public.company_lifecycles USING btree (company_id);
+
+
+--
 -- Name: idx_company_ownerships_on_visitor_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4380,6 +4585,13 @@ CREATE INDEX idx_individual_delegate_grants_on_visitor_id ON public.individual_d
 --
 
 CREATE UNIQUE INDEX idx_individual_delegate_grants_unique ON public.individual_delegation_grants USING btree (individual_id, visitor_id);
+
+
+--
+-- Name: idx_individual_lifecycles_one_individual; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_individual_lifecycles_one_individual ON public.individual_lifecycles USING btree (individual_id);
 
 
 --
@@ -5926,6 +6138,14 @@ ALTER TABLE ONLY public.com_enforcement_appeals
 
 
 --
+-- Name: company_lifecycles fk_rails_76afb35b3e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_lifecycles
+    ADD CONSTRAINT fk_rails_76afb35b3e FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: company_view_grants fk_rails_76b4415d0a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6051,6 +6271,14 @@ ALTER TABLE ONLY public.visitor_preference_currencies
 
 ALTER TABLE ONLY public.visitor_preference_adult_content_gates
     ADD CONSTRAINT fk_rails_a04d2550c9 FOREIGN KEY (option_id) REFERENCES public.visitor_preference_adult_content_gate_options(id);
+
+
+--
+-- Name: individual_lifecycles fk_rails_a1671a518d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.individual_lifecycles
+    ADD CONSTRAINT fk_rails_a1671a518d FOREIGN KEY (individual_id) REFERENCES public.individuals(id) ON DELETE RESTRICT;
 
 
 --
@@ -6324,6 +6552,9 @@ ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261003202301'),
+('20260923180001'),
+('20260923170001'),
 ('20260923160001'),
 ('20260923150001'),
 ('20260923140001'),

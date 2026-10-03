@@ -960,7 +960,6 @@ Umaxica/ExplicitMethodVisibility:
     - "app/models/concerns/signed_session_reference.rb"
     - "app/models/concerns/single_use_token.rb"
     - "app/models/concerns/social_ceremony_transactionable.rb"
-    - "app/models/concerns/step_up_ceremony_transactionable.rb"
     - "app/models/concerns/telephone.rb"
     - "app/models/concerns/telephone_ceremony_transactionable.rb"
     - "app/models/concerns/telephone_normalization.rb"

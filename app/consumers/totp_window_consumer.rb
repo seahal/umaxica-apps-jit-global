@@ -20,7 +20,7 @@ class TotpWindowConsumer
       def credential_required? = status == :credential_required
     end
 
-  def self.call(credentials:, token:, credential_public_id: nil, now: Time.current)
+  def self.call(credentials:, token:, credential_public_id: nil, now: nil)
     new(credentials:, token:, credential_public_id:, now:).call
   end
 
@@ -63,7 +63,8 @@ class TotpWindowConsumer
   end
 
   def verify(credential)
-    otp_at = ROTP::TOTP.new(credential.private_key).verify(token, at: now.to_i)
+    decision_time = now || credential.class.database_now
+    otp_at = ROTP::TOTP.new(credential.private_key).verify(token, at: decision_time.to_i)
     return fail_attempt(credential, status: :mismatch) unless otp_at
 
     return fail_attempt(credential, status: :replay, otp_at:) if replayed?(credential, otp_at)

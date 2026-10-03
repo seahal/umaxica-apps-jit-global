@@ -1,123 +1,184 @@
-# typed: false
 # frozen_string_literal: true
 
+# Base owns the only authority transition. Token freshness, transaction consumption and Auth
+# continuity completion share the actor-specific ticket connection and transaction. The principal
+# credential remains locked while those writes commit; no normal page needs this credential lookup.
 class IdentityStepUpCeremonyFreshnessCommitter
-  Commit = Data.define(:result, :token)
+  class << self
+    public
 
-  def self.call!(result_token:, token:, expected_scope:, expected_aal:, expected_method:,
-                 expected_phishing_resistant: false, audience:, surface:, now: Time.current)
-    new(
-      result_token: result_token,
-      surface: surface,
-      token: token,
-      expected_scope: expected_scope,
-      expected_aal: expected_aal,
-      expected_method: expected_method,
-      expected_phishing_resistant: expected_phishing_resistant,
-      audience: audience,
-      now: now,
-    ).call!
-  end
+    def call!(actor:, token:, transaction:, requirement:, raw_result:)
+      binding = binding_for(actor, token, transaction)
+      credentials = binding.fetch(2)
+      payload = BaseAuthAdmissionCoordinator.read_result!(
+        raw_code: raw_result, surface: transaction.surface,
+        transaction_ref: transaction.transaction_id, expected_intent: "step_up",
+      )
+      digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose: "step_up_result", raw_code: raw_result)
+      actor.class.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          raise IdentityStepUpCeremonyContract::Error, "actor unavailable" unless actor.login_allowed?
 
-  def initialize(result_token:, token:, expected_scope:, expected_aal:, expected_method:,
-                 expected_phishing_resistant: false, audience:, surface:, now: Time.current)
-    @result_token = result_token
-    @surface = surface.to_s
-    @token = token
-    @expected_scope = expected_scope.to_s
-    @expected_aal = expected_aal.to_s
-    @expected_method = expected_method.to_s
-    @expected_phishing_resistant = !!expected_phishing_resistant
-    @audience = audience.to_s
-    @now = now
-  end
-
-  def call!
-    validate!
-    update_token!
-    Commit.new(result: result, token: token)
-  end
-
-  private
-
-  attr_reader :result_token, :token, :expected_scope, :expected_aal, :expected_method, :expected_phishing_resistant,
-              :audience, :surface, :now
-
-  def validate!
-    raise IdentityStepUpCeremonyContract::Error, "token is required" if token.blank?
-    # An Emergency (Restricted Mode) session is not eligible to hold step-up
-    # freshness at all. Rejecting the commit here means that even a ceremony
-    # result that was somehow produced under an Emergency session cannot be
-    # turned into usable freshness on the session row.
-    raise IdentityStepUpCeremonyContract::Error,
-          "authentication context is not eligible for step-up" if emergency_authentication_context?
-    raise IdentityStepUpCeremonyContract::Error,
-          "result actor does not match current actor" unless result["actor_ref"].to_s == token_actor_ref
-    raise IdentityStepUpCeremonyContract::Error,
-          "result session does not match current session" unless result["session_ref"].to_s == token.public_id.to_s
-    raise IdentityStepUpCeremonyContract::Error,
-          "result surface does not match current surface" unless result["surface"].to_s == surface
-    raise IdentityStepUpCeremonyContract::Error,
-          "result scope does not match requirement" unless result["scope"].to_s == expected_scope
-    raise IdentityStepUpCeremonyContract::Error,
-          "result method does not match ceremony" unless result["method"].to_s == expected_method
-    raise IdentityStepUpCeremonyContract::Error,
-          "result AAL is insufficient" unless aal_rank(result["aal"]) >= aal_rank(expected_aal)
-  end
-
-  def emergency_authentication_context?
-    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
-  end
-
-  def update_token!
-    token.update!(freshness_attributes)
-  end
-
-  def freshness_attributes
-    attributes = {
-      last_step_up_at: verified_at,
-      last_step_up_scope: result["scope"],
-    }
-    attributes[:last_step_up_aal] = result["aal"] if token_has_attribute?(:last_step_up_aal)
-    attributes[:last_step_up_method] = result["method"] if token_has_attribute?(:last_step_up_method)
-    attributes[:last_step_up_phishing_resistant] =
-      result.phishing_resistant? if token_has_attribute?(:last_step_up_phishing_resistant)
-    attributes[:last_step_up_purpose] = "step_up" if token_has_attribute?(:last_step_up_purpose)
-    attributes[:last_step_up_audience] = audience if token_has_attribute?(:last_step_up_audience)
-    if token_has_attribute?(:last_step_up_session_public_id)
-      attributes[:last_step_up_session_public_id] = token.public_id
-    end
-    attributes
-  end
-
-  def token_has_attribute?(attribute)
-    token.respond_to?(:has_attribute?) && token.has_attribute?(attribute.to_s)
-  end
-
-  def token_actor_ref
-    actor =
-      if token.respond_to?(:user)
-        token.user
-      elsif token.respond_to?(:visitor)
-        token.visitor
-      elsif token.respond_to?(:staff)
-        token.staff
+          credential = credentials.lock.find_by!(public_id: transaction.verified_credential_ref)
+          finalize_ticket!(
+            actor: actor, token: token, transaction: transaction, requirement: requirement,
+            payload: payload, digest: digest, binding: binding, credential: credential,
+          )
+        end
       end
-    actor&.public_id.to_s
-  end
+    end
 
-  def verified_at
-    Time.zone.at(Integer(result["verified_at"]))
-  end
+    private
 
-  def aal_rank(value)
-    IdentityStepUpCeremonyContract::AALS.index(value.to_s) || -1
-  end
+    def finalize_ticket!(actor:, token:, transaction:, requirement:, payload:, digest:, binding:, credential:)
+      session_model, ceremony_model, credentials = binding
+      transaction.class.connection_owner.connected_to(role: :writing) do
+        token.with_lock do
+          session_record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
+          transaction.with_lock do
+            now = transaction.class.database_now
+            unless credentials.exists?(id: credential.id)
+              raise IdentityStepUpCeremonyContract::Error, "verified credential unavailable"
+            end
 
-  def result
-    @result ||= IdentityStepUpCeremonyResult.decode(
-      result_token,
-      issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id(surface), now: now,
-    )
+            validate_finalization!(actor, token, transaction, requirement, now)
+            unless transaction.result_delivery_matches?(
+              result_digest: digest, result_generation: payload.fetch("result_generation"), now: now,
+            )
+              raise BaseAuthAdmissionCoordinator::Denied, "step-up result generation mismatch"
+            end
+
+            ceremony = ceremony_model.lock.find(payload.fetch("ceremony_session_ref"))
+            validate_continuity!(ceremony, transaction, now)
+            unless session_owned_by?(session_record, token) && session_record.scope == transaction.required_scope
+              raise IdentityStepUpCeremonyContract::Error, "session scope or owner mismatch"
+            end
+
+            if transaction.consumed?
+              unless ceremony.completed? && token.last_step_up_at == transaction.verified_at &&
+                  StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
+                raise IdentityStepUpCeremonyContract::Error, "finalized authority no longer available"
+              end
+            else
+              commit!(token, transaction, ceremony, requirement, now)
+            end
+            # Keep the same row for replay/retention; no latest-pending replacement or deletion.
+            transaction
+          end
+        end
+      end
+    end
+
+    def session_owned_by?(record, token)
+      case token
+      when ClientToken then record.user_token_id == token.id
+      when VisitorToken then record.visitor_token_id == token.id
+      when OperatorToken then record.staff_token_id == token.id
+      end
+    end
+
+    # [session model, continuity model, actor-owned active credential relation]
+    def binding_for(actor, token, transaction)
+      case token
+      when ClientToken
+        unless actor.is_a?(Client) && token.user_id == actor.id && transaction.is_a?(ClientStepUpCeremonyTransaction)
+          raise IdentityStepUpCeremonyContract::Error, "APP binding mismatch"
+        end
+
+        [ClientStepUpSession, ClientAuthCeremonySession, credential_scope(actor, transaction.method)]
+      when VisitorToken
+        unless actor.is_a?(Visitor) && token.visitor_id == actor.id &&
+            transaction.is_a?(VisitorStepUpCeremonyTransaction)
+          raise IdentityStepUpCeremonyContract::Error, "COM binding mismatch"
+        end
+
+        [VisitorStepUpSession, VisitorAuthCeremonySession, credential_scope(actor, transaction.method)]
+      when OperatorToken
+        unless actor.is_a?(Operator) && token.staff_id == actor.id &&
+            transaction.is_a?(OperatorStepUpCeremonyTransaction) &&
+            !token.emergency_authentication_context?
+          raise IdentityStepUpCeremonyContract::Error, "ORG binding mismatch"
+        end
+
+        [OperatorStepUpSession, OperatorAuthCeremonySession, credential_scope(actor, transaction.method)]
+      else
+        raise IdentityStepUpCeremonyContract::Error, "unsupported Base session"
+      end
+    end
+
+    def credential_scope(actor, method)
+      case [actor, method]
+      in [Client, "passkey"]
+        actor.client_passkeys.active.where("discard_at > clock_timestamp()")
+      in [Client, "email_otp"]
+        actor.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+          .where("discard_at > clock_timestamp()")
+      in [Client, "totp"]
+        actor.client_totp_credentials.where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+      in [Visitor, "passkey"]
+        actor.visitor_passkeys.active.where("discard_at > clock_timestamp()")
+      in [Visitor, "email_otp"]
+        actor.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+          .where("discard_at > clock_timestamp()")
+      in [Operator, "passkey"]
+        actor.staff_passkeys.active.where("discard_at > clock_timestamp()")
+      else
+        raise IdentityStepUpCeremonyContract::Error, "credential method unavailable"
+      end
+    end
+
+    def validate_finalization!(actor, token, transaction, requirement, now)
+      unless token.currently_usable? && transaction.actor_ref == actor.public_id &&
+          transaction.session_ref == token.public_id && transaction.purpose == "step_up" &&
+          %w(verified consumed).include?(transaction.status) && !transaction.expired?(now: now)
+        raise IdentityStepUpCeremonyContract::Error, "step-up actor or session unavailable"
+      end
+
+      validate_requirement!(token, transaction, requirement)
+      validate_evidence!(transaction, requirement, now)
+    end
+
+    def validate_requirement!(token, transaction, requirement)
+      unless requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
+          requirement.scope == transaction.required_scope && requirement.purpose == transaction.purpose &&
+          requirement.audience == "step_up:#{transaction.surface}" && requirement.require_session_binding &&
+          requirement.session_binding == token.public_id && requirement.token_binding == token.public_id &&
+          (requirement.required_aal&.to_s || "none") == transaction.required_aal &&
+          requirement.phishing_resistant_required? == transaction.phishing_resistant_required &&
+          requirement.method_allowed?(transaction.method) &&
+          transaction.allowed_methods_array.include?(transaction.method)
+        raise IdentityStepUpCeremonyContract::Error, "step-up requirement mismatch"
+      end
+    end
+
+    def validate_evidence!(transaction, requirement, now)
+      expected_aal = StepUpCeremonyTransactionable::METHOD_AALS.fetch(transaction.method)
+      unless transaction.phishing_resistant == (transaction.method == "passkey") && transaction.aal == expected_aal &&
+          (!requirement.phishing_resistant_required? || transaction.phishing_resistant) &&
+          transaction.verified_at && transaction.verified_at <= now && transaction.verified_at + requirement.ttl > now
+        raise IdentityStepUpCeremonyContract::Error, "step-up evidence unavailable"
+      end
+    end
+
+    def validate_continuity!(ceremony, transaction, now)
+      unless ceremony.admitted? && ceremony.admission_purpose == "step_up_handoff" &&
+          ceremony.step_up_ceremony_transaction_ref == transaction.transaction_id &&
+          !ceremony.revoked_at && !ceremony.cancelled_at && ceremony.expires_at > now &&
+          (ceremony.active?(now: now) || (transaction.consumed? && ceremony.completed?))
+        raise IdentityStepUpCeremonyContract::Error, "Auth continuity unavailable"
+      end
+    end
+
+    def commit!(token, transaction, ceremony, requirement, now)
+      token.update!(
+        last_step_up_at: transaction.verified_at, last_step_up_scope: transaction.required_scope,
+        last_step_up_aal: transaction.aal, last_step_up_method: transaction.method,
+        last_step_up_phishing_resistant: transaction.phishing_resistant,
+        last_step_up_purpose: transaction.purpose, last_step_up_audience: requirement.audience,
+        last_step_up_session_public_id: token.public_id,
+      )
+      transaction.update!(status: "consumed", consumed_at: now)
+      ceremony.complete!(now: now)
+    end
   end
 end

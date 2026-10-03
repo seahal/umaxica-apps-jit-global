@@ -51,4 +51,10 @@ class OperatorStepUpSession < OrgTicketRecord
   def expired?
     discard_at <= Time.current
   end
+
+  private
+
+  def passkey_transaction_model = OperatorStepUpCeremonyTransaction
+
+  def passkey_session_token = staff_token
 end

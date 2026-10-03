@@ -1,59 +1,61 @@
-# typed: false
 # frozen_string_literal: true
 
-module Auth
-  module Com
-    module Verification
-      class PasskeysController < ::Auth::Com::Verification::BaseController
-        include SignVerificationPasskeyActions
-        include ::SurfaceInertiaPage
+class Auth::Com::Verification::PasskeysController < ::Auth::Com::ApplicationController
+  include CloudflareTurnstile
+  include SurfaceInertiaPage
+  include AuthStepUpCeremonyContext
+  include AuthStepUpPasskeyCeremony
 
-        AUTHENTICATION_MODE = :private
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
-        NEW_COMPONENT = "auth/com/verification/passkeys/new"
+  rate_limit to: 5, within: 1.minute, by: -> { request.remote_ip },
+             scope: "auth_com_step_up", name: "passkey_options_ip_burst", only: :options,
+             store: rate_limit_store, with: -> { render_rate_limited(retry_after: 60) }
+  rate_limit to: 20, within: 15.minutes, by: -> { request.remote_ip },
+             scope: "auth_com_step_up", name: "passkey_options_ip_sustained", only: :options,
+             store: rate_limit_store, with: -> { render_rate_limited(retry_after: 900) }
 
-        private
+  private
 
-        # The assertion is still posted back as a document submission, so the failure path keeps its
-        # 422; only the rendering of the challenge page moved to React.
-        def render_verification_passkey_page(status: :ok)
-          render inertia: NEW_COMPONENT, props: new_page_props, status: status
-        end
+  def ceremony_actor_model = Visitor
 
-        def new_page_props
-          scope = incoming_scope.presence || params[:scope].presence
-          pt = incoming_pt.presence || params[:pt].presence
+  def ceremony_step_up_session_model = VisitorStepUpSession
 
-          {
-            title: t("sign.app.verification.edit.title"),
-            heading: t("sign.app.verification.edit.title"),
-            description: t("sign.app.verification.edit.description"),
-            errors: Array(@verification_errors),
-            form: {
-              action: auth_com_verification_passkey_path(ri: params[:ri]),
-              csrf_token: form_authenticity_token,
-              scope: scope,
-              pt: pt,
-              challenge_id: @passkey_challenge_id.to_s,
-              # The challenge the server just issued for this actor. The ERB embedded the same
-              # payload; it is what `navigator.credentials.get` consumes and carries no secret.
-              request_options: passkey_request_options_payload,
-              submit_label: t("sign.app.verification.edit.authenticate_with_passkey"),
-            },
-            cancel: step_up_cancellation_props,
-            back: {
-              label: t("sign.app.verification.edit.back"),
-              href: auth_com_verification_path(ri: params[:ri], scope: scope, pt: pt),
-            },
-          }
-        end
+  def ceremony_session_token(record) = record.visitor_token
 
-        def passkey_request_options_payload
-          return nil if @passkey_request_options.blank?
+  def ceremony_token_owned_by?(token, actor) = token.visitor_id == actor.id
 
-          JSON.parse(@passkey_request_options.to_json)
-        end
-      end
-    end
+  def ceremony_supported_methods = %i(passkey email_otp)
+
+  def ceremony_passkey_scope = @step_up_ceremony_actor.visitor_passkeys.active
+
+  def ceremony_passkey_handoff_path = auth_com_verification_handoff_path(ri: params[:ri])
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
+  end
+
+  def render_step_up_passkey_page
+    render inertia: "auth/com/verification/passkeys/new", props: {
+      title: t("sign.com.verification.edit.title"),
+      heading: t("sign.com.verification.edit.title"),
+      description: t("sign.com.verification.edit.description"),
+      errors: [],
+      panel: {
+        options_url: auth_com_verification_passkey_options_path(ri: params[:ri]),
+        verification_url: auth_com_verification_passkey_path(ri: params[:ri]),
+        region: current_region_identifier.to_s,
+        identifier_param: nil,
+        field: nil,
+        turnstile_site_key: JitSecurityTurnstileConfig.stealth_site_key.to_s,
+        turnstile_error_message: t("turnstile_error"),
+        submit_label: t("sign.com.verification.edit.authenticate_with_passkey"),
+      },
+      back: { label: t("sign.com.verification.edit.back"), href: auth_com_verification_path(ri: params[:ri]) },
+      cancel: { label: t("actions.cancel"),
+                action: auth_com_verification_cancellation_path(ri: params[:ri]),
+                method: "post", },
+    }
   end
 end

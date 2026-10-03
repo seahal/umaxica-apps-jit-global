@@ -4,6 +4,20 @@
 
 Accepted (2026-09-28). Supersedes `adr/base-warp-canonical-root-dashboard.md`.
 
+## Amendment: Core dashboard presentation (2026-10-03)
+
+In the target Core topology, TanStack Start owns Core's dashboard presentation. Rails retains
+authentication, session processing, final authorization, and business logic under the
+Core browser-to-Rails boundary in `adr/core-canonical-public-host.md`.
+
+This presentation ownership decision applies only to Core. It imposes no dashboard framework,
+rendering, or implementation-location requirement on Base, Warp, or any other surface. Each surface
+retains its own applicable authentication and authorization contracts; the Base/Warp behavior below
+continues to govern those surfaces independently of this Core presentation decision.
+
+Core dashboard implementation and deployment remain deferred. This amendment records ownership,
+not a completed migration or a change to the current route set.
+
 ## Decision
 
 Base and Warp apply the same contract on their app, com, and org hosts:

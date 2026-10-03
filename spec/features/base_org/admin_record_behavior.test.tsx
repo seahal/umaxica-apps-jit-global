@@ -1,13 +1,15 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The org administration screens render whatever the server resolved: records, the operations an
 // operator may start, and the confirmation form for a mutation. Inertia's form transport is
-// replaced because these specs exercise what the screens show and what they hand to the transport.
-const post = vi.fn();
-const transform = vi.fn<(nest: (data: Record<string, string>) => unknown) => void>();
+// replaced by a stand-in that follows the same contract: `transform` registers a callback, and
+// `post` sends the form's current data through it. `submissions` is what would reach the server.
+type Submission = { url: string; payload: unknown };
+const submissions: Submission[] = [];
 let formErrors: Record<string, string> = {};
+const unshaped = (current: Record<string, string>): unknown => current;
 
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -16,6 +18,7 @@ vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: {} }),
   useForm: (initial: Record<string, string>) => {
     const [data, setDataState] = useState(initial);
+    const shape = useRef(unshaped);
 
     return {
       data,
@@ -23,8 +26,12 @@ vi.mock("@inertiajs/react", () => ({
         setDataState((current) => ({ ...current, [key]: value })),
       errors: formErrors,
       processing: false,
-      transform,
-      post,
+      transform: (callback: (current: Record<string, string>) => unknown) => {
+        shape.current = callback;
+      },
+      post: (url: string) => {
+        submissions.push({ url, payload: shape.current(data) });
+      },
     };
   },
 }));
@@ -42,8 +49,7 @@ const context = {
 
 afterEach(() => {
   formErrors = {};
-  post.mockClear();
-  transform.mockClear();
+  submissions.length = 0;
 });
 
 describe("AdminRecord", () => {
@@ -242,7 +248,7 @@ describe("AdminConfirmation", () => {
     submit_label: "Open case",
   };
 
-  it("hands the transport the typed text value nested under its bracketed root", () => {
+  it("submits the typed text value and the hidden operation id, nested under the bracketed root", () => {
     render(
       <AdminConfirmation
         {...confirmationProps}
@@ -266,15 +272,12 @@ describe("AdminConfirmation", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.submit(screen.getByRole("button", { name: "Open case" }));
 
-    expect(post).toHaveBeenCalledWith("/support/enforcement_cases");
-    const nest = transform.mock.calls[0]?.[0];
-    expect(nest?.({ operation_id: "op-1", "enforcement_case[ticket_id]": "T-100" })).toEqual({
-      operation_id: "op-1",
-      enforcement_case: { ticket_id: "T-100" },
-    });
-    expect(screen.getByRole<HTMLInputElement>("textbox", { name: /Ticket ID/u }).value).toBe(
-      "T-100",
-    );
+    expect(submissions).toEqual([
+      {
+        url: "/support/enforcement_cases",
+        payload: { operation_id: "op-1", enforcement_case: { ticket_id: "T-100" } },
+      },
+    ]);
   });
 
   it("limits a text field to the server's maximum length", () => {
@@ -349,7 +352,6 @@ describe("AdminConfirmation", () => {
     fireEvent.click(checkbox);
     fireEvent.submit(screen.getByRole("button", { name: "Open case" }));
 
-    expect(post).not.toHaveBeenCalled();
-    expect(transform).not.toHaveBeenCalled();
+    expect(submissions).toEqual([]);
   });
 });

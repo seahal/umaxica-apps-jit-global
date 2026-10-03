@@ -42,4 +42,8 @@ class ClientStepUpCeremonyTransaction < AppTicketRecord
   include StepUpCeremonyTransactionable
 
   ceremony_surface "app"
+
+  private
+
+  def permitted_ceremony_methods = %w(passkey totp email_otp)
 end

@@ -1,41 +1,60 @@
-# typed: false
 # frozen_string_literal: true
 
-class Auth::Org::Verification::PasskeysController < ::Auth::Org::Verification::BaseController
-  include SignVerificationPasskeyActions
-  include ::SurfaceInertiaPage
+class Auth::Org::Verification::PasskeysController < ::Auth::Org::ApplicationController
+  include CloudflareTurnstile
+  include SurfaceInertiaPage
+  include AuthStepUpCeremonyContext
+  include AuthStepUpPasskeyCeremony
 
-  AUTHENTICATION_MODE = :private
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
+
+  rate_limit to: 5, within: 1.minute, by: -> { request.remote_ip },
+             scope: "auth_org_step_up", name: "passkey_options_ip_burst", only: :options,
+             store: rate_limit_store, with: -> { render_rate_limited(retry_after: 60) }
+  rate_limit to: 20, within: 15.minutes, by: -> { request.remote_ip },
+             scope: "auth_org_step_up", name: "passkey_options_ip_sustained", only: :options,
+             store: rate_limit_store, with: -> { render_rate_limited(retry_after: 900) }
 
   private
 
-  # This controller's own layout is the Inertia shell, but the step-up completion page is a
-  # cross-host handoff form rendered from ERB, so it keeps the surface document layout.
-  def step_up_handoff_layout
-    "auth/org/application"
+  def ceremony_actor_model = Operator
+
+  def ceremony_step_up_session_model = OperatorStepUpSession
+
+  def ceremony_session_token(record) = record.staff_token
+
+  def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id && !token.emergency_authentication_context?
+
+  def ceremony_supported_methods = %i(passkey)
+
+  def ceremony_passkey_scope = @step_up_ceremony_actor.staff_passkeys.active
+
+  def ceremony_passkey_handoff_path = auth_org_verification_handoff_path(ri: params[:ri])
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
   end
 
-  def render_verification_passkey_page(status: :ok)
-    render inertia: "auth/org/verification/passkeys/new", props: verification_passkey_props, status: status
-  end
-
-  def verification_passkey_props
-    {
+  def render_step_up_passkey_page
+    render inertia: "auth/org/verification/passkeys/new", props: {
       title: t("sign.org.verification.edit.title"),
       description: t("sign.org.verification.edit.description"),
-      errors_sentence: Array(@verification_errors).presence&.to_sentence,
-      form: {
-        action: auth_org_verification_passkey_path(ri: params[:ri]),
-        param_scope: "verification",
-        challenge_id: @passkey_challenge_id.to_s,
-        request_options: @passkey_request_options.as_json,
+      errors_sentence: nil,
+      panel: {
+        options_url: auth_org_verification_passkey_options_path(ri: params[:ri]),
+        verification_url: auth_org_verification_passkey_path(ri: params[:ri]),
+        region: current_region_identifier.to_s,
+        identifier_param: nil,
+        field: nil,
+        turnstile_site_key: JitSecurityTurnstileConfig.stealth_site_key.to_s,
+        turnstile_error_message: t("turnstile_error"),
         submit_label: t("sign.org.verification.edit.authenticate_with_passkey"),
       },
-      cancel: step_up_cancellation_props,
-      back_link: {
-        label: t("sign.org.verification.edit.back"),
-        href: auth_org_verification_path(ri: params[:ri]),
-      },
+      back_link: { label: t("sign.org.verification.edit.back"), href: auth_org_verification_path(ri: params[:ri]) },
+      cancel: { label: t("actions.cancel"),
+                action: auth_org_verification_cancellation_path(ri: params[:ri]),
+                method: "post", },
     }
   end
 end

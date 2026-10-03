@@ -30,6 +30,7 @@
 class ClientStepUpSession < AppTicketRecord
   include Retainable
   include StepUpSessionConsumable
+  include StepUpEmailChallenge
 
   STATUSES = %w(PENDING VERIFIED).freeze
   METHODS = %w(passkey totp email_otp).freeze
@@ -51,4 +52,14 @@ class ClientStepUpSession < AppTicketRecord
   def expired?
     discard_at <= Time.current
   end
+
+  private
+
+  def email_transaction_model = ClientStepUpCeremonyTransaction
+
+  def email_session_token = user_token
+
+  def passkey_transaction_model = ClientStepUpCeremonyTransaction
+
+  def passkey_session_token = user_token
 end

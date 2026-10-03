@@ -9,6 +9,8 @@ module Base
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
+        STEP_UP_RESULT_ORIGINS = JitHostOriginEnv.trusted_origins(ENV.fetch("PUBLIC_AUTH_STAFF_URL")).freeze
+        protect_from_forgery using: :header_or_legacy_token, trusted_origins: STEP_UP_RESULT_ORIGINS, with: :exception
 
         before_action :authenticate_operator!
 
@@ -18,11 +20,16 @@ module Base
             surface: "org",
             actor: current_operator,
             token: current_session_token,
-            fallback: base_org_dashboard_path(ri: params[:ri]),
           )
         end
 
         private
+
+        def completion_step_up_transaction(reference)
+          OperatorStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
+            OperatorStepUpCeremonyTransaction.find_by!(transaction_id: reference)
+          end
+        end
 
         def actor_verification_path(**args)
           base_org_verification_path(**args)

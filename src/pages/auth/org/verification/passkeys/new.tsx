@@ -4,15 +4,15 @@ import Page from "@/components/ui/Page";
 import CeremonyCancellation, {
   type CeremonyCancellationProps,
 } from "@/features/auth/CeremonyCancellation";
-import StepUpPasskeyForm, {
-  type StepUpPasskeyFormProps,
-} from "@/features/auth/passkeys/StepUpPasskeyForm";
+import PasskeyAuthenticationPanel, {
+  type PasskeyAuthenticationPanelProps,
+} from "@/features/auth/passkeys/PasskeyAuthenticationPanel";
 
 export type OrgVerificationPasskeyPageProps = {
   title: string;
   description: string;
   errors_sentence: string | null;
-  form: StepUpPasskeyFormProps;
+  panel: PasskeyAuthenticationPanelProps;
   back_link: { label: string; href: string };
   cancel: CeremonyCancellationProps;
 };
@@ -21,7 +21,7 @@ export default function OrgVerificationPasskeyPage({
   title,
   description,
   errors_sentence: errorsSentence,
-  form,
+  panel,
   back_link: backLink,
   cancel,
 }: OrgVerificationPasskeyPageProps) {
@@ -34,7 +34,7 @@ export default function OrgVerificationPasskeyPage({
     >
       <ErrorList errors={errorsSentence === null ? [] : [errorsSentence]} />
 
-      <StepUpPasskeyForm {...form} />
+      <PasskeyAuthenticationPanel {...panel} />
       {/* Back returns to method selection; this ends the whole Step-Up ceremony. */}
       <CeremonyCancellation {...cancel} />
     </Page>

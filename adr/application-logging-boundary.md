@@ -16,6 +16,12 @@ pipeline even though they have different purposes.
 
 ## Decision
 
+OTP message disclosure through delivery events and DEBUG output is an open, mandatory remediation
+item. The [2026-10-03 escalation decision](otp-observability-secret-exposure-remediation.md)
+and [active remediation plan](../plans/active/otp-observability-secret-exposure-remediation.md)
+record the finding, comprehensive scope, and required closure evidence. This does not change the
+logging ownership below or claim that secret protection has been implemented.
+
 Access logs stay on Lograge. Lograge owns request-completion logging and emits one normalized JSON
 object per request.
 

@@ -104,6 +104,8 @@ module Auth
 
       private
 
+      def auth_credential_ceremony? = true
+
       # Every HTML action on the Auth host is a sign-in/sign-up ceremony screen or step that never
       # acts on preference authority, so an unusable preference credential is detached instead of
       # ending the request with 401. See PreferenceTransport#handle_unusable_preference_credential!.
@@ -157,8 +159,7 @@ module Auth
       def after_login_path
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
-        complete_auth_ceremony_session!
-        base_com_dashboard_url(ri: current_region_identifier, host: base_authority_host, protocol: "https")
+        auth_com_sign_handoff_path(ri: current_region_identifier)
       end
 
       def after_login_allows_other_host?

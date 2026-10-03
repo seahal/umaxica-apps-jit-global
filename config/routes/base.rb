@@ -17,6 +17,9 @@ scope(module: :base, as: :base) do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
       end
+      namespace :sign do
+        resource :completion, only: :create
+      end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -195,7 +198,7 @@ scope(module: :base, as: :base) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
         resource :completion, only: :create
@@ -281,6 +284,9 @@ scope(module: :base, as: :base) do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
+      end
+      namespace :sign do
+        resource :completion, only: :create
       end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
@@ -409,7 +415,7 @@ scope(module: :base, as: :base) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
         resource :completion, only: :create
@@ -483,6 +489,9 @@ scope(module: :base, as: :base) do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
+      end
+      namespace :sign do
+        resource :completion, only: :create
       end
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
@@ -663,7 +672,7 @@ scope(module: :base, as: :base) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
         resource :completion, only: :create

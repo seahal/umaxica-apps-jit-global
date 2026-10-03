@@ -1,87 +1,60 @@
 # typed: false
 # frozen_string_literal: true
 
-class Auth::App::Verification::EmailsController < ::Auth::App::Verification::BaseController
+class Auth::App::Verification::EmailsController < ::Auth::App::ApplicationController
   include ::SurfaceInertiaPage
 
-  AUTHENTICATION_MODE = :private
+  include AuthStepUpCeremonyContext
+
+  AUTHENTICATION_MODE = :open
+  declare_authentication_mode! :open
 
   NEW_COMPONENT = "auth/app/verification/emails/new"
   EDIT_COMPONENT = "auth/app/verification/emails/edit"
 
-  skip_before_action :enforce_step_up_prereqs!, only: %i(edit update)
-  before_action :set_verification_navigation_context, only: %i(edit update)
+  public
 
   def new
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_get!
-    return unless require_method_available!(:email_otp)
+    return unless load_email_ceremony!
 
-    unless send_email_otp!
-      render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
-      return
-    end
-
-    nonce = ensure_email_nonce!
-    redirect_to(
-      edit_auth_app_verification_email_path(
-        nonce,
-        ri: params[:ri],
-        scope: current_step_up_scope,
-        pt: current_step_up_pt_param,
-      ),
-    )
+    render inertia: NEW_COMPONENT, props: new_page_props
   end
 
   def edit
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_get!
-    return unless require_email_nonce!
+    return unless load_email_ceremony!
+    return render_invalid_step_up_context! unless params[:id] == @step_up_ceremony_transaction.transaction_id
 
-    if email_otp_session_active?
-      render inertia: EDIT_COMPONENT, props: edit_page_props
-      return
+    if @step_up_ceremony_session.email_delivery_state == "failed"
+      @verification_errors = [t("otp.resend.failed")]
     end
-
-    unless send_email_otp!
-      render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
-      return
-    end
-
     render inertia: EDIT_COMPONENT, props: edit_page_props
   end
 
   def create
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_post!
-    return unless require_method_available!(:email_otp)
+    return unless load_email_ceremony!
 
-    unless send_email_otp!
-      render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
-      return
-    end
-
-    nonce = ensure_email_nonce!
-    redirect_to(
-      edit_auth_app_verification_email_path(
-        nonce,
-        ri: params[:ri],
-        scope: current_step_up_scope,
-        pt: current_step_up_pt_param,
-      ),
+    IdentityStepUpEmailCodeIssuer.call!(
+      actor: @step_up_ceremony_actor, credential: ceremony_email_credential,
+      transaction: @step_up_ceremony_transaction, session_record: @step_up_ceremony_session,
     )
+    redirect_to(edit_auth_app_verification_email_path(@step_up_ceremony_transaction.transaction_id, ri: params[:ri]))
+  rescue IdentityStepUpEmailCodeIssuer::Unavailable, IdentityStepUpCeremonyContract::Error
+    @verification_errors = [t("otp.resend.failed")]
+    render inertia: NEW_COMPONENT, props: new_page_props, status: :unprocessable_content
   end
 
   def update
-    return unless require_step_up_session!
-    return if redirect_if_recent_verification_for_post!
-    return unless require_email_nonce!
-    return unless require_method_available!(:email_otp)
+    return unless load_email_ceremony!
+    return render_invalid_step_up_context! unless params[:id] == @step_up_ceremony_transaction.transaction_id
 
-    if verify_email_otp!
-      consume_step_up_session!(method: :email_otp)
+    if IdentityStepUpEmailVerificationCommitter.call!(
+      actor: @step_up_ceremony_actor, credential: ceremony_email_credential,
+      transaction: @step_up_ceremony_transaction, session_record: @step_up_ceremony_session,
+      code: email_verification_code,
+    )
+      redirect_to(auth_app_verification_handoff_path(ri: params[:ri]))
     else
-      record_failed_step_up_attempt!(:email_otp)
+      @verification_errors = [t("sign.app.verification.errors.incorrect_code")]
       render inertia: EDIT_COMPONENT, props: edit_page_props, status: :unprocessable_content
     end
   end
@@ -92,8 +65,8 @@ class Auth::App::Verification::EmailsController < ::Auth::App::Verification::Bas
   # with either the completion hand-off document or this page re-rendered with 422, neither of which
   # is an Inertia visit. Only the rendering of the page itself moved to React.
   def new_page_props
-    scope = incoming_scope.presence
-    pt = incoming_pt.presence
+    scope = @step_up_ceremony_transaction.required_scope
+    pt = nil
 
     {
       title: t("sign.app.verification.new.title"),
@@ -123,20 +96,20 @@ class Auth::App::Verification::EmailsController < ::Auth::App::Verification::Bas
       delivery_help: t("sign.app.verification.edit.email_delivery_help"),
       errors: Array(@verification_errors),
       form: {
-        action: auth_app_verification_email_path(params[:id], ri: params[:ri]),
+        action: auth_app_verification_email_path(@step_up_ceremony_transaction.transaction_id, ri: params[:ri]),
         csrf_token: form_authenticity_token,
-        scope: @verification_scope,
-        pt: @verification_pt,
+        scope: @step_up_ceremony_transaction.required_scope,
+        pt: nil,
         code_label: t("sign.app.verification.edit.code_label"),
         code_placeholder: t("sign.app.verification.edit.code_placeholder"),
         submit_label: t("sign.app.verification.edit.submit"),
       },
       resend: {
         action: auth_app_verification_email_redelivery_path(
-          params[:id],
+          @step_up_ceremony_transaction.transaction_id,
           ri: params[:ri],
-          scope: @verification_scope,
-          pt: @verification_pt,
+          scope: @step_up_ceremony_transaction.required_scope,
+          pt: nil,
         ),
         csrf_token: form_authenticity_token,
         label: t("otp.resend.button"),
@@ -146,38 +119,48 @@ class Auth::App::Verification::EmailsController < ::Auth::App::Verification::Bas
         label: t("sign.app.verification.edit.back"),
         href: auth_app_verification_path(
           ri: params[:ri],
-          scope: @verification_scope,
-          pt: @verification_pt,
+          scope: @step_up_ceremony_transaction.required_scope,
+          pt: nil,
         ),
       },
     }
   end
 
-  def require_email_nonce!
-    rs = current_step_up_session
-    expected_nonce = current_email_otp_session_data&.fetch("nonce", nil)
-    if rs.present? && expected_nonce.present? && params[:id] == expected_nonce
-      return true
-    end
+  def load_email_ceremony!
+    return false unless load_step_up_ceremony_context!
+    return render_invalid_step_up_context! unless admitted_step_up_methods.include?(:email_otp)
 
-    safe_redirect_to(
-      auth_app_verification_path(verification_recovery_redirect_params),
-      fallback: auth_app_verification_path(ri: params[:ri]),
-    )
-    false
+    true
   end
 
-  def set_verification_navigation_context
-    @verification_scope = incoming_scope.presence || current_step_up_scope
-    @verification_pt = incoming_pt.presence || current_step_up_pt_param
+  def email_verification_code
+    input = params[:verification]
+    input.permit(:code)[:code] if input.is_a?(ActionController::Parameters)
   end
 
-  def verification_email_edit_path
-    edit_auth_app_verification_email_path(
-      params[:id],
-      ri: params[:ri],
-      scope: @verification_scope,
-      pt: @verification_pt,
-    )
+  def ceremony_email_credential
+    scope = @step_up_ceremony_actor.client_emails.where(
+      user_email_status_id: [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
+    ).where("discard_at > clock_timestamp()")
+    reference = @step_up_ceremony_session.email_credential_ref
+    reference ? scope.find_by!(public_id: reference) : scope.order(:id).first!
+  end
+
+  def ceremony_actor_model = Client
+
+  def ceremony_step_up_session_model = ClientStepUpSession
+
+  def ceremony_session_token(record) = record.user_token
+
+  def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
+
+  def ceremony_supported_methods = %i(passkey totp email_otp)
+
+  def authorize_step_up_ceremony_actor!(actor)
+    authorize!(actor, to: :show?, context: { user: actor })
+  end
+
+  def step_up_cancellation_props
+    { label: t("actions.cancel"), action: auth_app_verification_cancellation_path(ri: params[:ri]), method: "post" }
   end
 end

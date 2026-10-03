@@ -42,4 +42,8 @@ class VisitorStepUpCeremonyTransaction < ComTicketRecord
   include StepUpCeremonyTransactionable
 
   ceremony_surface "com"
+
+  private
+
+  def permitted_ceremony_methods = %w(passkey email_otp)
 end
