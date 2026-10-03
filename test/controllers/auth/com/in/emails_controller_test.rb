@@ -219,7 +219,8 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
   end
 
-  test "post create is refused when the visitor already holds a restricted session at the limit" do
+  # The retired restricted placeholder no longer refuses the whole account before verification.
+  test "post create proceeds to verification even beside a leftover restricted session at the limit" do
     visitor = create_verified_visitor_with_email(email_address: "limit-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
     VisitorToken.create!(
@@ -234,14 +235,12 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
     )
 
-    assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-      post auth_com_sign_in_email_url(ri: "jp"),
-           params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
-           headers: { "Host" => @host }
-    end
+    post auth_com_sign_in_email_url(ri: "jp"),
+         params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
+         headers: { "Host" => @host }
 
-    assert_response :forbidden
-    assert_equal I18n.t("session_limit.login_limit_exceeded"), response.body
+    assert_response :redirect
+    assert_equal "/sign/in/email/edit", URI.parse(response.location).path
   end
 
   test "patch update with a valid pass code signs the visitor in and clears the email session" do

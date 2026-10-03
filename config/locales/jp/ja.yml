@@ -2328,7 +2328,7 @@ ja:
       invalid_request: 無効なリクエストです。
       less_than: は%{count}より小さい値にしてください
       less_than_or_equal_to: は%{count}以下の値にしてください
-      login_cooldown: ログインをやり直すにはしばらくお待ちください
+      login_cooldown_retry: "現在サインインできません。しばらく待ってから %{restart_url} でもう一度お試しください"
       login_required: ログインが必要です
       model_invalid: "バリデーションに失敗しました: %{errors}"
       not_a_number: は数値で入力してください
@@ -2380,6 +2380,7 @@ ja:
       too_many_requests: アクセスが集中しています。時間をおいて再度お試しください。
     social_auth:
       conflict: このアカウントは既に別のユーザーに紐付けられています
+      fatal: 致命的なエラーが発生しました
       identity_conflict: このアカウントは既に紐付けられています
       identity_not_found: "%{provider}アカウントが紐付けられていません"
       insufficient_login_methods: 解除前に、メールアドレス、電話番号確認済みのパスキー、または別のソーシャル連携を登録してください

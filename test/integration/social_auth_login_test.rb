@@ -97,7 +97,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_predicate cookies[AuthenticationBase::REFRESH_COOKIE_KEY].to_s, :empty?
   end
 
-  test "Google login with existing identity completes through acme dashboard" do
+  test "Google login with existing identity completes on the app Dashboard, never Home" do
     existing_uid = "existing_google_welcome_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
@@ -122,8 +122,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     submit_social_completion_if_present!
 
     assert_response :redirect
-    assert_equal configured_host(:acme_service), URI.parse(response.location).host
-    assert_equal "/", URI.parse(response.location).path
+    assert_social_login_lands_on_app_dashboard(response.location)
 
     cycle = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
 
@@ -153,47 +152,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     get auth_app_social_google_callback_url(ri: "jp"),
         params: { state: state },
         headers: browser_headers.merge(@callback_headers)
-    submit_social_completion_if_present!
+    assert_no_difference(-> { ClientToken.where(user_id: existing_user.id).count }) do
+      submit_social_completion_if_present!
+    end
 
+    # A same-host redirect on the Base host that ran the completion: the pending sign-in flow is held
+    # by that host's Rails session, and the URL carries no grant of its own.
     assert_response :redirect
-    gateway = URI.parse(response.location)
+    redirect_uri = URI.parse(response.location)
 
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    redirect_uri = URI.parse(payload.fetch("url"))
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), redirect_uri.host
     assert_equal "/sign/in/limitation", redirect_uri.path
-    social_resolution = Rack::Utils.parse_nested_query(redirect_uri.query.to_s)["social_resolution"]
+    assert_nil Rack::Utils.parse_nested_query(redirect_uri.query.to_s)["social_resolution"]
+    assert_equal 2, ClientToken.where(user_id: existing_user.id).count
+    assert_predicate ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first,
+                     :sign_in_session_limit_pending?
 
-    assert_predicate social_resolution, :present?
-    assert_equal(
-      existing_user.public_id,
-      Rails.application.message_verifier(:social_session_limit_limitation).verify(social_resolution).fetch("actor_ref"),
-    )
-
-    get redirect_uri.to_s, headers: browser_headers
-
-    assert_response :success
-    assert_equal "Session limit", inertia_props.fetch("heading")
-
-    session_ref = inertia_props.fetch("sessions").first.fetch("session_ref")
-    selected_session = SessionLimitResolutionTokenRef.find_client_token(session_ref)
-
-    patch acme_app_sign_in_limitation_url(host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")),
-          params: {
-            social_resolution: social_resolution,
-            session_ref: session_ref,
-          },
-          headers: browser_headers
-
-    assert_predicate selected_session.reload, :revoked?
-    assert_redirected_to base_app_dashboard_url(
-      ri: "jp",
-      host: ENV.fetch(
-        "PRIVATE_BASE_SERVICE_URL", "www.app.localhost",
-      ),
-    )
+    # The limitation page itself, reached through the flow locator held by the Base session, is
+    # exercised in test/controllers/base/app/sign/in/limitations_controller_test.rb.
   end
 
   def create_active_user_session_for_limit(user)
@@ -293,8 +268,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     submit_social_completion_if_present!
 
     assert_response :redirect
-    assert_equal configured_host(:acme_service), URI.parse(response.location).host
-    assert_equal "/", URI.parse(response.location).path
+    assert_social_login_lands_on_app_dashboard(response.location)
     assert_equal user_count_before, Client.count
 
     sign_in_cycle = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
@@ -482,6 +456,34 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_equal user_count_before, Client.count
   end
 
+  test "Apple login with existing identity completes on the app Dashboard, never Home" do
+    existing_uid = "existing_apple_dashboard_#{SecureRandom.hex(4)}"
+    existing_user = Client.create!(
+      status_id: ClientStatus::NOTHING,
+      public_id: "apd_#{SecureRandom.hex(4)}",
+      birthdate: "2000-01-01",
+    )
+    ClientAppleIdentity.create!(
+      user: existing_user,
+      uid: existing_uid,
+      provider: "apple",
+      token: "old_token",
+      expires_at: 1.week.from_now.to_i,
+      user_apple_identity_status: client_apple_identity_statuses(:active),
+    )
+
+    state = start_social_auth_flow(provider: "apple", intent: "login")
+    setup_apple_mock_auth(uid: existing_uid)
+
+    get auth_app_social_apple_callback_url(provider: "apple", ri: "jp"),
+        params: { state: state },
+        headers: browser_headers.merge(@callback_headers)
+    submit_social_completion_if_present!
+
+    assert_response :redirect
+    assert_social_login_lands_on_app_dashboard(response.location)
+  end
+
   test "Apple sign up entry with existing identity falls through to sign in flow" do
     existing_uid = "existing_apple_signup_entry_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
@@ -513,8 +515,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     submit_social_completion_if_present!
 
     assert_response :redirect
-    assert_equal configured_host(:acme_service), URI.parse(response.location).host
-    assert_equal "/", URI.parse(response.location).path
+    assert_social_login_lands_on_app_dashboard(response.location)
     assert_equal user_count_before, Client.count
 
     sign_in_cycle = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
@@ -1203,6 +1204,16 @@ class SocialAuthLoginTest
   PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
 
   private
+
+  # Ordinary social sign-in completes on the app Dashboard. Home "/" is 404 for an authenticated
+  # session, so landing there is the regression this guards against.
+  def assert_social_login_lands_on_app_dashboard(location)
+    destination = URI.parse(jump_rt_url_from_location(location))
+
+    assert_includes [nil, configured_host(:acme_service), ENV.fetch("PUBLIC_BASE_SERVICE_URL")], destination.host
+    assert_equal "/dashboard", destination.path
+    assert_equal "jp", Rack::Utils.parse_nested_query(destination.query.to_s)["ri"]
+  end
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host

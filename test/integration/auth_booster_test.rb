@@ -47,7 +47,10 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
     def login_action
       user = Client.first
-      result = log_in(user, record_login_audit: false, token_kind_id: "BROWSER_WEB", require_totp_check: false)
+      result = log_in(
+        user, establishment: :root_login, record_login_audit: false, token_kind_id: "BROWSER_WEB",
+              require_totp_check: false,
+      )
       render json: result
     end
 

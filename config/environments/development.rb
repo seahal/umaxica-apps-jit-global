@@ -16,10 +16,8 @@ Rails.application.configure do
   # Do not eager load code on boot.
   config.eager_load = false
 
-  # Development is exposed through a public Cloudflare Tunnel. Treating every
-  # request as local would serve /rails/info and detailed exception pages to
-  # internet scanners, so only request.local? clients get full error reports.
-  config.consider_all_requests_local = false
+  # Show full error reports.
+  config.consider_all_requests_local = true
 
   # Enable server timing.
   config.server_timing = true

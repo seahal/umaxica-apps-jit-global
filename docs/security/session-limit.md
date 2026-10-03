@@ -13,56 +13,44 @@ and `org` surfaces.
 
 ## Surfaces And Limits
 
-Each surface has its own token model and independent session limit.
+Each surface has its own token model and independent session limit. The limit counts ACTIVE,
+unexpired, unrotated token rows. No restricted placeholder is issued
+(`adr/root-login-establishment-boundary.md`).
 
-| Surface | Actor      | Token model     | Active sessions | Restricted session | Total live sessions |
-| ------- | ---------- | --------------- | --------------- | ------------------ | ------------------- |
-| `app`   | `Client`   | `ClientToken`   | 2               | 1                  | 3                   |
-| `com`   | `Visitor`  | `VisitorToken`  | 1               | 1                  | 2                   |
-| `org`   | `Operator` | `OperatorToken` | 1               | 1                  | 2                   |
+| Surface | Actor      | Token model     | Active sessions | Model total-row ceiling |
+| ------- | ---------- | --------------- | --------------- | ----------------------- |
+| `app`   | `Client`   | `ClientToken`   | 2               | 3                       |
+| `com`   | `Visitor`  | `VisitorToken`  | 1               | 2                       |
+| `org`   | `Operator` | `OperatorToken` | 1               | 2                       |
 
-The active-session constants are:
-
-- `ClientToken::MAX_SESSIONS_PER_USER = 2`
-- `VisitorToken::MAX_SESSIONS_PER_VISITOR = 1`
-- `OperatorToken::MAX_SESSIONS_PER_STAFF = 1`
-
-The model-level total live-session constants are:
-
-- `ClientToken::MAX_TOTAL_SESSIONS_PER_USER = 3`
-- `VisitorToken::MAX_TOTAL_SESSIONS_PER_VISITOR = 2`
-- `OperatorToken::MAX_TOTAL_SESSIONS_PER_STAFF = 2`
+The total-row ceiling is the token model's create validation (`MAX_TOTAL_SESSIONS_*`); it remains a
+last line of defence and is answered with `:session_limit_hard_reject`.
 
 ## Login-Time Behavior
 
-`Authentication::Base#log_in` evaluates the actor's session-limit state before issuing a new token.
+`AuthenticationBase#log_in(resource, establishment:)` decides under the actor row lock, in one
+ticket-database transaction:
 
-1. If active sessions are below the surface limit, login issues a normal active token.
-2. If active sessions are at the surface limit and no restricted session exists, login issues a
-   restricted token.
-3. If active sessions are at the surface limit and a restricted session already exists, login is
-   rejected with `:session_limit_hard_reject` and HTTP `403 Forbidden`.
+1. Below the limit, it commits one ACTIVE session and returns `status: :success`.
+2. At the limit, it writes nothing and returns `status: :session_limit_pending`. The sign-in flow
+   moves to `SESSION_LIMIT_PENDING` and is the only pending state; no token, cookie,
+   `current_resource`, or `LOGGED_IN` audit exists for the attempt.
 
-Restricted sessions are short-lived and exist only to let the actor manage sessions. They are issued
-with a 15-minute TTL.
+A pending flow does not block other sign-ins of the account.
 
-## Restricted Session Management
+## Session-Limit Resolution
 
-Restricted sessions may access the Sign-In session management endpoint for their own surface:
+- Auth: `Auth::{App,Com,Org}::Sign::In::SessionsController` opens only for the browser whose flow
+  locator names a flow in `SESSION_LIMIT_PENDING`. The actor is that flow's principal.
+- Base app, OIDC resume: `/sign/in/limitation` with the `ClientSessionLimitResolutionTransaction`
+  challenge.
+- Base app, social completion: `/sign/in/limitation` on the Base host that ran the completion,
+  located through that host's flow locator. The URL carries no grant.
 
-- `app`: `Sign::App::In::SessionsController`
-- `com`: `Sign::Com::In::SessionsController`
-- `org`: `Sign::Org::In::SessionsController`
-
-Acme also owns a browser ceremony for session-limit resolution at `/sign/in/limitation`. It is not
-an OIDC protocol endpoint, and it is not part of the Sign RP surface. The OIDC branch uses
-`resolution_challenge`; the social branch uses `social_resolution`.
-
-The session management flow lists active and restricted sessions for the current actor. The actor
-can revoke existing sessions. After revocation, the restricted session is promoted to active only if
-the active-session count is below the surface limit.
-
-If the actor cancels instead, the restricted token is revoked and the request is logged out.
+After the user revokes a session, the waiting sign-in completes through `log_in`, which re-counts
+the limit; if it is still full, nothing is issued and the page is shown again. Cancelling fails only
+the waiting flow; no existing session is touched. com and org have no Base limitation ceremony, so
+their OIDC resume refuses a full limit with `403`.
 
 ## Sign-In Families
 
@@ -84,18 +72,8 @@ one login unit when it mints one `ClientToken`.
 
 ## Gate State
 
-For DB-backed sign-in cycles, `SignIn::SessionLimitManager` is the authoritative session-limit
-participant. It accepts only cycles at `SESSION_LIMIT_PENDING`, binds the restricted token to
-`cycle.token_id`, promotes only when the active-session count is below the surface limit, advances
-successful promotions to `GUARDRAIL_PENDING`, and moves cancelled cycles to `FAILED`.
-
-Legacy `SessionLimitGate` Rails session state remains as compatibility fallback for sign-in entry
-points that have not yet been fully wired to DB-backed cycle locators. The legacy gate contains a
-nonce, issue time, return path, and flow name. It expires after 15 minutes and is consumed after
-successful session management.
-
-The durable session state is the token row and its token-status reference id. The long-term sign-in
-sequence authority is the DB-backed sign-in cycle, not the legacy gate session key.
+The DB-backed `*SignInFlow` is the pending authority. `SessionLimitGate` only remembers the return
+path in the Rails session; it holds no principal and grants nothing.
 
 ## Token Status Reference
 
@@ -116,13 +94,14 @@ The current token-status ids reserve space between active and terminal states:
 | `RESTRICTED` | 103 |
 | `REVOKED`    | 104 |
 
-New token rows default to `ACTIVE`. Restricted login flow rows are issued with `RESTRICTED`, and
-revocation updates the reference id to `REVOKED`.
+New token rows default to `ACTIVE`, and revocation updates the reference id to `REVOKED`.
+`RESTRICTED` is no longer written; existing rows authenticate nothing and expire through their
+`discard_at`.
 
 ## Enforcement Notes
 
-The login flow uses write-role reads when counting active and restricted sessions, so the decision
-is based on the primary database state.
+The login flow counts ACTIVE sessions and reads the cooldown anchor on the writer inside the
+issuance transaction, so the decision is based on the primary database state.
 
 The token models also validate total live-session count on create. This validation gives a
 model-level failure before excess live token rows are accepted.

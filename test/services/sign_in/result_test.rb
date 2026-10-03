@@ -36,26 +36,46 @@ class SignInResultTest < ActiveSupport::TestCase
     assert_equal :found, result.response_status
   end
 
-  test "maps restricted session to session limit pending" do
+  test "a success carrying the retired restricted flag is still only a success, never pending" do
     result = SignInResult.from_session_result(
-      { status: :success, restricted: true },
+      { status: :success, restricted: true, session_management_required: true },
+      session_management_path: "/in/session",
+    )
+
+    assert_predicate result, :success?
+    assert_not_predicate result, :session_limit_pending?
+  end
+
+  test "maps session limit pending to the session management path with no token" do
+    result = SignInResult.from_session_result(
+      { status: :session_limit_pending, access_token: "never-exposed" },
       session_management_path: "/in/session",
     )
 
     assert_predicate result, :session_limit_pending?
+    assert_not_predicate result, :success?
+    assert_not_predicate result, :proceed?
+    assert_nil result.token
     assert_equal "/in/session", result.redirect_to
     assert_equal :found, result.response_status
   end
 
-  test "maps legacy session limit exceeded to session limit pending" do
-    result = SignInResult.from_session_result(
-      { status: :session_limit_exceeded },
-      session_management_path: "/in/session",
-    )
+  test "recorded OIDC evidence proceeds without being a committed session" do
+    result = SignInResult.from_session_result({ status: :authentication_evidence_recorded, redirect_path: "/check" })
 
-    assert_predicate result, :session_limit_pending?
-    assert_equal "/in/session", result.redirect_to
-    assert_equal :found, result.response_status
+    assert_predicate result, :proceed?
+    assert_not_predicate result, :success?
+    assert_nil result.token
+    assert_equal "/check", result.redirect_to
+  end
+
+  test "an unknown or missing status is an invalid request" do
+    [{ status: :session_limit_exceeded }, { status: nil }, {}, { status: "" }].each do |data|
+      result = SignInResult.from_session_result(data)
+
+      assert_equal :invalid_request, result.status, data.inspect
+      assert_not_predicate result, :proceed?
+    end
   end
 
   test "maps hard reject to terminal forbidden result" do

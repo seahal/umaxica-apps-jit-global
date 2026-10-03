@@ -1376,7 +1376,6 @@ Umaxica/ExplicitMethodVisibility:
   app/services/sign_in_return_participant.rb: 1
   app/services/sign_in_selector_participant.rb: 1
   app/services/sign_in_sequence_carrier.rb: 8
-  app/services/sign_in_session_limit_manager.rb: 3
   app/services/sign_in_state_machine.rb: 2
   app/services/sign_otp_ceremony.rb: 4
   app/services/sign_recovery_passcode_requirement.rb: 2

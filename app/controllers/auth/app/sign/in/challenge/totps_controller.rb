@@ -194,9 +194,9 @@ module Auth
               case result[:status]
               when :session_limit_hard_reject
                 render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
-              when :restricted
+              when :session_limit_pending
                 redirect_to(result[:redirect_path])
-              when :success
+              when :success, :authentication_evidence_recorded
                 redirect_to_sign_in_sequence!(
                   pt: result[:redirect_path],
                 )

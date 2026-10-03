@@ -517,16 +517,16 @@ module SignUpSequenceControllerSupport
   end
 
   def handoff_to_sign_in_flow!(actor)
-    # bootstrap_actor: true marks this as a fresh registration handoff.
-    # The sign-in boundary creates or advances a pending cycle; active
-    # session issuance remains delayed until checkpoint and selector pass.
+    # A finished registration hands off to the ordinary sign-in boundary with
+    # no exemption: a new account has no prior root login and no sessions, so
+    # the cooldown and the limit pass on their own, and any account where they
+    # do not pass must not receive a session either.
     result = establish_signed_in_session!(
       actor,
       pt: sign_up_handoff_pt,
       ri: params[:ri],
       auth_method: sign_up_auth_method,
       audit_context: { flow: "sign_up", sign_up_flow_id: @sign_up_ticket.public_id },
-      bootstrap_actor: true,
       # sign_up_auth_method collapses google/apple to "social" for the MFA-gating
       # value; the sign-up ticket's entry_method still carries the precise
       # provider (adr/unified-enforcement.md, Session attribution).

@@ -79,7 +79,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
 
   test "an emergency sign-in records the context on the session row and in the access token" do
     result = @harness.invoke(
-      :log_in, @staff, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
     )
 
     assert_equal :success, result[:status]
@@ -91,7 +91,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
   end
 
   test "a normal sign-in records the normal context and never the emergency one" do
-    result = @harness.invoke(:log_in, @staff)
+    result = @harness.invoke(:log_in, @staff, establishment: :root_login)
     token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
     assert_nil token.authentication_context
@@ -101,7 +101,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
 
   test "refresh keeps the emergency context and never upgrades the session" do
     issued = @harness.invoke(
-      :log_in, @staff, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
     )
 
     refreshed = @harness.invoke(:refresh_access_token, issued[:refresh_token])
@@ -117,7 +117,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
 
   test "repeated rotation never drops the emergency context" do
     issued = @harness.invoke(
-      :log_in, @staff, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
     )
     refresh_token = issued[:refresh_token]
 
@@ -133,14 +133,14 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
   # Changing mode means ending the session and starting a new one, so the new
   # session must be a new row rather than the old one relabelled.
   test "signing out of an emergency session and signing in normally produces a new normal session" do
-    @harness.invoke(:log_in, @staff, authentication_context: AuthenticationContextValue::EMERGENCY_KEY)
+    @harness.invoke(:log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY)
     emergency_token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
     @harness.invoke(:log_out)
 
     # The cooldown exists to slow repeated sign-ins, not to describe the mode
     # transition; the transition itself is what this asserts.
-    normal = with_login_cooldown(0.seconds) { @harness.invoke(:log_in, @staff) }
+    normal = with_login_cooldown(0.seconds) { @harness.invoke(:log_in, @staff, establishment: :root_login) }
     normal_token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
     assert_not_equal emergency_token.id, normal_token.id

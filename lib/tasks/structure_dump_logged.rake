@@ -7,6 +7,7 @@
 # reference only permanent tables". Structure files therefore always record plain tables; the
 # test environment still applies UNLOGGED when it creates tables.
 namespace :db do
+  desc "Normalize table and sequence persistence in structure dumps"
   task normalize_structure_persistence: :environment do
     Rails.root.glob("db/*structure.sql").each do |path|
       sql = path.read

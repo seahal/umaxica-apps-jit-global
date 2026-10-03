@@ -11,7 +11,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
     @user.update_columns(created_at: 120.days.ago, updated_at: 120.days.ago)
     @token = ClientToken.create!(
       user: @user,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "wd#{SecureRandom.hex(8)}",
       discard_at: 1.day.from_now,
@@ -19,7 +19,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
     )
     @other_token = ClientToken.create!(
       user: @user,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "wo#{SecureRandom.hex(8)}",
       discard_at: 1.day.from_now,

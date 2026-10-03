@@ -98,4 +98,47 @@ class OmniauthTest < ActiveSupport::TestCase
     assert_equal "StandardError", event.dig("data", "error_class")
     assert_not_includes errors.join("\n"), provider_secret
   end
+
+  test "omniauth failure stops with a plain-text fatal error when the strategy raised a code defect" do
+    env = Rack::MockRequest.env_for("/social/google", method: "POST")
+    env["omniauth.error.type"] = "undefined method 'bytesize' for nil"
+    env["omniauth.error.strategy"] = Struct.new(:name).new("google")
+    defect = NoMethodError.new("undefined method 'bytesize' for nil")
+    defect.set_backtrace(["#{Rails.root.join("lib/example.rb:1:in 'call'")}"])
+    env["omniauth.error"] = defect
+
+    errors = []
+    logger = Struct.new(:errors) do
+      def error(message)
+        errors << message
+      end
+    end.new(errors)
+
+    status, headers, body = Rails.stub(:logger, logger) { OmniAuth.config.on_failure.call(env) }
+    text = +""
+    body.each { |chunk| text << chunk }
+
+    assert_equal 500, status
+    assert_equal "text/plain; charset=utf-8", headers["Content-Type"]
+    assert_nil headers["Location"]
+    assert_equal "致命的なエラーが発生しました", text
+
+    event = errors.map { |message| JSON.parse(message) }.find { |entry| entry["event"] == "social_auth.fatal" }
+
+    assert_equal "NoMethodError", event.dig("data", "error_class")
+    assert_equal "#{Rails.root.join("lib/example.rb:1:in 'call'")}", event.dig("data", "origin")
+    assert_not_includes errors.join("\n"), "bytesize"
+  end
+
+  test "omniauth failure keeps redirecting to the failure endpoint for an ordinary provider error" do
+    env = Rack::MockRequest.env_for("/social/google/callback")
+    env["omniauth.error.type"] = "invalid_credentials"
+    env["omniauth.error.strategy"] = Struct.new(:name).new("google")
+    env["omniauth.error"] = StandardError.new("provider rejected the code")
+
+    status, headers, = Rails.stub(:logger, Logger.new(nil)) { OmniAuth.config.on_failure.call(env) }
+
+    assert_equal 302, status
+    assert_equal "/social/failure?message=invalid_credentials&strategy=google", headers["Location"]
+  end
 end

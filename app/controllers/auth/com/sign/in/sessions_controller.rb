@@ -44,18 +44,14 @@ module Auth
               revoke_sessions_by_refs(@current_visitor, refs)
             end
 
-            if (pending_session_limit_cycle? || current_session_restricted?) && can_promote_session?(@current_visitor)
-              if pending_session_limit_cycle? && promote_current_session_limit_cycle!(@current_visitor)
-                consume_session_limit_gate!
-                return redirect_to_sign_in_sequence!(
-                  pt: retrieve_pt.presence || session_limit_pt,
-                )
-              end
-
-              promote_current_session!
+            # The pending flow is the only thing to complete. log_in re-counts the
+            # limit under the actor lock; while it is still full nothing is issued
+            # and the page is shown again.
+            if pending_session_limit_cycle? && promote_current_session_limit_cycle!(@current_visitor)
               consume_session_limit_gate!
-              session.delete(:pending_login_visitor_id)
-              return redirect_to_return_path
+              return redirect_to_sign_in_sequence!(
+                pt: retrieve_pt.presence || session_limit_pt,
+              )
             end
 
             load_session_data
@@ -73,18 +69,12 @@ module Auth
               load_session_data
               render inertia: SESSION_PAGE_COMPONENT, props: session_page_props
             else
-              current_db_sign_in_flow_for_sequence&.fail_sign_in! if pending_session_limit_cycle?
+              # Cancelling ends only this pending flow; it issued nothing, and no
+              # other session of the account is touched.
+              flow = current_db_sign_in_flow_for_sequence
+              with_sign_in_flow_writing(flow) { flow.fail_sign_in! } if flow&.sign_in_session_limit_pending?
               consume_session_limit_gate!
-              session.delete(:pending_login_visitor_id)
-
-              if current_session&.restricted?
-                AuthenticationLogoutCurrentSession.call(
-                  resource: @current_visitor,
-                  token: current_session,
-                  reason: "session_limit_cancelled",
-                )
-                log_out
-              end
+              clear_current_sign_in_flow_locator!
 
               return head :no_content if request.format.json?
 
@@ -97,10 +87,10 @@ module Auth
 
           private
 
+          # Only a verified sign-in flow waiting on the session limit opens this page.
+          # A signed-in browser has nothing pending here.
           def require_authentication_or_gate
-            return if logged_in? && current_session_restricted?
             return if pending_session_limit_cycle?
-            return if session_limit_gate_valid? && session[:pending_login_visitor_id].present?
 
             if logged_in?
               head :forbidden
@@ -121,34 +111,14 @@ module Auth
             )
           end
 
-          def authentication_credentials_invalid?
-            return false if action_name == "show" && current_session_restricted?
-
-            super
-          end
-
-          def redirect_to_return_path
-            return_path = retrieve_pt || session_limit_pt
-            consume_session_limit_gate!
-
-            if return_path.present?
-              destination = path_from_signed_pt(signed_pt_token(return_path)) || base_com_identity_url(
-                ri: current_region_identifier,
-                host: base_authority_host,
-              )
-              redirect_to_pt_destination!(destination)
-            else
-              redirect_to_jump_url(
-                base_com_identity_url(ri: current_region_identifier, host: base_authority_host, protocol: "https"),
-              )
-            end
-          end
-
+          # The actor is the pending flow's principal, read from the flow this
+          # browser's locator names; never a principal id kept in the session.
           def resolve_current_visitor
-            return current_resource if current_resource
+            flow = current_db_sign_in_flow_for_sequence
+            return unless flow&.sign_in_session_limit_pending?
 
-            visitor_id = session[:pending_login_visitor_id]
-            Visitor.find_by(id: visitor_id) if visitor_id
+            principal = with_sign_in_flow_writing(flow) { flow.principal }
+            principal if principal.is_a?(Visitor)
           end
 
           def load_session_data
@@ -222,23 +192,6 @@ module Auth
               last_used_at: session.last_used_at ? l(session.last_used_at, format: :short) : nil,
               ref: (revocable && !current) ? session.signed_ref : nil,
             }
-          end
-
-          def can_promote_session?(visitor)
-            active_count =
-              ComTicketRecord.connected_to(role: :writing) do
-                VisitorToken.active_status.where(visitor_id: visitor.id).count
-              end
-            active_count < VisitorToken::MAX_SESSIONS_PER_VISITOR
-          end
-
-          def promote_current_session!
-            return unless current_session&.restricted?
-
-            ComTicketRecord.connected_to(role: :writing) do
-              current_session.promote_to_active!
-            end
-            @current_session = nil
           end
 
           def revoke_session_by_ref(visitor, ref)

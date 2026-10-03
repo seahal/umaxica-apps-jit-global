@@ -19,7 +19,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
     @staff = operators(:one)
     @token = OperatorToken.create!(
       staff: @staff,
-      staff_token_status_id: OperatorTokenStatus::NOTHING,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       public_id: "ovf#{SecureRandom.hex(4)}",
       discard_at: 1.day.from_now,

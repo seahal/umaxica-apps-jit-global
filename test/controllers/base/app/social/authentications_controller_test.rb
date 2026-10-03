@@ -162,9 +162,6 @@ class Base::App::Social::AuthenticationsControllerTest < ActionController::TestC
     @controller.define_singleton_method(:base_social_login_redirect_to) do |_sign_in_result|
       "/dashboard"
     end
-    @controller.define_singleton_method(:base_social_login_redirect_allows_other_host?) do |_redirect_url|
-      false
-    end
 
     commit = Struct.new(:user, :result, :pt, :identity, :existing_account).new(
       @commit_user,
@@ -254,7 +251,11 @@ class Base::App::Social::AuthenticationsControllerTest < ActionController::TestC
       ) do
         IdentitySocialCeremonyFinalCommitter.stub(:call!, commit) do
           IdentityGraphProvisioner.stub(:call!, ->(*_args, **_kwargs) { true }) do
-            AuthenticationSessionCommitter.stub(:call, ->(**) { raise AuthenticationBase::LoginCooldownError }) do
+            AuthenticationSessionCommitter.stub(
+              :call, ->(**) {
+                       raise AuthenticationBase::LoginCooldownError
+                     },
+            ) do
               post :create, params: { id: "google", ri: "jp", social_ceremony_result: "signed-token" }
             end
           end
@@ -264,6 +265,10 @@ class Base::App::Social::AuthenticationsControllerTest < ActionController::TestC
 
     assert_response :too_many_requests
     assert_nil response.location
-    assert_includes response.body, I18n.t("errors.messages.login_cooldown")
+    assert_equal AuthenticationBase.login_cooldown.to_i.to_s, response.headers["Retry-After"]
+    assert_equal "no-store", response.headers["Cache-Control"]
+    # The restart is a new sign-in at Base /sign, never a reload of the used callback.
+    assert_includes response.body, "/sign"
+    assert_not_includes response.body, "social_ceremony_result"
   end
 end

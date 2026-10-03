@@ -61,9 +61,9 @@ class AuthenticationLogoutCurrentSession
           .first
     end
 
+    # A database failure here is not "no session": it propagates so the
+    # sign-out is reported as incomplete instead of as an idempotent success.
     find_token_by(:public_id) || find_token_by(:oidc_sid)
-  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotDefined
-    nil
   end
 
   def find_token_by(column)
@@ -90,8 +90,6 @@ class AuthenticationLogoutCurrentSession
     return unless klass
 
     klass.active.find_by(public_id: session_public_id)
-  rescue ActiveRecord::StatementInvalid, ActiveRecord::ConnectionNotDefined
-    nil
   end
 
   def with_token_writing_connection(token_record, &)
@@ -157,6 +155,9 @@ class AuthenticationLogoutCurrentSession
     revoke_token!(token_record)
   end
 
+  # Revocation either takes effect or raises. A row that is already gone is
+  # the only failure that leaves nothing usable, so it is the only one treated
+  # as done; any other failure must not let the sign-out flow complete.
   def revoke_token!(token_record)
     return true if token_record.blank?
     return true if token_record.respond_to?(:revoked?) && token_record.revoked?
@@ -164,20 +165,19 @@ class AuthenticationLogoutCurrentSession
     if token_record.respond_to?(:revoke!)
       token_record.revoke!
     elsif token_record.respond_to?(:destroy)
-      token_record.destroy
+      raise ActiveRecord::RecordNotDestroyed.new("session token was not destroyed", token_record) unless
+        token_record.destroy
     end
     true
-  rescue ActiveRecord::RecordNotFound, ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+  rescue ActiveRecord::RecordNotFound
     Rails.logger.info(
       JitLogEvent.format(
-        "auth.logout_current_session.failed",
+        "auth.logout_current_session.token_already_gone",
         reason: reason,
         resource_class: resource&.class&.name,
         resource_id: resource&.id,
         token_class: token_record&.class&.name,
         token_id: token_record&.try(:public_id),
-        error_class: e.class.name,
-        error_message: e.message,
       ),
     )
     true

@@ -13,7 +13,7 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
       classification: "auth boundary; each rescue logs and re-raises ActorSupport::ResolutionError",
     },
     "app/controllers/concerns/authentication_logoutable.rb" => {
-      count: 5,
+      count: 4,
       classification: "logout boundary; each rescue logs and re-raises after session cleanup",
     },
     "app/controllers/concerns/social_callback_guard.rb" => {

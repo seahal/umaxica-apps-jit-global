@@ -56,8 +56,10 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
 
+      # The account is at its limit and the waiting browser holds no session of its own: the
+      # OIDC resume issued nothing and left only the resolution challenge.
       tokens =
-        3.times.map do
+        ClientToken::MAX_SESSIONS_PER_USER.times.map do
           ClientToken.create!(
             user: user,
             user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -65,7 +67,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
             authentication_event_at: Time.current,
           )
         end
-      current_session = tokens.second
       issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email", code_verifier: code_verifier)
       resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
         actor: user,
@@ -80,13 +81,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
               resolution_challenge: resolution.challenge,
               session_ref: SessionLimitResolutionTokenRef.issue(selected),
             },
-            headers: browser_headers.merge(
-              as_user_headers(user, host: acme_host, session_public_id: current_session.public_id),
-            )
+            headers: browser_headers
 
       assert_response :redirect
       assert_predicate selected.reload, :revoked?
-      assert_equal active_session_count - 1, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+      # One revoked, one newly committed root login: still exactly at the limit.
+      assert_equal active_session_count, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+      assert_not_nil ClientToken.where(user_id: user.id).order(:id).last.root_login_established_at
       callback_uri = URI.parse(jump_rt_url_from_location(response.location))
       callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
 
@@ -252,14 +253,15 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert_predicate transaction, :authenticated?
       assert_nil transaction.session_ref
-      assert_equal 3, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
+      # Waiting on the limit issues nothing: no restricted placeholder, no third row.
+      assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
       resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(
         resume_query.fetch("resolution_challenge"),
       )
 
       assert_predicate resolution, :present?
-      assert_predicate ClientToken.restricted_status.where(user_id: user.id), :exists?
+      assert_not_predicate ClientToken.restricted_status.where(user_id: user.id), :exists?
 
       host!(acme_host)
       get(resume_uri.request_uri, headers: browser_headers)
@@ -463,35 +465,32 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_not token.reload.revoked?
   end
 
-  test "acme app session-limit limitation rejects mixed oidc and social payloads" do
+  # The retired signed social_resolution URL token is not a grant: without this browser's pending
+  # flow or an OIDC resolution challenge, nothing is listed, revoked, or issued.
+  test "acme app session-limit limitation ignores a social_resolution token in the request" do
     acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
-    resolution = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-      actor: user,
-      oidc_transaction: issuance.transaction,
-    )
     social_token = Rails.application.message_verifier(:social_session_limit_limitation).generate(
-      {
-        "actor_ref" => user.public_id,
-        "expires_at" => 15.minutes.from_now.iso8601,
-      },
+      { "actor_ref" => user.public_id, "expires_at" => 15.minutes.from_now.iso8601 },
     )
 
     host! acme_host
-    patch acme_app_sign_in_limitation_path,
-          params: {
-            resolution_challenge: resolution.challenge,
-            social_resolution: social_token,
-            session_ref: SessionLimitResolutionTokenRef.issue(token),
-          },
-          headers: browser_headers
+    assert_no_difference(-> { ClientToken.where(user_id: user.id).count }) do
+      patch acme_app_sign_in_limitation_path,
+            params: { social_resolution: social_token, session_ref: SessionLimitResolutionTokenRef.issue(token) },
+            headers: browser_headers
+    end
 
     assert_response :gone
     assert_not token.reload.revoked?
-    assert_not_predicate issuance.transaction.reload, :consumed?
+
+    delete acme_app_sign_in_limitation_path,
+           params: { social_resolution: social_token },
+           headers: browser_headers.merge("X-Inertia" => "true")
+
+    assert_response :gone
   end
 
   test "acme app session-limit limitation rejects missing payload" do
@@ -549,20 +548,6 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}").host, location.host
     assert_nil response.headers["Location"]
     assert_predicate resolution.transaction.reload, :cancelled?
-  end
-
-  test "acme app session-limit limitation cancel of a social resolution from an inertia visit leaves the app" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    social_token = Rails.application.message_verifier(:social_session_limit_limitation).generate(
-      { "actor_ref" => clients(:one).public_id, "session_ref" => nil, "expires_at" => 10.minutes.from_now.iso8601 },
-    )
-
-    delete acme_app_sign_in_limitation_path,
-           params: { social_resolution: social_token },
-           headers: browser_headers.merge("X-Inertia" => "true")
-
-    assert_response :conflict
-    assert_predicate response.headers["X-Inertia-Location"], :present?
   end
 
   test "app com and org authorization endpoints are exposed at Acme oauth authorize" do

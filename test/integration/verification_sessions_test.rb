@@ -17,7 +17,7 @@ class VerificationSessionsTest < ActionDispatch::IntegrationTest
 
     @token = ClientToken.create!(
       user: @user,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "verify_#{SecureRandom.hex(4)}",
       discard_at: 1.day.from_now,

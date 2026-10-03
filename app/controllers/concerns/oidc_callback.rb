@@ -29,20 +29,20 @@ module OidcCallback
       return redirect_to(consume_oidc_pt, allow_other_host: false)
     end
 
+    # The RP's local session derives from a root login Base already
+    # established; it is an RP session, so it neither checks nor moves the
+    # root-login cooldown anchor.
     login_result =
       ActiveRecord::Base.connected_to(role: :writing) do
         log_in(
-          resource, token_kind_id: "BROWSER_WEB", require_totp_check: false,
+          resource, establishment: :rp_session, token_kind_id: "BROWSER_WEB", require_totp_check: false,
                     audit_context: { oidc_client_id: oidc_client_id },
-                    skip_login_cooldown: true,
                     authentication_event_at: authentication_event_at,
         )
       end
-    return render_oidc_session_limit_hard_reject(login_result) if login_result[:status] == :session_limit_hard_reject
-
-    if login_result[:session_management_required]
-      bind_oidc_rp_logout_session!(id_token_result.payload)
-      return redirect_to(oidc_session_management_path, allow_other_host: false)
+    # No restricted session is issued at a full limit; the RP refuses.
+    if %i(session_limit_hard_reject session_limit_pending).include?(login_result[:status])
+      return render_oidc_session_limit_hard_reject(login_result.reverse_merge(http_status: :forbidden))
     end
 
     return render_callback_failure("login_failed") unless login_result[:status] == :success
@@ -195,15 +195,6 @@ module OidcCallback
 
     render plain: login_result[:message].presence || I18n.t("session_limit.login_limit_exceeded"),
            status: login_result[:http_status].presence || :forbidden
-  end
-
-  def oidc_session_management_path
-    return session_management_path if respond_to?(:session_management_path, true)
-    return sign_app_sign_in_session_path if respond_to?(:sign_app_sign_in_session_path, true)
-    return sign_org_sign_in_session_path if respond_to?(:sign_org_sign_in_session_path, true)
-    return sign_com_sign_in_session_path if respond_to?(:sign_com_sign_in_session_path, true)
-
-    "/sign/in/session"
   end
 
   def render_callback_failure(error)

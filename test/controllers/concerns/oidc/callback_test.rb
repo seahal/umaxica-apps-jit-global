@@ -378,8 +378,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_redirected_to "/after"
-    assert_not OidcCallbackTestController.last_login_kwargs.fetch(:bootstrap_actor, false)
-    assert OidcCallbackTestController.last_login_kwargs.fetch(:skip_login_cooldown)
+    assert_equal :rp_session, OidcCallbackTestController.last_login_kwargs.fetch(:establishment)
   end
 
   test "show rejects scalar-only legacy state before token exchange" do
@@ -771,7 +770,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_equal 1, logged.count { |entry| entry[:event] == "oidc.rp.callback.failed" }
   end
 
-  test "show redirects session-limit pending callbacks to session management without restarting oidc" do
+  test "show refuses a session-limit pending RP session without issuing or restarting oidc" do
     get "/oidc/callback/session",
         params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/settings?ri=jp" }
 
@@ -786,10 +785,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       payload: { "sub" => "42", "nonce" => "nonce", "auth_time" => @authentication_event_at },
       error: nil,
     )
-    OidcCallbackTestController.login_result_for_test = {
-      status: :success,
-      session_management_required: true,
-    }
+    OidcCallbackTestController.login_result_for_test = { status: :session_limit_pending }
 
     OidcRpTokenClient.stub(:call, result) do
       OidcIdTokenVerifier.stub(:call, id_token_result) do
@@ -798,10 +794,9 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :redirect
-    assert_redirected_to "/sign/in/session"
-    assert OidcCallbackTestController.last_login_kwargs.fetch(:skip_login_cooldown)
-    assert_not OidcCallbackTestController.last_login_kwargs.fetch(:bootstrap_actor, false)
+    assert_response :forbidden
+    # The RP session derives from Base's root login: it neither checks nor records the cooldown.
+    assert_equal :rp_session, OidcCallbackTestController.last_login_kwargs.fetch(:establishment)
   end
 
   test "show renders hard reject instead of restarting oidc when restricted session already exists" do

@@ -1099,6 +1099,7 @@ CREATE TABLE public.visitor_tokens (
     established_authentication_method character varying,
     last_step_up_phishing_resistant boolean DEFAULT false NOT NULL,
     authentication_event_at timestamp(6) with time zone,
+    root_login_established_at timestamp with time zone,
     CONSTRAINT chk_customer_tokens_kind_id_positive CHECK ((visitor_token_kind_id >= 0)),
     CONSTRAINT chk_customer_tokens_status_id_positive CHECK ((visitor_token_status_id >= 0)),
     CONSTRAINT chk_visitor_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text]))))
@@ -1995,6 +1996,13 @@ CREATE INDEX index_visitor_sign_in_flows_on_token_id ON public.visitor_sign_in_f
 
 
 --
+-- Name: index_visitor_sign_in_flows_on_token_id_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_visitor_sign_in_flows_on_token_id_unique ON public.visitor_sign_in_flows USING btree (token_id) WHERE (token_id IS NOT NULL);
+
+
+--
 -- Name: index_visitor_sign_out_flows_on_access_expires_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2310,6 +2318,13 @@ CREATE INDEX index_visitor_tokens_on_visitor_id_and_oidc_client_id ON public.vis
 
 
 --
+-- Name: index_visitor_tokens_on_visitor_id_root_login_established_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitor_tokens_on_visitor_id_root_login_established_at ON public.visitor_tokens USING btree (visitor_id, root_login_established_at) WHERE (root_login_established_at IS NOT NULL);
+
+
+--
 -- Name: index_visitor_tokens_on_visitor_token_binding_method_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2502,6 +2517,7 @@ ALTER TABLE ONLY public.visitor_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261002120000'),
 ('20260924156000'),
 ('20260924155000'),
 ('20260924154000'),
@@ -2578,3 +2594,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260508135006'),
 ('20260507010003'),
 ('20260501000000');
+

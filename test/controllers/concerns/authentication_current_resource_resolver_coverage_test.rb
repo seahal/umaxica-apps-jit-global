@@ -27,6 +27,11 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
         self
       end
 
+      # The resolver reads only ACTIVE sessions (TokenStatusManagement.active_status).
+      def active_status
+        self
+      end
+
       def includes(*)
         self
       end

@@ -2224,7 +2224,7 @@ en:
       invalid_request: Invalid request.
       less_than: must be less than %{count}
       less_than_or_equal_to: must be less than or equal to %{count}
-      login_cooldown: Please wait before logging in again
+      login_cooldown_retry: "Sign-in is temporarily unavailable. Please wait a moment, then start again at %{restart_url}"
       model_invalid: "Validation failed: %{errors}"
       not_a_number: is not a number
       not_an_integer: must be an integer
@@ -2277,6 +2277,7 @@ en:
       too_many_requests: Too many requests right now. Please try again shortly.
     social_auth:
       conflict: This account is already linked to another user
+      fatal: A fatal error occurred
       identity_conflict: This account is already linked
       identity_not_found: No %{provider} account linked
       insufficient_login_methods:

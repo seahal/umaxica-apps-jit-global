@@ -81,6 +81,11 @@ module Authentication
     end
 
     class FakeTokenClass
+      # The resolver reads only ACTIVE sessions (TokenStatusManagement.active_status).
+      def self.active_status
+        FakeTokenScope.new
+      end
+
       def self.where(*)
         FakeTokenScope.new
       end

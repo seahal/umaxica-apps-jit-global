@@ -52,43 +52,34 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     Rails.application.reload_routes!
   end
 
-  test "show with restricted session displays sessions" do
-    create_active_session(@user)
-    token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, token, host: @host)
+  # The page opens only for a verified sign-in flow waiting on the session limit. Every case below
+  # reaches that state through the real email sign-in, so the flow locator in this browser's
+  # session -- not a principal id, and not a restricted session -- is what grants access
+  # (adr/root-login-establishment-boundary.md).
 
-    get auth_app_sign_in_session_url(ri: "jp"), headers: headers
+  test "show for a pending sign-in lists the account's sessions and the cancel action" do
+    enter_pending_session_limit!
+
+    get auth_app_sign_in_session_url(ri: "jp")
 
     assert_response :success
-    assert_not response.redirect?
     assert_equal "auth/app/sign/in/sessions/show", inertia_component
     assert_equal auth_app_sign_in_session_path(ri: "jp"), inertia_props.fetch("form").fetch("action")
-    # A session is selected by its signed reference, the same opaque value the radio button carried.
     refs = inertia_props.fetch("active_sessions").fetch("items").filter_map { |item| item["ref"] }
 
-    assert_predicate refs, :any?
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER, refs.size
     assert_equal I18n.t("sign.app.in.session.cancel_logout"), inertia_props.fetch("cancel").fetch("label")
-    # Cancelling the sign-in stays a DELETE to the session route.
     assert_equal auth_app_sign_in_session_path(ri: "jp"), inertia_props.fetch("cancel").fetch("action")
   end
 
   test "show counts only usable active sessions" do
-    active_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    rotated_refresh = active_token.rotate_refresh_token!
-    SignRefreshTokenIssuer.call(refresh_token: rotated_refresh)
+    enter_pending_session_limit!
+    ClientToken.where(user_id: @user.id).first.revoke!
 
-    current_active = ClientToken.where(user_id: @user.id, user_token_status_id: ClientTokenStatus::ACTIVE).order(:created_at).last
-    other_active = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    other_active.rotate_refresh_token!
-    restricted_token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    get auth_app_sign_in_session_url(ri: "jp"), headers: headers
+    get auth_app_sign_in_session_url(ri: "jp")
 
     assert_response :success
-    assert_equal "(2/#{ClientToken::MAX_SESSIONS_PER_USER})",
-                 inertia_props.fetch("active_sessions").fetch("count_label")
-    assert_not_equal active_token.public_id, current_active.public_id
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER - 1, inertia_props.fetch("active_sessions").fetch("items").size
   end
 
   test "show with active session returns forbidden" do
@@ -100,9 +91,14 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_response :forbidden
   end
 
-  # ===================================================================
-  # update -- authentication & access control
-  # ===================================================================
+  test "a legacy restricted session does not open the page" do
+    token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
+    headers = as_user_headers_with_token(@user, token, host: @host)
+
+    get auth_app_sign_in_session_url(ri: "jp"), headers: headers
+
+    assert_redirected_to auth_app_sign_in_url(ri: "jp")
+  end
 
   test "update without authentication redirects to login" do
     patch auth_app_sign_in_session_url(ri: "jp"),
@@ -127,212 +123,70 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_response :forbidden
   end
 
-  # ===================================================================
-  # update -- empty selections
-  # ===================================================================
+  test "update without selections keeps the flow pending and re-renders show" do
+    enter_pending_session_limit!
 
-  test "update without selections flashes alert and re-renders show" do
-    token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [] },
-          headers: headers
+    patch auth_app_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }
 
     assert_response :unprocessable_content
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
-  # ===================================================================
-  # update -- revoke by refs (batch) + promotion
-  # ===================================================================
+  test "update revokes the selected session and commits the waiting sign-in" do
+    first, second = enter_pending_session_limit!
 
-  test "update revokes selected sessions and promotes restricted session" do
-    active_token1 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
+    assert_difference(-> { ClientToken.where(user_id: @user.id).count }, 1) do
+      patch auth_app_sign_in_session_url(ri: "jp"), params: { revoke_refs: [first.signed_ref] }
+    end
 
-    active_token2 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token2.rotate_refresh_token!
+    assert_response :redirect
+    assert_not first.reload.currently_usable?
+    assert_predicate second.reload, :currently_usable?
+    issued = ClientToken.where(user_id: @user.id).order(:id).last
 
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [active_token1.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::ACTIVE, restricted_token.user_token_status_id
-
-    active_token1.reload
-
-    assert_not active_token1.currently_usable?
-
-    # Unrevoked active session remains
-    active_token2.reload
-
-    assert_predicate active_token2, :currently_usable?
+    assert_predicate issued, :active_status?
+    assert_equal issued.id, latest_flow.token_id
   end
 
-  test "update revokes session but does not promote when still at limit" do
-    active_token1 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
+  test "update with an unusable ref revokes nothing and issues nothing while the limit is full" do
+    enter_pending_session_limit!
 
-    active_token2 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token2.rotate_refresh_token!
+    assert_no_difference(-> { ClientToken.where(user_id: @user.id).count }) do
+      patch auth_app_sign_in_session_url(ri: "jp"), params: { revoke_refs: ["invalid_ref_value"] }
+    end
 
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    # Send an invalid ref so nothing actually gets revoked
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: ["invalid_ref_value"] },
-          headers: headers
-
-    # Still restricted -- not promoted because active_count == MAX_SESSIONS_PER_USER
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
-    assert_response :success # re-renders show
-  end
-
-  test "update skips current session ref in batch revoke" do
-    # Need 2 active sessions to prevent auto-promotion after no-op revoke
-    active_token1 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
-
-    active_token2 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token2.rotate_refresh_token!
-
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [restricted_token.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
-    assert_predicate restricted_token, :currently_usable?
+    assert_response :success
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
   test "update ignores ref belonging to another user" do
     other_user = clients(:two)
     ClientToken.where(user: other_user).delete_all
     other_token = ClientToken.create!(user: other_user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    other_token.rotate_refresh_token!
+    enter_pending_session_limit!
 
-    restricted_token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
+    patch auth_app_sign_in_session_url(ri: "jp"), params: { revoke_refs: [other_token.signed_ref] }
 
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [other_token.signed_ref] },
-          headers: headers
-
-    other_token.reload
-
-    assert_predicate other_token, :currently_usable?
+    assert_predicate other_token.reload, :currently_usable?
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
-  # ===================================================================
-  # update -- revoke by single ref param
-  # ===================================================================
+  test "update with ref param revokes that session and commits the waiting sign-in" do
+    first, = enter_pending_session_limit!
 
-  test "update with ref param revokes specific session" do
-    active_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
+    patch auth_app_sign_in_session_url(ri: "jp"), params: { ref: first.signed_ref }
 
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { ref: active_token.signed_ref },
-          headers: headers
-
-    active_token.reload
-
-    assert_not active_token.currently_usable?
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::ACTIVE, restricted_token.user_token_status_id
+    assert_not first.reload.currently_usable?
+    assert_predicate latest_flow.token_id, :present?
   end
 
-  test "update with ref param rejects revoking current session" do
-    # Need 2 active sessions to prevent auto-promotion
-    active_token1 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
+  test "update with invalid ref param stays on the page" do
+    enter_pending_session_limit!
 
-    active_token2 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token2.rotate_refresh_token!
+    patch auth_app_sign_in_session_url(ri: "jp"), params: { ref: "totally_invalid_ref" }
 
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { ref: restricted_token.signed_ref },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
-    assert_predicate restricted_token, :currently_usable?
-  end
-
-  test "update with invalid ref param flashes alert and stays on page" do
-    # Need 2 active sessions to prevent auto-promotion
-    active_token1 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
-
-    active_token2 = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token2.rotate_refresh_token!
-
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { ref: "totally_invalid_ref" },
-          headers: headers
-
-    assert_response :success # re-renders show
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
-  end
-
-  # ===================================================================
-  # update -- redirect after promotion
-  # ===================================================================
-
-  test "update promotes and redirects to settings path by default" do
-    active_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [active_token.signed_ref] },
-          headers: headers
-
-    assert_response :redirect
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
+    assert_response :success
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
   test "OIDC email verification reaches the Auth handoff without issuing an Auth session" do
@@ -423,56 +277,6 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "update with pt param redirects to the requested path" do
-    active_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    pt = "/settings"
-
-    patch auth_app_sign_in_session_url(ri: "jp", pt: pt),
-          params: { revoke_refs: [active_token.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::ACTIVE, restricted_token.user_token_status_id
-
-    assert_response :redirect
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
-  end
-
-  test "update with invalid pt param falls back to default path" do
-    active_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    patch auth_app_sign_in_session_url(ri: "jp", pt: "not-a-token"),
-          params: { revoke_refs: [active_token.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::ACTIVE, restricted_token.user_token_status_id
-
-    assert_response :redirect
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
-  end
-
-  # ===================================================================
-  # destroy -- authentication & access control
-  # ===================================================================
-
   test "destroy without authentication redirects to login" do
     delete auth_app_sign_in_session_url(ri: "jp"),
            headers: browser_headers.merge(
@@ -493,196 +297,87 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_response :forbidden
   end
 
-  # ===================================================================
-  # destroy -- cancel restricted session (no ref)
-  # ===================================================================
+  test "destroy cancels only the waiting flow and redirects to login" do
+    existing = enter_pending_session_limit!
+    flow = latest_flow
 
-  test "destroy cancels restricted session and redirects to login" do
-    token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, token, host: @host)
-
-    delete auth_app_sign_in_session_url(ri: "jp"), headers: headers
+    delete auth_app_sign_in_session_url(ri: "jp")
 
     assert_response :see_other
     assert_redirected_to auth_app_sign_in_url(ri: "jp")
-
-    token.reload
-
-    assert_not token.currently_usable?
-    assert_equal ClientTokenStatus::REVOKED, token.user_token_status_id
+    assert_predicate flow.reload, :sign_in_failed?
+    assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
-  test "delete session route cancels restricted session and redirects to login" do
-    token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, token, host: @host)
+  test "destroy returns no content for json and cancels the waiting flow" do
+    enter_pending_session_limit!
+    flow = latest_flow
 
-    delete auth_app_sign_in_session_url(ri: "jp"), headers: headers
-
-    assert_response :see_other
-    assert_redirected_to auth_app_sign_in_url(ri: "jp")
-
-    token.reload
-
-    assert_not token.currently_usable?
-    assert_equal ClientTokenStatus::REVOKED, token.user_token_status_id
-  end
-
-  test "delete session route returns no content for json" do
-    token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, token, host: @host)
-
-    delete auth_app_sign_in_session_url(ri: "jp", format: :json), headers: headers
+    delete auth_app_sign_in_session_url(ri: "jp", format: :json)
 
     assert_response :no_content
-
-    token.reload
-
-    assert_not token.currently_usable?
-    assert_equal ClientTokenStatus::REVOKED, token.user_token_status_id
+    assert_predicate flow.reload, :sign_in_failed?
   end
 
-  # ===================================================================
-  # destroy -- revoke specific session (with ref)
-  # ===================================================================
+  test "destroy with ref param revokes that session and re-renders show" do
+    first, second = enter_pending_session_limit!
 
-  test "destroy with ref param revokes specific session and re-renders show" do
-    active_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    delete auth_app_sign_in_session_url(ri: "jp"),
-           params: { ref: active_token.signed_ref },
-           headers: headers
-
-    assert_response :success # re-renders show, does not redirect
-
-    active_token.reload
-
-    assert_not active_token.currently_usable?
-
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
-  end
-
-  test "destroy with ref param rejects revoking current session" do
-    restricted_token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
-
-    delete auth_app_sign_in_session_url(ri: "jp"),
-           params: { ref: restricted_token.signed_ref },
-           headers: headers
+    delete auth_app_sign_in_session_url(ri: "jp"), params: { ref: first.signed_ref }
 
     assert_response :success
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
-    assert_predicate restricted_token, :currently_usable?
+    assert_not first.reload.currently_usable?
+    assert_predicate second.reload, :currently_usable?
   end
 
   test "destroy with invalid ref param does not revoke anything" do
-    restricted_token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
+    existing = enter_pending_session_limit!
 
-    delete auth_app_sign_in_session_url(ri: "jp"),
-           params: { ref: "invalid_ref" },
-           headers: headers
+    delete auth_app_sign_in_session_url(ri: "jp"), params: { ref: "invalid_ref" }
 
     assert_response :success
-    restricted_token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted_token.user_token_status_id
+    assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
   test "destroy with ref belonging to another user does not revoke" do
     other_user = clients(:two)
     ClientToken.where(user: other_user).delete_all
     other_token = ClientToken.create!(user: other_user, user_token_status_id: ClientTokenStatus::ACTIVE)
-    other_token.rotate_refresh_token!
+    enter_pending_session_limit!
 
-    restricted_token = create_restricted_session(@user)
-    headers = as_user_headers_with_token(@user, restricted_token, host: @host)
+    delete auth_app_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }
 
-    delete auth_app_sign_in_session_url(ri: "jp"),
-           params: { ref: other_token.signed_ref },
-           headers: headers
-
-    other_token.reload
-
-    assert_predicate other_token, :currently_usable?
-  end
-
-  # ===================================================================
-  # restricted session expiry (boundary analysis)
-  # ===================================================================
-
-  test "restricted session at 14 minutes is still accessible (boundary: within TTL)" do
-    token = create_restricted_session(@user, discard_at: 15.minutes.from_now)
-    headers = as_user_headers_with_token(@user, token, host: @host, expires_at: 30.minutes.from_now)
-
-    travel 14.minutes do
-      get auth_app_sign_in_session_url(ri: "jp"), headers: headers
-
-      assert_response :success
-    end
-
-    assert_response :success
-    token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, token.user_token_status_id
-  end
-
-  test "restricted session expires after 15 minutes and is locked on in/session" do
-    token = create_restricted_session(@user, discard_at: 15.minutes.from_now)
-    headers = as_user_headers_with_token(@user, token, host: @host)
-    logs = []
-
-    travel 16.minutes do
-      Rails.logger.stub(
-        :info, ->(*args) do
-                 message = args.first
-                 logs << JSON.parse(message, symbolize_names: true) if message.present?
-               end,
-      ) do
-        get auth_app_sign_in_session_url(ri: "jp"), headers: headers
-      end
-    end
-
-    assert_response :locked
-    assert_equal "きんそくじこうです", response.body
-    assert_not response.redirect?
-    assert_includes logs.pluck(:event), "session.restricted.expired"
-  end
-
-  # ===================================================================
-  # RestrictedSessionGuard -- non-session routes blocked
-  # ===================================================================
-
-  test "restricted session is blocked on non-session base app routes" do
-    token = create_restricted_session(@user)
-    base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
-    headers = as_user_headers_with_token(@user, token, host: base_host)
-
-    get base_app_accounts_url(ri: "jp", host: base_host), headers: headers
-
-    assert_response :locked
-    assert_equal RestrictedSessionGuard::BLOCKED_MESSAGE, response.body
+    assert_predicate other_token.reload, :currently_usable?
   end
 
   private
 
-  def create_restricted_session(user, discard_at: nil)
-    token = ClientToken.create!(
-      user: user,
-      user_token_status_id: ClientTokenStatus::RESTRICTED,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+  # Fills the limit, then signs in through the real email ceremony so the browser holds a verified
+  # flow in SESSION_LIMIT_PENDING. Returns the sessions that fill the limit.
+  def enter_pending_session_limit!
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    existing = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { create_active_session(@user) }
+    email = @user.client_emails.create!(address: "limit_#{SecureRandom.hex(4)}@example.com")
+    host!(@host)
+    post(
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: { :user_email => { address: email.address }, "cf-turnstile-response" => "t" },
     )
-    token.rotate_refresh_token!(discard_at: discard_at)
-    token
+    pass_code = store_otp_and_return_code(email)
+    patch(
+      auth_app_sign_in_email_url(ri: "jp"),
+      params: { "user_email" => { "pass_code" => pass_code }, "cf-turnstile-response" => "t" },
+    )
+
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    existing
+  ensure
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
+  def latest_flow
+    ClientSignInFlow.where(principal_id: @user.id).recent_first.first
   end
 
   def create_active_session(user)

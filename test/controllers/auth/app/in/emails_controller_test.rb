@@ -396,35 +396,26 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
   end
 
-  test "post create is refused when the user already holds a restricted session at the limit" do
-    # A fixture user carries sessions of its own, and the model refuses a fourth row
-    # outright; start from a user whose whole session list is the one built here.
+  # The retired restricted placeholder no longer refuses the whole account: the address is
+  # verified as usual, and the limit is decided when the session would be committed.
+  test "post create proceeds to verification even when a leftover restricted session exists" do
     user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
     test_email = user.client_emails.create!(address: "session_limit_#{SecureRandom.hex(4)}@example.com")
-    ClientToken::MAX_SESSIONS_PER_USER.times do
-      ClientToken.create!(
-        user: user,
-        user_token_status_id: ClientTokenStatus::ACTIVE,
-        user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      )
-    end
     ClientToken.create!(
       user: user,
       user_token_status_id: ClientTokenStatus::RESTRICTED,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
 
-    assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-      post auth_app_sign_in_email_url(ri: "jp"),
-           params: {
-             :user_email => { address: test_email.address },
-             "cf-turnstile-response" => "test_token",
-           },
-           headers: { "Host" => @host }
-    end
+    post auth_app_sign_in_email_url(ri: "jp"),
+         params: {
+           :user_email => { address: test_email.address },
+           "cf-turnstile-response" => "test_token",
+         },
+         headers: { "Host" => @host }
 
-    assert_response :forbidden
-    assert_equal I18n.t("session_limit.login_limit_exceeded"), response.body
+    assert_response :redirect
+    assert_equal "/sign/in/email/edit", URI.parse(response.location).path
   end
 
   test "patch update after an unknown address is rejected without disclosing that no account exists" do
@@ -1035,7 +1026,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_predicate session[SessionLimitGate::GATE_SESSION_KEY], :present?
   end
 
-  test "email login hard rejects when a restricted session already exists" do
+  test "email login at the limit beside a leftover restricted session waits without issuing anything" do
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
 
@@ -1066,12 +1057,13 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
-    assert_response :forbidden
-    assert_includes response.body, "セッション数の上限に達しました"
+    assert_response :redirect
+    assert_equal "/sign/in/session", URI.parse(response.location).path
     assert_equal 1, ClientToken.where(user_id: user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
+    assert_predicate ClientSignInFlow.where(principal_id: user.id).recent_first.first, :sign_in_session_limit_pending?
   end
 
-  test "email login (JSON) with session limit exceeded returns session_restricted" do
+  test "email login (JSON) with session limit exceeded returns session_limit_pending" do
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
 
@@ -1104,7 +1096,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :ok
     json = response.parsed_body
 
-    assert_equal "session_restricted", json["status"]
+    assert_equal "session_limit_pending", json["status"]
     assert_equal auth_app_sign_in_session_path(ri: "jp"), json["redirect_url"]
   end
 

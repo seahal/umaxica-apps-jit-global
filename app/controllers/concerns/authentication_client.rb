@@ -44,6 +44,15 @@ module AuthenticationClient
     ::Client
   end
 
+  # Where a new sign-in starts after a login cooldown refusal: the surface's
+  # Base neutral /sign entry, which issues a fresh admission and ceremony.
+  def login_cooldown_restart_url
+    base_app_sign_show_url(
+      host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
+      protocol: "https",
+    )
+  end
+
   def token_class
     ClientToken
   end

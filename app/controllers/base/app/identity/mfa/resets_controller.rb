@@ -13,14 +13,6 @@ module Base
 
           before_action :authenticate_client!
 
-          protected
-
-          def track_authenticated_session_activity?
-            false
-          end
-
-          public
-
           def show
             authorize!(current_client, to: :show?)
             render inertia: true, props: {
@@ -31,6 +23,12 @@ module Base
                 href: base_app_identity_path(ri: params[:ri]),
               },
             }
+          end
+
+          protected
+
+          def track_authenticated_session_activity?
+            false
           end
 
           private

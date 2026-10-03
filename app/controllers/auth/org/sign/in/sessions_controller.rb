@@ -1,22 +1,21 @@
 # typed: false
 # frozen_string_literal: true
 
-# Manages session (refresh token) limits for Org staff.
+# Session-limit resolution for a sign-in that is waiting on the concurrent
+# session limit (1 active). The waiting sign-in has issued nothing: its verified
+# sign-in flow in SESSION_LIMIT_PENDING, located through this browser's
+# session, is the only authority this page acts on
+# (adr/root-login-establishment-boundary.md).
 #
-# When a staff member exceeds their maximum concurrent sessions during login,
-# they are logged in with a "restricted" session that only allows session management.
-# This controller handles:
-#   - show: Display active and restricted sessions
-#   - update: Promote restricted session to active (after revoking an active session)
-#   - destroy: Cancel the restricted session (logout) or revoke a specific session
+#   - show: list the account's active sessions
+#   - update: revoke selected sessions, then complete the pending flow through
+#     the final issuance boundary when the limit allows it
+#   - destroy: revoke one session by signed ref, or cancel the pending flow
 #
 # Routes:
 #   GET    /in/session  -> #show
 #   PATCH  /in/session  -> #update
 #   DELETE /in/session  -> #destroy
-#
-# The restricted session approach avoids blocking login while ensuring staff
-# can manage their sessions. Invariant: max 1 restricted session per staff.
 class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationController
   include SessionLimitGate
   include ::SurfaceInertiaPage
@@ -27,16 +26,15 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
   # and staff who are in the process of logging in (with a pending gate).
   declare_authentication_mode! :open
 
-  # For show/update/destroy, staff must be logged in (even if restricted)
   before_action :require_authentication_or_gate
 
-  # Display active and restricted sessions for the staff
+  # Display the account's active sessions
   def show
     load_session_data
     render inertia: true, props: session_limit_props
   end
 
-  # Revoke selected sessions and optionally promote restricted to active
+  # Revoke selected sessions and complete the pending sign-in when the limit allows it
   def update
     @current_operator = resolve_current_operator
     return redirect_to_login unless @current_operator
@@ -59,27 +57,22 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
       revoke_sessions_by_refs(@current_operator, refs)
     end
 
-    # Check if we can promote restricted session to active
-    if (pending_session_limit_cycle? || current_session_restricted?) && can_promote_session?(@current_operator)
-      if pending_session_limit_cycle? && promote_current_session_limit_cycle!(@current_operator)
-        consume_session_limit_gate!
-        return redirect_to_sign_in_sequence!(
-          pt: retrieve_pt.presence || session_limit_pt,
-        )
-      end
-
-      promote_current_session!
+    # The pending flow is the only thing to complete. log_in re-counts the
+    # limit under the actor lock; while it is still full nothing is issued
+    # and the page is shown again.
+    if pending_session_limit_cycle? && promote_current_session_limit_cycle!(@current_operator)
       consume_session_limit_gate!
-      session.delete(:pending_login_staff_id)
-      return redirect_to_return_path
+      return redirect_to_sign_in_sequence!(
+        pt: retrieve_pt.presence || session_limit_pt,
+      )
     end
 
-    # Still restricted, stay on session management
+    # Still at the limit, stay on session management
     load_session_data
     render inertia: "auth/org/sign/in/sessions/show", props: session_limit_props
   end
 
-  # Cancel the restricted session (logout) or revoke a specific session
+  # Cancel the pending sign-in or revoke a specific session
   def destroy
     @current_operator = resolve_current_operator
     return redirect_to_login unless @current_operator
@@ -92,19 +85,12 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
       load_session_data
       render inertia: "auth/org/sign/in/sessions/show", props: session_limit_props
     else
-      current_db_sign_in_flow_for_sequence&.fail_sign_in! if pending_session_limit_cycle?
+      # Cancelling ends only this pending flow; it issued nothing, and no
+      # other session of the account is touched.
+      flow = current_db_sign_in_flow_for_sequence
+      with_sign_in_flow_writing(flow) { flow.fail_sign_in! } if flow&.sign_in_session_limit_pending?
       consume_session_limit_gate!
-      session.delete(:pending_login_staff_id)
-
-      if current_session&.restricted?
-        # Cancel: revoke the restricted session and leave the user signed out.
-        AuthenticationLogoutCurrentSession.call(
-          resource: @current_operator,
-          token: current_session,
-          reason: "session_limit_cancelled",
-        )
-        log_out
-      end
+      clear_current_sign_in_flow_locator!
 
       return head :no_content if request.format.json?
 
@@ -143,20 +129,13 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
     }
   end
 
+  # Only a verified sign-in flow waiting on the session limit opens this page.
+  # A signed-in browser has nothing pending here.
   def require_authentication_or_gate
-    return if current_session_restricted? || restricted_session_expired?
     return if pending_session_limit_cycle?
 
-    # If logged in with a restricted session, allow access (this is the intended staff)
-    # If logged in with an active (non-restricted) session, deny access.
-    # This page is only for staff in the restricted session state (3rd login).
     if logged_in?
       head :forbidden
-      return
-    end
-
-    # If not logged in but has a valid gate, try to load pending staff
-    if session_limit_gate_valid? && session[:pending_login_staff_id].present?
       return
     end
 
@@ -174,36 +153,14 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
     )
   end
 
-  def authentication_credentials_invalid?
-    return false if action_name == "show" && current_session_restricted?
-
-    super
-  end
-
-  def redirect_to_return_path
-    return_path = retrieve_pt || session_limit_pt
-    consume_session_limit_gate!
-
-    if return_path.present?
-      destination = path_from_signed_pt(signed_pt_token(return_path)) || base_org_identity_url(
-        ri: current_region_identifier,
-        host: base_authority_host,
-      )
-      redirect_to_pt_destination!(destination)
-    else
-      redirect_to_jump_url(
-        base_org_identity_url(ri: current_region_identifier, host: base_authority_host, protocol: "https"),
-      )
-    end
-  end
-
+  # The actor is the pending flow's principal, read from the flow this
+  # browser's locator names; never a principal id kept in the session.
   def resolve_current_operator
-    # Prefer current_resource (logged in staff)
-    return current_resource if current_resource
+    flow = current_db_sign_in_flow_for_sequence
+    return unless flow&.sign_in_session_limit_pending?
 
-    # Fall back to pending staff from gate
-    staff_id = session[:pending_login_staff_id]
-    Operator.find_by(id: staff_id) if staff_id
+    principal = with_sign_in_flow_writing(flow) { flow.principal }
+    principal if principal.is_a?(Operator)
   end
 
   def load_session_data
@@ -213,24 +170,6 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
     @active_sessions = @current_operator.staff_tokens.active_status.order(created_at: :desc)
     @restricted_sessions = @current_operator.staff_tokens.restricted_status.order(created_at: :desc)
     @current_session_public_id = current_session_public_id
-  end
-
-  def can_promote_session?(staff)
-    # Can promote if active session count is below limit
-    active_count =
-      OrgTicketRecord.connected_to(role: :writing) do
-        OperatorToken.active_status.where(staff_id: staff.id).count
-      end
-    active_count < OperatorToken::MAX_SESSIONS_PER_STAFF
-  end
-
-  def promote_current_session!
-    return unless current_session&.restricted?
-
-    OrgTicketRecord.connected_to(role: :writing) do
-      current_session.promote_to_active!
-    end
-    @current_session = nil # Clear cached session
   end
 
   def revoke_session_by_ref(staff, ref)

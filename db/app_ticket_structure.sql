@@ -276,6 +276,39 @@ ALTER SEQUENCE public.client_email_ceremony_transactions_id_seq OWNED BY public.
 
 
 --
+-- Name: client_emergency_sign_in_operations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_emergency_sign_in_operations (
+    id bigint NOT NULL,
+    operation_id uuid NOT NULL,
+    credential_public_id character varying(21) NOT NULL,
+    client_token_id bigint NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: client_emergency_sign_in_operations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_emergency_sign_in_operations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_emergency_sign_in_operations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_emergency_sign_in_operations_id_seq OWNED BY public.client_emergency_sign_in_operations.id;
+
+
+--
 -- Name: client_oauth_callback_states; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1223,6 +1256,7 @@ CREATE TABLE public.client_tokens (
     established_authentication_method character varying,
     last_step_up_phishing_resistant boolean DEFAULT false NOT NULL,
     authentication_event_at timestamp(6) with time zone,
+    root_login_established_at timestamp with time zone,
     CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text])))),
     CONSTRAINT chk_user_tokens_kind_id_positive CHECK ((user_token_kind_id >= 0)),
     CONSTRAINT chk_user_tokens_status_id_positive CHECK ((user_token_status_id >= 0))
@@ -1667,6 +1701,13 @@ ALTER TABLE ONLY public.client_email_ceremony_transactions ALTER COLUMN id SET D
 
 
 --
+-- Name: client_emergency_sign_in_operations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_emergency_sign_in_operations ALTER COLUMN id SET DEFAULT nextval('public.client_emergency_sign_in_operations_id_seq'::regclass);
+
+
+--
 -- Name: client_oauth_callback_states id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2003,6 +2044,14 @@ ALTER TABLE ONLY public.client_dpop_proof_states
 
 ALTER TABLE ONLY public.client_email_ceremony_transactions
     ADD CONSTRAINT client_email_ceremony_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_emergency_sign_in_operations client_emergency_sign_in_operations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_emergency_sign_in_operations
+    ADD CONSTRAINT client_emergency_sign_in_operations_pkey PRIMARY KEY (id);
 
 
 --
@@ -2397,6 +2446,13 @@ CREATE INDEX idx_on_client_id_login_challenge_8f71e56454 ON public.client_oidc_a
 
 
 --
+-- Name: idx_on_credential_public_id_148fd60d04; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_credential_public_id_148fd60d04 ON public.client_emergency_sign_in_operations USING btree (credential_public_id);
+
+
+--
 -- Name: idx_on_expires_at_6a705a7bb7; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2635,6 +2691,20 @@ CREATE UNIQUE INDEX index_client_email_ceremony_transactions_on_transaction_id O
 
 
 --
+-- Name: index_client_emergency_sign_in_operations_on_client_token_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_emergency_sign_in_operations_on_client_token_id ON public.client_emergency_sign_in_operations USING btree (client_token_id);
+
+
+--
+-- Name: index_client_emergency_sign_in_operations_on_operation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_emergency_sign_in_operations_on_operation_id ON public.client_emergency_sign_in_operations USING btree (operation_id);
+
+
+--
 -- Name: index_client_oauth_callback_states_on_expires_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2793,6 +2863,13 @@ CREATE INDEX index_client_sign_in_flows_on_status_id ON public.client_sign_in_fl
 --
 
 CREATE INDEX index_client_sign_in_flows_on_token_id ON public.client_sign_in_flows USING btree (token_id);
+
+
+--
+-- Name: index_client_sign_in_flows_on_token_id_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_sign_in_flows_on_token_id_unique ON public.client_sign_in_flows USING btree (token_id) WHERE (token_id IS NOT NULL);
 
 
 --
@@ -3153,6 +3230,13 @@ CREATE INDEX index_client_tokens_on_user_id_and_oidc_client_id ON public.client_
 
 
 --
+-- Name: index_client_tokens_on_user_id_root_login_established_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_tokens_on_user_id_root_login_established_at ON public.client_tokens USING btree (user_id, root_login_established_at) WHERE (root_login_established_at IS NOT NULL);
+
+
+--
 -- Name: index_client_tokens_on_user_token_binding_method_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3441,6 +3525,14 @@ ALTER TABLE ONLY public.client_tokens
 
 
 --
+-- Name: client_emergency_sign_in_operations fk_rails_e979437e5d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_emergency_sign_in_operations
+    ADD CONSTRAINT fk_rails_e979437e5d FOREIGN KEY (client_token_id) REFERENCES public.client_tokens(id);
+
+
+--
 -- Name: client_tokens fk_rails_f69bf5b8f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3471,6 +3563,8 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261002120000'),
+('20260926170000'),
 ('20260924156000'),
 ('20260924155000'),
 ('20260924154000'),
@@ -3555,3 +3649,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260508135006'),
 ('20260507010001'),
 ('20260501000000');
+

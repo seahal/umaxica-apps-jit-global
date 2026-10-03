@@ -100,7 +100,7 @@ class AuthClientTest < ActiveSupport::TestCase
   test "log_in sets access token in cookie" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @user, skip_login_cooldown: true)
+    @obj.send(:log_in, @user, establishment: :root_login)
 
     assert @obj.cookies[::AuthenticationClient::ACCESS_COOKIE_KEY]
     assert_predicate @obj, :logged_in?
@@ -110,7 +110,7 @@ class AuthClientTest < ActiveSupport::TestCase
   test "log_in sets cookie expirations" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @user)
+    @obj.send(:log_in, @user, establishment: :root_login)
 
     access_opts = @obj.cookies.options_for(::AuthenticationClient::ACCESS_COOKIE_KEY)
     refresh_opts = @obj.cookies.options_for(::AuthenticationClient::REFRESH_COOKIE_KEY)
@@ -124,7 +124,7 @@ class AuthClientTest < ActiveSupport::TestCase
   test "log_out clears session and current_client" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @user)
+    @obj.send(:log_in, @user, establishment: :root_login)
     @obj.send(:log_out)
 
     assert_not_predicate @obj, :logged_in?
@@ -134,7 +134,7 @@ class AuthClientTest < ActiveSupport::TestCase
   test "log_out revokes refresh token and removes cookies" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @user)
+    @obj.send(:log_in, @user, establishment: :root_login)
 
     assert_no_difference("ClientToken.count") { @obj.send(:log_out) }
 
@@ -146,7 +146,7 @@ class AuthClientTest < ActiveSupport::TestCase
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
     @obj.request.host = "id.app.localhost"
 
-    @obj.send(:log_in, @user)
+    @obj.send(:log_in, @user, establishment: :root_login)
 
     assert_not @obj.cookies.options_for(::AuthenticationClient::ACCESS_COOKIE_KEY).key?(:domain)
     assert_not @obj.cookies.options_for(::AuthenticationClient::REFRESH_COOKIE_KEY).key?(:domain)
@@ -155,7 +155,7 @@ class AuthClientTest < ActiveSupport::TestCase
   test "log_in returns tokens hash" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    tokens = @obj.send(:log_in, @user)
+    tokens = @obj.send(:log_in, @user, establishment: :root_login)
 
     assert_kind_of Hash, tokens
     assert tokens[:access_token]
@@ -168,47 +168,26 @@ class AuthClientTest < ActiveSupport::TestCase
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
     @obj.request.format.format_type = :json
 
-    @obj.send(:log_in, @user)
+    @obj.send(:log_in, @user, establishment: :root_login)
 
     assert @obj.cookies[::AuthenticationClient::ACCESS_COOKIE_KEY]
     assert @obj.cookies.encrypted[::AuthenticationClient::REFRESH_COOKIE_KEY]
   end
 
-  test "log_in hard rejects when active and restricted sessions already exist" do
+  test "log_in at the active limit issues nothing, even beside a legacy restricted session" do
     2.times do
       token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
       token.rotate_refresh_token!
     end
-    restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-    restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
+    ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
     before_ids = ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discard_at)
 
-    result = @obj.send(:log_in, @user, require_totp_check: false, skip_login_cooldown: true)
+    result = @obj.send(:log_in, @user, establishment: :root_login, require_totp_check: false)
 
-    assert_equal :session_limit_hard_reject, result[:status]
-    assert_equal :forbidden, result[:http_status]
-    assert_equal AuthenticationBase::SESSION_LIMIT_HARD_REJECT_MESSAGE, result[:message]
+    assert_equal :session_limit_pending, result[:status]
+    assert_nil @obj.cookies[::AuthenticationClient::ACCESS_COOKIE_KEY]
     assert_equal before_ids,
                  ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discard_at)
-  end
-
-  test "log_in issues restricted session with 15 minute ttl when active sessions reach limit" do
-    2.times do
-      token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-      token.rotate_refresh_token!
-    end
-
-    freeze_time do
-      result = @obj.send(:log_in, @user, require_totp_check: false, skip_login_cooldown: true)
-
-      assert_equal :success, result[:status]
-      assert result[:restricted]
-
-      restricted = ClientToken.where(user_id: @user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).order(:created_at).last
-
-      assert_not_nil restricted
-      assert_in_delta 15.minutes.from_now.to_i, restricted.discard_at.to_i, 1
-    end
   end
 end
 

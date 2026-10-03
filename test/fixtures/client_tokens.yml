@@ -80,7 +80,7 @@ one:
   user_token_binding_method_id: <%= ClientTokenBindingMethod::NOTHING %>
   user_token_dbsc_status_id: <%= ClientTokenDbscStatus::NOTHING %>
   user_token_kind_id: <%= ClientTokenKind::BROWSER_WEB %>
-  user_token_status_id: <%= ClientTokenStatus::NOTHING %>
+  user_token_status_id: <%= ClientTokenStatus::ACTIVE %>
   discard_at: <%= 1.day.from_now %>
   purge_eligible_at: <%= 1.day.from_now %>
   created_at: <%= Time.current %>
@@ -91,7 +91,7 @@ two:
   user_token_binding_method_id: <%= ClientTokenBindingMethod::NOTHING %>
   user_token_dbsc_status_id: <%= ClientTokenDbscStatus::NOTHING %>
   user_token_kind_id: <%= ClientTokenKind::BROWSER_WEB %>
-  user_token_status_id: <%= ClientTokenStatus::NOTHING %>
+  user_token_status_id: <%= ClientTokenStatus::ACTIVE %>
   discard_at: <%= 1.day.from_now %>
   purge_eligible_at: <%= 1.day.from_now %>
   created_at: <%= Time.current %>

@@ -82,9 +82,9 @@ module Auth
               end
             end
 
-            def render_passkey_restricted_success(_result)
+            def render_passkey_session_limit_pending(_result)
               render json: {
-                status: "session_restricted",
+                status: "session_limit_pending",
                 redirect_url: auth_app_sign_in_session_path,
                 message: I18n.t("sign.app.in.session.restricted_notice"),
               }, status: :ok

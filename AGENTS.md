@@ -60,6 +60,8 @@ the remaining entries matching the task.
 - Routing or authentication workflows: `project/surfaces.mdc`, `generic/routing.mdc`,
   `generic/no-workflow-drift.mdc`, `generic/no-silent-fallback.mdc`,
   `docs/architecture/controller-lifecycle.md`
+- Sign-in, session issuance, session limits, the login cooldown, or sign-out:
+  `project/session-issuance.mdc`, `adr/root-login-establishment-boundary.md`
 - User-facing notices, alerts, or feedback: `generic/no-flash-messages.mdc`
 - Translation keys, locale bundles under `config/locales/`, or `t`/`I18n.t` calls:
   `docs/architecture/i18n.md`, `adr/i18n-explicit-translation-keys.md`

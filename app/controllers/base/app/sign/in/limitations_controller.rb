@@ -6,6 +6,13 @@ module Base
     module Sign
       module In
         # Base sign-in limitation ceremony for OIDC resume and social handoff.
+        #
+        # Two pending states can reach this page, and neither carries a session:
+        # an OIDC authorization resume holds a ClientSessionLimitResolutionTransaction
+        # (challenge in the request), and a social sign-in holds its ClientSignInFlow in
+        # SESSION_LIMIT_PENDING through this browser's flow locator. After the user
+        # revokes a session, the new root login is issued only by log_in, which
+        # re-counts the limit and re-checks the cooldown under the actor lock.
         class LimitationsController < Base::App::ApplicationController
           include ::SurfaceInertiaPage
 
@@ -51,7 +58,7 @@ module Base
             end
 
             if social_resolution?
-              promote_social_resolution_session
+              complete_social_resolution
             else
               resume_authorization_after_resolution
             end
@@ -60,7 +67,13 @@ module Base
           def destroy
             return render_invalid_resolution unless resolution_loaded?
 
-            @resolution.cancel! unless social_resolution?
+            # Cancelling ends only this pending sign-in; no existing session is touched.
+            if social_resolution?
+              AppTicketRecord.connected_to(role: :writing) { @pending_sign_in_flow.fail_sign_in! }
+              clear_current_sign_in_flow_locator!
+            else
+              @resolution.cancel!
+            end
             redirect_to_surface_url(
               auth_app_sign_in_url(
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
@@ -98,19 +111,15 @@ module Base
           end
 
           def resolution_field
-            if @social_resolution_token.present?
-              { field: "social_resolution", value: @social_resolution_token }
-            else
-              { field: "resolution_challenge", value: @resolution_challenge }
-            end
+            return nil if social_resolution?
+
+            { field: "resolution_challenge", value: @resolution_challenge }
           end
 
           def resolution_query_parameters
-            if @social_resolution_token.present?
-              { social_resolution: @social_resolution_token }
-            else
-              { resolution_challenge: @resolution_challenge }
-            end
+            return {} if social_resolution?
+
+            { resolution_challenge: @resolution_challenge }
           end
 
           def serialize_limitation_session(session_record)
@@ -126,12 +135,10 @@ module Base
 
           def load_resolution
             @resolution_challenge = params[:resolution_challenge].to_s
-            @social_resolution_token = params[:social_resolution].to_s
-            return if @resolution_challenge.blank? && @social_resolution_token.blank?
-            return if @resolution_challenge.present? && @social_resolution_token.present?
+            if @resolution_challenge.present?
+              @resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(@resolution_challenge)
+              return unless @resolution
 
-            @resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(@resolution_challenge)
-            if @resolution
               @actor = Client.find_by(public_id: @resolution.actor_ref)
               @oidc_transaction = @resolution.oidc_authorization_transaction
               return
@@ -149,26 +156,21 @@ module Base
           end
 
           def social_resolution?
-            @social_resolution_payload.present?
+            @pending_sign_in_flow.present?
           end
 
+          # The pending flow is found only through the locator this browser's
+          # Rails session holds; the actor is the flow's principal, never a
+          # request parameter or a principal id stored beside the locator.
           def load_social_resolution
-            return if @social_resolution_token.blank?
+            flow = current_db_sign_in_flow_for_sequence
+            return unless flow.is_a?(ClientSignInFlow) && flow.sign_in_session_limit_pending?
 
-            verifier = Rails.application.message_verifier(:social_session_limit_limitation)
-            payload = verifier.verify(@social_resolution_token)
-            expires_at = Time.zone.parse(payload.fetch("expires_at").to_s)
-            return if expires_at.blank? || expires_at <= Time.current
+            actor = AppTicketRecord.connected_to(role: :writing) { flow.principal }
+            return unless actor
 
-            @actor =
-              AppTicketRecord.connected_to(role: :writing) do
-                Client.find_by(public_id: payload.fetch("actor_ref"))
-              end
-            return unless @actor
-
-            @social_resolution_payload = payload
-          rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, ArgumentError, TypeError
-            @social_resolution_payload = nil
+            @pending_sign_in_flow = flow
+            @actor = actor
           end
 
           def load_session_inventory
@@ -196,28 +198,8 @@ module Base
             end
           end
 
-          def promote_social_resolution_session
-            if current_session&.restricted?
-              return render_invalid_resolution unless current_session.user_id == @actor.id
-
-              if @social_resolution_payload["session_ref"].present?
-                return render_invalid_resolution unless current_session.public_id ==
-                  @social_resolution_payload["session_ref"]
-              end
-
-              current_session.promote_to_active!
-            else
-              login_result = log_in(
-                @actor,
-                record_login_audit: true,
-                token_kind_id: "BROWSER_WEB",
-                require_totp_check: false,
-                audit_context: { auth_method: "social_session_limitation" },
-                bootstrap_actor: true,
-                authentication_event_at: current_authentication_event_at,
-              )
-              return render_invalid_resolution unless login_result[:status] == :success
-            end
+          def complete_social_resolution
+            return render_invalid_resolution unless promote_current_session_limit_cycle!(@actor)
 
             redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
           end
@@ -235,31 +217,19 @@ module Base
             issue_authorization_code!
           end
 
+          # The OIDC resume issued nothing while the limit was full. The root login
+          # is committed here, through the same final boundary as any sign-in.
           def promote_oidc_resolution_session!
-            candidate = current_session
-            return false unless candidate.is_a?(ClientToken)
-            return false unless candidate.user_id == @actor.id && candidate.currently_usable?
-
-            promoted_session =
-              with_actor_session_lock(@actor) do
-                AppTicketRecord.connected_to(role: :writing) do
-                  token = ClientToken.lock.find_by(id: candidate.id)
-                  next false unless token&.currently_usable? && token.user_id == @actor.id
-
-                  if token.restricted?
-                    next false unless ClientToken.active_status.where(user_id: @actor.id).count <
-                      ClientToken::MAX_SESSIONS_PER_USER
-
-                    token.promote_to_active!
-                  end
-                  token
-                end
-              end
-
-            return false unless promoted_session
-
-            @current_session = promoted_session
-            true
+            login_result = log_in(
+              @actor,
+              establishment: :root_login,
+              record_login_audit: true,
+              token_kind_id: "BROWSER_WEB",
+              require_totp_check: false,
+              audit_context: { auth_method: "session_limit_promotion", oidc_client_id: @oidc_transaction.client_id },
+              authentication_event_at: @oidc_transaction.authenticated_at,
+            )
+            login_result[:status] == :success
           end
 
           def issue_authorization_code!

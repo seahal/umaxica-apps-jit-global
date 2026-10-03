@@ -1,0 +1,53 @@
+---
+name: session-issuance
+description: Rules for the final session issuance boundary, pending sign-ins, the login cooldown, and sign-out failures.
+---
+
+# Session Issuance
+
+`adr/root-login-establishment-boundary.md` is the decision this rule enforces.
+
+## Establishment
+
+- Issue a browser session only through `AuthenticationBase#log_in(resource, establishment:)`. Never
+  create `ClientToken`, `VisitorToken`, `OperatorToken`, or a device session for a login anywhere
+  else.
+- Pass `establishment: :root_login` for a new Base Browser Session and `:rp_session` only for an RP
+  callback that derives from an existing root login. Do not add a third value, a bypass flag, or an
+  argument that skips the cooldown, the session limit, or the flow re-check.
+- Pass `sign_in_flow:` when a flow is completing. The final boundary re-locks and re-validates it;
+  never remove that check because a caller already validated the flow.
+- Set cookies, `current_resource`, and the success audit only from the committed path inside
+  `log_in`. Do not write them before the commit or after a refusal.
+
+## Results
+
+- `status: :success` means a committed session. Return `:session_limit_pending`,
+  `:authentication_evidence_recorded`, or a refusal status for anything else. Never attach a flag to
+  a success to mean "not really signed in".
+- Do not issue a `RESTRICTED` token or any other placeholder session for a pending sign-in. The
+  pending state is the `*SignInFlow`, located through the browser's flow locator.
+- Do not authorize session-limit management from a principal id in the session or the request.
+
+## Cooldown
+
+- The anchor is `root_login_established_at`. Never derive it from `created_at`, `auth_time`,
+  refresh, step-up, or RP connection times, and never backfill it from existing rows.
+- Do not exempt sign-out, a successful provider callback, or any flow from the cooldown.
+
+## Failure
+
+- Do not rescue an exception during issuance or revocation and report success. A database failure
+  while resolving or revoking a session is not "no session".
+
+## Tests
+
+Cover each change through a public entry with the database, cookie, and audit state asserted, and
+keep `test/controllers/concerns/auth/session_issuance_boundary_surfaces_test.rb`,
+`test/controllers/concerns/auth/login_cooldown_surfaces_test.rb`, and
+`test/integration/root_login_establishment_flow_test.rb` green without weakening them.
+
+## Refusal responses
+
+- A cooldown refusal must not reveal that the account exists, that it signed in recently, or the
+  remaining wait. Keep the message generic and `Retry-After` at the full window.

@@ -94,7 +94,65 @@ class Base::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert_nil response.location
   end
+  test "authenticated Home answers 404 as a rendered response, not a raised exception" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host! host
+    controller_exception =
+      capture_controller_exception do
+        get(base_app_root_url(ri: "jp"), headers: as_user_headers(clients(:one), host: host))
+      end
+
+    assert_response :not_found
+    assert_nil controller_exception
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
+
+  test "authenticated Home answers a JSON request with the public JSON 404 document" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host! host
+
+    get base_app_root_url(ri: "jp", format: :json), headers: as_user_headers(clients(:one), host: host)
+
+    assert_response :not_found
+    assert_equal({ "status" => 404, "error" => "Not Found" }, response.parsed_body)
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
+
+  test "authenticated Home answers an HTML request with the public 404 page" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host! host
+
+    get base_app_root_url(ri: "jp"), headers: as_user_headers(clients(:one), host: host)
+
+    assert_response :not_found
+    assert_equal "text/html", response.media_type
+    assert_equal Rails.public_path.join("404.html").read, response.body
+  end
+
+  test "anonymous Dashboard answers 404 as a rendered response, not a raised exception" do
+    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+
+    controller_exception =
+      capture_controller_exception do
+        get(base_app_dashboard_url(ri: "jp"))
+      end
+
+    assert_response :not_found
+    assert_nil controller_exception
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
   private
+
+  # The controller's own instrumentation reports an exception that escaped the action; the 404
+  # boundary is ordinary control flow and must not depend on the exceptions app.
+  def capture_controller_exception(&)
+    captured = nil
+    callback = ->(*, payload) { captured = payload[:exception] if payload.key?(:exception) }
+    ActiveSupport::Notifications.subscribed(callback, "process_action.action_controller", &)
+    captured
+  end
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")

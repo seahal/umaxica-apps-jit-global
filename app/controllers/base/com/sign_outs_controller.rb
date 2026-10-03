@@ -20,16 +20,6 @@ module Base
       declare_authentication_mode! :open
       after_action :sign_out_notice_cache_headers!, only: %i(edit create)
 
-      protected
-
-      def track_authenticated_session_activity?
-        return false if (request.get? || request.head?) && %w(new edit).include?(action_name)
-
-        super
-      end
-
-      public
-
       def new
         redirect_to(sign_out_edit_path, status: :see_other)
       end
@@ -40,6 +30,14 @@ module Base
 
       def create
         finish_local_sign_out!
+      end
+
+      protected
+
+      def track_authenticated_session_activity?
+        return false if (request.get? || request.head?) && %w(new edit).include?(action_name)
+
+        super
       end
 
       private

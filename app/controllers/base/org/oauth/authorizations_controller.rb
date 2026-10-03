@@ -144,6 +144,11 @@ module Base
           finalization = finalize_authorization_transaction!(
             resource, transaction, result_generation: result_generation,
           )
+          if %i(session_limit_pending session_limit_hard_reject).include?(finalization[:status])
+            # This surface has no Base session-limit ceremony, so a full limit is
+            # refused rather than answered with a restricted session.
+            return render_session_limit_hard_reject
+          end
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,
@@ -185,15 +190,18 @@ module Base
           end
         end
 
+        # Auth recorded only credential evidence; the root login is established
+        # here, at the Base authority, through the final issuance boundary. The
+        # cooldown and the session limit are checked at this commit.
         def login_for_oidc(resource, transaction)
           ActiveRecord::Base.connected_to(role: :writing) do
             log_in(
               resource,
-              record_login_audit: false,
+              establishment: :root_login,
+              record_login_audit: true,
               token_kind_id: "BROWSER_WEB",
               require_totp_check: false,
               audit_context: { oidc_client_id: transaction.client_id },
-              bootstrap_actor: true,
               authentication_event_at: transaction.authenticated_at,
             )
           end

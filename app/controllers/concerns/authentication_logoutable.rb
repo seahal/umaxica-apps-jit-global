@@ -131,10 +131,14 @@ module AuthenticationLogoutable
     return nil unless respond_to?(:find_refresh_token_record, true)
 
     refresh_plain = cookies[AuthenticationBase::REFRESH_COOKIE_KEY].to_s
+    return nil if refresh_plain.blank?
+
     refresh_public_id, = token_class.parse_refresh_token(refresh_plain)
+    return nil if refresh_public_id.blank?
+
+    # Lookup failures propagate (raise_logout_resolution_error!): a database
+    # error is not evidence that the browser held no session.
     find_refresh_token_record(refresh_public_id)
-  rescue StandardError
-    nil
   end
 
   def current_session_public_id_from_refresh_cookie_for_logout

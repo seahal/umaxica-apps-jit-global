@@ -3,9 +3,14 @@
 
 require "test_helper"
 # require "helpers/global_test_support"
+require "minitest/mock"
+require "base64"
 
 class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationTest
-  fixtures :operators, :operator_statuses, :operator_token_statuses, :operator_token_kinds
+  include OrgEntraFirstStageHelper
+
+  fixtures :operators, :operator_statuses, :operator_token_statuses, :operator_token_kinds,
+           :operator_passkeys, :operator_passkey_statuses
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
@@ -53,38 +58,23 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     Rails.application.reload_routes!
   end
 
-  test "show with restricted session displays sessions" do
-    active_token = create_active_session(@staff)
-    token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, token, host: @host)
+  # The page opens only for a verified sign-in flow waiting on the session limit, reached here
+  # through the real Entra + passkey ceremony (adr/root-login-establishment-boundary.md).
 
-    get auth_org_sign_in_session_url(ri: "jp"), headers: headers
+  test "show for a pending sign-in lists the active session and offers only cancellation" do
+    existing = enter_pending_session_limit!
+
+    get auth_org_sign_in_session_url(ri: "jp")
 
     assert_response :success
-    assert_not response.redirect?
     assert_equal "auth/org/sign/in/sessions/show", inertia_component
     assert_equal auth_org_sign_in_session_path(ri: "jp"), inertia_props.fetch("form_action")
-    # Sessions are chosen one at a time by signed reference, never by a multi-select of ids.
     assert_nil inertia_props["revoke_session_ids"]
+    assert_not inertia_props.key?("back_link")
     assert_equal I18n.t("session_limit.edit.cancel_logout"), inertia_props.fetch("cancel_logout_label")
     rendered_ref = inertia_props.fetch("sessions").first.fetch("ref")
 
-    assert_equal active_token, OperatorToken.find_from_signed_ref(rendered_ref)
-  end
-
-  # Authentication already succeeded and a restricted session exists, so the sign-in form is not a
-  # prior stage of this ceremony. The page ends the ceremony only through the DELETE cancellation.
-  test "show with restricted session offers cancellation and no back link to sign-in" do
-    create_active_session(@staff)
-    token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, token, host: @host)
-
-    get auth_org_sign_in_session_url(ri: "jp"), headers: headers
-
-    assert_response :success
-    assert_not inertia_props.key?("back_link")
-    assert_equal I18n.t("session_limit.edit.cancel_logout"), inertia_props.fetch("cancel_logout_label")
-    assert_equal auth_org_sign_in_session_path(ri: "jp"), inertia_props.fetch("form_action")
+    assert_equal existing.first, OperatorToken.find_from_signed_ref(rendered_ref)
   end
 
   test "show with active session returns forbidden" do
@@ -96,18 +86,20 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_response :forbidden
   end
 
-  # ===================================================================
-  # update -- authentication & access control
-  # ===================================================================
+  test "a legacy restricted session does not open the page" do
+    token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
+    headers = as_staff_headers_with_token(@staff, token, host: @host)
+
+    get auth_org_sign_in_session_url(ri: "jp"), headers: headers
+
+    assert_response :redirect
+    assert_match %r{/sign/in}, response.location
+  end
 
   test "update without authentication redirects to login" do
     patch auth_org_sign_in_session_url(ri: "jp"),
           params: { revoke_refs: ["some-ref"] },
-          headers: browser_headers.merge(
-            "Host" => @host,
-            "Origin" => "http://#{@host}",
-            "HTTP_ORIGIN" => "http://#{@host}",
-          )
+          headers: browser_headers.merge("Host" => @host)
 
     assert_response :redirect
     assert_match %r{/sign/in}, response.location
@@ -117,259 +109,60 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     active_token = create_active_session(@staff)
     headers = as_staff_headers_with_token(@staff, active_token, host: @host)
 
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: ["some-ref"] },
-          headers: headers
+    patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: ["some-ref"] }, headers: headers
 
     assert_response :forbidden
   end
 
-  # ===================================================================
-  # update -- empty selections
-  # ===================================================================
+  test "update without selections keeps the flow pending" do
+    enter_pending_session_limit!
 
-  test "update without selections flashes alert and re-renders show" do
-    token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [] },
-          headers: headers
+    patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }
 
     assert_response :unprocessable_content
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
-  # ===================================================================
-  # update -- revoke by refs (batch) + promotion
-  # ===================================================================
+  test "update revokes the selected session and commits the waiting sign-in" do
+    existing = enter_pending_session_limit!
 
-  test "update revokes selected sessions and promotes restricted session" do
-    active_token1 = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
+    assert_difference(-> { OperatorToken.where(staff_id: @staff.id).count }, 1) do
+      patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: [existing.first.signed_ref] }
+    end
 
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
+    assert_response :redirect
+    assert_not existing.first.reload.currently_usable?
+    issued = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [active_token1.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::ACTIVE, restricted_token.staff_token_status_id
-
-    active_token1.reload
-
-    assert_not active_token1.currently_usable?
+    assert_predicate issued, :active_status?
+    assert_equal issued.id, latest_flow.token_id
   end
 
-  test "update revokes session but does not promote when still at limit" do
-    # Create 1 active session -- revoking 0 keeps at limit
-    active_token1 = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
+  test "update with an unusable ref issues nothing while the limit is full" do
+    enter_pending_session_limit!
 
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
+    assert_no_difference(-> { OperatorToken.where(staff_id: @staff.id).count }) do
+      patch auth_org_sign_in_session_url(ri: "jp"), params: { ref: "totally_invalid_ref" }
+    end
 
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    # Send an invalid ref so nothing actually gets revoked
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: ["invalid_ref_value"] },
-          headers: headers
-
-    # Still restricted -- not promoted because active_count == MAX_SESSIONS_PER_STAFF
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
-    assert_response :success # re-renders show
-  end
-
-  test "update skips current session ref in batch revoke" do
-    # Need 1 active session to prevent auto-promotion after no-op revoke
-    active_token1 = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    # Try to revoke the current (restricted) session via refs -- should be skipped
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [restricted_token.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-    # Actor session should NOT be revoked via batch refs
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
-    assert_predicate restricted_token, :currently_usable?
+    assert_response :success
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
   test "update ignores ref belonging to another staff" do
     other_staff = operators(:two)
     OperatorToken.where(staff: other_staff).delete_all
     other_token = OperatorToken.create!(staff: other_staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    other_token.rotate_refresh_token!
+    enter_pending_session_limit!
 
-    restricted_token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
+    patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: [other_token.signed_ref] }
 
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [other_token.signed_ref] },
-          headers: headers
-
-    # Other staff's token must remain untouched
-    other_token.reload
-
-    assert_predicate other_token, :currently_usable?
+    assert_predicate other_token.reload, :currently_usable?
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
-
-  # ===================================================================
-  # update -- revoke by single ref param
-  # ===================================================================
-
-  test "update with ref param revokes specific session" do
-    active_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { ref: active_token.signed_ref },
-          headers: headers
-
-    active_token.reload
-
-    assert_not active_token.currently_usable?
-
-    # With only 1 active left (now 0 after revoke), restricted should be promoted
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::ACTIVE, restricted_token.staff_token_status_id
-  end
-
-  test "update with ref param rejects revoking current session" do
-    # Need 1 active session to prevent auto-promotion
-    active_token1 = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { ref: restricted_token.signed_ref },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
-    assert_predicate restricted_token, :currently_usable?
-  end
-
-  test "update with invalid ref param flashes alert and stays on page" do
-    # Need 1 active session to prevent auto-promotion
-    active_token1 = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token1.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { ref: "totally_invalid_ref" },
-          headers: headers
-
-    assert_response :success # re-renders show
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
-  end
-
-  # ===================================================================
-  # update -- redirect after promotion
-  # ===================================================================
-
-  test "update promotes and redirects to settings path by default" do
-    active_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [active_token.signed_ref] },
-          headers: headers
-
-    assert_response :redirect
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
-  end
-
-  test "update with pt param redirects to the requested path" do
-    active_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-    pt = "/settings"
-
-    patch auth_org_sign_in_session_url(ri: "jp", pt: pt),
-          params: { revoke_refs: [active_token.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::ACTIVE, restricted_token.staff_token_status_id
-    assert_response :redirect
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
-  end
-
-  test "update with invalid pt param falls back to default path" do
-    active_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    patch auth_org_sign_in_session_url(ri: "jp", pt: "not-a-token"),
-          params: { revoke_refs: [active_token.signed_ref] },
-          headers: headers
-
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::ACTIVE, restricted_token.staff_token_status_id
-    assert_response :redirect
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
-  end
-
-  # ===================================================================
-  # destroy -- authentication & access control
-  # ===================================================================
 
   test "destroy without authentication redirects to login" do
-    delete auth_org_sign_in_session_url(ri: "jp"),
-           headers: browser_headers.merge(
-             "Host" => @host,
-             "Origin" => "http://#{@host}",
-             "HTTP_ORIGIN" => "http://#{@host}",
-           )
+    delete auth_org_sign_in_session_url(ri: "jp"), headers: browser_headers.merge("Host" => @host)
 
     assert_response :redirect
     assert_match %r{/sign/in}, response.location
@@ -384,183 +177,81 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_response :forbidden
   end
 
-  # ===================================================================
-  # destroy -- cancel restricted session (no ref)
-  # ===================================================================
+  test "destroy cancels only the waiting flow and keeps the existing session" do
+    existing = enter_pending_session_limit!
+    flow = latest_flow
 
-  test "destroy cancels restricted session and redirects to login" do
-    token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, token, host: @host)
-
-    delete auth_org_sign_in_session_url(ri: "jp"), headers: headers
+    delete auth_org_sign_in_session_url(ri: "jp")
 
     assert_response :see_other
-    assert_match %r{/sign/in}, response.location
-
-    token.reload
-
-    assert_not token.currently_usable?
-    assert_equal OperatorTokenStatus::REVOKED, token.staff_token_status_id
+    assert_redirected_to auth_org_sign_in_url(ri: "jp")
+    assert_predicate flow.reload, :sign_in_failed?
+    assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
-  test "delete session route cancels restricted session and redirects to login" do
-    token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, token, host: @host)
+  test "destroy with ref param revokes that session and re-renders show" do
+    existing = enter_pending_session_limit!
 
-    delete auth_org_sign_in_session_url(ri: "jp"), headers: headers
+    delete auth_org_sign_in_session_url(ri: "jp"), params: { ref: existing.first.signed_ref }
 
-    assert_response :see_other
-    assert_match %r{/sign/in}, response.location
-
-    token.reload
-
-    assert_not token.currently_usable?
-    assert_equal OperatorTokenStatus::REVOKED, token.staff_token_status_id
-  end
-
-  # ===================================================================
-  # destroy -- revoke specific session (with ref)
-  # ===================================================================
-
-  test "destroy with ref param revokes specific session and re-renders show" do
-    active_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    active_token.rotate_refresh_token!
-
-    restricted_token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::RESTRICTED)
-    restricted_token.rotate_refresh_token!
-
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    delete auth_org_sign_in_session_url(ri: "jp"),
-           params: { ref: active_token.signed_ref },
-           headers: headers
-
-    assert_response :success # re-renders show, does not redirect
-
-    active_token.reload
-
-    assert_not active_token.currently_usable?
-
-    # Restricted session remains (not cancelled)
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
-  end
-
-  test "destroy with ref param rejects revoking current session" do
-    restricted_token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    delete auth_org_sign_in_session_url(ri: "jp"),
-           params: { ref: restricted_token.signed_ref },
-           headers: headers
-
-    assert_response :success # re-renders show
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
-    assert_predicate restricted_token, :currently_usable?
-  end
-
-  test "destroy with invalid ref param does not revoke anything" do
-    restricted_token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
-
-    delete auth_org_sign_in_session_url(ri: "jp"),
-           params: { ref: "invalid_ref" },
-           headers: headers
-
-    assert_response :success # re-renders show
-    restricted_token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, restricted_token.staff_token_status_id
+    assert_response :success
+    assert_not existing.first.reload.currently_usable?
   end
 
   test "destroy with ref belonging to another staff does not revoke" do
     other_staff = operators(:two)
     OperatorToken.where(staff: other_staff).delete_all
     other_token = OperatorToken.create!(staff: other_staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
-    other_token.rotate_refresh_token!
+    enter_pending_session_limit!
 
-    restricted_token = create_restricted_session(@staff)
-    headers = as_staff_headers_with_token(@staff, restricted_token, host: @host)
+    delete auth_org_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }
 
-    delete auth_org_sign_in_session_url(ri: "jp"),
-           params: { ref: other_token.signed_ref },
-           headers: headers
-
-    other_token.reload
-
-    assert_predicate other_token, :currently_usable?
-  end
-
-  # ===================================================================
-  # restricted session expiry (boundary analysis)
-  # ===================================================================
-
-  test "restricted session at 14 minutes is still accessible (boundary: within TTL)" do
-    token = create_restricted_session(@staff, discard_at: 15.minutes.from_now)
-    headers = as_staff_headers_with_token(@staff, token, host: @host, expires_at: 30.minutes.from_now)
-
-    travel 14.minutes do
-      get auth_org_sign_in_session_url(ri: "jp"), headers: headers
-
-      assert_response :success
-    end
-
-    assert_response :success
-    token.reload
-
-    assert_equal OperatorTokenStatus::RESTRICTED, token.staff_token_status_id
-  end
-
-  test "restricted session expires after 15 minutes and is locked" do
-    token = create_restricted_session(@staff, discard_at: 15.minutes.from_now)
-    headers = as_staff_headers_with_token(@staff, token, host: @host)
-    logs = []
-
-    travel 16.minutes do
-      Rails.logger.stub(
-        :info, ->(*args) do
-                 message = args.first
-                 logs << JSON.parse(message, symbolize_names: true) if message.present?
-               end,
-      ) do
-        get auth_org_sign_in_session_url(ri: "jp"), headers: headers
-      end
-    end
-
-    assert_response :locked
-    assert_equal "きんそくじこうです", response.body
-    assert_not response.redirect?
-    assert_includes logs.pluck(:event), "session.restricted.expired"
-  end
-
-  # ===================================================================
-  # RestrictedSessionGuard -- non-session routes blocked for org
-  # ===================================================================
-
-  test "restricted session is blocked on non-session base org routes" do
-    token = create_restricted_session(@staff)
-    base_host = ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost")
-    headers = as_staff_headers_with_token(@staff, token, host: base_host)
-
-    get base_org_accounts_url(ri: "jp", host: base_host), headers: headers
-
-    assert_response :locked
-    assert_equal RestrictedSessionGuard::BLOCKED_MESSAGE, response.body
+    assert_predicate other_token.reload, :currently_usable?
   end
 
   private
 
-  def create_restricted_session(staff, discard_at: nil)
-    token = OperatorToken.create!(
-      staff: staff,
-      staff_token_status_id: OperatorTokenStatus::RESTRICTED,
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+  # Fills the one-session limit, then completes Entra and the passkey stage so this browser holds a
+  # verified flow in SESSION_LIMIT_PENDING. Returns the session that fills the limit.
+  def enter_pending_session_limit!
+    @staff.update!(status_id: OperatorStatus::ACTIVE)
+    existing = Array.new(OperatorToken::MAX_SESSIONS_PER_STAFF) { create_active_session(@staff) }
+    passkey = OperatorPasskey.create!(
+      staff: @staff,
+      webauthn_id: Base64.urlsafe_encode64("staff_limit_#{SecureRandom.hex(6)}", padding: false),
+      external_id: SecureRandom.uuid,
+      public_key: "staff_login_key",
+      description: "Staff Login Key",
+      status_id: OperatorPasskeyStatus::ACTIVE,
     )
-    token.rotate_refresh_token!(discard_at: discard_at)
-    token
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    complete_org_entra_first_stage!(@staff)
+    post(auth_org_sign_in_passkey_options_url(ri: "jp"), params: {})
+    challenge_id = response.parsed_body.fetch("challenge_id")
+    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
+    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
+      post(
+        auth_org_sign_in_passkey_verification_url(ri: "jp"), params: {
+          challenge_id: challenge_id,
+          credential: {
+            id: passkey.webauthn_id,
+            response: { clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig", userHandle: "h" },
+          },
+        },
+      )
+    end
+
+    assert_equal "session_limit_pending", response.parsed_body.fetch("status")
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    existing
+  ensure
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
+  def latest_flow
+    OperatorSignInFlow.where(principal_id: @staff.id).recent_first.first
   end
 
   def create_active_session(staff)

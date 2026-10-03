@@ -132,6 +132,26 @@ module Auth
         :app
       end
 
+      # The harness stands in for an app sign-in controller. Its class name carries no surface
+      # namespace, so it declares the surface a real Auth::App controller resolves from its name.
+      def sign_in_surface
+        :app
+      end
+
+      # Relative like the other route stubs here, so the harness never needs a Jump issuer.
+      def base_app_welcome_url(host:, protocol:, **attrs)
+        _ = [host, protocol]
+        query = attrs.compact.to_query
+        "/welcome#{"?#{query}" if query.present?}"
+      end
+
+      # Relative like the other route stubs here, so the harness never needs a Jump issuer.
+      def base_app_dashboard_url(host:, protocol:, **attrs)
+        _ = [host, protocol]
+        query = attrs.compact.to_query
+        "/dashboard#{"?#{query}" if query.present?}"
+      end
+
       def auth_app_root_path(ri: nil, pt: nil)
         path = "/dashboard"
         query = []
@@ -379,7 +399,7 @@ module Auth
       assert_nil cycle.return_to
     end
 
-    test "dashboard continuation falls back when resolved return path is welcome" do
+    test "dashboard continuation lands on Dashboard, never Home, when resolved return path is welcome" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
@@ -391,7 +411,7 @@ module Auth
       harness.send(:continue_dashboard_sequence_without_content!)
 
       assert_nil harness.redirected
-      assert_equal "/", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/dashboard", harness.instance_variable_get(:@welcome_next_path)
       assert_predicate cycle.reload, :sign_in_completed?
       assert_nil cycle.return_to
     end

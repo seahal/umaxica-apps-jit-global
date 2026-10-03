@@ -1,12 +1,12 @@
 # typed: false
 # frozen_string_literal: true
 
-# Legacy compatibility gate for concurrent session-limit management.
+# Return-target carrier for concurrent session-limit management.
 #
-# DB-backed sign-in cycles should use SignInSessionLimitManager as the
-# authoritative session-limit participant. This concern remains only for
-# sign-in entry points that have not yet been fully wired to DB-backed cycle
-# locators.
+# The verified sign-in flow in SESSION_LIMIT_PENDING is the only authority for
+# a pending sign-in (adr/root-login-establishment-boundary.md). This gate holds
+# no principal and grants nothing; it only remembers where the browser returns
+# after the limit is resolved.
 #
 # Provides server-side session gating for concurrent session limit management.
 # When a user exceeds their maximum concurrent sessions, they are redirected to
@@ -92,12 +92,6 @@ module SessionLimitGate
 
   def session_limit_gate_valid?
     valid_gate?(session[GATE_SESSION_KEY])
-  end
-
-  def session_limit_hard_reject_for?(resource)
-    return false unless resource
-
-    session_limit_state_for(resource) == :hard_reject
   end
 
   def render_session_limit_hard_reject(message: nil, http_status: nil)

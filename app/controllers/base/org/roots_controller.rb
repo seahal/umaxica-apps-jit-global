@@ -5,6 +5,7 @@ module Base
   module Org
     class RootsController < Base::Org::ApplicationController
       include ::SurfaceInertiaPage
+      include ::SessionBoundaryNotFound
 
       AUTHENTICATION_MODE = :open
       skip_before_action :set_preferences_cookie, only: %i(index show)
@@ -13,7 +14,7 @@ module Base
 
       def index
         response.headers["Cache-Control"] = "private, no-store"
-        raise ActiveRecord::RecordNotFound if logged_in?
+        return render_session_boundary_not_found if logged_in?
 
         render inertia: true, props: root_landing_props,
                clear_history: session.delete(:inertia_clear_history) == true
@@ -21,7 +22,7 @@ module Base
 
       def show
         response.headers["Cache-Control"] = "private, no-store"
-        raise ActiveRecord::RecordNotFound unless logged_in?
+        return render_session_boundary_not_found unless logged_in?
         return unless require_selected_actor_context_for_dashboard!
 
         authorize!(current_operator, to: :show?)
@@ -94,7 +95,7 @@ module Base
         raise ActiveRecord::RecordNotFound, "selected org Persona is not available to this principal" if persona.blank?
 
         display_name = persona.moniker
-        raise "selected org Persona has no display name" if display_name.blank?
+        raise RuntimeError, "selected org Persona has no display name" if display_name.blank?
 
         identity = { display_name: display_name }
         avatar = switcher.selected_avatar

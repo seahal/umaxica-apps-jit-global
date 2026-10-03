@@ -257,15 +257,17 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
 
     # Established social login is base authority: the sign callback emits a
     # one-shot completion form (evidence only) and the session is established on
-    # base completion, which redirects to the Base root (`/`).
+    # base completion, which redirects to the Base Dashboard.
     assert_emits_acme_completion_only!
 
     submit_social_completion_if_present!
 
-    # The completion form posts to the public base origin; Base root `/` is the
-    # post-login landing (retired `/dashboard`).
-    assert_equal "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/",
-                 response.location
+    # Home `/` is 404 for an authenticated session, so ordinary sign-in lands on
+    # `/dashboard` (adr/home-dashboard-authentication-boundary.md).
+    landing = URI.parse(response.location)
+
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), landing.host
+    assert_equal "/dashboard", landing.path
   end
 
   test "existing Google identity without birthdate stays on login side" do

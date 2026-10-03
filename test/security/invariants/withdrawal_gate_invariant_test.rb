@@ -163,7 +163,7 @@ module Security
         apply_withdrawal_state!(user, state)
         token = ClientToken.create!(
           user: user,
-          user_token_status_id: ClientTokenStatus::NOTHING,
+          user_token_status_id: ClientTokenStatus::ACTIVE,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           discard_at: 1.day.from_now,
         )
@@ -186,7 +186,7 @@ module Security
         apply_withdrawal_state!(visitor, state)
         token = VisitorToken.create!(
           visitor: visitor,
-          visitor_token_status_id: VisitorTokenStatus::NOTHING,
+          visitor_token_status_id: VisitorTokenStatus::ACTIVE,
           visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           discard_at: 1.day.from_now,
         )

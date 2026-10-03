@@ -348,9 +348,9 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       end
     end
 
-    # The completion form posts to the public base origin; Base root `/` is the
-    # post-login landing (retired `/dashboard`).
-    assert_redirected_to "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/"
+    # Home `/` is 404 for an authenticated session, so ordinary sign-in lands on
+    # the region-preserving Dashboard (adr/home-dashboard-authentication-boundary.md).
+    assert_redirected_to "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/dashboard?ri=jp"
     identity.reload
 
     assert_equal user.id, identity.user_id

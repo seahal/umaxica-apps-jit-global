@@ -11,6 +11,9 @@ module AuthenticationRedirects
   PATH_TARGET_TOKEN_PURPOSE = :path_target
   PATH_TARGET_TOKEN_EXPIRES_IN = 15.minutes
 
+  # A controller asked for a sign-in destination without belonging to a sign-in surface.
+  class UnknownSignInSurfaceError < StandardError; end
+
   # Preserves the redirect parameter in session and returns it for immediate use
   #
   # @param session_key [Symbol] The session key to store pt parameter in
@@ -148,12 +151,13 @@ module AuthenticationRedirects
   end
 
   def sign_in_welcome_path(pt: nil, id: nil)
+    surface = sign_in_surface
     attrs = { ri: current_region_identifier }
     safe_pt = signed_pt_token(pt)
     attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
     _ = id
 
-    case sign_in_surface
+    case surface
     when :app
       base_app_welcome_url(
         **attrs,
@@ -172,10 +176,6 @@ module AuthenticationRedirects
         host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
         protocol: "https",
       )
-    else
-      path = "/welcome"
-      query = attrs.compact.to_query
-      query.present? ? "#{path}?#{query}" : path
     end
   end
 
@@ -201,8 +201,6 @@ module AuthenticationRedirects
         host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
         protocol: "https",
       )
-    else
-      "/"
     end
   end
 
@@ -212,11 +210,17 @@ module AuthenticationRedirects
 
   alias after_dashboard_path after_welcome_path
 
+  # Resolves the surface whose Dashboard and Welcome complete a sign-in. Base controllers complete
+  # sign-ins too (social completion, session-limit resolution, Welcome), so they resolve like Auth.
+  # A controller outside these namespaces has no sign-in destination; reaching here from one is a
+  # programmer error and fails instead of guessing a destination such as Home "/".
   def sign_in_surface
     case self.class.name
-    when /\A(Auth|Sign|Acme)::App::/ then :app
-    when /\A(Auth|Sign|Acme)::Com::/ then :com
-    when /\A(Auth|Sign|Acme)::Org::/ then :org
+    when /\A(Auth|Sign|Acme|Base)::App::/ then :app
+    when /\A(Auth|Sign|Acme|Base)::Com::/ then :com
+    when /\A(Auth|Sign|Acme|Base)::Org::/ then :org
+    else
+      raise UnknownSignInSurfaceError, "#{self.class.name} has no sign-in surface"
     end
   end
 
@@ -312,9 +316,9 @@ module AuthenticationRedirects
   alias safe_non_dashboard_return_path safe_non_welcome_return_path
 
   def welcome_return_path?(path)
+    # Every surface serves Welcome at "/welcome", so classifying a return path needs no surface.
     candidate = URI.parse(path.to_s)
-    welcome = URI.parse(sign_in_welcome_path)
-    candidate.path == welcome.path || candidate.path == "/welcome" || candidate.path.start_with?("/welcomes/")
+    candidate.path == "/welcome" || candidate.path.start_with?("/welcomes/")
   rescue URI::InvalidURIError
     false
   end

@@ -149,7 +149,7 @@ module Base
             resource,
             transaction,
           ) if finalization[:status] == :session_limit_hard_reject ||
-            finalization[:session_management_required]
+            finalization[:status] == :session_limit_pending
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,
@@ -184,8 +184,6 @@ module Base
               ).merge(browser_session_ref: locked.browser_session_ref)
             else
               login_result = login_for_oidc(resource, locked)
-              next login_result if login_result[:status] == :session_limit_hard_reject ||
-                login_result[:session_management_required]
               next login_result unless login_result[:status] == :success
 
               { status: :success, browser_session_ref: current_session.public_id }
@@ -193,16 +191,18 @@ module Base
           end
         end
 
+        # Auth recorded only credential evidence; the root login is established
+        # here, at the Base authority, through the final issuance boundary. The
+        # cooldown and the session limit are checked at this commit.
         def login_for_oidc(resource, transaction)
           ActiveRecord::Base.connected_to(role: :writing) do
             log_in(
               resource,
-              record_login_audit: false,
+              establishment: :root_login,
+              record_login_audit: true,
               token_kind_id: "BROWSER_WEB",
               require_totp_check: false,
               audit_context: { oidc_client_id: transaction.client_id },
-              bootstrap_actor: false,
-              skip_login_cooldown: true,
               authentication_event_at: transaction.authenticated_at,
             )
           end

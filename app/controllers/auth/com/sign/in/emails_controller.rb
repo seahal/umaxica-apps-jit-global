@@ -111,8 +111,6 @@ module Auth
               return
             end
 
-            return render_session_limit_hard_reject if @session_limit_hard_reject
-
             record_sign_in_email_cooldown!(normalized_address)
             preserve_pt
 
@@ -147,7 +145,7 @@ module Auth
               controller: self, resource: visitor, pt: peek_pt, ri: current_region_identifier, auth_method: "email",
             )
             sign_in_result = sign_in_result_from_session_result(result, actor: visitor)
-            unless sign_in_result.success? || sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
+            unless sign_in_result.proceed? || sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
               return render_session_limit_hard_reject(
                 message: sign_in_result.message,
                 http_status: sign_in_result.response_status,
@@ -303,12 +301,6 @@ module Auth
             existing_email = find_email_with_timing_protection(normalized_address)
 
             if existing_email&.visitor&.login_allowed?
-              visitor = existing_email.visitor
-              if session_limit_hard_reject_for?(visitor)
-                @session_limit_hard_reject = true
-                return
-              end
-
               session[:user_email_authentication_id] = existing_email.id
               session[:user_email_authentication_address] = nil
 

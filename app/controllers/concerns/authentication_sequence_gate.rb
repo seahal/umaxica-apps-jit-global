@@ -402,7 +402,7 @@ module AuthenticationSequenceGate
     @current_db_sign_in_flow_for_sequence ||=
       begin
         token = respond_to?(:current_session, true) ? current_session : nil
-        actor = current_resource || pending_sign_in_flow_actor
+        actor = current_resource
         SignInCycleLocator.new(
           session,
           surface: sign_in_sequence_surface,
@@ -414,17 +414,6 @@ module AuthenticationSequenceGate
       end
   rescue ArgumentError
     nil
-  end
-
-  def pending_sign_in_flow_actor
-    case sign_in_sequence_surface
-    when :app
-      Client.find_by(id: session[:pending_login_user_id])
-    when :com
-      Visitor.find_by(id: session[:pending_login_visitor_id])
-    when :org
-      Operator.find_by(id: session[:pending_login_staff_id])
-    end
   end
 
   def with_sign_in_flow_writing(cycle, &)
@@ -471,26 +460,21 @@ module AuthenticationSequenceGate
   def advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
     return result unless cycle&.persisted?
 
-    if result[:status] == :session_limit_hard_reject
-      cycle.fail_sign_in!
-      sign_in_flow_locator_for(actor: resource).issue!(cycle)
-      return result
-    end
-
-    if result[:session_management_required]
+    case result[:status]
+    when :session_limit_pending
       cycle.advance_sign_in_to_session_limit! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
       sign_in_flow_locator_for(actor: resource).issue!(cycle)
-      return result
+    when :success, :authentication_evidence_recorded
+      cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
+      if cycle.sign_in_guardrail_pending?
+        guardrail = SignInGuardrailParticipant.new(cycle: cycle, actor: resource)
+        guardrail.advance_if_clear!
+      end
+      sign_in_flow_locator_for(actor: resource).issue!(cycle.reload)
+    else
+      cycle.fail_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed?
+      sign_in_flow_locator_for(actor: resource).issue!(cycle) if result[:status] == :session_limit_hard_reject
     end
-
-    return result unless result[:status] == :success
-
-    cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
-    if cycle.sign_in_guardrail_pending?
-      guardrail = SignInGuardrailParticipant.new(cycle: cycle, actor: resource)
-      guardrail.advance_if_clear!
-    end
-    sign_in_flow_locator_for(actor: resource).issue!(cycle.reload)
     result
   end
 
@@ -506,75 +490,56 @@ module AuthenticationSequenceGate
     end
   end
 
+  # Session-limit resolution ends in the same final issuance boundary as any
+  # root login: log_in re-locks the flow, re-counts the limit, re-checks the
+  # cooldown, and binds the new session to this flow in one transaction. When
+  # the limit is full again by then, the flow stays SESSION_LIMIT_PENDING and
+  # nothing is issued.
   def promote_current_session_limit_cycle!(actor)
     cycle = current_db_sign_in_flow_for_sequence
     return false unless cycle&.sign_in_session_limit_pending?
 
-    result = SignInSessionLimitManager.new(
-      cycle: cycle,
-      actor: actor,
-      token: current_session,
-    ).promote!
-    cycle = result.cycle.reload
-
     session_result = log_in(
       actor,
+      establishment: :root_login,
+      sign_in_flow: cycle,
       record_login_audit: true,
       token_kind_id: "BROWSER_WEB",
       require_totp_check: false,
       audit_context: { auth_method: "session_limit_promotion" },
-      bootstrap_actor: true,
       authentication_event_at: current_authentication_event_at,
     )
-    return false unless session_result[:status] == :success && current_session
+    return false unless session_result[:status] == :success
 
-    issued_session = current_session
-    with_sign_in_flow_writing(cycle) do
-      changes = { token: issued_session }
-      changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
-      cycle.reload.update!(changes)
-    end
-
+    cycle = cycle.reload
     if cycle.sign_in_guardrail_pending?
-      SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
+      with_sign_in_flow_writing(cycle) do
+        SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
+      end
     end
-    sign_in_flow_locator_for(actor: actor, token: issued_session).issue!(cycle.reload)
+    sign_in_flow_locator_for(actor: actor, token: current_session).issue!(cycle.reload)
     reset_current_db_sign_in_flow_for_sequence!
     true
   end
 
+  # Selector completion issues the root login for a flow that has not issued
+  # one yet. A flow that already carries a session (or a browser that is
+  # already signed in) is refused by the final boundary rather than receiving
+  # a second root session.
   def issue_active_session_for_selector!(cycle)
-    actor = sign_in_flow_actor(cycle)
+    actor = cycle.principal
     return { status: :invalid_request } unless actor
+    return { status: :invalid_request } if logged_in?
 
-    cycle.class.transaction do
-      cycle.lock!
-      return { status: :success } if cycle.sign_in_completed? && cycle.token_id.present?
-      return { status: :invalid_request } unless cycle.sign_in_session_issuance_pending?
-    end
-
-    result = log_in(
+    log_in(
       actor,
+      establishment: :root_login,
+      sign_in_flow: cycle,
       record_login_audit: true,
       token_kind_id: "BROWSER_WEB",
       require_totp_check: false,
       audit_context: { auth_method: "selector" },
-      bootstrap_actor: true,
     )
-    return result unless result[:status] == :success
-
-    token = current_session
-    cycle.class.transaction do
-      cycle.lock!
-      return result if cycle.sign_in_completed? && cycle.token_id == token&.id
-      return { status: :invalid_request } unless cycle.sign_in_session_issuance_pending?
-
-      changes = { token: token }
-      changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
-      cycle.update!(changes)
-      cycle.complete_sign_in!
-    end
-    result
   end
 
   def sign_in_flow_actor(cycle)
@@ -645,7 +610,7 @@ module AuthenticationSequenceGate
     true
   end
 
-  private :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?, :pending_sign_in_flow_actor,
+  private :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?,
           :authorize_sign_in_sequence!, :authenticate_sign_in_sequence_actor!,
           :authenticate_oidc_result_actor!, :oidc_authorization_login_challenge_present?
 end

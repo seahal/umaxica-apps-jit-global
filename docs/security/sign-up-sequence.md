@@ -80,8 +80,8 @@ All sign-up routes converge on the shared sign-up finalization boundary:
 
 - `finalize_sign_up_from_checkpoint!` is the sign-up completion gate.
 - `IdentityGraphProvisioner.call!` runs inside that boundary before handoff.
-- `establish_signed_in_session!(..., bootstrap_actor: true)` is the shared session issuance helper
-  used by the sign-up handoff path.
+- `establish_signed_in_session!` is the shared session issuance helper used by the sign-up handoff
+  path, with no cooldown or limit exemption.
 - Sign-up controllers must not create `ClientToken` or `ClientDeviceSession` directly, and they must
   not write auth cookies directly.
 - Sign-in convergence for the next phase should reuse `establish_signed_in_session!` instead of
@@ -259,8 +259,8 @@ Expected state-machine path:
   - Allowed only when email OTP and checkpoint birthdate are complete.
   - `finalize_sign_up_from_checkpoint!` promotes the pending actor, provisions the durable identity
     graph, and hands off to the shared sign-in boundary.
-  - `establish_signed_in_session!` is called from the shared handoff path with
-    `bootstrap_actor: true` only for newly provisioned identities.
+  - `establish_signed_in_session!` is called from the shared handoff path; the cooldown and the
+    session limit apply as for any root login.
   - Both boundaries run inside the same Rails action/request.
   - Neither boundary redirects, renders, reloads through HTTP, or chooses the final route.
   - If sign-up finalization fails, treat it as sign-up failure recovery.
@@ -322,7 +322,7 @@ Current implementation path:
   - Writes the sign-up audit entry.
   - Saves the verified email.
   - Provisions the identity graph.
-  - Hands the actor off to the shared sign-in boundary with `bootstrap_actor: true`.
+  - Hands the actor off to the shared sign-in boundary.
 
 - Post-auth handoff: shared sign-in boundary
   - The shared handoff helper establishes the authenticated session only after guardrail,

@@ -5,6 +5,7 @@ module Warp
   module Com
     class DashboardsController < Warp::Com::ApplicationController
       include ::WarpDashboardPage
+      include ::SessionBoundaryNotFound
 
       AUTHENTICATION_MODE = :open
       declare_authentication_mode! :open
@@ -13,7 +14,7 @@ module Warp
 
       def show
         response.headers["Cache-Control"] = "private, no-store"
-        raise ActiveRecord::RecordNotFound unless logged_in?
+        return render_session_boundary_not_found unless logged_in?
 
         authorize!(current_visitor, to: :show?)
         render inertia: "warp/com/dashboards/show", props: dashboard_page_props

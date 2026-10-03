@@ -20,8 +20,8 @@ This document does not cover sign-up completion or step-up freshness.
 - Social callback failures must not leave usable auth state behind.
 - Passkey failures must not leave usable auth state behind.
 - MFA-required completion returns a pending MFA state without minting a new login unit.
-- Restricted completion returns the restricted session-management path without completing the normal
-  callback.
+- Session-limit completion returns `:session_limit_pending` and the session-management path; it
+  issues no token, cookie, or success audit.
 - Hard reject returns a deterministic forbidden response and does not create a new session.
 
 ## Retry Behavior

@@ -5,6 +5,7 @@ module Warp
   module Com
     class RootsController < Warp::Com::ApplicationController
       include ::WarpDashboardPage
+      include ::SessionBoundaryNotFound
 
       AUTHENTICATION_MODE = :open
 
@@ -12,7 +13,7 @@ module Warp
 
       def index
         response.headers["Cache-Control"] = "private, no-store"
-        raise ActiveRecord::RecordNotFound if logged_in?
+        return render_session_boundary_not_found if logged_in?
 
         render inertia: true, props: root_landing_props,
                clear_history: session.delete(:inertia_clear_history) == true

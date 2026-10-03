@@ -18,7 +18,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
     )
     @token = OperatorToken.create!(
       staff: @staff,
-      staff_token_status_id: OperatorTokenStatus::NOTHING,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       discard_at: 1.day.from_now,
       public_id: "stepup_org_#{SecureRandom.hex(4)}",

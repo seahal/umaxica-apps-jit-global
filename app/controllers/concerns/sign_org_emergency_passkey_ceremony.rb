@@ -121,21 +121,14 @@ module SignOrgEmergencyPasskeyCeremony
     when :session_limit_hard_reject
       render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
       true
-    when :session_limit_exceeded
-      issue_session_limit_gate!(pt: request.fullpath, flow: "in.emergency.passkeys.session")
-      render json: {
-        status: "session_limit_exceeded",
-        redirect_url: new_auth_org_sign_in_emergency_passkey_path,
-      }, status: :ok
-      true
     else
       false
     end
   end
 
-  def render_passkey_restricted_success(_result)
+  def render_passkey_session_limit_pending(_result)
     render json: {
-      status: "session_restricted",
+      status: "session_limit_pending",
       redirect_url: auth_org_sign_in_session_path,
     }, status: :ok
   end

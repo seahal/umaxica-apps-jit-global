@@ -14,7 +14,7 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
 
     def create
       user = Client.find(params[:user_id])
-      result = log_in(user, require_totp_check: false)
+      result = log_in(user, establishment: :root_login, require_totp_check: false)
 
       if result[:status] == :session_limit_hard_reject
         respond_to do |format|
@@ -36,12 +36,15 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
     @user = clients(:one)
     ClientToken.where(user_id: @user.id).delete_all
     Prosopite.pause do
+      # Below the active limit, but at the model's total-session ceiling because of leftover
+      # restricted rows from the retired session-limit placeholder. The token model's own
+      # validation is the last line, so the attempt is refused instead of over-issuing.
+      token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
+      token.rotate_refresh_token!
       2.times do
-        token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-        token.rotate_refresh_token!
+        restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
+        restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
       end
-      restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-      restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
     end
 
     Rails.application.routes.draw do

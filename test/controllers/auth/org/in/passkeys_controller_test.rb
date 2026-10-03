@@ -281,7 +281,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "ok", response.parsed_body["status"]
   end
 
-  test "verification returns session_restricted when one logical session has many rotated ancestors" do
+  test "verification returns session_limit_pending when one logical session has many rotated ancestors" do
     create_rotated_active_staff_session(@staff, rotations: 4)
     complete_org_entra_first_stage!(@staff)
     challenge_id = issue_challenge!
@@ -294,7 +294,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_response :ok
     json = response.parsed_body
 
-    assert_equal "session_restricted", json["status"]
+    assert_equal "session_limit_pending", json["status"]
     assert_equal auth_org_sign_in_session_path(ri: "jp"), json["redirect_url"]
   end
 

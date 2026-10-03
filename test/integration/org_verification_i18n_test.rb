@@ -18,7 +18,7 @@ class OrgVerificationI18nTest < ActionDispatch::IntegrationTest
     @staff = Operator.create!(status_id: OperatorStatus::NOTHING, public_id: Operator.generate_public_id)
     @token = OperatorToken.create!(
       staff: @staff,
-      staff_token_status_id: OperatorTokenStatus::NOTHING,
+      staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       public_id: "ov_i18n_#{SecureRandom.hex(4)}",
       discard_at: 1.day.from_now,

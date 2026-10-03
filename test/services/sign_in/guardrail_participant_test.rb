@@ -61,17 +61,17 @@ module SignIn
       assert_predicate cycle.reload, :sign_in_guardrail_pending?
     end
 
-    test "existing restricted session becomes guardrail blocking item" do
+    # The retired session-limit placeholder no longer blocks the whole account: a pending flow
+    # elsewhere must not hold every other sign-in hostage.
+    test "a leftover restricted session does not block the guardrail" do
       actor = create_client
-      restricted = ClientToken.create!(user: actor, user_token_status_id: ClientTokenStatus::RESTRICTED)
-      restricted.rotate_refresh_token!(discard_at: TokenStatusManagement::RESTRICTED_TTL.from_now)
+      ClientToken.create!(user: actor, user_token_status_id: ClientTokenStatus::RESTRICTED)
       cycle = create_cycle(actor)
 
       result = SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
 
-      assert_predicate result, :blocking?
-      assert_includes result.stack.map(&:key), :restricted_session_exists
-      assert_predicate cycle.reload, :sign_in_guardrail_pending?
+      assert_not_predicate result, :blocking?
+      assert_predicate cycle.reload, :sign_in_checkpoint_pending?
     end
 
     test "raises when evaluator returns non-item" do

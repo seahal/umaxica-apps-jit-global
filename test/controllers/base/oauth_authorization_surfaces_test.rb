@@ -314,9 +314,35 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal token_count_before + 1, VisitorToken.where(visitor_id: visitor.id).count
   end
 
+  test "org authorize refuses a new root login at the one-session limit and issues nothing" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    operator = operators(:one)
+    OperatorToken.where(staff_id: operator.id).delete_all
+    OperatorToken.create!(staff_id: operator.id, staff_token_status_id: OperatorTokenStatus::ACTIVE)
+    issuance = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),
+    )
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: "org", login_challenge: issuance.transaction.login_challenge,
+      actor: operator, session_ref: "org-limit-session", auth_method: "passkey",
+      authentication_event_at: Time.current,
+    )
+
+    assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
+      post base_org_oauth_authorization_url(host: host),
+           params: { result: result.code, transaction_ref: result.transaction.transaction_id },
+           headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
+    end
+
+    assert_response :forbidden
+    assert_nil issuance.transaction.reload.browser_session_ref
+  end
+
   test "org authorize reuses a finalized browser session without creating another root session" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     operator = operators(:one)
+    # The org limit is one session; start from none so the first resume can establish one.
+    OperatorToken.where(staff_id: operator.id).delete_all
     token_count_before = OperatorToken.where(staff_id: operator.id).count
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "org", intent: "sign_in", params: authorize_params(realm: "operator"),

@@ -8,6 +8,7 @@ class SessionLimitPromotionFlowTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    ClientToken.where(user_id: clients(:one).id).delete_all
     host! @host
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }

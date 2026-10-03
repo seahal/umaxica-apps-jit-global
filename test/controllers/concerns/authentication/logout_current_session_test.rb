@@ -331,34 +331,37 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   # Targets line 66: resolved_token swallows a real ActiveRecord::StatementInvalid
   # raised while introspecting token_class and treats it as "no token found".
-  test "resolved token is nil when introspecting the token class raises a statement error" do
-    result = AuthenticationLogoutCurrentSession.call(
-      resource: clients(:one),
-      token_class: StatementInvalidTokenClass,
-      session_public_id: "some-session-id",
-      reason: "user_logout",
-    )
-
-    assert result
+  # A database failure is not "no session": sign-out must not report success.
+  test "a statement error while resolving the token propagates" do
+    assert_raises(ActiveRecord::StatementInvalid) do
+      AuthenticationLogoutCurrentSession.call(
+        resource: clients(:one),
+        token_class: StatementInvalidTokenClass,
+        session_public_id: "some-session-id",
+        reason: "user_logout",
+      )
+    end
   end
 
   # Targets line 94: find_device_session swallows a device-session lookup
   # failure and the resolver falls back to the ordinary public_id lookup.
-  test "falls back to the ordinary token lookup when the device session lookup raises" do
+  test "a device-session lookup failure propagates and revokes nothing" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     ClientDeviceSession.stub(:active, -> { raise ActiveRecord::StatementInvalid, "boom" }) do
-      AuthenticationLogoutCurrentSession.call(
-        resource: user,
-        token_class: ClientToken,
-        session_public_id: token.public_id,
-        reason: "user_logout",
-      )
+      assert_raises(ActiveRecord::StatementInvalid) do
+        AuthenticationLogoutCurrentSession.call(
+          resource: user,
+          token_class: ClientToken,
+          session_public_id: token.public_id,
+          reason: "user_logout",
+        )
+      end
     end
 
-    assert_predicate token.reload, :revoked?
+    assert_not_predicate token.reload, :revoked?
   end
 
   # ------------------------------------------------------------------
@@ -431,37 +434,39 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     assert token.destroyed
   end
 
-  test "logs and treats logout as successful when revoking the token raises RecordInvalid" do
+  test "a revocation failure propagates and the token stays unrevoked" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:revoke!) { raise ActiveRecord::RecordInvalid.new(token) }
 
-    result = AuthenticationLogoutCurrentSession.call(
-      resource: user,
-      token: token,
-      reason: "user_logout",
-      cascade_device_session_tokens: false,
-    )
+    assert_raises(ActiveRecord::RecordInvalid) do
+      AuthenticationLogoutCurrentSession.call(
+        resource: user,
+        token: token,
+        reason: "user_logout",
+        cascade_device_session_tokens: false,
+      )
+    end
 
-    assert result
     assert_not token.revoked?
   end
 
   # Targets else@175, else@176: the rescue log must not blow up without a
   # resource present.
-  test "logs and treats logout as successful when revoking the token raises without a resource" do
+  test "a revocation failure propagates without a resource" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:revoke!) { raise ActiveRecord::RecordInvalid.new(token) }
 
-    result = AuthenticationLogoutCurrentSession.call(
-      resource: nil,
-      token: token,
-      reason: "user_logout",
-      cascade_device_session_tokens: false,
-    )
+    assert_raises(ActiveRecord::RecordInvalid) do
+      AuthenticationLogoutCurrentSession.call(
+        resource: nil,
+        token: token,
+        reason: "user_logout",
+        cascade_device_session_tokens: false,
+      )
+    end
 
-    assert result
     assert_not token.revoked?
   end
 

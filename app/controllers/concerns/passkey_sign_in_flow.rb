@@ -290,8 +290,8 @@ module PasskeySignInFlow
   def handle_login_result(result)
     sign_in_result = sign_in_result_from_session_result(result)
     return if handle_domain_specific_login_status(result)
-    return render_passkey_restricted_success(result) if sign_in_result.session_limit_pending?
-    return render_passkey_success(result) if sign_in_result.success?
+    return render_passkey_session_limit_pending(result) if sign_in_result.session_limit_pending?
+    return render_passkey_success(result) if sign_in_result.proceed?
 
     render_error("errors.login_failed", :unprocessable_content)
   end
@@ -315,8 +315,8 @@ module PasskeySignInFlow
     false
   end
 
-  def render_passkey_restricted_success(_result)
-    raise NotImplementedError, "#{self.class} must define #render_passkey_restricted_success"
+  def render_passkey_session_limit_pending(_result)
+    raise NotImplementedError, "#{self.class} must define #render_passkey_session_limit_pending"
   end
 
   def passkey_checkpoint_redirect_url

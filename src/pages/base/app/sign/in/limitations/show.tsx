@@ -24,8 +24,9 @@ type Props = {
   cancel_action: string;
   submit_label: string;
   cancel_label: string;
-  // The server decides which resolution channel this ceremony runs on and names the field.
-  resolution: { field: string; value: string };
+  // The server decides which resolution channel this ceremony runs on and names the field. A
+  // sign-in flow held by this browser's session needs no field: the browser itself is the binding.
+  resolution: { field: string; value: string } | null;
   sessions: SessionEntry[];
 };
 
@@ -44,7 +45,7 @@ export default function SignInLimitationShow({
 }: Props) {
   const form = useForm<{ session_ref: string } & Record<string, string>>({
     session_ref: "",
-    [resolution.field]: resolution.value,
+    ...(resolution ? { [resolution.field]: resolution.value } : {}),
   });
   const { data, setData, errors, processing } = form;
 

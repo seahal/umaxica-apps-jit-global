@@ -72,7 +72,48 @@ class Base::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert_nil response.location
   end
+  test "authenticated Home answers 404 as a rendered response, not a raised exception" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    host! host
+    visitor = create_verified_visitor_with_email(email_address: "base-com-root-boundary@example.com")
+    visitor.visitor_telephones.create!(
+      number: "+15550002227",
+      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+    )
+    controller_exception =
+      capture_controller_exception do
+        get(base_com_root_url(ri: "jp"), headers: as_visitor_headers(visitor, host: host))
+      end
+
+    assert_response :not_found
+    assert_nil controller_exception
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
+
+  test "anonymous Dashboard answers 404 as a rendered response, not a raised exception" do
+    host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+
+    controller_exception =
+      capture_controller_exception do
+        get(base_com_dashboard_url(ri: "jp"))
+      end
+
+    assert_response :not_found
+    assert_nil controller_exception
+    assert_nil response.location
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+  end
   private
+
+  # The controller's own instrumentation reports an exception that escaped the action; the 404
+  # boundary is ordinary control flow and must not depend on the exceptions app.
+  def capture_controller_exception(&)
+    captured = nil
+    callback = ->(*, payload) { captured = payload[:exception] if payload.key?(:exception) }
+    ActiveSupport::Notifications.subscribed(callback, "process_action.action_controller", &)
+    captured
+  end
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")

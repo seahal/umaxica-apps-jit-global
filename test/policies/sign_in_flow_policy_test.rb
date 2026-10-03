@@ -52,8 +52,10 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
     }
 
     expectations.each do |status_name, allowed_method|
-      cycle = create_cycle(status_name, principal_id: @client.id, token: @token)
-      Actor.install_context!(authn: Actor::Authentication.new(login_public_id: @token.public_id))
+      # One flow binds at most one session (unique token_id), so each state gets its own session.
+      token = ClientToken.create!(user: @client, user_token_status_id: ClientTokenStatus::ACTIVE)
+      cycle = create_cycle(status_name, principal_id: @client.id, token: token)
+      Actor.install_context!(authn: Actor::Authentication.new(login_public_id: token.public_id))
       policy = ClientSignInFlowPolicy.new(cycle, user: @client)
 
       expectations.values.each do |method_name|
@@ -63,6 +65,8 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
           assert_not_predicate policy, method_name, "#{status_name} #{method_name}"
         end
       end
+      # Keep the account under its session ceiling for the next state.
+      token.revoke!
     end
   end
 

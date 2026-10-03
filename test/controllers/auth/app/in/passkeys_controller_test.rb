@@ -193,7 +193,7 @@ module Auth::App::In
       assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     end
 
-    test "verification with session limit exceeded returns session_restricted" do
+    test "verification with session limit exceeded returns session_limit_pending" do
       # Create 2 active sessions to hit the limit
       ClientToken.where(user_id: @user.id).delete_all
       2.times do
@@ -213,7 +213,7 @@ module Auth::App::In
       assert_response :ok
       json = response.parsed_body
 
-      assert_equal "session_restricted", json["status"]
+      assert_equal "session_limit_pending", json["status"]
       assert_equal auth_app_sign_in_session_path(ri: "jp"), json["redirect_url"]
       assert_equal 0, ClientToken.where(user_id: @user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
     end

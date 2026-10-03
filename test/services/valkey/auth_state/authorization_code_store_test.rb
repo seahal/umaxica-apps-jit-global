@@ -223,28 +223,6 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     assert_equal :missing, @store.mark_replay!(raw_code: "unknown-code").status
   end
 
-  private
-
-  def issued_code
-    @store.issue!(
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      subject: "sub-1",
-      code_challenge: "challenge",
-      code_challenge_method: "S256",
-      resource_type: "client",
-    )
-  end
-
-  def consumed_code
-    raw = issued_code
-    @store.consume!(
-      raw_code: raw,
-      expected: { client_id: CLIENT_ID, redirect_uri: REDIRECT_URI },
-    )
-    raw
-  end
-
   test "every operation reports Valkey unavailability as Unavailable" do
     down = Object.new
     down.define_singleton_method(:key) { |digest| "down:#{digest}" }
@@ -338,5 +316,26 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     assert_raises(Umaxica::Valkey::SerializationError) { store.consume!(raw_code: "code", expected: {}) }
     assert_raises(Umaxica::Valkey::SerializationError) { store.link_family!(raw_code: "code", rp_session_ref: "rp") }
     assert_raises(Umaxica::Valkey::SerializationError) { store.mark_replay!(raw_code: "code") }
+  end
+  private
+
+  def issued_code
+    @store.issue!(
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      subject: "sub-1",
+      code_challenge: "challenge",
+      code_challenge_method: "S256",
+      resource_type: "client",
+    )
+  end
+
+  def consumed_code
+    raw = issued_code
+    @store.consume!(
+      raw_code: raw,
+      expected: { client_id: CLIENT_ID, redirect_uri: REDIRECT_URI },
+    )
+    raw
   end
 end

@@ -8,13 +8,12 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   setup do
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
-    @visitor = create_verified_visitor_with_email(email_address: "sessions-#{SecureRandom.hex(4)}@example.com")
+    @email_address = "sessions-#{SecureRandom.hex(4)}@example.com"
+    @visitor = create_verified_visitor_with_email(email_address: @email_address)
     @visitor.visitor_telephones.create!(
       number: "+10000000991",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
     )
-    @token = create_restricted_session(@visitor)
-    satisfy_visitor_verification(@token)
   end
 
   test "show redirects to login when not authenticated" do
@@ -43,16 +42,16 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     Rails.application.reload_routes!
   end
 
-  test "show with restricted session displays sessions" do
-    create_active_session(@visitor)
-    headers = request_headers(@token)
+  # The page opens only for a verified sign-in flow waiting on the session limit, reached here
+  # through the real email sign-in (adr/root-login-establishment-boundary.md).
 
-    get auth_com_sign_in_session_url(ri: "jp"), headers: headers
+  test "show for a pending sign-in lists the active session" do
+    enter_pending_session_limit!
+
+    get auth_com_sign_in_session_url(ri: "jp")
 
     assert_response :success
-    assert_not response.redirect?
     assert_equal "auth/com/sign/in/sessions/show", inertia_component
-
     props = inertia_props
 
     assert_equal auth_com_sign_in_session_path(ri: "jp"), props.fetch("form").fetch("action")
@@ -60,99 +59,106 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     assert_equal I18n.t("sign.app.in.session.cancel_logout"), props.fetch("cancel").fetch("label")
   end
 
-  test "update without selections flashes alert and re-renders show" do
-    headers = request_headers(@token)
+  test "a legacy restricted session does not open the page" do
+    token = create_restricted_session(@visitor)
 
-    patch auth_com_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }, headers: headers
+    get auth_com_sign_in_session_url(ri: "jp"), headers: request_headers(token)
+
+    assert_response :redirect
+    assert_redirected_to %r{/sign/in\?ri=jp}
+  end
+
+  test "update without selections keeps the flow pending" do
+    enter_pending_session_limit!
+
+    patch auth_com_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }
 
     assert_response :unprocessable_content
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
-  test "update with ref param revokes specific session" do
-    active_token = create_active_session(@visitor)
-    headers = request_headers(@token)
+  test "update with ref param revokes that session and commits the waiting sign-in" do
+    existing = enter_pending_session_limit!
 
-    patch auth_com_sign_in_session_url(ri: "jp"), params: { ref: active_token.signed_ref }, headers: headers
+    assert_difference(-> { VisitorToken.where(visitor_id: @visitor.id).count }, 1) do
+      patch auth_com_sign_in_session_url(ri: "jp"), params: { ref: existing.first.signed_ref }
+    end
 
     assert_response :redirect
-    # Redirect to Base identity through Jump RT after restricted-session promotion.
-    assert_match %r{\Ahttps://jump\.umaxica\.net/}, response.location
-    assert_includes response.location, "rt="
-    assert_not_nil active_token.reload.discard_at
-    assert_equal VisitorTokenStatus::ACTIVE, @token.reload.visitor_token_status_id
+    assert_not existing.first.reload.currently_usable?
+    assert_equal VisitorToken.where(visitor_id: @visitor.id).order(:id).last.id, latest_flow.token_id
   end
 
-  test "update with a batch of refs revokes every selected session but never the current one" do
-    first = create_active_session(@visitor)
-    second = create_active_session(@visitor)
-    headers = request_headers(@token)
-
-    patch auth_com_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [first.signed_ref, second.signed_ref, @token.signed_ref] },
-          headers: headers
-
-    assert_response :redirect
-    assert_not_nil first.reload.discard_at
-    assert_not_nil second.reload.discard_at
-    assert_predicate @token.reload, :currently_usable?
-  end
-
-  test "update with a batch that names another visitor's session leaves it alone" do
+  test "update with a ref naming another visitor's session leaves it alone and issues nothing" do
     other_visitor = create_verified_visitor_with_email(email_address: "batch-ses-#{SecureRandom.hex(4)}@example.com")
     other_token = create_active_session(other_visitor)
-    headers = request_headers(@token)
+    enter_pending_session_limit!
 
-    patch auth_com_sign_in_session_url(ri: "jp"),
-          params: { revoke_refs: [other_token.signed_ref] },
-          headers: headers
+    assert_no_difference(-> { VisitorToken.where(visitor_id: @visitor.id).count }) do
+      patch auth_com_sign_in_session_url(ri: "jp"), params: { revoke_refs: [other_token.signed_ref] }
+    end
 
-    assert_response :redirect
     assert_predicate other_token.reload, :currently_usable?
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
   end
 
-  test "update with ref belonging to another visitor does not revoke" do
-    other_visitor = create_verified_visitor_with_email(email_address: "other-ses-#{SecureRandom.hex(4)}@example.com")
-    other_token = create_active_session(other_visitor)
-    headers = request_headers(@token)
+  test "destroy without ref cancels only the waiting flow and redirects to login" do
+    existing = enter_pending_session_limit!
+    flow = latest_flow
 
-    patch auth_com_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }, headers: headers
-
-    assert_response :redirect
-    assert_predicate other_token.reload, :currently_usable?
-  end
-
-  test "destroy without ref logs out and redirects to login" do
-    headers = request_headers(@token)
-
-    delete auth_com_sign_in_session_url(ri: "jp"), headers: headers
+    delete auth_com_sign_in_session_url(ri: "jp")
 
     assert_response :see_other
     assert_match %r{/sign/in\?ri=jp}, response.location
-  end
-
-  test "delete session route logs out and redirects to login" do
-    headers = request_headers(@token)
-
-    delete auth_com_sign_in_session_url(ri: "jp"), headers: headers
-
-    assert_response :see_other
-    assert_match %r{/sign/in\?ri=jp}, response.location
-    assert_not_predicate @token.reload, :currently_usable?
-    assert_equal VisitorTokenStatus::REVOKED, @token.visitor_token_status_id
+    assert_predicate flow.reload, :sign_in_failed?
+    assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
   test "destroy with ref belonging to another visitor does not revoke" do
     other_visitor = create_verified_visitor_with_email(email_address: "other-des-#{SecureRandom.hex(4)}@example.com")
     other_token = create_active_session(other_visitor)
-    headers = request_headers(@token)
+    enter_pending_session_limit!
 
-    delete auth_com_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }, headers: headers
+    delete auth_com_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }
 
     assert_response :success
     assert_predicate other_token.reload, :currently_usable?
   end
 
   private
+
+  # Fills the one-session limit, then signs in through the real email ceremony so this browser holds
+  # a verified flow in SESSION_LIMIT_PENDING. Returns the session that fills the limit.
+  def enter_pending_session_limit!
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    existing = Array.new(VisitorToken::MAX_SESSIONS_PER_VISITOR) { create_active_session(@visitor) }
+    email = VisitorEmail.find_by!(
+      visitor_id: @visitor.id,
+      address_digest: IdentifierBlindIndex.bidx_for_email(@email_address),
+    )
+    post(
+      auth_com_sign_in_email_url(ri: "jp"),
+      params: { :user_email => { address: @email_address }, "cf-turnstile-response" => "t" },
+    )
+    key = ROTP::Base32.random_base32
+    email.store_otp(key, 7, 12.minutes.from_now.to_i)
+    patch(
+      auth_com_sign_in_email_url(ri: "jp"),
+      params: { "visitor_email" => { "pass_code" => ROTP::HOTP.new(key).at(7).to_s },
+                "cf-turnstile-response" => "t", },
+    )
+
+    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    existing
+  ensure
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
+  def latest_flow
+    VisitorSignInFlow.where(principal_id: @visitor.id).recent_first.first
+  end
 
   def create_restricted_session(visitor)
     token = VisitorToken.create!(

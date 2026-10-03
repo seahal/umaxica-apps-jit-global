@@ -239,10 +239,12 @@ module AuthenticationHarness
     token || authentication_harness_latest_token(resource) || authentication_harness_create_token(resource)
   end
 
+  # Only an ACTIVE session authenticates (AuthenticationCurrentResourceResolver), so the harness
+  # reuses only one of those and otherwise creates one.
   def authentication_harness_latest_token(resource)
     authentication_harness_token_model(resource)
+      .active_status
       .where(authentication_harness_token_owner_column(resource) => resource.id)
-      .where("discard_at > ?", Time.current)
       .order(created_at: :desc)
       .first
   end

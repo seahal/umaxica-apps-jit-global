@@ -125,8 +125,6 @@ module Auth
               return
             end
 
-            return render_session_limit_hard_reject if @session_limit_hard_reject
-
             record_sign_in_email_cooldown!(normalized_address)
 
             # Preserve pt parameter if provided
@@ -319,15 +317,6 @@ module Auth
             existing_email = find_email_with_timing_protection(normalized_address)
 
             if existing_email&.user&.login_allowed?
-              # Pre-check session limit before sending OTP.
-              # If the user is already at the hard limit (2 active + 1 restricted),
-              # skip sending OTP and flag for the create action to handle.
-              user = existing_email.user
-              if session_limit_hard_reject_for?(user)
-                @session_limit_hard_reject = true
-                return
-              end
-
               SignAppInEmailAuthenticationState.store_existing!(session, existing_email)
 
               return :ok if existing_email.locked?
@@ -382,9 +371,12 @@ module Auth
                   hard_reject: true,
                   http_status: sign_in_result.response_status, }
               elsif sign_in_result.session_limit_pending?
-                { success: true, restricted: true, redirect_path: sign_in_result.redirect_to }
+                { success: true, session_limit_pending: true, redirect_path: sign_in_result.redirect_to }
               elsif sign_in_result.success?
                 { success: true, tokens: sign_in_result.token }
+              elsif sign_in_result.proceed?
+                # OIDC evidence recorded: no tokens; the sign-in sequence decides the next step.
+                { success: true }
               else
                 { success: false, error: t("sign.app.authentication.email.update.invalid_code") }
               end
@@ -424,7 +416,7 @@ module Auth
           end
 
           def redirect_after_successful_email_login(result)
-            if result[:restricted] || result[:redirect_path]
+            if result[:redirect_path]
               redirect_to(result[:redirect_path])
             else
               redirect_to_sign_in_sequence!(
@@ -434,9 +426,9 @@ module Auth
           end
 
           def render_successful_email_login_json(result)
-            if result[:restricted]
+            if result[:session_limit_pending]
               render json: {
-                status: "session_restricted",
+                status: "session_limit_pending",
                 redirect_url: result[:redirect_path],
                 message: I18n.t("sign.app.in.session.restricted_notice"),
               }, status: :ok

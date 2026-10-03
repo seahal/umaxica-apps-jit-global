@@ -147,36 +147,16 @@ module Base
           end
 
           def base_social_login_redirect_to(sign_in_result)
-            return social_session_limitation_url(sign_in_result.actor) if sign_in_result.session_limit_pending?
+            return social_session_limitation_path if sign_in_result.session_limit_pending?
 
             sign_in_result.redirect_to
           end
 
-          def base_social_login_redirect_allows_other_host?(redirect_url)
-            social_session_limitation_url?(redirect_url) || after_login_allows_other_host?
-          end
-
-          def social_session_limitation_url?(redirect_url)
-            uri = URI.parse(redirect_url.to_s)
-            uri.host == ENV.fetch("PUBLIC_BASE_SERVICE_URL") &&
-              uri.path == "/sign/in/limitation"
-          rescue URI::InvalidURIError
-            false
-          end
-
-          def social_session_limitation_url(actor)
-            token = Rails.application.message_verifier(:social_session_limit_limitation).generate(
-              {
-                "actor_ref" => actor.public_id,
-                "session_ref" => current_session&.public_id,
-                "expires_at" => 15.minutes.from_now.iso8601,
-              },
-            )
-            base_app_sign_in_limitation_url(
-              social_resolution: token,
-              ri: params[:ri],
-              host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-            )
+          # The pending sign-in flow is held by the flow locator in this Base host's
+          # Rails session, so the limitation page is a same-host path; the URL itself
+          # carries no grant.
+          def social_session_limitation_path
+            base_app_sign_in_limitation_path(ri: params[:ri])
           end
 
           def complete_social_signup!(commit, provider)

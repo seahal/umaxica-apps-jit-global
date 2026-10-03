@@ -17,16 +17,6 @@ module Base
         before_action :authorize_secrets!, only: :show
         prepend_after_action :set_no_store_for_secret_credential_pages, only: :show
 
-        protected
-
-        def track_authenticated_session_activity?
-          return false if (request.get? || request.head?) && action_name == "show"
-
-          super
-        end
-
-        public
-
         def show
           response.headers["Referrer-Policy"] = "no-referrer"
           reveal = IdentityOneTimeReveal.consume!(
@@ -48,6 +38,14 @@ module Base
               href: base_com_identity_path(ri: params[:ri]),
             },
           }
+        end
+
+        protected
+
+        def track_authenticated_session_activity?
+          return false if (request.get? || request.head?) && action_name == "show"
+
+          super
         end
 
         private

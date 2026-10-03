@@ -201,7 +201,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   def create_client_token
     token = ClientToken.create!(
       user: @actor,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "revoke_#{SecureRandom.hex(4)}",
       discard_at: 1.day.from_now,
@@ -213,7 +213,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   def create_visitor_token
     token = VisitorToken.create!(
       visitor: @actor,
-      visitor_token_status_id: VisitorTokenStatus::NOTHING,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       public_id: "revoke_#{SecureRandom.hex(4)}",
       discard_at: 1.day.from_now,

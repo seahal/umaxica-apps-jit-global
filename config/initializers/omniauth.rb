@@ -339,15 +339,58 @@ OmniAuth.config.after_request_phase = proc { |env| SocialCallbackGuard.capture_r
 # =============================================================================
 # Redirect to our custom failure endpoint.
 # This uses OmniAuth standard path: /social/failure
+#
+# OmniAuth rescues every StandardError raised by a strategy and routes it here,
+# so a defect in our own code (NoMethodError, TypeError, ...) would otherwise
+# look like an ordinary provider failure and silently bounce the user back to
+# the sign-in page. Those defects stop here with a plain-text 500 instead.
+module OmniAuthFatalFailure
+  module_function
+
+  DEFECT_CLASSES = [NameError, TypeError, ArgumentError, FrozenError, NotImplementedError].freeze
+
+  def defect?(error)
+    DEFECT_CLASSES.any? { |klass| error.is_a?(klass) }
+  end
+
+  # Only the class and the code location are logged: exception messages can
+  # embed request or provider data.
+  def log!(error, strategy:)
+    origin = error.backtrace&.find { |frame| frame.start_with?(Rails.root.to_s) && frame.exclude?("/vendor/") }
+    Rails.logger.error(
+      JitLogEvent.format(
+        "social_auth.fatal",
+        strategy: strategy,
+        error_class: error.class.name,
+        origin: origin || error.backtrace&.first,
+      ),
+    )
+  end
+
+  def response
+    Rack::Response.new(
+      [I18n.t("errors.social_auth.fatal", locale: I18n.default_locale)],
+      500,
+      "Content-Type" => "text/plain; charset=utf-8",
+      "Cache-Control" => "no-store",
+    ).finish
+  end
+end
+
 OmniAuth.config.on_failure =
   proc do |env|
     request = Rack::Request.new(env)
     message = env["omniauth.error.type"]&.to_s || "unknown_error"
     strategy = env["omniauth.error.strategy"]&.name || "unknown"
 
+    error = env["omniauth.error"]
+    if error && OmniAuthFatalFailure.defect?(error)
+      OmniAuthFatalFailure.log!(error, strategy: strategy)
+      next OmniAuthFatalFailure.response
+    end
+
     # Provider exception messages can contain response bodies or credentials;
     # retain only allowlisted classification metadata.
-    error = env["omniauth.error"]
     if error
       Rails.logger.error(
         JitLogEvent.format(
