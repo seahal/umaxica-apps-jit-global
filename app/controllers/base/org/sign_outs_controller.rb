@@ -20,6 +20,8 @@ module Base
       declare_authentication_mode! :open
       after_action :sign_out_notice_cache_headers!, only: %i(edit create)
 
+      public
+
       def new
         redirect_to(sign_out_edit_path, status: :see_other)
       end

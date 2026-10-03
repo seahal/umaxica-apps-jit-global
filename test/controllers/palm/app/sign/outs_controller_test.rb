@@ -107,17 +107,15 @@ module Palm
             rt, JumpRtKeyring.private_key("PALM_APP"), true, algorithms: ["ES384"],
           )
 
-          assert_equal "https://palm-jp.umaxica.app", rt_payload.fetch("iss")
-          assert_equal "ES384", rt_header.fetch("alg")
-          assert_equal 1, rt_payload.fetch("schema")
+          assert_equal ["https://palm-jp.umaxica.app", "ES384", 1],
+                       [rt_payload.fetch("iss"), rt_header.fetch("alg"), rt_payload.fetch("schema")]
           logout_uri = URI.parse(rt_payload.fetch("url"))
           query = Rack::Utils.parse_nested_query(logout_uri.query.to_s)
 
           assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), logout_uri.host
           assert_equal "/oidc/logout", logout_uri.path
           assert_predicate query["logout_challenge"], :present?
-          assert_nil query["actor_ref"]
-          assert_nil query["session_ref"]
+          assert_equal [nil, nil], query.values_at("actor_ref", "session_ref")
 
           browser_token = create_client_token(native_client)
           post base_app_oidc_logout_url(

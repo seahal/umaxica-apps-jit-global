@@ -1,5 +1,13 @@
 # Org Entra Callback Boundary
 
+> Current implementation (2026-10-03): this document describes the hand-written ceremony that
+> `adr/org-entra-omniauth-strategy-migration.md` replaced.
+> `ExternalAuthenticationOrgEntraCeremonyStore` and the `Auth::Org::Sign::In::Entra::*` controllers
+> no longer exist. State, nonce, and PKCE are now verified by the OmniAuth strategy in
+> `lib/omniauth/strategies/umaxica_entra.rb`, and the callback is handled by
+> `Auth::Org::Omniauth::OmniauthCallbacksController`. The sections below are kept as the record of
+> the earlier boundary; the class names and line numbers in them do not match current code.
+
 ## Boundary
 
 The org Entra ID sign-in ceremony (`Auth::Org::Sign::In::Entra::AuthorizationsController` and

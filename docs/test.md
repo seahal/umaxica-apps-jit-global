@@ -41,7 +41,7 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
 - API & BFF endpoints (health, inquiry validation, preference APIs)
 - Security controls (JWT issuance, rate limiting, Turnstile, redirect whitelist, encryption)
 - Observability (OpenTelemetry traces and health endpoints)
-- Build/test automation (pnpm-managed JS checks/tests, `bin/rails test`, and `bin/ci`)
+- Build/test automation (Bun-managed JS checks/tests, `bin/rails test`, and `bin/ci`)
 
 ### 2.2 Out of Scope
 
@@ -68,15 +68,15 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
 
 ## 4. Test Approach
 
-- **Unit tests (Ruby)**: `bundle exec rails test` covers models (e.g.,
-  `ServiceSiteContact`, `UserIdentityEmail`, `TimeBasedOneTimePassword`), controllers, concerns,
-  services, consumers. Fixtures stored under `test/fixtures`; multi-database fixtures split by
-  context. The test database configuration uses Rails' standard process parallelization,
-  overridable via `PARALLEL_WORKERS`, disables PostgreSQL query/maintenance parallelism for test
-  connections, and prepares separate writer/reader database names for each configured connection.
-  Valkey rate-limit and auth-state use KVS logical DBs 4 and 6 with run/worker key namespaces.
-  Test cache is `MemoryStore`.
-- **Unit tests (JS/TS)**: `bun vitest run` runs the JavaScript test baseline directly through Vitest.
+- **Unit tests (Ruby)**: `bundle exec rails test` covers models (e.g., `ServiceSiteContact`,
+  `UserIdentityEmail`, `TimeBasedOneTimePassword`), controllers, concerns, services, consumers.
+  Fixtures stored under `test/fixtures`; multi-database fixtures split by context. The test database
+  configuration uses Rails' standard process parallelization, overridable via `PARALLEL_WORKERS`,
+  disables PostgreSQL query/maintenance parallelism for test connections, and prepares separate
+  writer/reader database names for each configured connection. Valkey rate-limit and auth-state use
+  KVS logical DBs 4 and 6 with run/worker key namespaces. Test cache is `MemoryStore`.
+- **Unit tests (JS/TS)**: `bun vitest run` runs the JavaScript test baseline directly through
+  Vitest.
 - **Integration/system tests**: Rails integration and system tests remain the automated baseline.
   Browser-level Playwright scenarios are deferred until a concrete release flow requires them.
 - **API/contract tests**: Rails controller/integration tests cover API behavior, with
@@ -86,30 +86,29 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
   sanitization, Turnstile failure handling, PII encryption.
 - **Cache and rate-limit stores in test**: Rails.cache is `MemoryStore`. Rate-limit uses namespaced
   Valkey on KVS DB 4. Worker setup deletes that worker's keys so no test inherits counters it did
-  not ask for. A test that passes only because an earlier test warmed the
-  cache does not describe the behaviour it claims to, and rate-limit counters are keyed by request
-  IP -- identical for every test -- so a shared counting store makes unrelated tests 429 depending
-  on suite order. Cache tests stub `Rails.cache` with a `MemoryStore`; rate-limit tests declare
-  `rate_limit_counters!` (or wrap an exercise in `with_rate_limit_counters`, both in
-  `test/test_helper.rb`), which points `TestSupport::SwappableCacheStore` at a `MemoryStore` behind
-  the store controllers captured at class-load time when a case needs time-travelled windows
-  without using KVS.
+  not ask for. A test that passes only because an earlier test warmed the cache does not describe
+  the behaviour it claims to, and rate-limit counters are keyed by request IP -- identical for every
+  test -- so a shared counting store makes unrelated tests 429 depending on suite order. Cache tests
+  stub `Rails.cache` with a `MemoryStore`; rate-limit tests declare `rate_limit_counters!` (or wrap
+  an exercise in `with_rate_limit_counters`, both in `test/test_helper.rb`), which points
+  `TestSupport::SwappableCacheStore` at a `MemoryStore` behind the store controllers captured at
+  class-load time when a case needs time-travelled windows without using KVS.
 - **Performance tests**: Dedicated k6/wrk scenarios are deferred. Add them only when a concrete load
   target and environment are defined.
 - **Observability verification**: OTEL traces appear in Tempo; Loki logs capture Turnstile failures;
   Grafana dashboards show request rate and application error signals.
 - **Automation**: CI runs the configured Rails and JS gates: `bin/ci` for the Rails stack and GitHub
-  Actions `pnpm check` plus `pnpm test:coverage` for JavaScript.
+  Actions `bun run check` plus `bun run test:coverage` for JavaScript.
 
 ---
 
 ## 5. Test Environments
 
-| Env                     | Purpose                                 | Stack                                                                                                                                     |
-| ----------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Local                   | Developer loop                          | Podman Compose (Postgres primaries/replicas, Valkey, optional RustFS, Loki, Tempo, Grafana), Foreman with Rails + pnpm-managed JS tooling |
-| Staging                 | Integrated QA, performance & regression | Mirrors production hostnames, uses managed Postgres/Valkey, OTEL exports to staging Tempo                                                 |
-| Production Verification | Smoke tests post-deploy                 | Fastly/Cloudflare fronted hosts, managed infra                                                                                            |
+| Env                     | Purpose                                 | Stack                                                                                                                                    |
+| ----------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Local                   | Developer loop                          | Podman Compose (Postgres primaries/replicas, Valkey, optional RustFS, Loki, Tempo, Grafana), Foreman with Rails + Bun-managed JS tooling |
+| Staging                 | Integrated QA, performance & regression | Mirrors production hostnames, uses managed Postgres/Valkey, OTEL exports to staging Tempo                                                |
+| Production Verification | Smoke tests post-deploy                 | Fastly/Cloudflare fronted hosts, managed infra                                                                                           |
 
 **Data**: Seed states provided via fixtures; Compose services start with empty DBs. Sensitive data
 must be synthetic. Contact forms require Turnstile test keys or bypass for automated runs.
@@ -218,15 +217,15 @@ must be synthetic. Contact forms require Turnstile test keys or bypass for autom
 
 ### 7.9 Current Automation Matrix
 
-| Layer              | Local command                                | CI status                                                   | Decision                                                                |
-| ------------------ | -------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Ruby unit/ctrl/int | `bin/rails test`                             | Covered by `bin/ci`                                         | Adopted baseline.                                                       |
-| Rails system       | `bin/rails test:system`                      | Covered by `bin/ci`                                         | Adopted Rails-level browser/system baseline.                            |
-| JavaScript checks  | `pnpm check`                                 | Covered by `.github/workflows/integration.yml`              | Adopted baseline.                                                       |
-| JavaScript tests   | `pnpm test`                                  | `pnpm test:coverage` in `.github/workflows/integration.yml` | Adopted baseline; keep expanding behavior-specific coverage.            |
-| API contracts      | Rails tests with selective `committee-rails` | Covered when Rails tests exercise schema validation         | Adopted selectively; no Rswag dependency.                               |
-| Browser E2E        | Not adopted                                  | Not gated                                                   | Deferred until a named cross-browser release flow needs it.             |
-| Performance/load   | Not adopted                                  | Not gated                                                   | Deferred until load targets and an execution environment are specified. |
+| Layer              | Local command                                | CI status                                                       | Decision                                                                      |
+| ------------------ | -------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Ruby unit/ctrl/int | `bin/rails test`                             | Covered by `bin/ci`                                             | Adopted baseline.                                                             |
+| Rails system       | Not adopted                                  | Not gated                                                       | No `test/system` directory exists and `config/ci.rb` has no system-test step. |
+| JavaScript checks  | `bun run check`                              | `bin/ci`; format, lint, typecheck in `.github/workflows/ci.yml` | Adopted baseline.                                                             |
+| JavaScript tests   | `bun run test`                               | `bun run test:coverage` in `.github/workflows/ci.yml`           | Adopted baseline; keep expanding behavior-specific coverage.                  |
+| API contracts      | Rails tests with selective `committee-rails` | Covered when Rails tests exercise schema validation             | Adopted selectively; no Rswag dependency.                                     |
+| Browser E2E        | Not adopted                                  | Not gated                                                       | Deferred until a named cross-browser release flow needs it.                   |
+| Performance/load   | Not adopted                                  | Not gated                                                       | Deferred until load targets and an execution environment are specified.       |
 
 ---
 

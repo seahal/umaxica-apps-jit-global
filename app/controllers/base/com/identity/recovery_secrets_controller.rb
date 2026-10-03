@@ -17,6 +17,8 @@ module Base
         before_action :authorize_secrets!, only: :show
         prepend_after_action :set_no_store_for_secret_credential_pages, only: :show
 
+        public
+
         def show
           response.headers["Referrer-Policy"] = "no-referrer"
           reveal = IdentityOneTimeReveal.consume!(

@@ -149,9 +149,11 @@ Browser --(HTTPS)--> Cloudflare edge --(QUIC tunnel)--> cloudflared (compose: cl
   share a Podman network. An Edge Worker reaches Rails through its Cloudflare Workers VPC Service
   binding and this tunnel, including `remote: true` binding behavior during local Worker
   development.
-- `core` never publishes a host port in the base `compose.yaml` — verified by
-  `test/unit/security/tunnel_origin_isolation_test.rb`. This is the actual security boundary:
-  nothing outside the compose project's private networks can reach Rails directly.
+- `core` never publishes a host port in the base `compose.yaml`. No test asserts this any longer:
+  `test/unit/security/tunnel_origin_isolation_test.rb` was removed, and Compose configuration is
+  verified by running it (`adr/no-test-suite-for-environment-construction.md`). This is the actual
+  security boundary: nothing outside the compose project's private networks can reach Rails
+  directly.
 - Headers Cloudflare's edge sets and the client cannot override: `CF-Connecting-IP`, `CF-Ray`,
   `CF-IPCountry`. Headers the client _can_ set and Cloudflare may append to (not replace) if already
   present: `X-Forwarded-For`.
@@ -163,8 +165,8 @@ Browser --(HTTPS)--> Cloudflare edge --(QUIC tunnel)--> cloudflared (compose: cl
   whether the immediate peer (`REMOTE_ADDR`) is itself a trusted proxy — it only strips proxy-hop
   IPs found _within_ the `X-Forwarded-For` chain. A request that reached Rails directly, bypassing
   `cloudflared`, could set an arbitrary `X-Forwarded-For` and have it trusted regardless of
-  `trusted_proxies` value. See `test/unit/security/tunnel_origin_isolation_test.rb` for the
-  reproducible proof (no live infrastructure required). **The real control is network isolation**
+  `trusted_proxies` value. The removed `test/unit/security/tunnel_origin_isolation_test.rb` held the
+  reproducible proof; it is no longer in the suite. **The real control is network isolation**
   (previous paragraph), not the `trusted_proxies` value itself.
 - **Decision**: do not widen `trusted_proxies` to Cloudflare's public IP ranges — there is no
   evidence Rails ever receives a connection directly from those addresses (it only ever sees

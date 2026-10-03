@@ -9,8 +9,8 @@ the required host configuration.
 
 - Install the Dev Containers extension.
 - Open the repository folder and run **Reopen in Container**.
-- `postCreateCommand` runs `bundle install && pnpm install`. Wait for that command to finish in the
-  Dev Containers log before starting tasks.
+- `devcontainer.json` declares no `postCreateCommand`. Run `bundle install` and
+  `bun install --frozen-lockfile` inside the container before starting tasks.
 
 ## IntelliJ IDEA (Gateway)
 

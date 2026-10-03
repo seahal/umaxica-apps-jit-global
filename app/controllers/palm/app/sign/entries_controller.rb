@@ -79,7 +79,8 @@ module Palm
         def valid_native_request?(query)
           return false unless OidcClientStoresStaticClientStore::NATIVE_COMPLETION_URIS.key?(query[:client_id])
           return false if params.key?(:code_verifier)
-          return false unless query[:code_challenge].is_a?(String) && query[:code_challenge].match?(/\A[A-Za-z0-9_-]{43}\z/)
+          return false unless query[:code_challenge].is_a?(String) &&
+            query[:code_challenge].match?(/\A[A-Za-z0-9_-]{43}\z/)
 
           %i(state nonce).all? do |key|
             query[key].is_a?(String) && query[key].bytesize.between?(1, CONTINUITY_MAX_LENGTH)

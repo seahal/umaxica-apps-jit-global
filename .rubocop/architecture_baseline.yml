@@ -156,7 +156,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/app/settings_controller.rb: 1
   app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb: 2
   app/controllers/auth/app/sign/in/challenge/totps_controller.rb: 3
-  app/controllers/auth/app/sign/in/check/cancellations_controller.rb: 3
   app/controllers/auth/app/sign/in/checks_controller.rb: 1
   app/controllers/auth/app/sign/in/emails_controller.rb: 4
   app/controllers/auth/app/sign/in/guards_controller.rb: 1
@@ -203,7 +202,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/com/settings/removals_controller.rb: 1
   app/controllers/auth/com/settings_controller.rb: 1
   app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb: 2
-  app/controllers/auth/com/sign/in/check/cancellations_controller.rb: 3
   app/controllers/auth/com/sign/in/checks_controller.rb: 1
   app/controllers/auth/com/sign/in/emails_controller.rb: 5
   app/controllers/auth/com/sign/in/guards_controller.rb: 1
@@ -250,7 +248,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/auth/org/settings/passkeys_controller.rb: 7
   app/controllers/auth/org/settings/removals_controller.rb: 1
   app/controllers/auth/org/settings_controller.rb: 1
-  app/controllers/auth/org/sign/in/check/cancellations_controller.rb: 3
   app/controllers/auth/org/sign/in/checks_controller.rb: 1
   app/controllers/auth/org/sign/in/emergency/passkey/options_controller.rb: 1
   app/controllers/auth/org/sign/in/emergency/passkey/verifications_controller.rb: 1
@@ -475,7 +472,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/concerns/health_check_rendering.rb: 3
   app/controllers/concerns/oauth_authorize_rate_limit.rb: 1
   app/controllers/concerns/oidc_callback.rb: 1
-  app/controllers/concerns/oidc_rp_logout.rb: 1
   app/controllers/concerns/oidc_sso_initiator.rb: 2
   app/controllers/concerns/passkey_sign_in_flow.rb: 2
   app/controllers/concerns/preference_core.rb: 13
@@ -522,10 +518,8 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/app/healths_controller.rb: 1
   app/controllers/core/app/oidc/backchannel/logouts_controller.rb: 1
   app/controllers/core/app/revisions_controller.rb: 1
-  app/controllers/core/app/robots_controller.rb: 1
   app/controllers/core/app/roots_controller.rb: 1
   app/controllers/core/app/sign/outs_controller.rb: 4
-  app/controllers/core/app/sitemaps_controller.rb: 1
   app/controllers/core/com/api/v0/healths_controller.rb: 1
   app/controllers/core/com/api/v0/revisions_controller.rb: 1
   app/controllers/core/com/api/v0/sessions_controller.rb: 1
@@ -538,10 +532,8 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/com/healths_controller.rb: 1
   app/controllers/core/com/oidc/backchannel/logouts_controller.rb: 1
   app/controllers/core/com/revisions_controller.rb: 1
-  app/controllers/core/com/robots_controller.rb: 1
   app/controllers/core/com/roots_controller.rb: 1
   app/controllers/core/com/sign/outs_controller.rb: 4
-  app/controllers/core/com/sitemaps_controller.rb: 1
   app/controllers/core/dev/api/v0/healths_controller.rb: 1
   app/controllers/core/dev/api/v0/revisions_controller.rb: 1
   app/controllers/core/dev/csp_violation_reports_controller.rb: 1
@@ -565,7 +557,6 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/org/api/v0/sessions_controller.rb: 1
   app/controllers/core/org/api/v0/token/refreshes_controller.rb: 1
   app/controllers/core/org/application_controller.rb: 4
-  app/controllers/core/org/configurations_controller.rb: 1
   app/controllers/core/org/csp_violation_reports_controller.rb: 1
   app/controllers/core/org/health/livenesses_controller.rb: 1
   app/controllers/core/org/health/readinesses_controller.rb: 1
@@ -573,10 +564,8 @@ Umaxica/ExplicitMethodVisibility:
   app/controllers/core/org/healths_controller.rb: 1
   app/controllers/core/org/oidc/backchannel/logouts_controller.rb: 1
   app/controllers/core/org/revisions_controller.rb: 1
-  app/controllers/core/org/robots_controller.rb: 1
   app/controllers/core/org/roots_controller.rb: 1
   app/controllers/core/org/sign/outs_controller.rb: 4
-  app/controllers/core/org/sitemaps_controller.rb: 1
   app/controllers/docs/app/api/v0/entries_controller.rb: 2
   app/controllers/docs/app/api/v0/healths_controller.rb: 1
   app/controllers/docs/app/api/v0/revisions_controller.rb: 1

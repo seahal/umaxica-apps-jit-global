@@ -167,7 +167,8 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
 
     threads =
       ["Concurrent One", "Concurrent Two"].map do |moniker|
-        Thread.new do
+        # Independent workers are required to exercise the concurrent database boundary.
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
           ready << true
           start.pop
           AvatarRecord.connection_pool.with_connection do |connection|

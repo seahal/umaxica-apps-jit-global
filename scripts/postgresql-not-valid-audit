@@ -101,7 +101,8 @@ rows.each do |row|
     quoted = child.map { |column| PG::Connection.quote_ident(column) }
     nonnull = quoted.map { |column| "c.#{column} IS NOT NULL" }.join(" AND ")
     allnull = quoted.map { |column| "c.#{column} IS NULL" }.join(" AND ")
-    matching = child.zip(parent).map do |left, right|
+    pairs = child.zip(parent)
+    matching = pairs.map! do |left, right|
       "c.#{PG::Connection.quote_ident(left)} = p.#{PG::Connection.quote_ident(right)}"
     end.join(" AND ")
     missing = "NOT EXISTS(SELECT 1 FROM #{row.fetch("parent_table")} p WHERE #{matching})"

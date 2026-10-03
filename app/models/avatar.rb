@@ -59,9 +59,11 @@ class Avatar < AvatarRecord
            dependent: :restrict_with_error
   has_many :handles, through: :handle_assignments
   has_many :avatar_monikers, dependent: :destroy
+  # The full avatar_monikers association owns destruction; this is a current-row view.
   has_one :current_avatar_moniker,
           -> { where("valid_to = 'infinity'::timestamp with time zone") },
           class_name: "AvatarMoniker",
+          dependent: nil,
           inverse_of: :avatar
   has_many :avatar_memberships, dependent: :restrict_with_error
   has_many :avatar_ownership_periods, dependent: :restrict_with_error
@@ -69,12 +71,14 @@ class Avatar < AvatarRecord
            class_name: "AvatarOwnershipTransfer",
            dependent: :restrict_with_error,
            inverse_of: :avatar
+  # The full avatar_ownership_periods association owns retention; this view adds no deletion callback.
   has_one :current_ownership_period,
           -> {
             where("valid_to = 'infinity'::timestamp with time zone")
               .where(avatar_ownership_status_id: AvatarOwnershipStatus::ACTIVE)
           },
           class_name: "AvatarOwnershipPeriod",
+          dependent: nil,
           inverse_of: :avatar
 
   # Historical assignment rows are retained for data compatibility and cleanup only.

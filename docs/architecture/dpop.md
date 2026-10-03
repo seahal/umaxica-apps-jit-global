@@ -41,14 +41,14 @@ of the private key by signing a DPoP proof JWT on each request.
 
 ## Implementation
 
-Server-side DPoP support lives in `app/services/dpop/`:
+Server-side DPoP support lives in flat `dpop_*.rb` files under `app/lib/` and `app/services/`:
 
 | File                                            | Purpose                                               |
 | ----------------------------------------------- | ----------------------------------------------------- |
-| `app/services/dpop/proof_validator.rb`          | Core DPoP proof JWT validation (RFC 9449 Section 4.3) |
-| `app/services/dpop/request_verifier.rb`         | Per-request DPoP verification orchestrator            |
-| `app/services/dpop/jti_replay_guard.rb`         | RDB-backed JTI deduplication (stateful paths only)    |
-| `lib/jit/security/jwt/thumbprint_calculator.rb` | RFC 7638 JWK Thumbprint and `ath` computation         |
+| `app/lib/dpop_proof_verifier.rb`                | Core DPoP proof JWT validation (RFC 9449 Section 4.3) |
+| `app/services/dpop_request_verifier.rb`         | Per-request DPoP verification orchestrator            |
+| `app/services/dpop_jti_replay_guard.rb`         | RDB-backed JTI deduplication (stateful paths only)    |
+| `lib/jit_security_jwt_thumbprint_calculator.rb` | RFC 7638 JWK Thumbprint and `ath` computation         |
 
 Token issuance controllers (`Sign::App::TokensController`, `Sign::Org::TokensController`,
 `Sign::Com::TokensController`) forward the `DPoP` proof header, request URI, and request method to

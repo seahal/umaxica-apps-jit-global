@@ -37,7 +37,7 @@ module Palm
       # Palm renders regional HTML, so it owes the same `ri` contract as every other HTML surface:
       # a GET/HEAD without a valid region is redirected to the canonical URL that carries one, and
       # `PreferenceGlobal#default_url_options` then propagates it into every generated link.
-      # See docs/architecture/preference.md and test/support/ri_routing_contract.rb.
+      # See docs/architecture/preference.md and test/unit/security/ri_routing_contract_test.rb.
       before_action :verify_jump_return_rt!, if: :jump_return_rt_request?
       before_action :resolve_param_context
       before_action :set_region

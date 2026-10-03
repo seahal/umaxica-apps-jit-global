@@ -18,7 +18,7 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 
 - Rails application located at `/home/mslo/ghq/github.com/seahal/umaxica-app-jit`
 - Namespaced controllers for `Top`, `Sign`, `Help`, `Docs`, `News`, `Bff`, and `Api` surfaces
-- Turbo/React front-end with pnpm-managed tooling (`src/**`)
+- Turbo/React front-end with Bun-managed tooling (`src/**`)
 - Multi-database Active Record setup (`app_principal`, `org_ticket`, `com_setting`, etc.)
 - Supporting infrastructure: PostgreSQL primary/replica pairs, Valkey, Grafana/Loki/Tempo, and an
   opt-in RustFS object-storage profile for local integration checks; Shrine storage is configured
@@ -43,11 +43,11 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 2. Protect user data by routing each data class to its own PostgreSQL cluster and encrypting
    sensitive columns.
 3. Deliver modern identity experiences (passkeys, OTP, OAuth, JWT) and customer-support tooling
-   while keeping UX cohesive through pnpm-managed JS tooling and Vite-managed CSS.
+   while keeping UX cohesive through Bun-managed JS tooling and Vite-managed CSS.
 4. Operate reliably through strong observability (OpenTelemetry → Tempo, logs → Loki, dashboards →
    Grafana), rate limiting, and bot mitigation (Cloudflare Turnstile).
 5. Keep developer ergonomics high via Compose-based infrastructure, Foreman-managed processes, and
-   pnpm + Tailwind-driven assets.
+   Bun + Tailwind-driven assets.
 
 ### 2.2 Principles
 
@@ -60,13 +60,13 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 - **Observability-first**: All HTTP, rate-limit store, and ActionMailer operations are instrumented;
   `/health` (`text/plain`) and `/api/v0/health.json` exist for every host
   (`docs/reference/health-endpoints.md`).
-- **Composable tooling**: pnpm-managed JavaScript tooling, Vite-backed CSS entrypoints, Foreman +
+- **Composable tooling**: Bun-managed JavaScript tooling, Vite-backed CSS entrypoints, Foreman +
   Docker Compose for orchestration, GitHub Actions for CI.
 
 ### 2.3 Constraints
 
-- Ruby 3.4.7 / Rails 8.x
-- pnpm 12.0.0 / Node 24.19.0 (Active LTS) for JavaScript tooling (Vite-backed)
+- Ruby 4.0.7 / Rails 8.x
+- Bun 1.4.0 / Node 24.20.0 for JavaScript tooling (Vite-backed)
 - PostgreSQL 18 primaries/replicas per logical database
 - Valkey for the application cache and for distributed rate-limit counters, on two separate services
 - Cloudflare/ Fastly handle TLS and CDN duties
@@ -237,12 +237,12 @@ Sensitive columns leverage Active Record encryption.
   RustFS; its devcontainer override publishes the S3 API and console on loopback ports `9000` and
   `9001` by default.
 - `bin/dev` is the unified local entrypoint; it wraps `foreman start -f Procfile.dev` to orchestrate
-  Rails, Vite, and jobs. JavaScript tooling runs via Vite Plus when linting/formatting.
+  Rails, Vite, and jobs. JavaScript linting and formatting run through Bun scripts (oxlint, oxfmt).
 
 ### 6.2 CI/CD
 
-- GitHub Actions workflow (`integration.yml`) executes bundler install, `bin/rails test`, pnpm-based
-  lint/format (`pnpm run check`), RuboCop, ERB lint, Brakeman, Bundler Audit as configured by
+- GitHub Actions workflow (`ci.yml`) executes bundler install, `bin/rails test`, Bun-based
+  lint/format (`bun run check`), RuboCop, ERB lint, Brakeman, Bundler Audit as configured by
   `lefthook.yml`.
 - Deployment target (Cloud Run/Cloud Build + Fastly/Cloudflare) consumes container images or build
   artifacts; secrets injected per environment.
@@ -280,13 +280,13 @@ Sensitive columns leverage Active Record encryption.
 
 ## 8. External Interfaces
 
-| Interface      | Type          | Description                                                                                                                                                 |
-| -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health` (text), `/api/v0/health.json`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`. |
-| Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.                            |
-| SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                                          |
-| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound.    |
-| OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                                               |
+| Interface      | Type          | Description                                                                                                                                                                                                                        |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health` (text), `/api/v0/health.json`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`.                                                                        |
+| Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.                                                                                                   |
+| SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                                                                                                                 |
+| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound.                                                                           |
+| OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                                                                                                                      |
 | Object storage | S3-compatible | Shrine selects a boundary-specific bucket in development/staging and AWS S3 in production. Objects are private; the Avatar user-facing delivery API/CDN namespace is undefined. RustFS remains an opt-in local integration target. |
 
 ---
@@ -307,7 +307,7 @@ Sensitive columns leverage Active Record encryption.
 - **Rails vs. edge micro-apps**: consolidates duplicated auth/contact logic and simplifies
   compliance (single codebase, single observability stack).
 - **Multi-database**: isolates PII domains and supports region-specific scaling (read replicas).
-- **pnpm + Turbo**: keeps JS modern through lightweight tooling and aligns browser CSS with the
+- **Bun + Turbo**: keeps JS modern through lightweight tooling and aligns browser CSS with the
   Vite-backed frontend pipeline.
 - **Compose-based infrastructure**: developers get a self-contained environment (Postgres, Valkey,
   observability) without external services.

@@ -13,6 +13,8 @@ module Base
 
           before_action :authenticate_client!
 
+          public
+
           def show
             authorize!(current_client, to: :show?)
             render inertia: true, props: {

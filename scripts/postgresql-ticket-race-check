@@ -5,6 +5,7 @@
 require "pg"
 require "securerandom"
 require "timeout"
+require "active_support/core_ext/string/filters"
 
 surface = ARGV.fetch(0)
 prefix, actor_column, token_prefix, kind_id = {
@@ -45,14 +46,15 @@ begin
   c1.exec("BEGIN")
   c1.exec_params("INSERT INTO #{prefix}_token_kinds (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", [kind_id])
   [[70_001, "a"], [70_001, "b"], [70_001, "c"], [70_001, "d"]].each do |actor, label|
-    id = c1.exec_params(<<~SQL, ["r#{run_id}#{label}", actor]).first.fetch("id").to_i
+    id = c1.exec_params(<<~SQL.squish, ["r#{run_id}#{label}", actor]).first.fetch("id").to_i
       INSERT INTO #{session_table} (public_id, #{actor_column}, created_at, updated_at)
       VALUES ($1,$2,clock_timestamp(),clock_timestamp()) RETURNING id
     SQL
     created_sessions << id
   end
   2.times do |index|
-    id = c1.exec_params(<<~SQL, ["r#{run_id}t#{index}", 70_001, created_sessions[0], kind_id]).first.fetch("id").to_i
+    params = ["r#{run_id}t#{index}", 70_001, created_sessions[0], kind_id]
+    id = c1.exec_params(<<~SQL.squish, params).first.fetch("id").to_i
       INSERT INTO #{token_table} (public_id, #{actor_column}, device_session_id,
         #{token_prefix}_kind_id, created_at, updated_at)
       VALUES ($1,$2,$3,$4,clock_timestamp(),clock_timestamp()) RETURNING id
@@ -80,7 +82,8 @@ begin
     lambda do |sql, params, resolve:|
       c2.exec("BEGIN")
       worker =
-        Thread.new do
+        # Independent workers are required to exercise the concurrent database boundary.
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
           begin
             c2.exec_params(sql, params)
             c2.exec("COMMIT")
@@ -120,7 +123,8 @@ begin
   # A delete rolled back after the FK reader blocks allows the token creation to complete.
   c1.exec("BEGIN")
   c1.exec_params("DELETE FROM #{session_table} WHERE id=$1", [created_sessions[1]])
-  result = run_competing.call(<<~SQL, ["r#{run_id}rollback", 70_001, created_sessions[1], kind_id], resolve: "ROLLBACK")
+  params = ["r#{run_id}rollback", 70_001, created_sessions[1], kind_id]
+  result = run_competing.call(<<~SQL.squish, params, resolve: "ROLLBACK")
     INSERT INTO #{token_table} (public_id, #{actor_column}, device_session_id,
       #{token_prefix}_kind_id, created_at, updated_at)
     VALUES ($1,$2,$3,$4,clock_timestamp(),clock_timestamp())
@@ -130,7 +134,8 @@ begin
   # A committed parent deletion makes the waiting token insertion fail at the named FK.
   c1.exec("BEGIN")
   c1.exec_params("DELETE FROM #{session_table} WHERE id=$1", [created_sessions[2]])
-  result = run_competing.call(<<~SQL, ["r#{run_id}commit", 70_001, created_sessions[2], kind_id], resolve: "COMMIT")
+  params = ["r#{run_id}commit", 70_001, created_sessions[2], kind_id]
+  result = run_competing.call(<<~SQL.squish, params, resolve: "COMMIT")
     INSERT INTO #{token_table} (public_id, #{actor_column}, device_session_id,
       #{token_prefix}_kind_id, created_at, updated_at)
     VALUES ($1,$2,$3,$4,clock_timestamp(),clock_timestamp())

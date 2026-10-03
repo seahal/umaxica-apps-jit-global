@@ -2,16 +2,16 @@
 
 > **Current-contract supersession (2026-09-23):** This profile predates the accepted physical
 > authority relocation. Its Acme issuer vocabulary and discovery descriptions are retained for
-> protocol-history context only. The active Rails OIDC authority is Base, Auth is ceremony-only,
-> and the current client/route contract is defined by
-> `adr/base-auth-ceremony-and-seven-rp-boundary.md` and the live Base route registry. Do not use
-> this document to restore an Acme route family or a retired shared browser RP.
+> protocol-history context only. The active Rails OIDC authority is Base, Auth is ceremony-only, and
+> the current client/route contract is defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md`
+> and the live Base route registry. Do not use this document to restore an Acme route family or a
+> retired shared browser RP.
 
 Acme (`https://www.umaxica.app`, `.com`, `.org`) is the only IdP / Authorization Server. Sign / Core
 / Base / Palm are relying parties and hold no IdP authority. This document records the intentional,
 non-default choices in Acme's published OIDC metadata so reviewers do not mistake them for gaps.
 
-Source of truth: `app/services/oidc_discovery_document.rb`, `app/services/oidc_issuer.rb`.
+Source of truth: `app/values/oidc_discovery_document.rb`, `app/values/oidc_issuer.rb`.
 
 ## ES384-only is a private profile, not strict OIDC conformance
 

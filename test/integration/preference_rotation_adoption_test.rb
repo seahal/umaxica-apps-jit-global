@@ -27,7 +27,8 @@ class PreferenceRotationAdoptionTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_predicate cookies[PreferenceCookieName.refresh(surface: :app)], :present?
 
-    refresh_cookie = "#{PreferenceCookieName.refresh(surface: :app)}=#{cookies[PreferenceCookieName.refresh(surface: :app)]}"
+    refresh_name = PreferenceCookieName.refresh(surface: :app)
+    refresh_cookie = "#{refresh_name}=#{cookies[refresh_name]}"
     headers = as_user_headers(user, host: host)
     # The authentication harness replaces the Cookie header, so the preference refresh cookie is
     # carried alongside the access cookie explicitly. No preference access cookie is sent.

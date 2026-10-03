@@ -9,6 +9,13 @@ paths: src/**/*.css, src/**/*.tsx
 
 # Design System
 
+> Current implementation (2026-10-03): `src/styles.css` does not exist. Token values live in
+> `src/styles/theme.css` as `--ui-*` custom properties published as Tailwind theme tokens
+> (`bg-surface`, `text-fg`, `border-line`, `text-danger`), not as the shadcn/ui role names used
+> below. `theme.css` also sets `--font-sans` from `--ui-font-sans`, and defines neither chart series
+> colors nor a `--radius` scale. Read the rules below as usage guidance and take token names and
+> values from `theme.css`.
+
 ## Overview
 
 Token values are defined in `src/styles.css`: shadcn/ui's neutral base, kept achromatic for every

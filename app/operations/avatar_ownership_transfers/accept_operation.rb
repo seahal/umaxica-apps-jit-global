@@ -44,40 +44,7 @@ module AvatarOwnershipTransfers
             next
           end
 
-          owner = current_owner!(avatar, lock: true)
-          unless [owner.owner_surface, owner.owner_collective_public_id] ==
-              [transfer.from_owner_surface, transfer.from_owner_collective_public_id]
-            raise InvalidTransfer, "Avatar owner changed after transfer request"
-          end
-          unless transfer.to_owner_surface == surface && transfer.to_owner_collective_public_id.present?
-            raise InvalidTransfer, "transfer target owner changed"
-          end
-
-          active = AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
-          inactive = AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::INACTIVE)
-          owner.update!(valid_to: accepted_at, avatar_ownership_status: inactive)
-          AvatarOwnershipPeriod.create!(
-            avatar: avatar,
-            owner_organization_id: transfer.to_owner_collective_public_id,
-            owner_surface: transfer.to_owner_surface,
-            owner_collective_public_id: transfer.to_owner_collective_public_id,
-            avatar_ownership_status: active,
-            valid_from: accepted_at,
-          )
-
-          remove_group_memberships_with_different_owner!(
-            avatar: avatar,
-            owner_surface: transfer.to_owner_surface,
-            owner_collective_public_id: transfer.to_owner_collective_public_id,
-            at: accepted_at,
-          )
-
-          transfer.update!(
-            state: "accepted",
-            accepted_at: accepted_at,
-            accept_actor_surface: surface,
-            accept_actor_public_id: subject_public_id,
-          )
+          accept_transfer!(avatar, transfer, accepted_at)
           result = transfer
         end
       end
@@ -89,6 +56,43 @@ module AvatarOwnershipTransfers
     private
 
     attr_reader :actor, :surface, :subject_public_id, :transfer_public_id
+
+    def accept_transfer!(avatar, transfer, accepted_at)
+      owner = current_owner!(avatar, lock: true)
+      unless [owner.owner_surface, owner.owner_collective_public_id] ==
+          [transfer.from_owner_surface, transfer.from_owner_collective_public_id]
+        raise InvalidTransfer, "Avatar owner changed after transfer request"
+      end
+      unless transfer.to_owner_surface == surface && transfer.to_owner_collective_public_id.present?
+        raise InvalidTransfer, "transfer target owner changed"
+      end
+
+      active = AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::ACTIVE)
+      inactive = AvatarOwnershipStatus.find_or_create_by!(id: AvatarOwnershipStatus::INACTIVE)
+      owner.update!(valid_to: accepted_at, avatar_ownership_status: inactive)
+      AvatarOwnershipPeriod.create!(
+        avatar: avatar,
+        owner_organization_id: transfer.to_owner_collective_public_id,
+        owner_surface: transfer.to_owner_surface,
+        owner_collective_public_id: transfer.to_owner_collective_public_id,
+        avatar_ownership_status: active,
+        valid_from: accepted_at,
+      )
+
+      remove_group_memberships_with_different_owner!(
+        avatar: avatar,
+        owner_surface: transfer.to_owner_surface,
+        owner_collective_public_id: transfer.to_owner_collective_public_id,
+        at: accepted_at,
+      )
+
+      transfer.update!(
+        state: "accepted",
+        accepted_at: accepted_at,
+        accept_actor_surface: surface,
+        accept_actor_public_id: subject_public_id,
+      )
+    end
 
     def assert_same_transfer!(locked, observed)
       attributes = %w(

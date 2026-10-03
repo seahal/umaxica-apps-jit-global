@@ -138,8 +138,9 @@ profile:
 
 `cloudflare-tunnel-edge` merges `cloudflare-tunnel`'s definition through a YAML anchor, so the two
 differ only in the edge profile and token; the pinned release, the QUIC command, the `frontend`
-attachment, and the crash-loop caps are shared by construction.
-`test/tooling/compose_local_override_optional_test.rb` is the guard.
+attachment, and the crash-loop caps are shared by construction. No test guards this any longer:
+`test/tooling/compose_local_override_optional_test.rb` was removed, and Compose configuration is
+verified by running it (`adr/no-test-suite-for-environment-construction.md`).
 
 Each service reads its tunnel's scoped connector token from the repository-local `.env` and passes
 it to cloudflared as `TUNNEL_TOKEN`. Neither is an account API key. Each authorizes a connector to

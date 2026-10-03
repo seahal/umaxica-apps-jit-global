@@ -37,14 +37,7 @@ class GroupAvatarMembershipPolicy < ApplicationPolicy
     group_owner = group.current_ownership_period
     return false unless group_owner && group_owner.owner_surface == surface
 
-    if require_same_owner
-      return false unless avatar.is_a?(Avatar) && active_avatar?(avatar)
-
-      avatar_owner = avatar.current_ownership_period
-      return false unless avatar_owner
-      return false unless [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
-        [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
-    end
+    return false if require_same_owner && !same_active_avatar_owner?(avatar, group_owner)
 
     AvatarPermissionResolver.call(
       actor: user,
@@ -53,6 +46,16 @@ class GroupAvatarMembershipPolicy < ApplicationPolicy
       owner_collective_public_id: group_owner.owner_collective_public_id,
       permission: permission,
     )
+  end
+
+  def same_active_avatar_owner?(avatar, group_owner)
+    return false unless avatar.is_a?(Avatar) && active_avatar?(avatar)
+
+    avatar_owner = avatar.current_ownership_period
+    return false unless avatar_owner
+
+    [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
+      [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
   end
 
   def active_avatar?(avatar)

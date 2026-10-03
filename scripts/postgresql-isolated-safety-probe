@@ -9,7 +9,10 @@ guard = Umaxica::TestEnvironment::DatabaseSafety
 configs = ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
 raise RuntimeError, "isolated acceptance failed" unless guard.verify!(configurations: configs)
 raise RuntimeError, "unexpected role count" unless configs.length == 38
-raise RuntimeError, "unexpected database count" unless configs.map(&:database).uniq.length == 20
+
+databases = configs.map(&:database)
+databases.uniq!
+raise RuntimeError, "unexpected database count" unless databases.length == 20
 
 rejections = {
   "shared database target" => [configs.map do |config|

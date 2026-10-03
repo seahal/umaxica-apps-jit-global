@@ -55,16 +55,15 @@ authorize :actor, through: :current_actor
 
 `app/policies/application_policy.rb` provides these policy helpers:
 
-| Method                                                                        | Meaning                                                                                                               |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `actor` / `user`                                                              | Authorization context and derived concrete resource                                                                   |
-| `record`                                                                      | Resource being authorized                                                                                             |
-| `owner?`                                                                      | Whether `user` owns `record`, using Client `user_id`, Operator `staff_id`, Visitor `visitor_id`, or resource identity |
-| `operator?` / `manager?` / `editor?` / `contributor?` / `viewer?`             | Organization-scoped role checks                                                                                       |
-| `operator_or_manager?` / `can_edit?` / `can_view?` / `can_contribute?`        | Composite role checks                                                                                                 |
-| `has_scope?(scope)`                                                           | JWT scope check based on the current token's `scp` claim                                                              |
-| `domain_app?` / `domain_org?` / `domain_com?` / `domain_permitted?(*domains)` | Surface checks based on the JWT `aud` claim                                                                           |
-| `current_token`                                                               | `Actor.authz.token_claims`                                                                                            |
+| Method                                                                               | Meaning                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actor` / `user`                                                                     | Authorization context and derived concrete resource                                                                                                                                                                                                                       |
+| `record`                                                                             | Resource being authorized                                                                                                                                                                                                                                                 |
+| `owner?`                                                                             | Whether `user` owns `record`, using Client `user_id`, Operator `staff_id`, Visitor `visitor_id`, or resource identity                                                                                                                                                     |
+| `operator_capability?(capability)`                                                   | Whether `user` is an Operator holding the given `OperatorCapabilityGrant` capability in force                                                                                                                                                                             |
+| `operator?` / `operator_or_manager?` / `can_edit?` / `can_view?` / `can_contribute?` | Organization-role helpers. They delegate to `has_role?`, `operator_or_manager?`, `can_edit?`, `can_view?`, and `can_contribute?` on `user`, which no actor model currently defines, so calling them with an actor raises `NoMethodError`. Do not use them in new policies |
+| `authentication_context`                                                             | Authentication context (normal, emergency) read from the signed access token; drives the capability pre-check                                                                                                                                                             |
+| `current_token`                                                                      | `Actor.authz.token_claims`                                                                                                                                                                                                                                                |
 
 The default `index?`, `show?`, `create?`, `update?`, and `destroy?` predicates all return false.
 `alias_rule` maps `edit?` to `update?` and `new?` to `create?`.
@@ -138,10 +137,10 @@ A concrete record may also be passed directly, such as `authorize!(current_clien
 ### Applying a Scope
 
 Use `authorized_scope` to apply `relation_scope` to a collection. For example,
-`app/controllers/sign/app/settings/passkeys_controller.rb` uses:
+`app/controllers/base/app/groups_controller.rb` uses:
 
 ```ruby
-@passkeys = authorized_scope(current_client.client_passkeys).order(created_at: :desc)
+groups = authorized_scope(AvatarGroup.all).order(:created_at, :id)
 ```
 
 ## Authorization Failure Behavior

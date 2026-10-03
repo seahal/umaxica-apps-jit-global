@@ -56,7 +56,9 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
 
     SignUpTermination.stub(
       :call, ->(cycle:, **kwargs) {
-               raise ActiveRecord::StatementInvalid, "ticket database unavailable" if cycle.id == failing.id && cycle.is_a?(ClientSignUpFlow)
+               if cycle.id == failing.id && cycle.is_a?(ClientSignUpFlow)
+                 raise ActiveRecord::StatementInvalid, "ticket database unavailable"
+               end
 
                real_call.call(cycle: cycle, **kwargs)
              },

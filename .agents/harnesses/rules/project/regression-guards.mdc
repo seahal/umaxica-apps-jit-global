@@ -35,7 +35,7 @@ an allowlist edit as a reviewed boundary change. See
 
 ## Bare controller guard
 
-`test/controllers/apex/app/bare_controller_test.rb` pins the set of controllers inheriting
+`test/controllers/base/app/bare_controller_test.rb` pins the set of controllers inheriting
 `Apex::App::BareController` (a no-op `public_strict!` boundary). A new descendant fails the suite
 until it is confirmed to be a public, self-defending endpoint. See `controller-inheritance`.
 

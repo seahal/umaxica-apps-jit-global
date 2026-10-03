@@ -41,12 +41,7 @@ module GroupAvatarMemberships
           group = AvatarGroup.lock.find(current_membership.avatar_group_id)
           avatar = Avatar.lock.find(current_membership.avatar_id)
           locked_membership = GroupAvatarMembership.lock.find(membership.id)
-          unless locked_membership.avatar_group_id == group.id && locked_membership.avatar_id == avatar.id
-            raise ArgumentError, "membership ownership changed while reordering"
-          end
-          raise ArgumentError, "membership is not active" unless locked_membership.active?
-          raise ArgumentError, "group is not active" unless group.active?
-          raise ArgumentError, "position must be non-negative" if position.negative?
+          assert_reorderable!(locked_membership, group, avatar)
 
           authorize_same_owner!(group, avatar, observed_group_owner)
 
@@ -59,6 +54,15 @@ module GroupAvatarMemberships
     private
 
     attr_reader :membership, :position, :actor, :surface, :subject_public_id, :account_public_id
+
+    def assert_reorderable!(locked_membership, group, avatar)
+      unless locked_membership.avatar_group_id == group.id && locked_membership.avatar_id == avatar.id
+        raise ArgumentError, "membership ownership changed while reordering"
+      end
+      raise ArgumentError, "membership is not active" unless locked_membership.active?
+      raise ArgumentError, "group is not active" unless group.active?
+      raise ArgumentError, "position must be non-negative" if position.negative?
+    end
 
     def authorize_same_owner!(group, avatar, observed_group_owner)
       unless %w(app org).include?(surface) && account_public_id.present? &&

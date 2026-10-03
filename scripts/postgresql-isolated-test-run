@@ -6,11 +6,11 @@ require "pg"
 require "json"
 require "securerandom"
 
-settings = File.readlines(".env.local", chomp: true).filter_map do |line|
+settings = File.foreach(".env.local", chomp: true).filter_map do |line|
   match = line.match(/\A([A-Z][A-Z0-9_]*)=(.*)\z/)
   match && [match[1], match[2].sub(/\A["']/, "").sub(/["']\z/, "")]
 end.to_h
-example_hosts = File.readlines(".env.devcontainer.example", chomp: true).filter_map do |line|
+example_hosts = File.foreach(".env.devcontainer.example", chomp: true).filter_map do |line|
   match = line.match(/\A((?:PUBLIC|PRIVATE)_[A-Z][A-Z0-9_]*)=(.*)\z/)
   match && [match[1], match[2].sub(/\A["']/, "").sub(/["']\z/, "")]
 end.to_h
@@ -19,10 +19,12 @@ port = Integer(settings.fetch("POSTGRESQL_PORT", "5432"), 10)
 user = settings.fetch("POSTGRESQL_USER")
 password = settings.fetch("POSTGRESQL_PASSWORD")
 run_id = "20260924"
-logical = Dir.glob("db/*structure.sql").map do |path|
-  file = File.basename(path)
-  (file == "structure.sql") ? "primary" : file.delete_suffix("_structure.sql")
-end.sort
+logical =
+  Dir.glob("db/*structure.sql").map do |path|
+    file = File.basename(path)
+    (file == "structure.sql") ? "primary" : file.delete_suffix("_structure.sql")
+  end
+logical.sort!
 raise RuntimeError, "expected 20 Global logical databases" unless logical.length == 20
 
 names = logical.map { |name| "codex_integrity_#{run_id}_#{name}" }

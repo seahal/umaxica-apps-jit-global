@@ -14,8 +14,8 @@ client/redirect-host windows in that order. Each counter result must be a positi
 at or below the configured inclusive maximum continues; a count above it returns HTTP 429 and stops
 later checks. A missing or malformed counter result, or an explicit Valkey availability/operation
 error, returns HTTP 503 and does not continue authorization. There is no process-local or alternate
-backend fallback. Operational failures use the `oidc.authorize.rate_limit.backend_failure` log event;
-the exception message and counter value are not logged.
+backend fallback. Operational failures use the `oidc.authorize.rate_limit.backend_failure` log
+event; the exception message and counter value are not logged.
 
 The current limits are owned by `RateLimitProfiles.oauth_authorize`; this document does not create a
 second numeric policy source or a new alert threshold.
@@ -289,8 +289,8 @@ pages, so this row remains a target until a change flow is implemented.
 | event or control              | subject | 1 sec |   1 min |  1 hour | 1 day | 1 week | 1 month | 1 year | all time | counter source | implementation | source                                                                                                                      |
 | ----------------------------- | ------- | ----: | ------: | ------: | ----: | -----: | ------: | -----: | -------: | -------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | default web request limit     | ip      |  1e18 |     300 |    1e18 |  1e18 |   1e18 |    1e18 |   1e18 |     1e18 | valkey         | implemented    | `app/controllers/{acme,core,sign}/*/application_controller.rb` (`default_web`)                                              |
-| telephone verification create | ip      |  1e18 |       5 |    1e18 |  1e18 |   1e18 |    1e18 |   1e18 |     1e18 | valkey         | implemented    | `app/controllers/concerns/sign/telephone_registrable.rb`, `app/controllers/concerns/sign/operator_telephone_registrable.rb` |
-| sign-in OTP resend            | target  |  1e18 | dynamic | dynamic |  1e18 |   1e18 |    1e18 |   1e18 |     1e18 | occurrence     | implemented    | `app/services/sign/in/otp_resend_policy.rb`                                                                                 |
+| telephone verification create | ip      |  1e18 |       5 |    1e18 |  1e18 |   1e18 |    1e18 |   1e18 |     1e18 | valkey         | implemented    | `app/controllers/concerns/sign_telephone_registrable.rb`, `app/controllers/concerns/sign_operator_telephone_registrable.rb` |
+| sign-in OTP resend            | target  |  1e18 | dynamic | dynamic |  1e18 |   1e18 |    1e18 |   1e18 |     1e18 | occurrence     | implemented    | `app/policies/sign_in_otp_resend_policy.rb`                                                                                 |
 
 `dynamic` means the implementation uses recent event history and exponential cooldown instead of a
 single fixed count for that window.

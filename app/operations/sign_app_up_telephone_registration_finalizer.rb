@@ -10,7 +10,7 @@
 # and account creation only happen here, in one transaction, after the
 # required passkey exists.
 #
-# See adr/sign-up-authentication-handoff-and-social-pt.md (telephone
+# See adr/sign-up-authentication-handoff-and-social-rt.md (telephone
 # finalization is durable only after required Sign Up setup succeeds).
 class SignAppUpTelephoneRegistrationFinalizer
   Result = Data.define(:user)

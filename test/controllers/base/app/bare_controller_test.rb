@@ -25,7 +25,6 @@ module Base
         Base::App::Health::StartupsController
         Base::App::HealthsController
         Base::App::McpsController
-        Base::App::Oauth::JwksController
         Base::App::Oauth::RevocationsController
         Base::App::Oauth::UserinfosController
         Base::App::WellKnown::DiscoveriesController

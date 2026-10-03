@@ -74,28 +74,4 @@ class BranchCoverageBatch38ThresholdPushTest < ActiveSupport::TestCase
     assert_not AppleOnlyCredentialStatus.call(nil)
     assert_not AppleOnlyCredentialStatus.new(nil).call
   end
-
-  test "cancellations controller thin wrappers delegate" do
-    [
-      Auth::App::Sign::In::Check::CancellationsController,
-      Auth::Com::Sign::In::Check::CancellationsController,
-      Auth::Org::Sign::In::Check::CancellationsController,
-    ].each do |klass|
-      parent =
-        Module.new do
-          def show = :shown_super
-
-          def update = :updated_super
-
-          def destroy = :destroyed_super
-        end
-      # Prepend ancestor so `super` inside the thin wrappers resolves cleanly.
-      klass.prepend(parent) unless klass.ancestors.include?(parent)
-      controller = klass.allocate
-
-      assert_equal :destroyed_super, controller.create
-      assert_equal :shown_super, controller.show
-      assert_equal :updated_super, controller.update
-    end
-  end
 end

@@ -92,7 +92,8 @@ the gitignored repository-root `.env`, because `$UID` and `$GID` are bash builti
 exported variables and Compose cannot read them directly (see
 `docs/operations/development-credential-provisioning.md`). Global and Edge do not share a host
 Podman network; the Edge Worker uses Cloudflare Workers VPC to reach this tunnel.
-`postCreateCommand` then runs `bundle install && pnpm install`.
+`devcontainer.json` declares no `postCreateCommand`; run `bundle install` and
+`bun install --frozen-lockfile` by hand inside `core`.
 
 The Podman-specific properties are Compose concerns and need no flags: `userns_mode: keep-id`,
 `user: !reset null`, the `bind.selinux: Z` labels on the workspace and on the read-only
@@ -184,8 +185,9 @@ docker compose config
 
 then `Dev Containers: Reopen in Container`, or the `devcontainer up` invocation above.
 
-Two rules make that hold, and both are asserted by
-`test/tooling/compose_local_override_optional_test.rb`:
+Two rules make that hold. Neither is asserted by a test any longer
+(`test/tooling/compose_local_override_optional_test.rb` was removed; see
+`adr/no-test-suite-for-environment-construction.md`):
 
 1. **Every `dockerComposeFile` entry is a tracked file.** The Dev Containers CLI passes each entry
    to Compose as `-f`, so an entry a clone does not contain fails the whole `up` at configuration

@@ -271,7 +271,9 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification does not issue recovery passcodes after bootstrap passkey registration" do
-    unverified_user = create_verified_user_with_email(email_address: "bootstrap-passkey-#{SecureRandom.hex(4)}@example.com")
+    unverified_user = create_verified_user_with_email(
+      email_address: "bootstrap-passkey-#{SecureRandom.hex(4)}@example.com",
+    )
     token = ClientToken.create!(user: unverified_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(token, scope: "settings_passkey")
     headers = as_user_headers(

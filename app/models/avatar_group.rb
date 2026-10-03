@@ -13,9 +13,11 @@ class AvatarGroup < AvatarRecord
            class_name: "AvatarGroupOwnershipPeriod",
            dependent: :restrict_with_error,
            inverse_of: :avatar_group
+  # The full ownership_periods association owns retention; this view adds no deletion callback.
   has_one :current_ownership_period,
           -> { where("valid_to = 'infinity'::timestamp with time zone") },
           class_name: "AvatarGroupOwnershipPeriod",
+          dependent: nil,
           inverse_of: :avatar_group
 
   validates :account_surface, inclusion: { in: ACCOUNT_SURFACES }

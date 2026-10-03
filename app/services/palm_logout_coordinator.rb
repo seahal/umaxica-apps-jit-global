@@ -50,19 +50,7 @@ class PalmLogoutCoordinator < ApplicationService
     gateway = RedirectsJumpGatewayUrl.call(rt)
     return failure("invalid_request", "logout Jump gateway is unavailable") unless gateway.ok?
 
-    AuthenticationLogoutCurrentSession.call(
-      current: Actor,
-      resource: resource,
-      token: token,
-      token_class: ClientToken,
-      session_public_id: token.public_id,
-      reason: "user_logout",
-    )
-    revoke_refresh_token_family!(token)
-    AcmeLogoutTransactionCoordinator.advance!(
-      logout_challenge: transaction.logout_challenge,
-      step: AcmeLogoutTransaction::STEP_ORIGIN_CLEARED,
-    )
+    clear_origin_session!(resource, token, transaction)
 
     Result.new(
       success: true,
@@ -80,6 +68,22 @@ class PalmLogoutCoordinator < ApplicationService
   private
 
   attr_reader :request, :ri
+
+  def clear_origin_session!(resource, token, transaction)
+    AuthenticationLogoutCurrentSession.call(
+      current: Actor,
+      resource: resource,
+      token: token,
+      token_class: ClientToken,
+      session_public_id: token.public_id,
+      reason: "user_logout",
+    )
+    revoke_refresh_token_family!(token)
+    AcmeLogoutTransactionCoordinator.advance!(
+      logout_challenge: transaction.logout_challenge,
+      step: AcmeLogoutTransaction::STEP_ORIGIN_CLEARED,
+    )
+  end
 
   def authenticate_current_token
     auth_result = PalmAccessTokenAuthenticator.call(

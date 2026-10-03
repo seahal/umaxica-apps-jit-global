@@ -164,7 +164,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
     AvatarRecord.connected_to(role: :writing) do
       moniker.save!
       encrypted_value = AvatarMoniker.connection.select_value(
-        AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", moniker.id]),
+        AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", moniker.id]), # rubocop:disable I18n/RailsI18n/DecorateString -- Parameterized SQL.
       )
 
       assert_equal 512, AvatarMoniker.columns_hash.fetch("moniker").limit
@@ -179,7 +179,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
         valid_to: Time.utc(2024, 1, 2),
       )
       historical_ciphertext = AvatarMoniker.connection.select_value(
-        AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", historical.id]),
+        AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", historical.id]), # rubocop:disable I18n/RailsI18n/DecorateString -- Parameterized SQL.
       )
 
       assert_not_equal encrypted_value, historical_ciphertext
@@ -197,7 +197,7 @@ class AvatarMonikerTest < ActiveSupport::TestCase
   test "Rails encrypted fixtures persist ciphertext while exposing plaintext through the model" do
     fixture = avatar_monikers(:one)
     encrypted_value = AvatarMoniker.connection.select_value(
-      AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", fixture.id]),
+      AvatarMoniker.sanitize_sql_array(["SELECT moniker FROM avatar_monikers WHERE id = ?", fixture.id]), # rubocop:disable I18n/RailsI18n/DecorateString -- Parameterized SQL.
     )
 
     assert ActiveRecord::Encryption.encryptor.encrypted?(encrypted_value)

@@ -147,7 +147,7 @@ Then:
 
 ```bash
 ssh umaxica-global-core
-hostname; pwd; git status --short; ruby --version; bundle --version; node --version; pnpm --version
+hostname; pwd; git status --short; ruby --version; bundle --version; node --version; bun --version
 ```
 
 `hostname` reports the `core` container, and `pwd` is `/home/global/workspace` — the workspace bind,
@@ -205,9 +205,9 @@ volumes, which deregisters the node and forces a fresh enrolment.
   `userns_mode: keep-id`, so sshd cannot bind port 22, cannot use PAM, and cannot
   privilege-separate. Port 2222 and `AllowUsers global` follow from that.
 
-- **`bun` is not installed and is not planned.** This image is Ruby plus Node and pnpm. A completion
-  checklist that expects `bun --version` is checking for something no repository in this group
-  ships.
+- **The image ships Bun, not pnpm.** `Containerfile` pins `BUN_VERSION` and copies the Bun binary
+  into the development image, alongside Ruby and Node. A completion checklist that expects
+  `pnpm --version` is checking for a tool this repository no longer uses.
 
 - **The compose project name is `umaxicaappsglobaldc`,** set in `.devcontainer/compose.yaml`. It
   carries no separators because the Dev Containers CLI derives its own project name from

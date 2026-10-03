@@ -1,4 +1,4 @@
-[![CI](https://github.com/seahal/umaxica-app-jit/actions/workflows/integration.yml/badge.svg?branch=main)](https://github.com/seahal/umaxica-app-jit/actions/workflows/integration.yml)
+[![CI](https://github.com/seahal/umaxica-app-jit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/seahal/umaxica-app-jit/actions/workflows/ci.yml)
 ![GitHub last commit (branch)](https://img.shields.io/github/last-commit/seahal/umaxica-app-jit/main)
 
 # Umaxica App (JIT)
@@ -49,7 +49,8 @@ before inventing screen patterns. Start at
 - JavaScript entrypoints are bundled through Vite Rails from `src/entrypoints`.
 - Stimulus controllers live in `src/controllers`.
 - JavaScript tests live in `spec/` and run directly with Vitest.
-- Browser CSS is imported once through the Vite stylesheet graph in `src/styles/application.css`.
+- Browser CSS is one Vite stylesheet per surface under `src/styles/surfaces/`; each imports the
+  shared token and base layers (`src/styles/theme.css`, `src/styles/base.css`).
 - Static non-browser assets are served by Propshaft.
 
 Useful commands:
@@ -66,7 +67,7 @@ bin/rails assets:clobber        # Remove compiled assets
 - Docker Compose, or rootless Podman with `podman-compose`
 - Ruby `4.0.x`
 - Bundler
-- Node.js `24.19.0` (Active LTS)
+- Node.js `24.20.0` (pinned in `.node-version`; `package.json` accepts `>=24.19.0 <25`)
 - Bun `1.4.0`
 
 ### Credentials and secrets
@@ -140,8 +141,8 @@ PUBLIC_AUTH_STAFF_URL=auth.umaxica.org
 
 `TRUSTED_ORIGINS` remains available only for additional explicit origins.
 
-`bin/setup` installs Ruby gems, runs `bin/rails db:prepare`, clears logs and temp files, then starts
-`bin/dev`. It does not install JavaScript packages, so run `bun install --frozen-lockfile` first.
+`bin/setup` installs Ruby gems, runs `bun install --frozen-lockfile` and `bin/rails db:prepare`,
+clears logs and temp files, then starts `bin/dev` (pass `--skip-server` to stop before that).
 
 If dependencies are already installed, you can start development directly:
 
@@ -161,13 +162,13 @@ bin/dev
 Modern browsers resolve `*.localhost` to `127.0.0.1`, so extra `/etc/hosts` entries are usually not
 needed.
 
-The development container publishes ports `3000` and `3036` to `127.0.0.1` only, so these URLs work
-from the host and from nowhere else. Substituting the host's LAN or Tailscale address will not
-connect, by design; PostgreSQL and Valkey are not published to the host at all. See
-`docs/operations/development-host-port-exposure.md`. The Dev Container publishes Rails ports `3000`
-and `3036` to `127.0.0.1` only. In host-native mode, PostgreSQL writer/reader and Valkey are also
-published only to loopback (`5432`, `5433`, and `6379`) so host Rails can use them; containers
-continue to use Compose DNS names. See `docs/operations/development-host-port-exposure.md`.
+The URLs below use port `3000`, where host-native Rails listens. The Dev Container publishes its
+Rails port `3000` on host port `3001` and Vite on `3036`, both on `127.0.0.1` only, so from the host
+a Dev Container is reached on `:3001`. Substituting the host's LAN or Tailscale address will not
+connect, by design. `compose.yaml` publishes the PostgreSQL writer and reader and the Valkey
+services to loopback as well (`5432`, `5433`, and `6379` to `6381` by default) so host-native Rails
+can use them; containers continue to use Compose DNS names. See
+`docs/operations/development-host-port-exposure.md`.
 
 | Surface                    | URL                                                                           |
 | :------------------------- | :---------------------------------------------------------------------------- |
@@ -320,7 +321,10 @@ Run the Lefthook pre-commit checks before committing:
 lefthook run pre-commit
 ```
 
-These checks cover formatting, linting, security audits, database consistency, and Rails tests.
+The pre-commit hook formats staged files with oxfmt, autocorrects them with oxlint and RuboCop, and
+compiles every ERB template when a view changed. The pre-push hook runs `bun run ci` (JavaScript
+checks, Vitest with coverage, and the production build). Security audits and the full Rails suite
+run in CI, not in the hooks.
 
 ## Troubleshooting
 

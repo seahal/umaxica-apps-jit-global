@@ -57,7 +57,8 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
       browsers = Array.new(2) { open_session }
       threads =
         browsers.map do |browser|
-          Thread.new do
+          # Independent workers are required to exercise the concurrent database boundary.
+          Thread.new do # rubocop:disable ThreadSafety/NewThread
             browser.host!(host)
             ready << true
             start.pop

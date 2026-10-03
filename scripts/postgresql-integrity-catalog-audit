@@ -25,10 +25,12 @@ databases =
 admin.exec("ROLLBACK")
 admin.close
 
-required = Dir.glob("db/*structure.sql").map do |path|
-  name = File.basename(path)
-  (name == "structure.sql") ? "primary" : name.delete_suffix("_structure.sql")
-end.sort
+required =
+  Dir.glob("db/*structure.sql").map do |path|
+    name = File.basename(path)
+    (name == "structure.sql") ? "primary" : name.delete_suffix("_structure.sql")
+  end
+required.sort!
 raise RuntimeError, "expected logical databases missing" unless (required - databases.map { |name|
   name.delete_prefix("development_").delete_suffix("_db")
 }).empty?
@@ -135,7 +137,8 @@ databases.each do |database|
         "unverified_size"
       else
         qualified = "#{PG::Connection.quote_ident(table.fetch("schema"))}.#{PG::Connection.quote_ident(table.fetch("table_name"))}"
-        (connection.exec("SELECT EXISTS(SELECT 1 FROM #{qualified}) AS present").first.fetch("present") == "t") ? "yes" : "no"
+        present = connection.exec("SELECT EXISTS(SELECT 1 FROM #{qualified}) AS present").first.fetch("present")
+        (present == "t") ? "yes" : "no"
       end
     table["columns"] = columns.fetch(oid, [])
     table["constraints"] = constraints.fetch(oid, [])

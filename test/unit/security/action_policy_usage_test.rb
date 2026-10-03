@@ -48,8 +48,6 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
 
     # Sign-in verification and cancellation ceremony endpoints are guarded by active flow,
     # checkpoint, and verification state rather than standalone mutable resource records.
-    "app/controllers/auth/app/sign/in/check/cancellations_controller.rb#create",
-    "app/controllers/auth/app/sign/in/check/cancellations_controller.rb#update",
     "app/controllers/auth/app/sign/in/checks_controller.rb#destroy",
     "app/controllers/auth/app/sign/in/checks_controller.rb#update",
     "app/controllers/auth/app/verification/emails_controller.rb#create",
@@ -62,15 +60,11 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/auth/app/verification/passkeys_controller.rb#create",
     "app/controllers/auth/app/verification/redeliveries_controller.rb#create",
     "app/controllers/auth/app/verification/totps_controller.rb#create",
-    "app/controllers/auth/com/sign/in/check/cancellations_controller.rb#create",
-    "app/controllers/auth/com/sign/in/check/cancellations_controller.rb#update",
     "app/controllers/auth/com/sign/in/checks_controller.rb#destroy",
     "app/controllers/auth/com/sign/in/checks_controller.rb#update",
     "app/controllers/auth/com/verification/emails_controller.rb#create",
     "app/controllers/auth/com/verification/emails_controller.rb#update",
     "app/controllers/auth/com/verification/redeliveries_controller.rb#create",
-    "app/controllers/auth/org/sign/in/check/cancellations_controller.rb#create",
-    "app/controllers/auth/org/sign/in/check/cancellations_controller.rb#update",
     "app/controllers/auth/org/sign/in/checks_controller.rb#destroy",
     "app/controllers/auth/org/sign/in/checks_controller.rb#update",
 

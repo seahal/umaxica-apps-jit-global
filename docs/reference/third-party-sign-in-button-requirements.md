@@ -105,7 +105,8 @@ action. If a localised or sign-up variant is wanted later, take it from Google, 
 
 ### Apple — in the repository
 
-`app/views/auth/shared/_social_provider_button.html.erb` renders a custom Apple button, styled in
+`src/features/auth/signin/SocialProviderButton.tsx` and
+`src/features/auth/signup/SocialProviderButton.tsx` render a custom Apple button, styled in
 `src/styles/social_button.css` to the guideline constraints: black with a bezel on light backgrounds
 and white with an outline on dark, 8px corner radius, title at 17px in the system font (roughly 43%
 of the button height), 4px vertical margin and 8% minimum right margin. The title comes from the

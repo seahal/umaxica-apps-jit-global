@@ -6,7 +6,7 @@ require "pg"
 require "json"
 require "open3"
 
-settings = File.readlines(".env.local", chomp: true).filter_map do |line|
+settings = File.foreach(".env.local", chomp: true).filter_map do |line|
   match = line.match(/\A([A-Z][A-Z0-9_]*)=(.*)\z/)
   match && [match[1], match[2].sub(/\A["']/, "").sub(/["']\z/, "")]
 end.to_h

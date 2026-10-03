@@ -139,7 +139,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
     AppEnforcementAppeal.create!(
       enforcement_case: the_case,
       reason_code: "incorrect_decision",
-      statement: "Please review the decision.",
+      statement: "Please review the decision.", # rubocop:disable I18n/RailsI18n/DecorateString -- Fixed fixture copy.
       submitted_at: Time.current,
       state: "approved",
       reviewer_operator_public_id: "operator-reviewer",
@@ -178,7 +178,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
     AppEnforcementAppeal.create!(
       enforcement_case: the_case,
       reason_code: "incorrect_decision",
-      statement: "Please review the decision.",
+      statement: "Please review the decision.", # rubocop:disable I18n/RailsI18n/DecorateString -- Fixed fixture copy.
       submitted_at: Time.current,
       state: "approved",
       reviewer_operator_public_id: "operator-reviewer",
@@ -214,7 +214,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
     AppEnforcementAppeal.create!(
       enforcement_case: the_case,
       reason_code: "incorrect_decision",
-      statement: "Please review the decision.",
+      statement: "Please review the decision.", # rubocop:disable I18n/RailsI18n/DecorateString -- Fixed fixture copy.
       submitted_at: Time.current,
       state: "rejected",
       reviewer_operator_public_id: "operator-reviewer",

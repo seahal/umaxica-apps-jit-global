@@ -114,8 +114,8 @@ exports of non-secret configuration where policy permits.
 - Confirm at least one non-Apple authentication method is available. Passkey, email, and secret
   credential sign-in are present on the App surface.
 - Confirm an Apple-only user sees the alternative-credential warning
-  (`app/views/base/shared/identities/_apple_only_credential_warning.html.erb`) and that it
-  disappears once another credential is added.
+  (`src/features/identity/CredentialWarning.tsx`, shown when `AppleOnlyCredentialStatus` applies)
+  and that it disappears once another credential is added.
 
 ## If portal access is lost before completion
 

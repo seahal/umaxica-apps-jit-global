@@ -13,6 +13,8 @@ module Base
 
           before_action :authenticate_visitor!
 
+          public
+
           def show
             authorize!(current_visitor, to: :show?)
             render inertia: true, props: {

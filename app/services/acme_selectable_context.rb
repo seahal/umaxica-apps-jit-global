@@ -165,15 +165,7 @@ module AcmeSelectableContext
     end
     return false unless account
 
-    membership = nil
-    connection_owner(config.membership_class).connected_to(role: :writing) do
-      membership =
-        account.current_memberships.lock.find do |candidate_membership|
-          candidate_membership.active? &&
-            candidate_membership.collective.public_id == public_ids[:organization_public_id] &&
-            candidate_membership.collective_unit.public_id == public_ids[:organization_unit_public_id]
-        end
-    end
+    membership = locked_candidate_membership(account, public_ids)
     return false unless membership
     return true if config.avatar_mode == :none
     return true if config.avatar_mode == :optional && public_ids[:avatar_public_id].blank?
@@ -202,6 +194,19 @@ module AcmeSelectableContext
         )
         .exists?(["avatars.discard_at > ?", Time.current])
     end
+  end
+
+  def locked_candidate_membership(account, public_ids)
+    membership = nil
+    connection_owner(config.membership_class).connected_to(role: :writing) do
+      membership =
+        account.current_memberships.lock.find do |candidate_membership|
+          candidate_membership.active? &&
+            candidate_membership.collective.public_id == public_ids[:organization_public_id] &&
+            candidate_membership.collective_unit.public_id == public_ids[:organization_unit_public_id]
+        end
+    end
+    membership
   end
 
   def connection_owner(klass)

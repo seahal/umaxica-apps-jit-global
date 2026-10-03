@@ -98,9 +98,9 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     # The dashboard links to pages; it never posts a logout itself.
     assert_select "form[action^=?]", base_app_oidc_logout_path, count: 0
     assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
-    assert_not labelled.key?(dashboard_label(:oidc_discovery))
-    assert_not labelled.key?(dashboard_label(:jwks))
-    assert_not labelled.key?(dashboard_label(:userinfo))
+    assert_empty labelled.keys & [
+      dashboard_label(:oidc_discovery), dashboard_label(:jwks), dashboard_label(:userinfo),
+    ]
     assert_no_match(%r{//example|umaxica\.example|evil\.example}, response.body)
     assert_no_match(/サインイン済み|Signed in/i, response.body)
   end

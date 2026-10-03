@@ -29,8 +29,8 @@ Three secrets gate all live enforcement paths:
 - `ENFORCEMENT_ORG_IDENTIFIER_HMAC_KEY`
 
 Each is read by `EnforcementIdentifierDigest.key_for(realm)`
-(`app/services/enforcement_identifier_digest.rb`), which checks `Rails.app.creds` (encrypted
-credentials, then ENV) and raises `KeyError` — by design, per
+(`app/lib/enforcement_identifier_digest.rb`), which checks `Rails.app.creds` (encrypted credentials,
+then ENV) and raises `KeyError` — by design, per
 `.agents/harnesses/rules/generic/no-silent-fallback.mdc` — if the realm's key is absent. This is
 fail-closed: an unprovisioned key does not silently disable enforcement, it 500s the request path
 that needed it.
@@ -81,7 +81,7 @@ Run after secret provisioning and migration, before considering that environment
 3. Full regression suite green in that environment's CI, including
    `test/controllers/base/org/support/enforcement_cases_controller_test.rb` (org console),
    `test/integration/enforcement_identifier_attachment_gate_test.rb` (attachment gating),
-   `test/services/enforcement_identifier_digest_test.rb`, and
+   `test/lib/enforcement_identifier_digest_test.rb`, and
    `test/controllers/concerns/enforcement_identifier_gate_test.rb`.
 4. `test/models/enforcement_triggers_test.rb` passes (confirms both currently-built triggers —
    `client_emails` permanently_frozen protection, `clients` hard-delete protection — reject the

@@ -13,6 +13,8 @@ module Base
 
           before_action :authenticate_operator!
 
+          public
+
           def show
             authorize!(current_operator, to: :show?)
             render inertia: true, props: {
