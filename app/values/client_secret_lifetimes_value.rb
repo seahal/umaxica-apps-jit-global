@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# New operational values require explicit configuration; the proposal is documented separately.
+# Accepted operational lifetimes require explicit configuration; no silent defaults apply.
 class ClientSecretLifetimesValue
   class << self
     public

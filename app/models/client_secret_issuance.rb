@@ -131,7 +131,8 @@ class ClientSecretIssuance < AppZenithRecord
 
     recorded = ClientSecretAuditOutbox.exists?(
       client_ref: client.public_id, credential_ref: nil, operation_ref: origin_operation_id,
-      event_name: "secret.issuance_canceled", reason: %w(flow_canceled withdrawal), occurred_at: canceled_at,
+      event_name: "secret.issuance_canceled", reason: %w(flow_canceled withdrawal payload_unavailable),
+      occurred_at: canceled_at,
       actor_type: "Client", actor_id: client_id, actor_public_ref: client.public_id, item_count: planned_count,
     )
     return if recorded

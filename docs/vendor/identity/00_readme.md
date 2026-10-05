@@ -17,7 +17,7 @@ confidentiality: internal-vendor-shareable
 > be treated as current implementation requirements. The active Rails contract is
 > `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
 > IdP/Authorization Server, Auth is ceremony-only, and first-party browser RPs use independent
-> surface registrations with `/sign` and `/sign/callback`. The package remains useful as historical
+> surface registrations with `/sign` and `/oidc/callback`. The package remains useful as historical
 > vendor-review context until its individual inventories are refreshed.
 
 # Purpose

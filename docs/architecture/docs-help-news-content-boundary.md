@@ -172,3 +172,4 @@ read-only surfaces.
 - `adr/publishing-persistence-polymorphism-prohibition.md`
 - `docs/architecture/regional-content.md`
 - `docs/architecture/acme-sign-core-base-port.md`
+- `docs/architecture/oidc-non-participant-surfaces.md`

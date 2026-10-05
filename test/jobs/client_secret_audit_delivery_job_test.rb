@@ -8,6 +8,76 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
   end
 
+  test "payload failure reaches Chronicle before real jobs delete the candidate and allocation" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+    candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
+    reference = candidate.public_id
+    ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
+      actor_context: context, token: token, issuance: issuance, purge_after: 0.000001.seconds,
+    )
+    previous = ENV.to_h.slice(
+      "APP_SECRET_PURGE_DELAY_SECONDS", "APP_SECRET_OUTBOX_RETENTION_SECONDS", "APP_SECRET_PROOF_RETENTION_SECONDS",
+    )
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "2592000"
+
+    assert_equal :undelivered,
+                 ClientSecretCredentialPurger.call!(credential: candidate, executor_job_id: "payload-before-audit")
+    allocation_event = ClientSecretAuditOutbox.find_by!(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.issuance_canceled",
+    )
+    candidate_event = ClientSecretAuditOutbox.find_by!(credential_ref: reference, event_name: "secret.discarded")
+    # One-row delivery preserves actual event order without directly marking acknowledgment.
+    1000.times do
+      break if allocation_event.reload.delivered_at
+
+      ClientSecretAuditDeliveryJob.perform_now(batch_size: 1, retention_seconds: 604_800)
+    end
+
+    assert_not_nil allocation_event.reload.delivered_at
+    assert_nil candidate_event.reload.delivered_at
+    assert_equal :undelivered,
+                 ClientSecretCredentialPurger.call!(credential: candidate, executor_job_id: "payload-partial-audit")
+    assert ClientSecretCredential.exists?(candidate.id)
+    ClientSecretLifecycleJob.perform_now(batch_size: 500)
+
+    assert_not ClientSecretCredential.exists?(candidate.id)
+    assert_not ClientSecretIssuance.exists?(issuance.id)
+    terminal = ClientSecretAuditOutbox.find_by!(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.issuance_canceled",
+    )
+
+    assert_equal "payload_unavailable", terminal.reason
+    assert Chronicle.exists?(event_uuid: terminal.event_id)
+    purged = ClientSecretAuditOutbox.find_by!(credential_ref: reference, event_name: "secret.purged")
+    ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 604_800)
+
+    assert Chronicle.exists?(event_uuid: purged.event_id)
+    assert_no_difference "Chronicle.count" do
+      ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 604_800)
+    end
+  ensure
+    if previous
+      %w(
+        APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
+      ).each do |key|
+        previous.key?(key) ? ENV[key] = previous.fetch(key) : ENV.delete(key)
+      end
+    end
+  end
+
   test "withdrawal candidate audit reaches Chronicle before real lifecycle deletion" do
     now = Client.database_now
     actor = Client.create!(status_id: ClientStatus::ACTIVE, withdrawn_at: now, terminated_at: now)
@@ -23,8 +93,10 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     )
     previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
     previous_retention = ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"]
+    previous_proof_retention = ENV["APP_SECRET_PROOF_RETENTION_SECONDS"]
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     withdrawal_at = Client.database_now
     purge_at = withdrawal_at + 0.000001.seconds
     issuance.cancel_for_withdrawal!(at: withdrawal_at, purge_at: purge_at)
@@ -56,6 +128,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   ensure
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = previous_delay
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = previous_retention
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = previous_proof_retention
   end
 
   test "retired allocation waits for Chronicle and legal hold and rolls deletion back with its outbox" do
@@ -141,6 +214,23 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     assert_equal :undelivered, ClientSecretCredentialPurger.call!(credential: candidate, executor_job_id: "purge-test")
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
 
+    terminal = ClientSecretAuditOutbox.find_by!(
+      operation_ref: issuance.origin_operation_id, event_name: "secret.discarded", credential_ref: nil,
+    )
+    durable = Chronicle.find_by!(event_uuid: terminal.event_id)
+    metadata = durable.metadata
+    begin
+      # Corrupt the durable target while retaining its UUID and success result.
+      durable.update_columns(metadata: {})
+
+      assert_equal :undelivered,
+                   ClientSecretCredentialPurger.call!(credential: candidate, executor_job_id: "conflicting-audit")
+      assert ClientSecretCredential.exists?(candidate.id)
+      assert_not ClientSecretAuditOutbox.exists?(credential_ref: candidate.public_id, event_name: "secret.purged")
+    ensure
+      durable.update_columns(metadata: metadata)
+    end
+
     assert_equal :purged, ClientSecretCredentialPurger.call!(credential: candidate, executor_job_id: "purge-test")
     assert_not ClientSecretCredential.exists?(candidate.id)
     assert_equal :purged, ClientSecretIssuancePurger.call!(issuance: issuance, executor_job_id: "issuance-purge")
@@ -203,10 +293,12 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     # Roll back only the Source acknowledgement; Chronicle uses its own connection.
     ClientSecretAuditOutbox.transaction(requires_new: true) do
       ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
+
       assert event.reload.delivered_at
       assert_equal 1, Chronicle.where(event_uuid: event.event_id).count
       raise ActiveRecord::Rollback
     end
+
     assert_nil event.reload.delivered_at
     assert_equal 1, Chronicle.where(event_uuid: event.event_id).count
     assert_no_difference("Chronicle.count") do
@@ -217,8 +309,13 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "real lifecycle delivery precedes credential deletion and preserves its purged event for retry" do
+    config_keys = %w(
+      APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
+    )
+    original_config = ENV.to_h.slice(*config_keys)
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "60"
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
     token = ClientToken.create!(user: actor)
@@ -255,6 +352,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
       assert ClientSecretAuditOutbox.exists?(credential_ref: reference, event_name: "secret.purged")
       raise ActiveRecord::Rollback
     end
+
     assert ClientSecretCredential.exists?(credential.id)
     assert_not ClientSecretAuditOutbox.exists?(credential_ref: reference, event_name: "secret.purged")
     ClientSecretLifecycleJob.perform_now(batch_size: 500)
@@ -276,9 +374,15 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     assert_no_difference("Chronicle.count") do
       ClientSecretLifecycleJob.perform_now(batch_size: 500)
     end
+  ensure
+    config_keys.each { |key| ENV[key] = original_config[key] }
   end
 
   test "source events reach Chronicle once and can be rescanned without queue enqueue" do
+    # Source outboxes outlive fixture replacement; deliver earlier durable work first.
+    while ClientSecretAuditOutbox.exists?(delivered_at: nil)
+      ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
+    end
     client = clients(:one)
     context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
     event = nil

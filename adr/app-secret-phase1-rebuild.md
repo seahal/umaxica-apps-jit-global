@@ -17,6 +17,15 @@ outside this replacement.
 
 ## Decision
 
+The user accepted the four operational lifetimes on 2026-10-05 (UTC): 600 seconds
+for issuance/presentation, 86400 seconds before eligible terminal collection,
+604800 seconds for delivered source outboxes, and 2592000 seconds for processing
+proof retention. Explicit configuration is required; authority deadlines and
+unresolved dependencies still restrict these lifetimes. Solid Queue performs
+application audit delivery and physical collection through periodic recovery
+scans and bounded continuations. This decision introduces no database VACUUM task
+and grants no shared-database application or deployment authorization.
+
 ClientSecretCredential is an app Client-owned, server-generated, case-sensitive
 32-character Base58 single-use credential for normal Sign in. Generate with
 SecureRandom.base58(32), without user selection, normalization or truncation.

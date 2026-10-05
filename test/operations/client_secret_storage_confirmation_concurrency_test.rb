@@ -106,6 +106,103 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
+  test "confirmation racing claim never authenticates an unconfirmed candidate or reactivates a claim" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+    raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: admission.reference, surface: "app", expected_intent: "sign_in",
+    )
+    flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
+    )
+
+    assert_nil ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+    ready = Queue.new
+    release = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
+    futures =
+      %i(confirm claim).map do |operation|
+        Concurrent::Future.execute do
+          AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+            connection.execute("SET lock_timeout = '5000'")
+            ready << connection.select_value("SELECT pg_backend_pid()")
+            release.pop
+            AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+              if operation == :confirm
+                owner = Client.find(actor.id)
+                ClientSecretStorageConfirmationCommitter.call!(
+                  actor_context: context.with(subject: owner), token: token, issuance: issuance,
+                ).public_id
+              else
+                ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)&.public_id
+              end
+            end
+          ensure
+            connection.execute("RESET lock_timeout")
+          end
+        end
+      end
+    pids, results =
+      Timeout.timeout(20) do
+        identifiers = [ready.pop, ready.pop]
+        2.times { release << true }
+        [identifiers, futures.map(&:value!)]
+      end
+    candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
+
+    assert_equal 2, pids.uniq.length
+    assert_equal issuance.public_id, results.first
+    assert_equal issuance.reload.confirmed_at, candidate.confirmed_at
+    if results.last
+      assert_equal candidate.public_id, results.last
+      assert_operator candidate.claimed_at, :>=, candidate.confirmed_at
+    else
+      assert_nil candidate.claimed_at
+      assert ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+    end
+    claim_operation = candidate.reload.claim_operation_id
+    ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+
+    assert_equal claim_operation, candidate.reload.claim_operation_id
+    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+    events = ClientSecretAuditOutbox.where(client_ref: actor.public_id)
+
+    assert_equal 1, events.where(event_name: "secret.storage_declared").count
+    assert_equal 1, events.where(event_name: "secret.claimed").count
+    capacity = ClientSecretCapacityQuery.call(client: actor, at: Client.database_now)
+
+    assert_equal 0, capacity.active_count
+    assert_equal 0, capacity.reserved_count
+    assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: candidate.public_id).count
+    assert_equal 1, ClientToken.where(user_id: actor.id).count
+  ensure
+    2.times { release << true } if release
+    futures&.each { |future| future.wait(10) }
+    ceremony&.destroy!
+    flow&.destroy!
+    if actor
+      ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
+      ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
+      ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+      token&.destroy!
+      actor.reload.destroy!
+    end
+  end
+
   test "separate writers converge duplicate confirmations on one declaration and one credential activation" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor)

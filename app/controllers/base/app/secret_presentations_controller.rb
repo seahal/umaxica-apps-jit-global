@@ -19,7 +19,7 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
     context = ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :base)
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: current_session_token, issuance: @issuance)
     @values = ClientSecretPresentationIssuer.call!(
-      actor_context: ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :base),
+      actor_context: context,
       token: current_session_token, issuance: @issuance,
     )
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -31,8 +31,8 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
   rescue ClientSecretPresentationIssuer::AlreadyPresented
     redirect_to(base_app_secret_issuance_path(@issuance.public_id), status: :see_other)
   rescue ClientSecretPresentationIssuer::PayloadUnavailable
-    ClientSecretManualIssuanceInvalidator.call!(
-      actor_context: ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :base),
+    ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
+      actor_context: context,
       token: current_session_token, issuance: @issuance, purge_after: ClientSecretLifetimesValue.purge_delay,
     )
     session.delete(:client_secret_operation_id)

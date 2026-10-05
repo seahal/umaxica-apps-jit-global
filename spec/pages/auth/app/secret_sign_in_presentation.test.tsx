@@ -9,6 +9,39 @@ vi.mock("@/features/turnstile/TurnstileWidget", () => ({ default: () => null }))
 const turnstile = { site_key: "test", action: "sign_in", mode: "render" as const, cdata: null };
 
 describe("Secret sign-in presentation", () => {
+  it.each([
+    ["empty", "", false],
+    ["31 characters", "a".repeat(31), false],
+    ["32 characters", "a".repeat(32), true],
+    ["33 characters", "a".repeat(33), false],
+    ["uppercase Base58", "A".repeat(32), true],
+    ["unknown but well-formed", "z".repeat(32), true],
+    ["allowed digit", "1".repeat(32), true],
+    ["excluded zero", "0".repeat(32), false],
+    ["excluded capital O", "O".repeat(32), false],
+    ["excluded capital I", "I".repeat(32), false],
+    ["excluded lowercase l", "l".repeat(32), false],
+    ["embedded NUL", `${"a".repeat(31)}\0`, false],
+  ] as const)("applies native submission constraints to %s", (_label, value, valid) => {
+    render(
+      <SecretSignIn
+        title="Sign in"
+        label="Secret"
+        submit="Continue"
+        error={null}
+        action="/sign/in/secret"
+        authenticity_token="synthetic"
+        turnstile={turnstile}
+      />,
+    );
+    const control = screen.getByLabelText<HTMLInputElement>("Secret");
+    expect(control.value).toBe("");
+    expect(control.getAttribute("value")).toBeNull();
+    control.value = value;
+    expect(control.checkValidity()).toBe(valid);
+    expect(control.value).toBe(value);
+  });
+
   it("describes the generic form rejection without treating it as a credential-specific validation failure", () => {
     render(
       <SecretSignIn

@@ -17,7 +17,7 @@ confidentiality: internal-vendor-shareable
 > descriptions are not the current Rails contract. For current implementation and security
 > decisions, use `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
 > `docs/security/sign-in-sequence.md`: Base owns Browser Session/RP Session and OIDC authority,
-> Auth owns credential ceremony continuity, and RP entry is `/sign` with `/sign/callback`.
+> Auth owns credential ceremony continuity, and RP entry is `/sign` with `/oidc/callback`.
 
 # Purpose
 

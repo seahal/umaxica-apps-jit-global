@@ -132,6 +132,61 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "unavailable manual payload retires candidates and releases capacity through the protected HTTP endpoint" do
+    [nil, "invalid encrypted payload"].each do |payload|
+      base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(user: actor, established_authentication_method: "secret")
+      BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
+      BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
+      token.update!(
+        last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+        last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+        last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      )
+      context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+      issuance = ClientSecretManualReservationIssuer.call!(
+        actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+      )
+      ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+      issuance.reload.update!(encrypted_payload: payload)
+      headers = as_user_headers(actor, host: base_host, session_public_id: token.public_id)
+        .except("Cookie", "HTTP_COOKIE").merge(
+        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+      )
+      host!(base_host)
+      https!
+      get base_app_secret_issuance_path(issuance.public_id, ri: "jp"), headers: headers
+
+      assert_response :success
+      page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+      csrf = page.fetch("props").fetch("authenticity_token")
+      assert_no_difference "ClientSecretCredential.count" do
+        post base_app_secret_issuance_presentation_path(issuance.public_id, ri: "jp"),
+             headers: headers, params: { authenticity_token: csrf }
+      end
+
+      assert_response :gone
+      assert_nil issuance.reload.encrypted_payload
+      assert_not_nil issuance.canceled_at
+      assert_equal ["payload_unavailable"], ClientSecretAuditOutbox.where(
+        operation_ref: issuance.origin_operation_id,
+        event_name: %w(secret.issuance_canceled secret.discarded),
+      ).distinct.pluck(:reason)
+      assert_equal 0, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).reserved_count
+      candidate = ClientSecretCredential.find_by!(issuance_id: issuance.id)
+
+      assert_nil candidate.confirmed_at
+      assert_not_nil candidate.discard_at
+      patch base_app_secret_issuance_path(issuance.public_id, ri: "jp"),
+            headers: headers, params: { authenticity_token: csrf, stored: "1" }
+
+      assert_response :forbidden
+      assert_nil candidate.reload.confirmed_at
+      assert_nil issuance.reload.confirmed_at
+    end
+  end
+
   test "manual HTTP delivery and storage confirmation lead to one canonical Base Secret login" do
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
@@ -198,6 +253,11 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
 
     assert_response :see_other
     assert_equal candidate.id, ClientSecretLookupQuery.call(secret: raw).id
+
+    assert_no_difference ["ClientSecretIssuance.count", "ClientSecretCredential.count", "ClientSecretAuditOutbox.count"] do
+      post base_app_secrets_path(ri: "jp"), params: { authenticity_token: csrf }, headers: headers
+    end
+    assert_redirected_to base_app_secret_issuance_path(issuance.public_id)
 
     base = open_session
     base.host!(base_host)

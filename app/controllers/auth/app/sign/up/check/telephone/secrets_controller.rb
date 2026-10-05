@@ -54,6 +54,12 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
     }
   rescue ClientSecretPresentationIssuer::AlreadyPresented
     redirect_to(auth_app_sign_up_check_telephone_secret_path(ri: current_region_identifier), status: :see_other)
+  rescue ClientSecretPresentationIssuer::PayloadUnavailable
+    ClientSecretManualIssuanceInvalidator.call_for_sign_up_payload_failure!(
+      flow: @sign_up_ticket, nonce: browser_nonce, issuance: @issuance,
+      purge_after: ClientSecretLifetimesValue.purge_delay,
+    )
+    render plain: t("base.app.secrets.payload_unavailable"), status: :gone
   end
 
   def update
@@ -80,7 +86,8 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
   end
 
   rescue_from ClientSecretPasskeyReservationIssuer::Denied, ClientSecretPresentationIssuer::Denied,
-              ClientSecretStorageConfirmationCommitter::Denied, with: :deny_delivery
+              ClientSecretStorageConfirmationCommitter::Denied,
+              ClientSecretManualIssuanceInvalidator::Denied, with: :deny_delivery
 
   private
 
@@ -99,7 +106,11 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
     return t("base.app.secrets.distribution_omitted") if @issuance.planned_count.zero?
     return unless @issuance.planned_count == 1
 
-    @issuance.confirmed_at ? t("base.app.secrets.distribution_one_confirmed") : t("base.app.secrets.distribution_one_present")
+    if @issuance.confirmed_at
+      t("base.app.secrets.distribution_one_confirmed")
+    else
+      t("base.app.secrets.distribution_one_present")
+    end
   end
 
   def deny_delivery

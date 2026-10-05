@@ -8,6 +8,9 @@ Current naming note (2026-09-25): `Side`/`Wide` in this decision name the Rails 
 implemented internally as `Warp`. The registered RP protocol identifiers and persisted values retain
 their established names.
 
+Current callback note (2026-10-02): the RP protocol callback written below as `GET /sign/callback`
+is now `GET /oidc/callback`. See `adr/sign-neutral-entry-and-logout-target-authorization.md`.
+
 Supersedes conflicting authority claims in:
 
 - `adr/acme-sign-core-base-port-boundary.md` where it calls Base an RP or Auth/Sign a special RP

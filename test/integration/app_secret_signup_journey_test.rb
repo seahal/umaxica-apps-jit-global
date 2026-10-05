@@ -7,6 +7,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
+    @previous_lifetimes = ENV.to_h.slice("APP_SECRET_ISSUANCE_TTL_SECONDS", "APP_SECRET_PURGE_DELAY_SECONDS")
     ENV["APP_SECRET_ISSUANCE_TTL_SECONDS"] = "600"
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
     TurnstileVerifierStub.challenge_enabled = true
@@ -15,11 +16,15 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
   teardown do
     ActionController::Base.allow_forgery_protection = @previous_forgery_protection
+    %w(APP_SECRET_ISSUANCE_TTL_SECONDS APP_SECRET_PURGE_DELAY_SECONDS).each do |key|
+      @previous_lifetimes.key?(key) ? ENV[key] = @previous_lifetimes.fetch(key) : ENV.delete(key)
+    end
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  ((0..20).map { |count| [count, :completed] } + [[0, :canceled], [0, :expired]]).each do |active_count, outcome|
+  ((0..20).map { |count| [count, :completed] } +
+    [[0, :canceled], [0, :expired], [0, :payload_unavailable]]).each do |active_count, outcome|
     test "telephone signup with A=#{active_count} saves its fixed Secret set and handles #{outcome}" do
       host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -138,6 +143,36 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         assert_nil page.fetch("props").fetch("notice")
       end
       values = []
+      if outcome == :payload_unavailable
+        nonce = SignUpSessionState.for(session, surface: :app).cycle_payload.stringify_keys.fetch("nonce")
+        ClientSecretPresentationIssuer.prepare_for_sign_up!(flow: flow, nonce: nonce, issuance: issuance)
+        issuance.reload.update!(encrypted_payload: nil)
+        passkey_ids = actor.client_passkeys.pluck(:public_id)
+        assert_no_difference ["ClientSecretCredential.count", "ClientPasskey.count", "ClientToken.count"] do
+          post auth_app_sign_up_check_telephone_secret_path(ri: "jp"),
+               headers: headers.merge("X-CSRF-Token" => csrf)
+        end
+
+        assert_not flow.reload.requirement_cleared?(:passkey)
+        assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, actor.reload.status_id
+        assert_equal passkey_ids, actor.client_passkeys.pluck(:public_id)
+        assert_not_nil issuance.reload.canceled_at
+        assert_equal 0, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).reserved_count
+        assert_response :gone
+        assert_equal 2, ClientSecretCredential.where(issuance_id: issuance.id).where.not(discard_at: Float::INFINITY).count
+        assert_equal ["payload_unavailable"], ClientSecretAuditOutbox.where(
+          operation_ref: issuance.origin_operation_id,
+          event_name: %w(secret.issuance_canceled secret.discarded),
+        ).distinct.pluck(:reason)
+        patch auth_app_sign_up_check_telephone_secret_path(ri: "jp"),
+              headers: headers.merge("X-CSRF-Token" => csrf),
+              params: { checkpoint_version: flow.checkpoint_version, stored: "1" }
+
+        assert_response :forbidden
+        assert_not flow.reload.requirement_cleared?(:passkey)
+        assert_nil issuance.reload.confirmed_at
+        next
+      end
       if expected_count.positive?
         post auth_app_sign_up_check_telephone_secret_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf)
 

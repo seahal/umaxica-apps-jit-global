@@ -4,6 +4,12 @@
 
 Proposed (2026-06-16)
 
+Constraint added 2026-10-05:
+`adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md` keeps Docs, Help, and News
+outside the OAuth/OIDC RP system. Per-user state in this proposal, such
+as `watch_state`, `tracking_state`, and `muted_state`, must be served through an authenticated
+RP-owned boundary rather than by making a content surface an RP.
+
 ## Context
 
 Umaxica has three information surfaces — `docs`, `help`, and `news`. Today they are read-only

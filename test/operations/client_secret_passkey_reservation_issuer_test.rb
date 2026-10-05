@@ -147,6 +147,14 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       ).id
     end
     ClientSecretPresentationIssuer.prepare_for_sign_up!(flow: flow, nonce: nonce, issuance: issuance)
+    assert_no_difference "ClientSecretAuditOutbox.count" do
+      assert_raises(ClientSecretPasskeyReservationIssuer::Denied) do
+        ClientSecretManualIssuanceInvalidator.call_for_sign_up_payload_failure!(
+          flow: flow, nonce: "wrong", issuance: issuance, purge_after: 1.day,
+        )
+      end
+    end
+    assert_nil issuance.reload.canceled_at
     values = ClientSecretPresentationIssuer.present_for_sign_up!(flow: flow, nonce: nonce, issuance: issuance)
 
     assert_equal 2, values.length

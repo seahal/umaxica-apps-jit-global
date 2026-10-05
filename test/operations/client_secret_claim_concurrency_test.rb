@@ -177,8 +177,13 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "real retention job preserves a claimed flow while its authentication outcome remains pending" do
+    config_keys = %w(
+      APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
+    )
+    original_config = ENV.to_h.slice(*config_keys)
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "2592000"
     unless ChronicleRetentionPolicy.exists?(code: "security")
       @retention_policy = ChronicleRetentionPolicy.create!(
         code: "security", name: "Security", duration_days: 365, permanent: false,
@@ -201,6 +206,8 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_equal Float::INFINITY, credential.discard_at
     assert_nil ClientSecretLookupQuery.call(secret: @raw)
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
+  ensure
+    config_keys.each { |key| ENV[key] = original_config[key] }
   end
 
   teardown do

@@ -17,7 +17,7 @@ confidentiality: internal-vendor-shareable
 > Sign as an RP gateway, and the surrounding Acme/Sign naming are historical evidence only. The
 > active Rails contract is `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole
 > physical OIDC IdP/Authorization Server, Auth is ceremony-only, and browser RPs use their
-> surface-specific registrations and `/sign` plus `/sign/callback`. Do not use this document to
+> surface-specific registrations and `/sign` plus `/oidc/callback`. Do not use this document to
 > restore retired shared RP clients, Acme-issued browser sessions, or Sign-side authority.
 
 # Purpose

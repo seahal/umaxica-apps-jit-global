@@ -9,19 +9,43 @@ class ClientSecretManualIssuanceInvalidator
     public
 
     def call!(actor_context:, token:, issuance:, purge_after:)
+      invalidate!(actor_context, token, issuance, purge_after, "flow_canceled")
+    end
+
+    def call_for_payload_failure!(actor_context:, token:, issuance:, purge_after:)
+      invalidate!(actor_context, token, issuance, purge_after, "payload_unavailable")
+    end
+
+    def call_for_sign_up_payload_failure!(flow:, nonce:, issuance:, purge_after:)
+      unless purge_after.is_a?(ActiveSupport::Duration) && purge_after.value.finite? && purge_after.value.positive?
+        raise ArgumentError, "Secret payload retirement requires explicit positive finite retention"
+      end
+
+      ClientSecretPasskeyReservationIssuer.with_sign_up_delivery!(
+        flow: flow, nonce: nonce, issuance: issuance,
+      ) do |owned, context, now|
+        unless owned.state(at: now) == :pending_presentation
+          raise Denied, "Secret payload retirement requires an unpresented signup allocation"
+        end
+
+        invalidate_pending!(context, owned, now, purge_after, "payload_unavailable")
+      end
+    end
+
+    private
+
+    def invalidate!(actor_context, token, issuance, purge_after, reason)
       validate_binding!(actor_context, token, issuance, purge_after)
       AppTicketRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock(requires_new: true) do
-              cancel!(actor_context, token, issuance, purge_after)
+              cancel!(actor_context, token, issuance, purge_after, reason)
             end
           end
         end
       end
     end
-
-    private
 
     def validate_binding!(context, token, issuance, duration)
       unless context.is_a?(ActorValuesContext) && context.client? && context.tld == :app &&
@@ -34,7 +58,7 @@ class ClientSecretManualIssuanceInvalidator
       raise ArgumentError, "Secret cancellation requires an explicit positive finite retention duration"
     end
 
-    def cancel!(context, token, issuance, duration)
+    def cancel!(context, token, issuance, duration, reason)
       actor = context.subject
       raise Denied, "Secret cancellation actor is unavailable" unless actor.login_allowed?
 
@@ -57,13 +81,13 @@ class ClientSecretManualIssuanceInvalidator
       when :confirmed, :omitted
         raise Denied, "terminal Secret issuance cannot be canceled"
       when :pending_presentation, :pending_confirmation
-        invalidate_pending!(context.with(subject: actor), owned, now, duration)
+        invalidate_pending!(context.with(subject: actor), owned, now, duration, reason)
       else
         raise InvalidState, "unsupported Secret issuance state"
       end
     end
 
-    def invalidate_pending!(context, issuance, now, duration)
+    def invalidate_pending!(context, issuance, now, duration, reason)
       ClientSecretCapacityQuery.call(client: context.subject, at: now)
       candidates = ClientSecretCredential.where(issuance_id: issuance.id, client_id: issuance.client_id)
         .order(:id).lock.to_a
@@ -80,7 +104,7 @@ class ClientSecretManualIssuanceInvalidator
 
       ClientSecretAuditOutbox.record!(
         actor_context: context, client_ref: context.subject.public_id, operation_ref: issuance.origin_operation_id,
-        occurred_at: now, event_name: "secret.issuance_canceled", reason: "flow_canceled",
+        occurred_at: now, event_name: "secret.issuance_canceled", reason: reason,
         item_count: issuance.planned_count,
       )
       candidates.each do |candidate|
@@ -88,7 +112,7 @@ class ClientSecretManualIssuanceInvalidator
         ClientSecretAuditOutbox.record!(
           actor_context: context, client_ref: context.subject.public_id, credential_ref: candidate.public_id,
           operation_ref: issuance.origin_operation_id, occurred_at: now,
-          event_name: "secret.discarded", reason: "flow_canceled",
+          event_name: "secret.discarded", reason: reason,
         )
       end
       issuance.update!(canceled_at: now, encrypted_payload: nil, discard_at: now, purge_eligible_at: purge_at)

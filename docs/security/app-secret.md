@@ -1,8 +1,119 @@
 # app Secret implementation boundary
 
+Physical collection of an unconfirmed candidate requires both its own discarded
+audit and its allocation's terminal audit to be committed in Chronicle. Partial
+delivery leaves the candidate intact. Withdrawal uses its credential-specific
+terminal audit. DELETE and the surviving purged outbox remain one Source
+transaction; full audit identity checks and retention holds still apply.
+Signup payload-failure allocations remain held while the original flow can
+continue. After its verified terminal outcome and proof-retention deadline,
+collection uses the original `payload_unavailable` audit rather than changing
+its reason to match the later flow outcome.
+
 This document describes the current Phase 1 foundations and distinguishes the
 approved target from unfinished journeys. See the [rebuild ADR](../../adr/app-secret-phase1-rebuild.md)
 and [issuance count policy](app-secret-issuance-count-policy.md).
+
+The protected Base presentation endpoint retires an unavailable candidate payload
+with the existing `payload_unavailable` audit reason. It repeats current owner,
+session and scoped Step-Up checks, atomically discards unconfirmed candidates and
+releases their reservation. Explicit user cancellation retains `flow_canceled`.
+Signup delivery uses the same retirement mutation after rechecking its original
+flow, browser nonce, pending Client and saved registration. It leaves the saved
+Passkey and uncleared registration requirement intact. Unavailable signup payloads
+now return 410 after retirement, rather than the generic 403 authorization denial;
+invalid authority remains a 403. Explicit new delivery attempts after this failure
+still need an implemented UI and replay-safe operation contract.
+No field, event name or reason enum was added by this correction. The current
+HTTP and operation results are recorded in
+[payload failure evidence](../../evidence/2026-10-05-app-secret-payload-failure-boundaries-6K3P.md).
+
+The user accepted the operational lifetimes on 2026-10-05 (UTC): issuance and
+presentation payload 600 seconds, terminal purge delay 86400 seconds, delivered
+source outbox retention 604800 seconds, and processing proof retention 2592000
+seconds. Each remains mandatory explicit configuration. Presentation and confirmation
+also obey the shorter bound operation and flow deadlines; retransmission does not
+extend them. Saved unused Secrets have no short lifetime. Holds, unresolved claims
+and live continuations take precedence over physical collection eligibility.
+This approval does not authorize shared-database application or deployment.
+
+Application cleanup uses the existing Solid Queue retention queue, rather than a
+database VACUUM job. Authentication exclusion and source audits commit synchronously.
+The periodic retention job rescans for delivery and dependency-gated deletion.
+`ClientSecretIssuanceCollectionJob` advances a bounded cursor past retained allocations
+and captures a fixed upper ID bound; allocations created during a pass wait for the
+next periodic pass. Continuations recheck expiry, retention, holds and durable audits.
+Expired allocations clear their encrypted payload and record retirement through the
+existing expiry invalidator even when an earlier allocation remains live. Failed
+enqueue leaves source state available to a fresh scan. A real Solid Queue worker
+verified continuation and later deletion while preserving retained authority and the
+purge outbox. Other lifecycle stages and replay-barrier retirement remain incomplete.
+Allocation collection also compares Chronicle action, operation, timestamp, actor,
+subject, result, reason, metadata and changeset against the delivered source event.
+A matching UUID with conflicting facts leaves the allocation uncollected.
+The lifecycle credential and signup phases also advance bounded cursors past
+held credentials and live signup allocations. Existing claim and purge operations
+retain their own locks and authority checks. Each batch delivers source audits
+before attempting credential collection; unresolved outcomes never regain eligibility.
+Retired signup allocations, including zero-count omissions, are collected only
+while the original matching Ticket flow is locked and terminal. Source retirement,
+payload erasure, absence of candidates/receipts, proof retention after both the flow
+and purge deadlines, durable reason-bearing terminal audits and credential-purge
+audits, and holds gate deletion. Cancellation does not fabricate signup activation.
+The canceled zero-count path is operation/job-tested. Public operations additionally
+verify CANCELLED/EXPIRED/FAILED with counts 0/1/2, including unconfirmed and confirmed
+candidates; candidate purge audits must be delivered before allocation collection.
+Receipt collection now has its own bounded fixed-horizon lifecycle continuation.
+An HTTP integration journey establishes two real canonical root logins, retains
+the first receipt under legal hold and collects the later receipt through the
+continuation while preserving both usable root tokens. Remaining race/deadline
+coverage and replay-barrier retirement still need work.
+The writer concurrency matrix covers A=18/19/20 for manual/manual,
+manual/registered-Passkey and registered-Passkey/registered-Passkey operations
+from separate browser sessions and PostgreSQL connections. Queue barriers start
+both competitors without sleep-based scheduling. Positive allocations serialize
+to one reservation and one explicit conflict; capacity-zero Passkey operations
+record omissions with no encrypted payload or reserved capacity. A and R remain
+separate, including a two-slot Passkey reservation at A=18. This is allocation
+coverage, not proof of every confirmation or root-issuance race.
+Additional separate-writer tests prepare and present an actual manual candidate,
+race storage confirmation against an admitted browser's claim, and retry the
+confirmation after claim. Unconfirmed input is refused; confirmation never
+reactivates a claim, duplicates its audit or releases claimed authentication
+material. Claim remains distinct from session issuance.
+
+The local Base HTTP concurrency journey starts with a legitimate Base admission,
+claims through Auth with CSRF enabled, and submits the resulting handoff from two
+in-flight copies of the same pre-completion browser. Separate writer connections
+produce one canonical root token, one matching receipt and one browser's login
+cookie; the other result is a conflict. Separate cancellation/expiration cases
+hold the Client lock until PostgreSQL confirms a pending HTTP callback is blocked,
+commit the Ticket terminal transition, then release that callback and send another
+stale result directly. Neither establishes a root token, receipt or cookie, and
+the claim retires without becoming reusable. The blocked callback returns 400;
+the later terminal result follows the existing authorization-denial redirect to
+the guest landing page, which is also followed and checked. No response contract
+is changed for these tests. The configured two-connection test pool supports two
+parallel completions or one lock observer plus one blocked terminal callback.
+These local-flow checks do not establish every OIDC cancellation/issuance race.
+Input boundaries are also exercised through admitted HTTP with CSRF and the
+existing online limits enabled: missing/null/empty, numeric zero, array/object,
+31/33 characters, excluded Base58 characters, NUL, case mismatch and an unknown
+well-formed value are rejected without changing credential facts, claims, tokens
+or Source audits. Distinct request addresses keep independent cases below the
+online limits; these tests do not simulate rate-limit infrastructure failure.
+Native form tests cover 31/32/33 characters and the Base58 alphabet in the DOM.
+The Secret input has no supplied value attribute or application Secret state;
+its initial value is empty. A well-formed unknown value remains a server-side
+decision, and native constraints do not normalize case or modify submitted text.
+If allocation expiry precedes later signup cancellation, collection preserves the
+original `flow_expired` audit. It accepts that reason only for an unconfirmed
+allocation whose immutable expiry preceded its recorded discard time. It does not
+rewrite the earlier source retirement to match the later Ticket terminal reason.
+
+E2E execution was explicitly excluded from this implementation request on
+2026-10-05 (UTC). Earlier browser observations remain evidence only for the cases
+actually run; current verification continues with public-operation, HTTP and real-DB tests.
 
 ## Current implementation
 
@@ -12,8 +123,13 @@ active capacity. Pending candidates do not authenticate. Account availability is
 a separate login condition and does not erase the active count.
 
 The old app Secret kind/status tables and usage counters are absent from the new
-disposable-DB schema. The migration does not convert legacy values. A fresh
-schema load and an old-schema rebuild passed in distinct task-owned fleets;
+disposable-DB schema. The migration does not convert legacy values. Current
+migration-based reconstruction passed across a new 20-owner disposable fleet,
+with no pending versions. A separate Source reconstruction stopped at the old
+three-table checkpoint, ran the app-only rebuild and verified unchanged OIDs for
+114 unrelated tables, including Client and Passkey, before applying subsequent
+Source migrations. The fresh DB model/lookup/count selection passed 29 tests.
+These checks use schema reconstruction rather than legacy credential inheritance;
 that is not approval to apply the irreversible migration to a shared database.
 The unconnected app Emergency login operation, old app CRUD services and legacy
 LOGIN inventory task have been removed. The shared management registration concern
@@ -21,6 +137,14 @@ has only com/org service branches. Other old app kind/status, recovery and
 withdrawal references still require retirement during the application cutover.
 The historical Ticket Emergency proof table remains present in the disposable
 schema; it is not the new canonical success receipt and still needs scoped cleanup.
+
+Manual POST retransmission after storage confirmation is currently an open
+defect: confirmation clears its Rails operation locator and a later create can
+reserve another allocation. A public HTTP test reproduces the extra allocation.
+The pending revised form/session and Source outbox proposal binds a server-issued
+operation to the current session, preserves ordinary retries and refuses stale
+forms. That shape change has not been approved or implemented; prior successful
+manual journeys do not establish this post-confirmation retransmission boundary.
 
 The old app `/identity/recovery-secret` reveal route is retired, including
 authenticated requests with a valid old reveal reference. It no longer consumes
@@ -95,13 +219,15 @@ before and after conversion; no session or authentication freshness is changed.
 An authorized duplicate confirmation returns the same confirmed facts without
 additional events. An expired, canceled, omitted or unpresented allocation cannot
 be confirmed. This operation does not generate, encrypt or present plaintext and
-is not yet connected to the HTTP interface or initial signup authorization.
+is connected to protected Base management HTTP requests. Signup uses its
+separately authorized flow confirmation path; it does not bypass this signed-in
+operation's Step-Up requirement.
 Separate writer/barrier tests cover confirmation racing cancellation: one terminal
 result wins, the losing mutation is refused, and reservation, eligibility and
-source audit agree. Passkey registration provenance is still a separate integration
-gate: current settings registration has no durable ceremony start, and issuance
-has no saved registered-Passkey reference. A proposed immutable snapshot is in
-the persistence shape proposal; prepared batch tests do not establish that binding.
+source audit agree. The earlier provenance gap is superseded by the current
+registration ceremony and its bound issuance operation. The actual signup and
+signed-in HTTP journeys verify saved Passkey registration followed by delivery
+and storage declaration; prepared batch tests alone do not establish that binding.
 
 Credential confirmation uses a narrow model write interval around a validated
 save. Source declaration and creation events are required; the interval closes
@@ -193,8 +319,9 @@ operator preparation; requests and delivery jobs never create missing policies.
 
 Zenith source outbox records typed event and actor facts with no raw Secret,
 digest or user-provided name. Ticket's success-receipt model validates a completed
-normal Secret flow and matching root session. Receipt writing is not yet
-connected to canonical login. Source outbox persistence is not Chronicle delivery.
+normal Secret flow and matching root session. Canonical Base login writes the
+receipt in its Ticket session transaction, as verified by the HTTP journeys.
+Source outbox persistence is not Chronicle delivery.
 
 ## Target journeys still requiring completion
 
@@ -205,7 +332,9 @@ bootstrap exemption applies. Deletion immediately revokes and discards; jobs
 perform the subsequent audited physical recovery. Reenable, secret editing,
 plaintext redisplay and generic rotation are not offered.
 
-The target requires signup and signed-in settings to share the 2/1/0 count policy. Signed-in registration is now connected; signup remains unfinished. The displayed collection is fixed before presentation, and confirmation
+Signup and signed-in settings share the 2/1/0 count policy. Both registration
+paths are connected and have HTTP tests covering A=0..20. The displayed
+collection is fixed before presentation, and confirmation
 activates all candidates or none. Signup cannot finalize before required storage
 declaration or normal omission. A saved Passkey is not automatically removed
 when its associated delivery is interrupted.
@@ -216,7 +345,10 @@ Service Worker caches, analytics and error collection need real-browser evidence
 Never silently regenerate a missing payload. Reissue invalidates the previous
 unconfirmed attempt; confirmed plaintext cannot be recovered.
 
-Auth app now exposes GET `/sign/in/secret/new` and POST `/sign/in/secret`; GET `/sign/in/secret` has no compatibility alias. The method selector preserves the other five methods and links with a generated regional `_url` helper. The local Base admission journey is connected and HTTP-tested with CSRF enabled. OIDC admission integration remains unfinished.
+Auth app exposes GET `/sign/in/secret/new` and POST `/sign/in/secret`; GET
+`/sign/in/secret` has no compatibility alias. The method selector preserves the
+other five methods and links with a generated regional `_url` helper. Local Base
+and OIDC admission journeys are connected and HTTP-tested with CSRF enabled.
 Full verification must lead to irreversible Zenith claim and then canonical
 Base login. After claim, cancellation, Ticket failure and response loss never
 restore usability. The same durable operation may reconcile its existing result;
@@ -348,16 +480,29 @@ the established root session active. These are dependency-order checks, not a
 completed receipt or issuance collector.
 
 Retired unconfirmed issuance collection is now connected to the lifecycle job.
+
+The explicit `ClientSecretIssuancePurger.call_confirmed!` entry also guards
+confirmed positive allocations against collection while credentials or login
+receipts remain. It requires the original authority deadline and allocation
+expiry plus explicit proof retention, completed signup when applicable, and
+delivered matching storage/creation audit and durable credential-purge events.
+The lifecycle job invokes this entry after receipt reconciliation. A real manual
+reservation, protected presentation, storage confirmation, management revocation,
+Chronicle delivery and credential DELETE now precede successful allocation
+collection in the public-operation/job regression. Signup and Passkey-specific
+collection paths, all timing boundaries and concurrency remain unverified.
+The protected replay barrier remains retained.
 The Source Client and allocation locks cover the retirement deadline, absence of
 credential dependencies and retention/enforcement holds. Terminal source events
 must be acknowledged and present in Chronicle before deletion. Allocation DELETE
 and `secret.issuance_purged` outbox persistence share the Source transaction; the
-outbox survives and is delivered on a later scan. Confirmed and omitted allocation
-collection, receipt collection and completed-flow collection remain unfinished.
+outbox survives and is delivered on a later scan. Complete flow-proof collection
+remains unfinished; omitted collection and receipt
+collection have separate guarded paths described below.
 The allocation collection tests additionally verify refusal before Chronicle
 delivery, legal-hold refusal, rollback of both DELETE and its outbox, and a
 successful retry after rollback. Confirmed and omitted facts are explicitly
-preserved by this collector, even if their retention timestamps are finite.
+preserved by this unconfirmed-allocation entry, even if their retention timestamps are finite.
 Reservation callers also refuse an operation with a surviving
 `secret.issuance_purged` event. Physical collection must not turn a retransmission
 into a new allocation. These source events remain replay barriers; future outbox
@@ -386,11 +531,39 @@ issuance row: the final DELETE may have left its purged event pending. The
 outbox-only recovery test executes the real periodic job on an empty Secret fleet,
 verifies Chronicle delivery and verifies duplicate-safe repeat execution.
 
+Omitted allocation collection is separately connected through
+`ClientSecretIssuancePurger.call_omitted!`. It uses the explicit proof-retention
+setting after the latest allocation/completion fact and bound Ticket deadline.
+An existing session uses its actual `discard_at` contract; positive Infinity
+retains the allocation until that session retires. Signup uses the existing flow
+expiry and requires its durable completion and matching source completion audit.
+Source Client, Ticket authority and allocation locks protect these checks.
+Missing or malformed expiry on an existing authority fails explicitly. A missing
+session/flow has no accepted continuation; its source completion facts and durable
+audit still gate collection. Uncompleted signup allocations remain retained.
+Matching omission audit must be delivered and present in Chronicle; legal and
+enforcement holds still apply. DELETE and the count-zero issuance_purged outbox
+commit in one Source transaction. Public runtime observations verify deadline
+refusal, missing-audit refusal, atomic rollback/retry, periodic-job connection and
+retention through an actual bound session deadline.
+Additional runtime fixtures verify the explicit positive-Infinity session sentinel,
+actual token revocation, legal-hold refusal/release and rejection of a completed
+signup audit without its required omission audit. These do not establish an
+actual completed-signup collection journey. These use isolated fixtures,
+not a new browser signup journey. Confirmed manual-batch collection has a public
+operation and lifecycle test. Full signup/hold/race coverage and eventual
+live-owner replay-barrier retirement remain unfinished.
+
 Delivered source outbox collection is now connected to the bounded lifecycle scan.
 It requires the configured retention deadline, Chronicle commit, no legal or
 enforcement hold and no credential, issuance or Ticket receipt dependency.
-`secret.issuance_purged` records remain explicit replay barriers and are excluded.
-They are excluded before the bounded candidate limit, so retained barriers cannot
+`secret.issuance_purged` records remain explicit replay barriers while their Client
+exists. When the Client is physically absent, the source event can be collected
+only after delivery, retention, absence of dependent facts, enforcement guards
+and durable Chronicle verification. The normal issuers require the owning Client
+lock, so an absent owner cannot authorize replay. Live-owner barrier retirement
+still requires implementation. Barriers now participate in the bounded cursor scan;
+the cursor advances past retained barriers, so they cannot
 occupy every scan slot and prevent later eligible events from being collected.
 `ClientSecretAuditOutboxPurgeJob` processes a bounded ID-ordered batch and queues
 the next cursor even when a preceding row remains held or dependent. Each scan
@@ -401,8 +574,19 @@ holds, dependencies and Chronicle evidence. Cursor progression grants no deletio
 authority. Public runtime jobs have verified dependent-row continuation with an
 inline job adapter and an actual Solid Queue worker on the guarded disposable fleet.
 The latter verifies durable enqueue while the worker is stopped and collection
-after it starts, with zero failed jobs. Enqueue failure, interruption during a
-claimed execution and Minitest coverage remain pending.
+after it starts, with zero failed jobs. A separate queue connection-failure
+observation verifies visible enqueue failure, preservation of unprocessed Source
+events and recovery through a fresh periodic scan followed by the actual worker.
+Interruption during a claimed execution and Minitest coverage remain pending.
+Physical credential and source outbox collection compare the durable Chronicle
+event with the complete immutable Source fact: UUID, action, operation, time,
+result, reason, actor, Client subject, allowlisted metadata and empty changeset.
+A matching UUID and success result alone do not authorize deletion. Conflicting
+target metadata keeps the Source record and credential intact; public purger
+tests verify refusal followed by successful collection after restoring the
+matching durable record. This strengthens existing records without changing
+their schema or Chronicle payload.
+
 Independent Chronicle history survives source outbox deletion. The current public
 tests verify undelivered/deadline refusal, collection without dependencies and
 preservation of credential dependencies and replay barriers. Complete receipt
@@ -410,8 +594,8 @@ collection, replay-barrier retirement and the remaining hold/crash/deadline-boun
 tests remain unfinished.
 
 Successful receipt collection is now connected to the lifecycle scan through the
-explicit `APP_SECRET_PROOF_RETENTION_SECONDS` setting (proposed 2592000 seconds;
-not approved). It locks Source Client, associated OIDC authorization, completed
+explicit `APP_SECRET_PROOF_RETENTION_SECONDS` setting (2592000 seconds accepted
+on 2026-10-05 UTC). It locks Source Client, associated OIDC authorization, completed
 Secret flow and receipt in that order. All flow/authorization acceptance deadlines
 and matching consumed/purged Chronicle times must precede the retention deadline;
 the credential must already be physically absent and holds prevent collection.
@@ -449,7 +633,8 @@ candidate. Actual Source reads verify two allocations, the original canceled and
 authentication-unavailable, the replacement confirmed, exactly one active Secret
 and the original single root session. This is an explicit replacement operation,
 not a fallback that saves an unseen value. Signup interruption and equivalent
-browser sign-in remain unverified.
+browser sign-in was unverified at that checkpoint. The later HTTPS browser
+journey below covers normal Secret root login and reuse refusal.
 
 The browser delivery file additionally verifies unconfirmed reload and a second
 tab in the same browser context. The sibling GET contains no value; reloading the
@@ -484,3 +669,16 @@ fixture; the subsequent Secret-established root acquires freshness through Auth
 verification and Base completion. This evidence covers Rails HTTP and persisted
 state, not a browser engine's history or storage behavior. Real-browser residual
 plaintext acceptance checks remain unfinished.
+
+The HTTPS Chromium journey in `e2e/app-secret-sign-in-entry.spec.ts` now reaches
+six distinct rendered authentication controls and the Secret form in both US and
+JP regions using server-issued Base admission. Another case uses browser manual
+issuance, protected presentation and explicit storage confirmation, then a guest
+flow through Auth evidence and native result handoff to canonical Base root login.
+The persisted receipt matches exactly one normal Secret root token and the
+consumed claim; another guest flow rejects the same saved value with HTTP 422.
+The existing 30-second cooldown remains enabled and is awaited before guest entry.
+Only the initial management session and Step-Up are fixture state; fresh browser
+Step-Up and signup are not proven by this case. External Jump and Turnstile are
+test adapter substitutes behind a loopback HTTPS proxy. See
+`evidence/2026-10-05-app-secret-browser-admission-9D3F.md` for commands and limits.

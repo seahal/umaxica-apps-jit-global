@@ -226,9 +226,10 @@ All three share this path:
 ```
 
 - `sign(/.*)?` covers the whole `/sign` scope in `config/routes/core.rb`: `GET`/`POST /sign` (RP
-  start), `/sign/callback` (OIDC callback), and `/sign/out` (sign-out). An earlier value listed only
-  `sign/out`, so `/sign` and `/sign/callback` never reached Rails and the edge answered with an
-  empty HTTP 300.
+  start) and `/sign/out` (sign-out). An earlier value listed only `sign/out`, so `/sign` never
+  reached Rails and the edge answered with an empty HTTP 300.
+- `oidc(/.*)?` covers the `/oidc` scope, including the OIDC callback `/oidc/callback`. The callback
+  was `/sign/callback` until 2026-10-02.
 - The anchored group does not admit sibling prefixes such as `/signup` or `/signs`.
 - `jp.umaxica.dev` is not published through this rule set.
 - Diagnosis: a response that reached Rails carries `x-request-id`; a response without it, and no

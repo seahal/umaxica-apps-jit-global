@@ -10,18 +10,23 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
-  test "separate writer connections and sessions serialize manual reservations at eighteen nineteen and twenty" do
-    [18, 19, 20].each do |count|
+  test "separate writers serialize manual and registered Passkey reservations at eighteen nineteen and twenty" do
+    [18, 19, 20].product([%i(manual manual), %i(manual passkey), %i(passkey passkey)]).each do |count, paths|
       actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
       tokens =
-        Array.new(2) do
+        Array.new(2) do |index|
           token = ClientToken.create!(user: actor)
           token.update!(
-            last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+            last_step_up_at: ClientToken.database_now,
+            last_step_up_scope: ((paths[index] == :manual) ? "settings_secret_credential" : "settings_passkey"),
             last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
             last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
           )
           token
+        end
+      passkeys =
+        paths.map do |path|
+          actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key") if path == :passkey
         end
       now = Client.database_now
       count.times do
@@ -40,7 +45,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
       release = Queue.new
       ActiveRecord::Base.connection_handler.clear_active_connections!
       futures =
-        tokens.map do |token|
+        tokens.each_with_index.map do |token, index|
           Concurrent::Future.execute do
             AppZenithRecord.connected_to(role: :writing) do
               AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
@@ -54,11 +59,19 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                     surface: :base,
                   )
                   AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
-                    ClientSecretManualReservationIssuer.call!(
-                      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
-                    )
+                    issuance =
+                      if paths[index] == :manual
+                        ClientSecretManualReservationIssuer.call!(
+                          actor_context: context, token: token, operation_id: SecureRandom.uuid,
+                          expires_after: 1.minute,
+                        )
+                      else
+                        ClientSecretPasskeyReservationIssuer.call!(
+                          actor_context: context, token: token, passkey: passkeys[index], expires_after: 1.minute,
+                        )
+                      end
+                    issuance.planned_count.zero? ? :omitted : :reserved
                   end
-                  :reserved
                 end
               end
             end
@@ -80,13 +93,28 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
         end
 
       assert_equal 2, pids.uniq.length
-      assert_equal(((count == 20) ? %i(full full) : %i(conflict reserved)), results.sort)
+      expected =
+        if count == 20
+          paths.map { |path| (path == :manual) ? :full : :omitted }
+        else
+          %i(conflict reserved)
+        end
+
+      assert_equal expected.sort, results.sort
       capacity = ClientSecretCapacityQuery.call(client: actor, at: Client.database_now)
+      winner = results.index(:reserved)
+      reserved_count = winner ? ((paths[winner] == :manual || count == 19) ? 1 : 2) : 0
 
       assert_equal count, capacity.active_count
-      assert_equal(((count == 20) ? 0 : 1), capacity.reserved_count)
+      assert_equal reserved_count, capacity.reserved_count
       assert_operator capacity.active_count + capacity.reserved_count, :<=, 20
-      assert_equal(((count == 20) ? 0 : 1), ClientSecretAuditOutbox.where(client_ref: actor.public_id).count)
+      assert_equal(
+        (count == 20) ? paths.count(:passkey) : 1,
+        ClientSecretAuditOutbox.where(client_ref: actor.public_id).count,
+      )
+      assert_equal 0, ClientSecretIssuance.where(client_id: actor.id, planned_count: 0).where.not(
+        encrypted_payload: nil,
+      ).count
     ensure
       2.times { release << true } if release
       futures&.each { |future| future.wait(10) }
@@ -94,6 +122,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
         ClientSecretAuditOutbox.where(client_ref: actor.public_id).find_each(&:destroy!)
         ClientSecretCredential.where(client_id: actor.id).find_each(&:destroy!)
         ClientSecretIssuance.where(client_id: actor.id).find_each(&:destroy!)
+        passkeys&.compact&.each(&:destroy!)
         tokens&.each(&:destroy!)
         actor.reload.destroy!
       end

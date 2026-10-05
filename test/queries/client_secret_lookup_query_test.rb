@@ -34,7 +34,7 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
   end
 
   test "pending claimed revoked and discarded rows never resolve as usable credentials" do
-    owner = clients(:placeholder)
+    owner = Client.create!(status_id: ClientStatus::ACTIVE)
     now = Client.database_now
     %i(pending claimed revoked discarded).each do |state|
       raw = SecureRandom.base58(32)
@@ -48,11 +48,21 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
         client: owner, issuance: issuance, name: "Fixture Secret", password: raw,
         lookup_digest: SignSecretLookupDigest.digest(raw),
         confirmed_at: (state == :pending) ? nil : now,
-        claimed_at: (state == :claimed) ? now : nil,
-        claim_operation_id: (state == :claimed) ? SecureRandom.uuid : nil,
         revoked_at: (state == :revoked) ? now : nil,
         discard_at: (state == :discarded) ? now : Float::INFINITY,
       )
+      if state == :claimed
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+        payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+          reference: admission.reference, surface: "app", expected_intent: "sign_in",
+        )
+        flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
+        ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+          admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
+        )
+
+        assert ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+      end
 
       assert_nil ClientSecretLookupQuery.call(secret: raw)
     end

@@ -3,22 +3,16 @@
 
 module Base
   module Dev
+    # An OIDC/OAuth Non-Participant face: it has no actor, session, or preference lifecycle.
     class ApplicationController < ActionController::Base
       include ::FqdnAvailabilityGate
       include ::RateLimit
       include ::DefaultNoStore
 
-      include ::Session
-
-      include ::ActorSupport
-
-      include ::Finisher
-
       AUTHENTICATION_MODE = :deny_all
 
       prepend_before_action :apply_default_no_store
 
-      helper_method :current_actor
       # Surface-wide default web request limit (defense-in-depth baseline).
       # RateLimit stays a side-effect-free helper; the limit and its numeric
       # value are declared here on the inheriting controller.
@@ -31,9 +25,6 @@ module Base
         store: rate_limit_store,
         with: -> { render_rate_limited(retry_after: 60) },
       )
-      before_action :set_current_context
-      before_action :reset_flash
-      prepend_around_action :with_actor_lifecycle
 
       allow_browser versions: :modern
 

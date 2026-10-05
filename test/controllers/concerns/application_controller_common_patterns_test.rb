@@ -17,6 +17,11 @@ module Concerns
       # Xper Phase 0 owns static landing pages without actor/session lifecycle.
       # Its edge protections and isolation are covered by XperBootstrapTest.
       .reject { |f| f.include?("/xper/") }
+      # The Base developer and network faces are OIDC/OAuth Non-Participants that serve only a
+      # landing page, so they carry no actor/session lifecycle. See
+      # adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md.
+      .reject { |f| f.include?("/base/dev/") }
+      .reject { |f| f.include?("/base/net/") }
       .sort
     CONTROLLER_FILES =
       ALL_CONTROLLER_FILES.index_with do |file|

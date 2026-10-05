@@ -17,14 +17,7 @@ class ClientSecretCredentialPurger
             AppEnforcementCase.principal_effect_blocking?(credential.client.public_id, :principal_hard_delete_blocked)
 
           events = terminal_events(credential).lock.to_a
-          return :undelivered if events.empty? || events.any? { |event| event.delivered_at.nil? }
-
-          event_ids = events.map(&:event_id)
-          durable_ids =
-            ChronicleRecord.connected_to(role: :writing) do
-              Chronicle.where(event_uuid: event_ids, result: "succeeded").pluck(:event_uuid)
-            end
-          return :undelivered unless durable_ids.sort! == event_ids.sort!
+          return :undelivered unless terminal_audits_complete?(credential, events)
 
           reference = credential.public_id
           client_ref = credential.client.public_id
@@ -42,6 +35,36 @@ class ClientSecretCredentialPurger
 
     private
 
+    def terminal_audits_complete?(credential, events)
+      return false if events.empty? || events.any? { |event| event.delivered_at.nil? }
+      return false unless events.any? { |event|
+        event.credential_ref == credential.public_id && event.event_name == "secret.discarded"
+      }
+
+      if credential.confirmed_at.nil? && events.none? { |event| event.reason == "withdrawal" }
+        return false unless events.any? { |event| event.credential_ref.nil? }
+      end
+
+      events.all? { |event| durable_event?(event) }
+    end
+
+    def durable_event?(event)
+      ChronicleRecord.connected_to(role: :writing) do
+        recorded = Chronicle.find_by(event_uuid: event.event_id)
+        metadata = {
+          "client_ref" => event.client_ref,
+          "credential_ref" => event.credential_ref,
+          "actor_public_ref" => event.actor_public_ref,
+          "item_count" => event.item_count,
+        }.compact
+        recorded && recorded.action == event.event_name && recorded.request_id == event.operation_ref &&
+          recorded.metadata == metadata && recorded.occurred_at == event.occurred_at &&
+          recorded.result == "succeeded" && recorded.reason == event.reason &&
+          recorded.actor_type == event.actor_type && recorded.actor_id == event.actor_id &&
+          recorded.subject_type == "Client" && recorded.subject_id == event.actor_id && recorded.changeset == {}
+      end
+    end
+
     def terminal_events(credential)
       if credential.confirmed_at || ClientSecretAuditOutbox.exists?(
         credential_ref: credential.public_id, event_name: "secret.discarded", reason: "withdrawal",
@@ -50,7 +73,7 @@ class ClientSecretCredentialPurger
       else
         ClientSecretAuditOutbox.where(
           operation_ref: credential.issuance.origin_operation_id,
-          credential_ref: nil, event_name: %w(secret.issuance_canceled secret.discarded),
+          credential_ref: [nil, credential.public_id], event_name: %w(secret.issuance_canceled secret.discarded),
         )
       end
     end

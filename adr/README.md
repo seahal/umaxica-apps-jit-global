@@ -37,6 +37,16 @@ Current identity authority decision:
   sole IdP/AS, Auth is ceremony-only, seven first-party RPs (`core-*`/`side-*`/`edit-org`), opaque
   handoff/result, Root homes, one-shot `/sign/out`, and Valkey auth-state topology for nonprod.
 
+- `adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md` — OAuth/OIDC
+  participation is allowlisted and never inferred from hostname, TLD, or shared code; all `.dev`
+  and `.net` surfaces, the Info/Docs/News/Help content faces, Auth, and Xper are Non-Participants,
+  and reclassifying one requires a new accepted ADR.
+
+- `adr/defer-auth-xper-transient-workflow-redesign.md` — scope decision for the current Base/RP
+  cycle: no Auth or Xper workflow, token, or cookie redesign and no shared transient-capability
+  implementation now; `auth.*` origins and Xper apex origins stay stable; the redesign is retained
+  as backlog.
+
 Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):
 
 - `adr/idp-flow-lifecycle-vocabulary.md` — lifecycle, event, request-semantics, and outcome

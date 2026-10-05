@@ -28,20 +28,13 @@ class ClientSecretAuditOutboxPurger
       now = Client.database_now
       return :undelivered unless event.delivered_at
       return :pending unless event.discard_at <= now && event.purge_eligible_at <= now
-      return :replay_barrier if event.event_name == "secret.issuance_purged"
+      return :replay_barrier if event.event_name == "secret.issuance_purged" && owner
       return :held if (owner && owner.client_retention_holds.active_at(now).exists?) ||
         AppEnforcementCase.principal_effect_blocking?(event.client_ref, :withdrawal_purge_blocked) ||
         AppEnforcementCase.principal_effect_blocking?(event.client_ref, :principal_hard_delete_blocked)
       return :dependent if dependent_facts?(event)
 
-      durable =
-        ChronicleRecord.connected_to(role: :writing) do
-          Chronicle.exists?(
-            event_uuid: event.event_id, action: event.event_name,
-            request_id: event.operation_ref, result: "succeeded",
-          )
-        end
-      return :undelivered unless durable
+      return :undelivered unless durable_event?(event)
 
       event.delete
       :purged
@@ -54,6 +47,23 @@ class ClientSecretAuditOutboxPurger
 
       AppTicketRecord.connected_to(role: :writing) do
         ClientSecretSignInReceipt.exists?(operation_id: event.operation_ref)
+      end
+    end
+
+    def durable_event?(event)
+      ChronicleRecord.connected_to(role: :writing) do
+        recorded = Chronicle.find_by(event_uuid: event.event_id)
+        metadata = {
+          "client_ref" => event.client_ref,
+          "credential_ref" => event.credential_ref,
+          "actor_public_ref" => event.actor_public_ref,
+          "item_count" => event.item_count,
+        }.compact
+        recorded && recorded.action == event.event_name && recorded.request_id == event.operation_ref &&
+          recorded.metadata == metadata && recorded.occurred_at == event.occurred_at &&
+          recorded.result == "succeeded" && recorded.reason == event.reason &&
+          recorded.actor_type == event.actor_type && recorded.actor_id == event.actor_id &&
+          recorded.subject_type == "Client" && recorded.subject_id == event.actor_id && recorded.changeset == {}
       end
     end
   end

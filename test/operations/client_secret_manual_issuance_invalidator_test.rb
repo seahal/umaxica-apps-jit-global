@@ -32,6 +32,9 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     candidate.reload
 
     assert_equal :canceled, issuance.state(at: Client.database_now)
+    assert_equal ["flow_canceled"], ClientSecretAuditOutbox.where(
+      operation_ref: issuance.origin_operation_id, event_name: %w(secret.issuance_canceled secret.discarded),
+    ).distinct.pluck(:reason)
     assert_nil issuance.encrypted_payload
     assert_equal issuance.canceled_at, issuance.discard_at
     assert_equal 1.day, issuance.purge_eligible_at - issuance.discard_at
@@ -67,6 +70,33 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
 
     assert_not rejected.valid?
     assert_includes rejected.errors.attribute_names, :issuance
+  end
+
+  test "payload failure retirement still requires current independent scoped Step-Up" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
+    )
+    ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
+    snapshot = issuance.reload.attributes
+    token.update!(last_step_up_at: nil)
+
+    assert_no_difference ["ClientSecretAuditOutbox.count", "ClientSecretCredential.count"] do
+      assert_raises(ClientSecretManualIssuanceInvalidator::Denied) do
+        ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
+          actor_context: context, token: token, issuance: issuance, purge_after: 1.day,
+        )
+      end
+    end
+    assert_equal snapshot, issuance.reload.attributes
+    assert_equal 1, issuance.reserved_count(at: Client.database_now)
   end
 
   test "audit failure rolls back cancellation candidate discard and payload removal" do

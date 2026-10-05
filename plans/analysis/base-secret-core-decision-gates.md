@@ -45,20 +45,24 @@ creation, same-value retry and mismatch refusal. The shared operational security
 duration remains unapproved; the 365-day local verification value is a proposal,
 not evidence of an accepted deployed security policy.
 
-## New operational values awaiting approval
+## Accepted operational values
 
-These are proposals, not silent production defaults. `ClientSecretLifetimesValue`
+The user accepted the four proposed values in the implementation conversation on
+2026-10-05 UTC: issuance 600 seconds, purge delay 86400 seconds, delivered outbox
+retention 604800 seconds, and proof retention 2592000 seconds. This acceptance
+does not authorize shared-database destructive application or deployment.
+These values remain explicit configuration, not silent production defaults. `ClientSecretLifetimesValue`
 requires explicit positive integer configuration; isolated tests provide explicit
 values. Missing values stop the dependent operation, not unrelated HTTP work.
 
-| Setting / concern | Proposed value | Start and resend behavior | Expiry outcome and reason |
+| Setting / concern | Accepted value | Start and resend behavior | Expiry outcome and reason |
 | --- | --- | --- | --- |
 | `APP_SECRET_ISSUANCE_TTL_SECONDS` | 600 seconds | Starts at writer reservation time; fixed batch retries never extend it; actual deadline is no later than signup flow expiry or scoped Step-Up expiry | Reject stale presentation/confirmation, erase payload and retire unconfirmed candidates; ten minutes permits deliberate saving within existing 15-minute authority |
 | One-display encrypted payload | Same issuance deadline; no independent extension | Created by explicit authorized preparation; presentation erases it; resend cannot restore it | Missing, undecryptable or expired payload never creates replacement unseen random values; keep a single reservation/authorization horizon |
 | `APP_SECRET_PURGE_DELAY_SECONDS` | 86400 seconds | Starts at source terminal transition; retries preserve terminal facts | Physical collection also waits for terminal Chronicle delivery and durable continuation reconciliation; one day gives an operational retry window without making the credential reusable |
 | `APP_SECRET_OUTBOX_RETENTION_SECONDS` | 604800 seconds | Starts at confirmed source delivery acknowledgment; delivery replay does not extend it | Undelivered events never qualify; delivered records may be collected only after dependent proof/purge references no longer need them; seven days provides delivery investigation time |
-| Successful receipt collection: `APP_SECRET_PROOF_RETENTION_SECONDS` | Proposed 2592000 seconds (30 days), unapproved | Starts after the latest completed-flow/authorization acceptance deadline and terminal consumed/purged Chronicle facts; retries do not extend the persisted facts | Explicit positive configuration; Source credential must be absent, matching terminal Chronicle facts must exist, and holds prevent collection. Receipt operation and lifecycle connection are implemented; remaining failure/boundary coverage is incomplete |
-| Issuance and other flow/proof collection | Separate dependency review still required | Unconfirmed retired allocations now use their explicit purge deadline; confirmed/omitted batches and remaining Ticket proofs are not collected yet | Never collect unresolved claims, live callbacks or pending purge dependencies; remaining implementation and unapproved operational values remain separate |
+| Successful receipt collection: `APP_SECRET_PROOF_RETENTION_SECONDS` | 2592000 seconds (30 days) | Starts after the latest completed-flow/authorization acceptance deadline and terminal consumed/purged Chronicle facts; retries do not extend the persisted facts | Explicit positive configuration; Source credential must be absent, matching terminal Chronicle facts must exist, and holds prevent collection. Receipt operation and lifecycle connection are implemented; remaining failure/boundary coverage is incomplete |
+| Issuance and other flow/proof collection | Separate dependency review still required | Unconfirmed retired allocations use their purge deadline; omitted and confirmed allocations use explicit proof retention after original Ticket authority deadline and source completion facts; confirmed collection additionally requires durable credential-purge audits; remaining Ticket proofs and bounded replay-barrier retirement still need collection | Never collect unresolved claims, live callbacks or pending purge dependencies; positive-Infinity session bindings retain completed allocations until session retirement; manual confirmed collection is job-tested, signup and Passkey collection remain unverified; implementation and operational approval remain separate |
 
 The issuance, payload and purge settings are separate from permanent credential
 eligibility and Chronicle retention. Operational approval does not authorize

@@ -2705,7 +2705,7 @@ CREATE TABLE public.client_secret_issuances (
     updated_at timestamp(6) with time zone NOT NULL,
     signup_completed_at timestamp(6) with time zone,
     CONSTRAINT client_secret_issuance_binding CHECK (((browser_session_ref IS NULL) <> (sign_up_flow_ref IS NULL))),
-    CONSTRAINT client_secret_issuance_count CHECK ((((origin)::text = ANY ((ARRAY['manual'::character varying, 'passkey_registration'::character varying])::text[])) AND (attempt_number > 0) AND ((planned_count >= 0) AND (planned_count <= 2)) AND (((origin)::text <> 'manual'::text) OR (planned_count <= 1)))),
+    CONSTRAINT client_secret_issuance_count CHECK ((((origin)::text = ANY (ARRAY[('manual'::character varying)::text, ('passkey_registration'::character varying)::text])) AND (attempt_number > 0) AND ((planned_count >= 0) AND (planned_count <= 2)) AND (((origin)::text <> 'manual'::text) OR (planned_count <= 1)))),
     CONSTRAINT client_secret_issuance_facts CHECK (((NOT ((confirmed_at IS NOT NULL) AND (canceled_at IS NOT NULL))) AND ((confirmed_at IS NULL) OR ((presented_at IS NOT NULL) AND (confirmed_at >= presented_at) AND (confirmed_at < expires_at))) AND ((presented_at IS NULL) OR (presented_at < expires_at)))),
     CONSTRAINT client_secret_issuance_omission CHECK ((((planned_count = 0) AND (expires_at IS NULL) AND (presented_at IS NULL) AND (confirmed_at IS NULL) AND (canceled_at IS NULL) AND (encrypted_payload IS NULL)) OR ((planned_count > 0) AND (expires_at IS NOT NULL))))
 );

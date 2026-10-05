@@ -4,11 +4,14 @@ Canonical decision: `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
 
 Machine-readable map: `AuthBoundaryAuthorityMap`.
 
+Surfaces outside this table are OAuth/OIDC Non-Participants; see
+`docs/architecture/oidc-non-participant-surfaces.md`.
+
 | Role     | Surface          | Notes                                               |
 | -------- | ---------------- | --------------------------------------------------- |
 | IdP / AS | Base app/com/org | `/oauth/*`, discovery, JWKS, end-session            |
 | Ceremony | Auth app/com/org | Passkey/Google/Apple/Entra; app TOTP only; Jump JWKS retained |
-| RP       | Core app/com/org | Rails owns neutral `GET/POST /sign` + `GET /sign/callback` |
+| RP       | Core app/com/org | Rails owns neutral `GET/POST /sign` + `GET /oidc/callback` |
 | RP       | Warp app/com/org | Independent clients; OIDC client IDs retain `side-*` |
 | RP       | Edit org         | Independent `edit-org`; Publishing UI on Edit       |
 

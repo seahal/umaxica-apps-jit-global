@@ -15,7 +15,7 @@ class ClientSecretAuditOutboxPurgeJob < ApplicationJob
 
     AppZenithRecord.connected_to(role: :writing) do
       eligible = ClientSecretAuditOutbox.where.not(delivered_at: nil)
-        .where(purge_eligible_at: ..Client.database_now).where.not(event_name: "secret.issuance_purged")
+        .where(purge_eligible_at: ..Client.database_now)
       through_id = eligible.maximum(:id) if through_id.nil?
       return if through_id.nil?
 

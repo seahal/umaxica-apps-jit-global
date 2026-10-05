@@ -1,5 +1,12 @@
 # app Secret persistence shape proposal
 
+This is a historical shape proposal. Its `consumed_at` removal discussion below
+was superseded by the current receipt-confirmed retirement contract: Source
+`consumed_at` records successful reconciliation only after durable canonical Ticket
+commit evidence. The current schema and [rebuild ADR](../../adr/app-secret-phase1-rebuild.md)
+govern implementation. Four operational lifetimes were accepted on 2026-10-05 UTC;
+that decision grants no shared-database application or deployment authorization.
+
 Direction approved and refined on 2026-10-03 (UTC). The current test runner
 confirmed Client/Secret ownership at app_zenith and Token/SignInFlow at app_ticket.
 The old app Secret data has no inheritance requirement. Approval below concerns
@@ -373,3 +380,53 @@ This proposal does not revive the old signed Passkey ceremony framework or settl
 the separate encrypted delivery tuple, claim-flow reference or Chronicle projection
 proposals above. Full registration retry/response-loss behavior still requires
 integration tests through actual registration and the bound operation locator.
+# Revised replay-protection proposal (approval pending, 2026-10-05 UTC)
+
+The admitted manual HTTP journey now reproduces an additional allocation when
+the original create POST is resent after storage confirmation. Confirmation
+currently removes the session's operation locator, allowing create to select a
+new UUID. Fixing this requires identifying the submitted operation, rather than
+interpreting every later POST as a new request. This revision supersedes the
+earlier outbox-only approval question; no implementation shape has changed yet.
+
+```text
+Manual form before: {authenticity_token}
+Manual form after:  {authenticity_token, operation_id: server_uuid}
+
+Rails session before: {client_secret_operation_id: server_uuid}
+Rails session after:  {client_secret_operation: {id: server_uuid, session_ref: current_token.public_id}}
+
+Outbox before: operation_ref, client_ref
+Outbox after:  operation_ref, client_ref,
+               issuance_origin,
+               issuance_browser_session_ref,
+               issuance_sign_up_flow_ref
+```
+
+The operation UUID is server-generated, nonsecret and submitted in a hidden
+field. The controller compares it with the operation bound to the current root
+session before reservation. Existing scoped Step-Up, expiry and ownership still
+apply. An explicit new form can prepare a new nonsecret operation; GET never
+creates a reservation, candidate, grant, challenge or Step-Up state. Old forms
+cannot select a newer operation. Confirmation preserves enough locator state
+for ordinary retransmission to return the existing result; a different session
+cannot use an old browser locator. Legacy locator shapes are refused rather than
+read through a compatibility fallback.
+
+Named session fields are intentional: explicit operation/session references
+reduce the risk of reversing authentication bindings compared with positional
+values. They are authority bindings, not a new proof of Step-Up.
+
+The three Source outbox snapshots come from the locked issuance immediately
+before deletion. `issuance_origin` reuses manual/passkey_registration; exactly
+one session/signup reference accompanies a snapshot. They establish which
+original authority must be terminal before its replay barrier can retire.
+Unknown authority remains retained. The model's existing Chronicle allowlist
+does not include these Source-only snapshots; Chronicle payload is unchanged.
+
+The revision affects app form props/request data, app Rails session serialization
+and an app-only additive migration. No plaintext, digest or authentication cookie
+is stored in the new fields. It does not change accepted TTL values, com/org,
+or authorize shared database application. Production-shape changes await explicit
+approval under the data-shape harness; the failing HTTP test remains evidence of
+the uncorrected behavior.

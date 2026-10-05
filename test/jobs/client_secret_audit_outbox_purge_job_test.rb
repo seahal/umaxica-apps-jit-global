@@ -50,10 +50,13 @@ class ClientSecretAuditOutboxPurgeJobTest < ActiveJob::TestCase
       ClientSecretAuditOutboxPurgeJob.perform_now(batch_size: 1)
     end
     assert events.all? { |event| ClientSecretAuditOutbox.exists?(event.id) }
-    perform_enqueued_jobs(only: ClientSecretAuditOutboxPurgeJob)
+    # Each invocation processes one bounded batch; flush the complete durable cursor chain.
+    while enqueued_jobs.any? { |entry| entry.fetch(:job) == ClientSecretAuditOutboxPurgeJob }
+      perform_enqueued_jobs(only: ClientSecretAuditOutboxPurgeJob)
+    end
 
     assert ClientSecretAuditOutbox.exists?(events.first.id)
-    assert_not ClientSecretAuditOutbox.exists?(events.last.id)
+    assert_not ClientSecretAuditOutbox.uncached { ClientSecretAuditOutbox.exists?(events.last.id) }
     assert Chronicle.exists?(event_uuid: events.last.event_id)
   end
 end
