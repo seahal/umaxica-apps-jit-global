@@ -3,11 +3,34 @@
 # Includers provide actor/session models, token ownership, method limits and explicit authorization.
 # The admitted actor is ceremony-scoped; it does not establish an Auth browser login.
 module AuthStepUpCeremonyContext
+  include StepUpCeremonyLogging
+
   private
 
   def load_step_up_ceremony_context!
-    transaction = auth_ceremony_step_up_transaction
-    return render_invalid_step_up_context! unless transaction
+    load_scoped_ceremony_context!(auth_ceremony_step_up_transaction)
+  end
+
+  def load_registration_ceremony_context!
+    load_scoped_ceremony_context!(auth_ceremony_registration_transaction)
+  end
+
+  def load_cancellation_ceremony_context!
+    load_scoped_ceremony_context!(
+      auth_ceremony_ticket_transaction(
+        %w(step_up reauthentication bootstrap credential_registration
+           credential_change),
+      ),
+    )
+  end
+
+  def load_scoped_ceremony_context!(transaction)
+    unless transaction
+      log_step_up_ceremony(
+        "refused", outcome: "refused", error_code: "invalid_admission", stage: "auth_ceremony_context",
+      )
+      return render_invalid_step_up_context!
+    end
 
     session_record =
       ceremony_step_up_session_model.connection_class_for_self.connected_to(role: :writing) do
@@ -20,6 +43,11 @@ module AuthStepUpCeremonyContext
       end
     unless token.public_id == transaction.session_ref && ceremony_token_owned_by?(token, actor) &&
         token.currently_usable? && actor.login_allowed?
+      log_step_up_ceremony(
+        "refused", transaction: transaction, outcome: "refused", stage: "auth_ceremony_context",
+                   error_code: token.currently_usable? ? "session_binding_mismatch" : "session_expired",
+                   state_before: transaction.status,
+      )
       return render_invalid_step_up_context!
     end
 
@@ -28,7 +56,8 @@ module AuthStepUpCeremonyContext
     @step_up_ceremony_session = session_record
     authorize_step_up_ceremony_actor!(actor)
     true
-  rescue ActiveRecord::RecordNotFound
+  rescue ActiveRecord::RecordNotFound => e
+    log_step_up_refusal(e, transaction: transaction, stage: "auth_ceremony_context")
     render_invalid_step_up_context!
   end
 

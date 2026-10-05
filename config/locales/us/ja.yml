@@ -517,6 +517,8 @@ ja:
       avatar_mute:
         muted_avatar_id: ミュート対象Avatar
         muter_avatar_id: ミュート実行Avatar
+      avatar_persona_binding:
+        persona_id: 紐付け先ペルソナ
       client:
         mfa_level: MFAレベル
         mfa_status: MFAステータス
@@ -536,6 +538,16 @@ ja:
         source_record_id: ソースレコードID
       client_persona:
         client_identity_id: ClientIdentity
+      client_secret_audit_outbox:
+        actor_public_ref: 実行主体の参照
+        client_ref: Clientの参照
+        credential_ref: Secretの参照
+        event_id: イベントID
+        event_name: イベント
+        item_count: 件数
+        occurred_at: 発生日時
+        operation_ref: 操作の参照
+        reason: 理由
       client_telephone:
         number: 電話番号
         number_digest: 電話番号ダイジェスト
@@ -733,6 +745,7 @@ ja:
     base: ベース
     birthdate: 生年月日
     body: 本文
+    canceled_at: 取消日時
     capability_id: ケイパビリティID
     client_emails: メールアドレス
     client_id: クライアントID
@@ -750,6 +763,7 @@ ja:
     confirm_policy: 利用規約
     confirm_reset: リセット確認
     confirm_using_mfa: MFA確認
+    confirmed_at: 保存確認日時
     cooldown_until: クールダウン終了日時
     current_refresh_token: 現在のリフレッシュトークン
     description: 説明
@@ -774,10 +788,12 @@ ja:
     initiator_actor_id: 開始アクターID
     invited_by: 招待者
     ip_occurrence_id: IP発生ID
+    issuance: 発行操作
     jti: JTI
     kid: KID
     kind_id: 種別ID
     last_otp_at: 最終OTP日時
+    lookup_digest: 検索用ダイジェスト
     member_id: メンバーID
     metadata: メタデータ
     method: 方式
@@ -799,6 +815,7 @@ ja:
     performant: パフォーマンスCookie
     preference: 設定
     preference_id: 設定ID
+    presented_at: 提示日時
     principal_effect: アカウントへの効果
     private_key: 秘密鍵
     public_id: 公開ID
@@ -897,6 +914,7 @@ ja:
   base:
     app:
       avatars:
+        already_assigned: すでにアバターをお持ちのため、新しいアバターは作成できません。
         moniker_validation:
           blank: 名前を入力してください。
           invalid: 名前に使用できない文字または前後の空白があります。
@@ -954,6 +972,15 @@ ja:
             page_title: 電話番号
           update:
             page_title: 電話番号を更新しました
+      navigation:
+        edit_membership: メンバーシップ %{id} の編集
+        groups_empty: グループはありません
+        membership: メンバーシップ %{id}
+        membership_unavailable: メンバーシップ管理はまだ利用できません。
+        memberships: メンバーシップ
+        memberships_empty: メンバーシップはありません
+        new_membership: メンバーシップの新規作成
+        telephone_registration: 電話番号の確認登録
       preference:
         emails:
           unsubscribe:
@@ -2800,8 +2827,6 @@ ja:
   sign:
     app:
       authentication:
-        emergency:
-          placeholder: 緊急アクセスはまだ実装されていません。
         device:
           placeholder: 別の端末でのサインインはまだ実装されていません。
         edit:
@@ -2837,7 +2862,6 @@ ja:
           back_to_root: もどる
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
-            emergency: 緊急アクセス
             device: 別の端末でサインイン
             apple: Appleで続行
             email: メールアドレス
@@ -3519,6 +3543,12 @@ ja:
           page_title: 設定
           security_settings: セキュリティ設定
           withdrawal: 退会
+      verification:
+        edit:
+          authenticate_with_passkey: パスキーで認証
+          back: 戻る
+          description: 本人確認のため、パスキーで認証してください。
+          title: 本人確認
     common:
       birthdate_parts:
         day: 日

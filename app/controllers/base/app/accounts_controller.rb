@@ -32,7 +32,11 @@ module Base
         account = find_account!
         authorize!(account, to: :show?, with: AccountPolicy)
 
-        render inertia: true, props: { title: "Account", body: "account" }
+        render inertia: true, props: {
+          title: "Account",
+          body: "account",
+          up_link: { label: t("actions.up"), href: base_app_accounts_path(ri: params[:ri]) },
+        }
       end
 
       private

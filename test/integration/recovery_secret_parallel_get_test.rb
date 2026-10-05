@@ -8,18 +8,8 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
   self.use_transactional_tests = false
   fixtures :clients, :visitors
 
-  test "parallel public recovery-secret GETs disclose a receipt once on app and com" do
+  test "parallel public recovery-secret GETs disclose a receipt once on com" do
     surfaces = [
-      {
-        name: "app",
-        actor: clients(:one),
-        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-        purpose: "client.recovery_secret_credential",
-        token_model: ClientToken,
-        owner_column: :user_id,
-        headers: ->(actor, host) { as_user_headers(actor, host: host) },
-        path: ->(token) { base_app_identity_recovery_secret_path(token: token, ri: "jp") },
-      },
       {
         name: "com",
         actor: visitors(:reserved_visitor),

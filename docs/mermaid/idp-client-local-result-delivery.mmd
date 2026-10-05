@@ -1,0 +1,12 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "no authentication evidence (derived)" as empty
+    state "evidence present (derived)" as evidence
+    state "result generation >0 (derived)" as delivery
+    state "base_finalized_at present (derived)" as finalized
+    [*] --> empty
+    empty --> evidence: record_local_authentication_evidence!
+    evidence --> delivery: prepare_local_result_delivery!
+    delivery --> delivery: prepare_local_result_delivery! reissue
+    delivery --> finalized: LocalAuthenticationSessionCommitter success
+    finalized --> [*]

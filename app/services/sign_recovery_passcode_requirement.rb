@@ -45,8 +45,6 @@ class SignRecoveryPasscodeRequirement
 
   def actor_secret_credentials
     case credential_class.name
-    when "ClientSecretCredential"
-      actor.client_secret_credentials
     when "VisitorSecretCredential"
       actor.visitor_secret_credentials
     when "OperatorSecretCredential"
@@ -62,8 +60,6 @@ class SignRecoveryPasscodeRequirement
 
   def kind_column
     case credential_class.name
-    when "ClientSecretCredential"
-      :user_secret_kind_id
     when "VisitorSecretCredential"
       :visitor_secret_credential_kind_id
     when "OperatorSecretCredential"

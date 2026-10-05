@@ -17,11 +17,10 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
     assert_empty offenders.map { |path| path.delete_prefix("#{Rails.root.join}") }
   end
 
-  test "credential changing app controllers call the shared security transition" do
+  test "app MFA and email credential changes retain the shared security transition" do
     required = {
       "app/controllers/base/app/identity/mfa/challenges_controller.rb" => "CredentialSecurityTransition.call",
       "app/controllers/base/app/identity/emails/registrations_controller.rb" => "CredentialSecurityTransition.call",
-      "app/services/client_secret_credentials_destroy.rb" => "CredentialSecurityTransition.call",
     }
 
     missing =

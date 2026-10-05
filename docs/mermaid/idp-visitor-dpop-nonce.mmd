@@ -1,0 +1,7 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "unused nonce (nonce_used_at null)" as unused
+    state "nonce_used_at present" as used
+    [*] --> unused
+    unused --> used: consume_nonce!
+    used --> [*]

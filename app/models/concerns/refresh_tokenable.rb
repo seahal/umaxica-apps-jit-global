@@ -45,6 +45,7 @@ module RefreshTokenable
             current_token.save!(touch: false)
 
             replacement, raw_refresh_token = create_rotated_token_record!(current_token, now: decision_time)
+            current_token.revoke_step_up_authority!(now: decision_time)
 
             {
               status: :rotated,

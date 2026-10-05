@@ -1,3 +1,5 @@
+import { Link } from "@inertiajs/react";
+
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
@@ -12,6 +14,7 @@ export type SessionAction = {
 
 export type SessionRow = {
   device: string;
+  show_href?: string;
   last_activity: string;
   created: string;
   expires_at: string;
@@ -121,7 +124,18 @@ export default function SessionIndex({
           <tbody>
             {sessions.map((session, index) => (
               <tr key={`${session.created}-${index}`}>
-                <td>{session.device}</td>
+                <td>
+                  {session.show_href ? (
+                    <Link
+                      href={session.show_href}
+                      className="text-fg underline underline-offset-4"
+                    >
+                      {session.device}
+                    </Link>
+                  ) : (
+                    session.device
+                  )}
+                </td>
                 {columns.mode ? <td>{session.mode}</td> : null}
                 <td>{session.last_activity}</td>
                 <td>{session.created}</td>

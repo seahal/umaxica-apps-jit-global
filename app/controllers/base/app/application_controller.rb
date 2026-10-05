@@ -152,14 +152,9 @@ module Base
         base_app_verification_path(**args)
       end
 
-      # Bootstrap setup is a credential ceremony owned by Auth, so it must cross the host boundary
-      # instead of resolving the Auth-only path against the current Base origin.
+      # Base collects consent and issues the scoped admission before leaving its root session.
       def actor_verification_setup_path(**args)
-        new_auth_app_verification_setup_url(
-          **args,
-          host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          protocol: "https",
-        )
+        base_app_verification_path(**args, scope: verification_scope)
       end
 
       def cross_host_redirect_allowed?

@@ -17,6 +17,9 @@ module Valkey
         invitation_handoff invitation_result
         step_up_handoff step_up_result
         reauthentication_handoff reauthentication_result
+        bootstrap_handoff bootstrap_result
+        credential_registration_handoff credential_registration_result
+        credential_change_handoff credential_change_result
         local_sign_in local_sign_up
         local_sign_in_result
       ).freeze

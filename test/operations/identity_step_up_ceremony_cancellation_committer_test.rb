@@ -31,6 +31,30 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
     assert_equal "canceled", @transaction.reload.status
   end
 
+  test "root token revocation closes pending proof and Auth continuity atomically" do
+    @token.revoke!
+
+    assert_predicate @token.reload, :revoked?
+    assert_equal "revoked", @transaction.reload.status
+    assert_not_nil @transaction.revoked_at
+    assert_not_nil @ceremony.reload.revoked_at
+    assert_nil @token.last_step_up_at
+    assert_operator @token.step_up_session.reload.discard_at, :<=, ClientToken.database_now
+  end
+
+  test "refresh rotation closes old pending proof instead of transferring it to the replacement" do
+    raw = @token.rotate_refresh_token!
+    _, verifier = ClientToken.parse_refresh_token(raw)
+    digest = ClientToken.digest_refresh_token(verifier)
+    result = ClientToken.rotate_refresh!(presented_refresh_digest: digest)
+
+    assert_equal :rotated, result[:status]
+    assert_equal "revoked", @transaction.reload.status
+    assert_not_nil @ceremony.reload.revoked_at
+    assert_nil result[:token].last_step_up_at
+    assert_not_equal @token.public_id, result[:token].public_id
+  end
+
   test "another browser session cannot cancel and a finalized result cannot be canceled" do
     other_token = ClientToken.create!(user: @actor)
     assert_raises(IdentityStepUpCeremonyContract::Error) do

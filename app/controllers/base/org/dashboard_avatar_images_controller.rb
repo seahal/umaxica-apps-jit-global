@@ -36,6 +36,10 @@ module Base
 
       protected
 
+      def authentication_redirect_allowed?
+        false
+      end
+
       def track_authenticated_session_activity?
         return false if request.get? || request.head?
 

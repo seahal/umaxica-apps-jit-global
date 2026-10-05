@@ -18,7 +18,8 @@ module AuthCeremonySession
   DEFAULT_TTL = 30.minutes
   AUTHENTICATION_METHODS = %w(email telephone secret passkey totp google apple entra).freeze
   ADMISSION_PURPOSES = %w(local_sign_in local_sign_up authentication_handoff invitation_handoff
-                          step_up_handoff reauthentication_handoff).freeze
+                          step_up_handoff reauthentication_handoff bootstrap_handoff
+                          credential_registration_handoff credential_change_handoff).freeze
 
   module ClassMethods
     public
@@ -198,7 +199,16 @@ module AuthCeremonySession
   end
 
   def revoke!(now: nil)
-    transition_to_terminal!(:revoked_at, now: now, require_admitted: false)
+    self.class.writing_connection do
+      with_lock do
+        raise InvalidTransition, "auth ceremony session is terminal" if terminal?
+
+        # Expired continuity has no authority, but must still close when its Base token is
+        # revoked. Requiring active continuity here would roll back logout after its TTL.
+        decision_time = now || self.class.database_now
+        update!(revoked_at: decision_time, updated_at: decision_time)
+      end
+    end
   end
 
   def complete!(now: nil)

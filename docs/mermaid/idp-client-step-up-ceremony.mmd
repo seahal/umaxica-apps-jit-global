@@ -1,0 +1,35 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "verified" as verified
+    state "consumed" as consumed
+    state "canceled" as canceled
+    state "expired" as expired
+    state "revoked" as revoked
+    pending --> canceled: cancel! public model API
+    verified --> consumed: consume_result! public model API
+    verified --> canceled: cancel! public model API
+    expired --> consumed: consume_result! public model API
+    expired --> canceled: cancel! public model API
+    [*] --> pending
+    pending --> verified: record_verification! / record_registration_verification!
+    verified --> verified: prepare_result_delivery!
+    pending --> canceled: Base cancellation committer
+    pending --> expired: Base cancellation at TTL
+    pending --> revoked: token revoke_step_up_authority!
+    verified --> canceled: Base cancellation committer
+    verified --> expired: Base cancellation at TTL
+    verified --> revoked: token revoke_step_up_authority!
+    verified --> consumed: Base freshness / registration final committer
+    pending --> consumed: consume_result! public model API
+    revoked --> [*]
+    consumed --> [*]
+    canceled --> [*]
+    note right of pending
+        Auth proof returns to owning Base operation.
+        revoked timestamp CHECK blocks public terminal rewrite.
+        expired public edges require future TTL; not clock-expiry recovery.
+        expired is stored by cancellation-at-TTL only.
+        Generic public methods have broader guards than Base.
+        consumed registration proof does not grant freshness.
+    end note

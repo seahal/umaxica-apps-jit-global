@@ -26,13 +26,15 @@ module Auth
         layout :settings_passkeys_layout
 
         before_action :authenticate_client!
-        step_up only: %i(new create), bootstrap: true
+        step_up only: %i(new create)
         step_up only: :destroy
 
         # GET /settings/passkeys
         def index
           authorize!(ClientPasskey, to: :index?)
-          @passkeys = current_client.client_passkeys.order(created_at: :asc)
+          @passkeys = current_client.client_passkeys.where.not(
+            status_id: [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED],
+          ).order(created_at: :asc)
           render_inertia_page(props: index_page_props)
         end
 
@@ -100,12 +102,13 @@ module Auth
           passkey = current_client.client_passkeys.find_by!(public_id: params.expect(:id))
           authorize!(passkey)
 
-          unless AuthMethodGuard.can_remove_passkey?(current_client, passkey)
+          unless IdentityCredentialRemovalCommitter.call!(
+            actor: current_client, credential: passkey, current_session: current_session, request: request,
+          )
             redirect_last_method
             return
           end
 
-          passkey.destroy!
           redirect_to(
             auth_app_settings_passkeys_path(ri: params[:ri]),
             status: :see_other,

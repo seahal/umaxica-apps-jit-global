@@ -270,7 +270,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 ## 8. Appendices & References
 
 - Repository guides: `README.md`, `AGENTS.md`, `docs/checklist.md`
-- Infrastructure: `compose.yml`, `Procfile.dev`
+- Infrastructure: `compose.yaml`, `Procfile.dev`
 - Security: `SECURITY.md`, `CODE_OF_CONDUCT.md`
 - Testing assets: `test/`, `spec/`, `rswag` configuration
 - Change log: tracked via Git history and PR descriptions

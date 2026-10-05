@@ -5,25 +5,24 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_statuses, :client_secret_credential_kinds, :client_secret_credential_statuses
+  fixtures :clients, :client_statuses
 
   setup do
     OmniAuth.config.test_mode = true
     @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     host! @host
     @user = create_verified_user_with_email(email_address: "social_link_test@example.com")
-    # Ensure @user has at least one auth method to start (e.g. password secret_credential)
-    # Check fixtures or add one.
-    # Note: ClientSecretCredentialKind should be seeded. If validation fails, check seeded values.
-    ClientSecretCredentialKind.find_or_create_by!(id: ClientSecretCredentialKind::LOGIN)
-    ClientSecretCredentialStatus.find_or_create_by!(id: ClientSecretCredentialStatus::ACTIVE)
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::ACTIVE)
-
-    ClientSecretCredential.create!(
-      user: @user,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-      password_digest: "digest",
-      name: "default",
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "social-link-secret-fixture", planned_count: 1,
+      presented_at: now, confirmed_at: now, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    @secret = ClientSecretCredential.create!(
+      client: @user, issuance: issuance, name: "Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
     )
     ClientTotpCredential.create!(
       user: @user,
@@ -53,9 +52,10 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
 
   test "should unlink apple account when another identity exists" do
     # Create Apple identity directly (link flow is handled elsewhere)
-    ClientAppleIdentity.create!(
-      user: @user, uid: "apple_uid_link", provider: "apple",
-      token: "t", token_expires_at: 1.hour.from_now.to_i,
+    identity = ClientExternalIdentity.create!(
+      client: @user, subject: "apple_uid_link", provider: "apple",
+      issuer: ExternalAuthentication::ProviderRegistry.fetch("apple").issuer,
+      audience: "apple-test-client-id", verification_authority: "test", verified_at: Time.current, state: "active",
     )
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
@@ -69,17 +69,20 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     follow_redirect!(headers: @headers)
 
-    assert_nil ClientAppleIdentity.find_by(uid: "apple_uid_link")
+    assert_not ClientExternalIdentity.exists?(identity.id)
+    assert @secret.reload.available_at?(at: Client.database_now)
+    assert_nil @secret.claimed_at
   end
 
-  test "should prevent unlinking last identity" do
-    # Create user with ONLY Apple identity (remove password secret_credential)
-    @user.client_secret_credentials.destroy_all
-    @user.client_emails.update_all(user_email_status_id: ClientEmailStatus::UNVERIFIED)
+  test "social unlink requires an alternative allowed by its existing method policy" do
+    # Secret remains a normal login method; the existing social-unlink policy
+    # separately requires email, Passkey or another active social identity.
+    @user.client_emails.each { |email| email.update!(user_email_status_id: ClientEmailStatus::UNVERIFIED) }
 
-    ClientAppleIdentity.create!(
-      user: @user, uid: "apple_uid_solo", provider: "apple",
-      token: "t", token_expires_at: 1.hour.from_now.to_i,
+    identity = ClientExternalIdentity.create!(
+      client: @user, subject: "apple_uid_solo", provider: "apple",
+      issuer: ExternalAuthentication::ProviderRegistry.fetch("apple").issuer,
+      audience: "apple-test-client-id", verification_authority: "test", verified_at: Time.current, state: "active",
     )
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
@@ -94,7 +97,9 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
 
     # Ensure it wasn't destroyed
-    assert ClientAppleIdentity.find_by(uid: "apple_uid_solo")
+    assert ClientExternalIdentity.exists?(identity.id)
+    assert @secret.reload.available_at?(at: Client.database_now)
+    assert_nil @secret.claimed_at
   end
 end
 

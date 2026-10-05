@@ -8,6 +8,11 @@ States: **done** (implemented and verified in the 2026-09-26 tree), **code-ready
 application), **external** (needs outside input, registration, keys, deployment, or a real service),
 **open** (spec or implementation still missing), **deferred** (approved deferral).
 
+The app Secret part of this ledger is superseded by
+[the Phase 1 rebuild](../../adr/app-secret-phase1-rebuild.md). Item C3 no longer
+requests legacy-row inventory, conversion or a revocation campaign. Historical
+observations below describe the 2026-09-26 tree, not the current Secret contract.
+
 ## Items A–F
 
 | Item | Original request | State | What remains | Needs |
@@ -19,7 +24,7 @@ application), **external** (needs outside input, registration, keys, deployment,
 | B4. Retention purge of claimed-but-unconsumed Emergency rows | 07 | open | Confirm `RetentionPurgeJob` covers them once `discard_at` passes; add a test. | B2. |
 | C1. Owner-family cutover | 02, 06 | code-ready | `bin/rails authority:cutover_guard` is read-only and fail-closed. On the dev DB it reports `ready: false` (app `client_persona` and `enterprise` have one unresolved row each; com/org families are empty). Run it on the target database, resolve each unresolved row through an authorized decision, then establish the marker. | Target-DB read access, owner decisions for unresolved rows, persistent-write approval and a recovery plan. |
 | C2. Avatar moniker data | 06 | code-ready | The current schema has no `avatars.moniker` column; monikers live in `avatar_monikers`. Whether the target database went through the same migration and has conflicting history was not checked. | Target-DB read access. |
-| C3. Legacy App LOGIN rows | 07 | code-ready | `bin/rails secret_credentials:legacy_login_inventory` is read-only. Select rows only by `user_secret_kind_id = LOGIN AND secret_kind IS NULL`: new-axis rows share the LOGIN kind id. Write a bounded logical-revocation operation (set `revoked_at`, move `discard_at` to now) with a dry run. | Persistent-write approval, recovery method, target-DB inventory. |
+| C3. Legacy App LOGIN rows | 07 | superseded | Phase 1 discards old app Secret credentials in the approved isolated rebuild. The old inventory task was removed; no conversion or compatibility campaign is required. | Complete the new issuance/login/audit paths and scoped obsolete-state cleanup. |
 | D. Regional RP values | 05, 11 | external | `bin/rails auth:regional_rp_contract` (2026-09-26): `complete: false`. Missing canonical audience for `core-{app,com,org}-{jp,us}` and `side-{app,com,org}-jp`; missing canonical host for `side-{app,com,org}-us`; `edit-org` complete. | Official audience/host values, OIDC registrations, production keys, deployment. |
 | E1. Turnstile real service | 10 | done for test keys | `JitSecurityTurnstileVerifier.verify` against real Cloudflare Siteverify with Cloudflare's public test secrets: pass → success; always-fail → `invalid-input-response`; spent → `timeout-or-duplicate`. | Site-specific non-production keys to verify hostname/action binding (`verify_for_ceremony`). |
 | E2. Vite HMR | — | open (finding) | The page loads `/vite-dev/@vite/client` through Rails; the client's primary socket targets the page host/port, where Rails answers 404 to a WebSocket upgrade. The fallback `localhost:3036` upgrades (101), so HMR works only when the browser runs on the Vite host. Not browser-verified. | Decide whether dev should proxy WebSockets or set `server.hmr`; verify in a browser. |

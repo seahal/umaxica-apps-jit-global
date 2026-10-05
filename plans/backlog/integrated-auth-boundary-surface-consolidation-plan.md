@@ -1029,6 +1029,18 @@ block plan approval:
 
 ## Security invariants required for completion
 
+The 2026-10-04 registration slice connects Base confirmation and bootstrap admission to Auth setup
+on all three surfaces, and connects APP TOTP candidate start/confirmation/result to Base credential
+creation. The HTTP journey continues through a separate normal TOTP assertion to the original
+protected Base page. Registration itself grants no freshness. The accepted separation decision is
+recorded in the [Base/Auth ADR](../../adr/base-auth-ceremony-and-seven-rp-boundary.md#registration-evidence-separation-amendment-2026-10-04).
+This slice does not close R01–R16: Passkey registration, later registration/change authority,
+Base-owned contact/MFA/provider settings, ORG's independent complete login/assertion journey,
+selector/completion race coverage, legacy retirement, audit/notifications/retention, independent-connection races
+and fault injection still require implementation and evidence. The APP Email JSON success contract
+remains held; browser verification is user-owned. Existing admission-free Auth tests need migration
+to the canonical flow without weakening credential-management coverage.
+
 The OTP delivery-event/DEBUG disclosure identified on 2026-10-03 is escalated as mandatory
 comprehensive remediation in the [active plan](../active/otp-observability-secret-exposure-remediation.md),
 under its [accepted handling decision](../../adr/otp-observability-secret-exposure-remediation.md).
@@ -1121,3 +1133,53 @@ Implementation is complete only when all of the following hold:
 The plan is ready to hand to an implementation session. Start only after restoring the test
 PostgreSQL/debugger prerequisites and capture a runnable full Rails baseline. Execute P1 first and
 use each phase’s listed failing tests before implementation.
+
+## Authentication execution update (2026-10-04)
+
+The independent ORG Normal login and subsequent protected-page journey now passes with real
+Entra strategy/ID-token validation, simulated provider HTTP responses and actual Passkey assertions;
+Base alone issues root credentials. See `evidence/2026-10-04-org-normal-root-and-step-up-5W8N.md`.
+COM Passkey controller admission, all four locale combinations, initial-contact classification,
+email-confirmation freshness/ceremony invalidation and revoked-history refusal are covered by
+`evidence/2026-10-04-com-contact-bootstrap-and-expiry-7K2R.md`. Existing Cookie challenges now reject
+exact expiry, but their planned database migration remains required.
+
+Passkey candidate persistence/response approval, admitted credential management, atomic last-method
+removal, remaining primary challenge/JWT retirement and the full protected-operation inventory are
+still open. APP primary Email JSON response work remains held; OTP logging remediation remains the
+separately escalated exclusion. Browser execution is user-owned. These execution records do not
+satisfy this plan's complete acceptance gate or claim a green full suite.
+
+### Credential removal concurrency progress (2026-10-04)
+
+The actor-locked removal primitive and existing four Auth callers now retain terminal credential
+history, invalidate freshness/unfinished ceremonies, preserve roots and prevent two independent
+writes from losing the last compatible method. Passkey capacity excludes terminal history and
+serializes insertion at four slots. Evidence: `evidence/2026-10-04-credential-removal-serialization-9R2M.md`.
+
+This does not close the purpose-limited management boundary. Base credential-change permission,
+Auth context migration, Base Passkey candidate commitment and the full original acceptance gates
+remain required. The full settings-controller gate still has 18 legacy TOTP registration failures
+(103 tests total); those must migrate to canonical admission without restoring Auth login fallback.
+Browser verification stays user-owned and OTP logging remediation stays in its separate escalation.
+
+### TOTP settings regression migration (2026-10-04)
+
+The previously recorded 18 legacy registration failures are resolved. Registration tests now use
+canonical Base admission and DB continuity without Auth root headers, and preserve creation at
+Base only. The combined settings/TOTP gate passes 122 tests/1,030 assertions. Paste formatting and
+private owner-miss contracts were restored; input, cancellation and capacity boundaries are covered.
+Evidence: `evidence/2026-10-04-totp-registration-test-migration-8T6Q.md`.
+
+This closes that specific failing gate, not R03/R09/R16 in full. Purpose-limited credential management,
+Base Passkey candidates, remaining legacy state and all original acceptance items remain required.
+
+## OIDC credential-transition progress (2026-10-04)
+
+R12 now invalidates owned unfinished OIDC results and Auth continuity, and cancels open APP OIDC capacity resolutions. R01 completion and APP limit promotion use actor-before-authorization locking and perform expiry validation before issuance. Evidence: `evidence/2026-10-04-oidc-credential-revocation-5K9D.md` (146 tests, 1562 assertions). This does not close the overall R12 gate: sign-up admission linkage, late proof recording, and independent root-finalization races still require implementation or verification. Browser verification remains user-owned; OTP logging remediation remains the separately escalated work item.
+
+## Sign-up authority binding decision pending (2026-10-04)
+
+The current exclusivity constraint prevents an admitted local sign-up from retaining its Base sign-in authority while attaching the actual Auth-owned sign-up child. The concrete constraint proposal is `plans/analysis/sign-up-admission-child-binding-shape-proposal.md`; implementation awaits explicit shape approval. It adds no columns or public wire fields and does not add ORG registration. R01/R02 sign-up linkage is not complete.
+
+OIDC expiry precision was independently corrected and verified by the 128-test gate in `evidence/2026-10-04-oidc-expiry-precision-9H4M.md`.

@@ -32,10 +32,19 @@ module Base
           sign_url_builder: ->(**query) {
             auth_org_verification_url(query.merge(host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"), protocol: "https"))
           },
+          setup_url_builder: ->(**query) {
+            new_auth_org_verification_setup_url(
+              query.merge(host: ENV.fetch("PUBLIC_AUTH_STAFF_URL"), protocol: "https"),
+            )
+          },
         )
       end
 
       private
+
+      def bootstrap_registration_methods = [:passkey]
+
+      def bootstrap_scope_permitted?(_scope) = true
 
       def actor_verification_path(**args)
         base_org_verification_path(**args)

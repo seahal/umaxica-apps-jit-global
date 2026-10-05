@@ -59,6 +59,9 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
     listed = inertia_props.fetch("telephones").pluck("public_id")
 
     assert_includes listed, telephone.public_id
+    assert_equal new_base_app_identity_telephone_path(ri: "jp"), inertia_props.dig("new_link", "href")
+    assert_equal new_base_app_identity_telephones_registration_path(ri: "jp"),
+                 inertia_props.dig("registration_link", "href")
   end
 
   test "index does not list another client's telephones" do

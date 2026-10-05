@@ -12,27 +12,40 @@ class IdentityStepUpCeremonyCancellationCommitter
         actor.with_lock do
           transaction.class.connection_owner.connected_to(role: :writing) do
             token.with_lock do
-              unless token.currently_usable? && transaction.actor_ref == actor.public_id &&
+              unless transaction.actor_ref == actor.public_id &&
                   transaction.session_ref == token.public_id
-                raise IdentityStepUpCeremonyContract::Error, "step-up cancellation binding mismatch"
+                raise IdentityStepUpCeremonyContract::Error.new(
+                  "step-up cancellation binding mismatch",
+                  code: "session_binding_mismatch",
+                )
               end
 
               record = session_model.lock.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
               unless owned_record?(record, token)
-                raise IdentityStepUpCeremonyContract::Error, "step-up cancellation session mismatch"
+                raise IdentityStepUpCeremonyContract::Error.new(
+                  "step-up cancellation session mismatch",
+                  code: "session_binding_mismatch",
+                )
               end
 
               transaction.with_lock do
                 now = transaction.class.database_now
+                unless token.currently_usable?(now)
+                  raise IdentityStepUpCeremonyContract::Error.new(
+                    "step-up cancellation session unavailable",
+                    code: "session_expired",
+                  )
+                end
+
                 return true if transaction.status == "canceled"
                 return false unless %w(pending verified).include?(transaction.status)
 
                 if transaction.expired?(now: now)
-                  transaction.update!(status: "expired")
+                  transaction.commit_expiry!
                   return false
                 end
 
-                transaction.update!(status: "canceled", canceled_at: now)
+                transaction.commit_cancellation!(now: now)
                 ceremonies = ceremony_model.where(step_up_ceremony_transaction_ref: transaction.transaction_id)
                 ceremonies.order(:id).lock.each do |sid|
                   sid.cancel!(now: now) if sid.active?(now: now) && sid.admitted?
@@ -55,12 +68,18 @@ class IdentityStepUpCeremonyCancellationCommitter
         [VisitorStepUpSession, VisitorAuthCeremonySession]
       in [Operator, OperatorToken, OperatorStepUpCeremonyTransaction]
         unless token.staff_id == actor.id && !token.emergency_authentication_context?
-          raise IdentityStepUpCeremonyContract::Error, "step-up cancellation surface mismatch"
+          raise IdentityStepUpCeremonyContract::Error.new(
+            "step-up cancellation surface mismatch",
+            code: "session_binding_mismatch",
+          )
         end
 
         [OperatorStepUpSession, OperatorAuthCeremonySession]
       else
-        raise IdentityStepUpCeremonyContract::Error, "step-up cancellation surface mismatch"
+        raise IdentityStepUpCeremonyContract::Error.new(
+          "step-up cancellation surface mismatch",
+          code: "session_binding_mismatch",
+        )
       end
     end
 

@@ -25,3 +25,16 @@ already authenticated by either the root Browser Session or a valid access crede
 same RP; the refusal is server-side and does not start a second OIDC transaction. A credential for
 another surface is not accepted as authentication for the current RP. Sign-out remains the
 required preceding ceremony.
+
+
+## Protected document and image responses
+
+Anonymous Base Dashboard documents are guided to the passive local Sign entry.
+Dashboard Avatar image retrieval on app/org instead uses a bodyless 401 for
+non-JSON GET/HEAD; JSON keeps the existing private-gate error. Accept, Fetch
+Metadata and valid Inertia headers do not turn an image request into an interactive
+login. Authentication still stops the request before selected image lookup or
+storage access. Authenticated image authorization, absence and storage failure
+contracts remain in [the image-delivery ADR](../../adr/base-dashboard-avatar-image-delivery.md).
+com has no Dashboard Avatar image route. These response differences do not change
+Base/Auth or Jump responsibilities.

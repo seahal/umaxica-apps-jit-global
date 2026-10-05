@@ -220,7 +220,7 @@ CREATE TABLE public.avatar_group_ownership_periods (
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_avatar_group_ownership_periods_owner_collective CHECK (((owner_collective_public_id)::text <> ''::text)),
-    CONSTRAINT chk_avatar_group_ownership_periods_owner_surface CHECK (((owner_surface)::text = ANY (ARRAY[('app'::character varying)::text, ('org'::character varying)::text]))),
+    CONSTRAINT chk_avatar_group_ownership_periods_owner_surface CHECK (((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[]))),
     CONSTRAINT chk_avatar_group_ownership_periods_valid_interval CHECK ((valid_from <= valid_to))
 );
 
@@ -259,9 +259,9 @@ CREATE TABLE public.avatar_groups (
     archived_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_avatar_groups_account_surface CHECK (((account_surface)::text = ANY (ARRAY[('app'::character varying)::text, ('org'::character varying)::text, ('com'::character varying)::text]))),
+    CONSTRAINT chk_avatar_groups_account_surface CHECK (((account_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying, 'com'::character varying])::text[]))),
     CONSTRAINT chk_avatar_groups_archive_state CHECK ((((state)::text = 'archived'::text) = (archived_at IS NOT NULL))),
-    CONSTRAINT chk_avatar_groups_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('archived'::character varying)::text])))
+    CONSTRAINT chk_avatar_groups_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'archived'::character varying])::text[])))
 );
 
 
@@ -554,7 +554,7 @@ CREATE TABLE public.avatar_ownership_periods (
     owner_surface character varying,
     owner_collective_public_id character varying,
     CONSTRAINT chk_avatar_ownership_periods_avatar_ownership_status_id_positiv CHECK (((avatar_ownership_status_id IS NULL) OR (avatar_ownership_status_id >= 0))),
-    CONSTRAINT chk_avatar_ownership_periods_owner_reference CHECK ((((owner_surface)::text = ANY (ARRAY[('app'::character varying)::text, ('org'::character varying)::text])) AND (owner_collective_public_id IS NOT NULL) AND ((owner_collective_public_id)::text <> ''::text)))
+    CONSTRAINT chk_avatar_ownership_periods_owner_reference CHECK ((((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND (owner_collective_public_id IS NOT NULL) AND ((owner_collective_public_id)::text <> ''::text)))
 );
 
 
@@ -634,8 +634,8 @@ CREATE TABLE public.avatar_ownership_transfers (
     CONSTRAINT chk_avatar_ownership_transfer_expiry CHECK (((requested_at < expires_at) AND ((expires_at - requested_at) <= '5 days'::interval))),
     CONSTRAINT chk_avatar_ownership_transfer_nonblank_ids CHECK ((((public_id)::text ~ '[^[:space:]]'::text) AND ((from_owner_collective_public_id)::text ~ '[^[:space:]]'::text) AND ((to_owner_collective_public_id)::text ~ '[^[:space:]]'::text) AND ((request_actor_public_id)::text ~ '[^[:space:]]'::text) AND ((accept_actor_public_id IS NULL) OR ((accept_actor_public_id)::text ~ '[^[:space:]]'::text)) AND ((cancel_actor_public_id IS NULL) OR ((cancel_actor_public_id)::text ~ '[^[:space:]]'::text)))),
     CONSTRAINT chk_avatar_ownership_transfer_owner_changed CHECK ((((from_owner_surface)::text <> (to_owner_surface)::text) OR ((from_owner_collective_public_id)::text <> (to_owner_collective_public_id)::text))),
-    CONSTRAINT chk_avatar_ownership_transfer_state CHECK (((state)::text = ANY (ARRAY[('pending'::character varying)::text, ('accepted'::character varying)::text, ('cancelled'::character varying)::text, ('expired'::character varying)::text]))),
-    CONSTRAINT chk_avatar_ownership_transfer_surfaces CHECK ((((from_owner_surface)::text = ANY (ARRAY[('app'::character varying)::text, ('org'::character varying)::text])) AND ((to_owner_surface)::text = ANY (ARRAY[('app'::character varying)::text, ('org'::character varying)::text])) AND ((request_actor_surface)::text = ANY (ARRAY[('app'::character varying)::text, ('org'::character varying)::text])) AND ((from_owner_surface)::text = (request_actor_surface)::text))),
+    CONSTRAINT chk_avatar_ownership_transfer_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_ownership_transfer_surfaces CHECK ((((from_owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((to_owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((request_actor_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((from_owner_surface)::text = (request_actor_surface)::text))),
     CONSTRAINT chk_avatar_ownership_transfer_terminal_facts CHECK (((((state)::text = 'pending'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'accepted'::text) AND (accepted_at IS NOT NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND ((accept_actor_surface)::text = (to_owner_surface)::text) AND (accept_actor_public_id IS NOT NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'cancelled'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NOT NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND ((cancel_actor_surface)::text = (from_owner_surface)::text) AND (cancel_actor_public_id IS NOT NULL)) OR (((state)::text = 'expired'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NOT NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL))))
 );
 
@@ -1069,7 +1069,7 @@ CREATE TABLE public.group_avatar_memberships (
     CONSTRAINT chk_group_avatar_memberships_removed_after_assigned CHECK (((removed_at IS NULL) OR (removed_at >= assigned_at))),
     CONSTRAINT chk_group_avatar_memberships_removed_state CHECK ((((state)::text = 'removed'::text) = (removed_at IS NOT NULL))),
     CONSTRAINT chk_group_avatar_memberships_role CHECK (((role)::text = 'member'::text)),
-    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY (ARRAY[('active'::character varying)::text, ('removed'::character varying)::text])))
+    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'removed'::character varying])::text[])))
 );
 
 

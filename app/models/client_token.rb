@@ -93,6 +93,11 @@ class ClientToken < AppTicketRecord
   include ::SessionOidcConnection
   include ::SelectedActorContext
 
+  SELECTED_ACTOR_CONTEXT_COLUMNS = %i(
+    selected_account_public_id selected_collective_public_id selected_collective_unit_public_id
+    selected_avatar_public_id selected_at
+  ).freeze
+
   DBSC_BINDING_METHOD_CLASS = ClientTokenBindingMethod
   DBSC_STATUS_CLASS = ClientTokenDbscStatus
 
@@ -128,6 +133,10 @@ class ClientToken < AppTicketRecord
   validate :enforce_concurrent_session_limit, on: :create
 
   private
+
+  def step_up_authority_binding
+    [ClientStepUpSession, ClientStepUpCeremonyTransaction, ClientAuthCeremonySession, :user_token_id]
+  end
 
   attr_accessor :skip_session_limit_check
 

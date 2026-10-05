@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted
+Superseded for app Secret by
+[Base, app Secret, and Core contract precedence](base-secret-core-contract-precedence.md)
+on 2026-10-03 (UTC). The former app Emergency purpose, entry and operation are
+retired by the normal single-use Secret rebuild. Irreversible claim and durable
+canonical session-commit evidence remain required; this historical operation is
+not the new login issuer. Implementation and verification of the replacement are
+still in progress.
+
+The obsolete app Emergency Ruby login operation was removed on 2026-10-04 (UTC),
+including its separate session-creation block and old counter/TTL tests. Its old
+Ticket proof table remains in the current disposable schema and is not used as
+the new canonical login receipt. That persistence cleanup is still outstanding;
+this historical ADR does not authorize treating the old operation as a fallback.
 
 ## Date
 

@@ -32,6 +32,16 @@ class Base::App::OrganizationsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/organizations/show", inertia_component
     assert_equal "organization", inertia_props.fetch("body")
+    links = inertia_props.fetch("links").map { |link| link.fetch("href") }
+
+    assert_includes links, base_app_organization_memberships_path(@bootstrap.collective.public_id, ri: "jp")
+    assert_includes links, new_base_app_organization_membership_path(@bootstrap.collective.public_id, ri: "jp")
+    membership = @bootstrap.account.current_memberships.first
+
+    assert_includes links,
+                    base_app_organization_membership_path(@bootstrap.collective.public_id, membership.id, ri: "jp")
+    assert_includes links,
+                    edit_base_app_organization_membership_path(@bootstrap.collective.public_id, membership.id, ri: "jp")
   end
 
   test "show rejects organization outside the current client membership set" do

@@ -3,6 +3,45 @@
 require "test_helper"
 
 class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
+  # Each test creates its authoritative transaction through the public model API.
+  self.fixture_table_names = []
+
+  [ClientStepUpCeremonyTransaction, VisitorStepUpCeremonyTransaction, OperatorStepUpCeremonyTransaction].each do |model|
+    %w(bootstrap credential_registration).each do |purpose|
+      test "#{model.name} #{purpose} evidence cannot become ordinary step-up evidence" do
+        transaction = model.create_transaction!(
+          actor_ref: "actor", session_ref: "session", required_scope: "settings_passkey",
+          required_aal: "none", allowed_methods: ["passkey"], purpose: purpose,
+        )
+        # Synthetic evidence exercises the purpose boundary, not WebAuthn cryptography.
+        assert_raises(IdentityStepUpCeremonyContract::Error) do
+          transaction.record_verification!(
+            method: "passkey", aal: "aal1", phishing_resistant: true,
+            verified_at: model.database_now, verified_credential_ref: "existing-credential",
+          )
+        end
+        assert_equal "pending", transaction.reload.status
+        transaction.record_registration_verification!(method: "passkey", verified_at: model.database_now)
+
+        assert_equal "none", transaction.aal
+        assert_not transaction.phishing_resistant
+        assert_nil transaction.verified_credential_ref
+        [
+          { purpose: "step_up" }, { verified_credential_ref: "existing-credential" }, { aal: "aal1" },
+          { phishing_resistant: true }, { required_aal: "aal1" }, { phishing_resistant_required: true },
+        ].each do |attributes|
+          # Bypass model validations through the public ORM API to prove the writer DB constraint.
+          assert_raises(ActiveRecord::StatementInvalid) do
+            model.transaction(requires_new: true) { transaction.update_columns(attributes) }
+          end
+          assert_equal purpose, transaction.reload.purpose
+          assert_equal "none", transaction.aal
+          assert_nil transaction.verified_credential_ref
+        end
+      end
+    end
+  end
+
   test "verified evidence is immutable and replacement result generations reject the previous delivery" do
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",

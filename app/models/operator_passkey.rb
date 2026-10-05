@@ -57,18 +57,36 @@ class OperatorPasskey < OrgPrincipalRecord
   validates :status_id, numericality: { only_integer: true }
   validates :sign_count, presence: true, numericality: { greater_than_or_equal_to: 0 }
 
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :staff,
-                 association: :staff_passkeys,
-                 foreign_key: :staff_id,
-                 limit: :MAX_PASSKEYS_PER_STAFF,
-                 record_name: "passkeys",
-                 owner_name: "staff"
-
+  validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
+  around_create :create_with_slot_lock
 
   private
+
+  # Terminal history remains available to bootstrap/recovery checks without occupying a registration slot.
+  def validate_slot_limit
+    return if staff_id.nil? || [OperatorPasskeyStatus::REVOKED].include?(status_id)
+
+    count =
+      self.class.connection_class_for_self.connected_to(role: :writing) do
+        self.class.where(staff_id: staff_id).where.not(status_id: [OperatorPasskeyStatus::REVOKED]).count
+      end
+    return if count < MAX_PASSKEYS_PER_STAFF
+
+    errors.add(:base, :too_many, message: "exceeds maximum passkeys per staff (#{MAX_PASSKEYS_PER_STAFF})")
+  end
+
+  # Validation alone cannot reserve capacity; every INSERT repeats the check under the owner lock.
+  def create_with_slot_lock
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      staff.with_lock do
+        validate_slot_limit
+        raise ActiveRecord::RecordInvalid, self if errors.any?
+
+        yield
+      end
+    end
+  end
 
   def set_defaults
     self.external_id ||= SecureRandom.uuid

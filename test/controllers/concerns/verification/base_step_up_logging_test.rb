@@ -31,7 +31,7 @@ class VerificationBaseStepUpLoggingTest < ActiveSupport::TestCase
       :last_step_up_audience,
       keyword_init: true,
     ) do
-      def currently_usable? = true
+      def currently_usable?(_now = Time.current) = true
 
       def has_attribute?(name)
         members.include?(name.to_sym)

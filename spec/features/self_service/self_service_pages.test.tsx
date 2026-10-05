@@ -38,6 +38,7 @@ const { default: SelfServiceShell } = await import("@/features/self_service/Shel
 const { default: EntityList } = await import("@/features/self_service/EntityList");
 const { default: AvatarForm } = await import("@/features/self_service/AvatarForm");
 const { default: BillingsIndex } = await import("@/pages/base/app/billings/index");
+const { default: OrganizationShow } = await import("@/pages/base/app/organizations/show");
 const { default: AvatarShow } = await import("@/pages/base/app/avatars/show");
 const { default: SwitcherShow } = await import("@/pages/base/app/switchers/show");
 const { default: SignInLimitationShow } = await import("@/pages/base/app/sign/in/limitations/show");
@@ -190,6 +191,25 @@ describe("EntityList", () => {
     expect(button.tagName).toBe("BUTTON");
     expect(button.hasAttribute("disabled")).toBe(true);
     expect(button.hasAttribute("href")).toBe(false);
+  });
+
+  it("links to the app Avatar new page even when the collection is empty", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Avatars"
+        body="avatars"
+        empty="None available"
+        entries={[]}
+        create_action={{ label: "Create Avatar", href: "/avatars/new?ri=jp" }}
+      />,
+    );
+
+    const actionContainer = document.createElement("div");
+    actionContainer.innerHTML = html;
+    expect(getByRole(actionContainer, "link", { name: "Create Avatar" }).getAttribute("href")).toBe(
+      "/avatars/new?ri=jp",
+    );
+    expect(queryByRole(actionContainer, "button", { name: "Create Avatar" })).toBeNull();
   });
 
   it("does not render a create button when the server withheld the action", () => {
@@ -603,5 +623,28 @@ describe("SignInLimitationShow", () => {
     });
 
     expect(deleteRequest).toHaveBeenCalledWith("/sign/in/limitation?resolution_challenge=ch_1");
+  });
+});
+
+describe("app organization navigation", () => {
+  it("renders the authorized membership destinations and parent list", () => {
+    const html = renderToStaticMarkup(
+      <OrganizationShow
+        title="Organization"
+        body="organization"
+        up_link={{ label: "Back", href: "/organizations?ri=jp" }}
+        links={[
+          { label: "Memberships", href: "/organizations/org-1/memberships?ri=jp" },
+          { label: "New Membership", href: "/organizations/org-1/memberships/new?ri=jp" },
+          { label: "Membership 1", href: "/organizations/org-1/memberships/1?ri=jp" },
+          { label: "Edit Membership 1", href: "/organizations/org-1/memberships/1/edit?ri=jp" },
+        ]}
+      />,
+    );
+    expect(html).toContain('href="/organizations?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships/new?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships/1?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships/1/edit?ri=jp"');
   });
 });

@@ -499,11 +499,14 @@ describe("Org passkey ceremony pages", () => {
         title="パスキーで確認"
         description="登録済みのパスキー"
         errors_sentence="失敗しました"
-        form={{
-          action: "/org/verification/passkey",
-          param_scope: "verification",
-          challenge_id: "challenge-1",
-          request_options: { challenge: "abc" },
+        panel={{
+          options_url: "/org/verification/passkey/options",
+          verification_url: "/org/verification/passkey",
+          region: "jp",
+          identifier_param: null,
+          field: null,
+          turnstile_site_key: "public-key",
+          turnstile_error_message: "Turnstile failed",
           submit_label: "認証する",
         }}
         back_link={BACK}
@@ -521,11 +524,14 @@ describe("Org passkey ceremony pages", () => {
         title="パスキーで確認"
         description="登録済みのパスキー"
         errors_sentence={null}
-        form={{
-          action: "/org/verification/passkey",
-          param_scope: "verification",
-          challenge_id: "challenge-1",
-          request_options: { challenge: "abc" },
+        panel={{
+          options_url: "/org/verification/passkey/options",
+          verification_url: "/org/verification/passkey",
+          region: "jp",
+          identifier_param: null,
+          field: null,
+          turnstile_site_key: "public-key",
+          turnstile_error_message: "Turnstile failed",
           submit_label: "認証する",
         }}
         back_link={BACK}

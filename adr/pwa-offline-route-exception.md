@@ -96,8 +96,8 @@ failed `request.mode === "navigate"` requests from that cache. It performs no ru
 authenticated HTML, page props, JSON, CSRF token, or `Set-Cookie` response can enter the cache.
 
 `app/views/pwa/offline.html.erb` is the generator's file with `lang`, the `<title>`, and three body
-strings localized to Japanese. Markup, CSS, `prefers-color-scheme` handling, and the
-`<form action="." method="get">` retry control are unchanged.
+strings localized to Japanese. Markup, CSS, and `prefers-color-scheme` handling are unchanged. The
+retry control drops the generator's `action="."`; see "Retry target" below.
 
 Both templates are shared by all ten surfaces. This is compatible with `project/surfaces.mdc` only
 because they reference no user, actor, tenant, session, or database state, and rendering them
@@ -150,9 +150,20 @@ is the only application-wide policy change: no wildcard, no scheme source, no `u
 The worker answers every failed navigation on the origin, including authentication protocol paths.
 The earlier revision excluded `/.well-known/`, `/oauth/`, `/oidc/`, `/social/`, and navigations
 carrying `code` or `state`, to stop the retry control replaying a consumed authorization code. The
-official template's retry is `<form action="." method="get">`, which requests the current URL's
-_directory_ with no query string, so it cannot replay a code. No failing case justifies the
-exclusions, so they are not carried over. `e2e/pwa_offline_auth.spec.ts` pins the retry target.
+retry control is a GET form with no fields, which requests its target with an empty query string, so
+it cannot replay a code. No failing case justifies the exclusions, so they are not carried over.
+
+### Retry target (amended 2026-10-05)
+
+The generator's retry control is `<form action="." method="get">`, which requests the current URL's
+_directory_. For any top-level path that directory is `/`, so retrying a failed `/dashboard`
+navigation sent an authenticated session to Home, which answers 404 under
+`adr/home-dashboard-authentication-boundary.md`. The development log of 2026-10-05 shows six
+consecutive 404 responses from that control.
+
+The form now omits `action`, so it submits to the document's own URL: the path whose navigation
+failed, with an empty query string. `test/controllers/pwa_endpoints_test.rb` pins the absence of
+`action`.
 
 ### Inertia
 

@@ -409,18 +409,21 @@ describe("auth/com step-up verification screens", () => {
     expect(markup).toContain("コードが正しくありません");
   });
 
-  it("carries the issued challenge into the passkey assertion form", () => {
+  it("renders the passkey panel, which fetches its challenge instead of embedding one", () => {
     const markup = renderToStaticMarkup(
       <ComVerificationPasskeyNew
         title="パスキーで確認"
         heading="パスキーで確認"
         description="パスキーで本人確認します"
         errors={[]}
-        form={{
-          ...formBase,
-          action: "/verification/passkey?ri=jp",
-          challenge_id: "challenge-1",
-          request_options: { challenge: "abc" },
+        panel={{
+          options_url: "/verification/passkey/options?ri=jp",
+          verification_url: "/verification/passkey?ri=jp",
+          region: "jp",
+          identifier_param: null,
+          field: null,
+          turnstile_site_key: "public-key",
+          turnstile_error_message: "Turnstile failed",
           submit_label: "パスキーで認証",
         }}
         back={{ label: "戻る", href: "/verification?ri=jp" }}
@@ -428,8 +431,8 @@ describe("auth/com step-up verification screens", () => {
       />,
     );
 
-    expect(markup).toContain('name="verification[challenge_id]" value="challenge-1"');
-    expect(markup).toContain('name="verification[credential_json]"');
+    expect(markup).not.toContain('name="verification[challenge_id]"');
+    expect(markup).not.toContain('name="verification[credential_json]"');
     expect(markup).toContain("パスキーで認証");
   });
 });

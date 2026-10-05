@@ -546,6 +546,7 @@ en:
   actions:
     actions: Actions
     back: Back
+    cancel: Cancel
     connect: Connect
     continue: Continue
     destroy: Delete
@@ -575,6 +576,8 @@ en:
       avatar_mute:
         muted_avatar_id: Muted avatar
         muter_avatar_id: Muter avatar
+      avatar_persona_binding:
+        persona_id: Bound persona
       client:
         mfa_level: MFA level
         mfa_status: MFA status
@@ -591,6 +594,16 @@ en:
         source_record_id: Source record ID
       client_persona:
         client_identity_id: Client identity
+      client_secret_audit_outbox:
+        actor_public_ref: Actor reference
+        client_ref: Client reference
+        credential_ref: Secret reference
+        event_id: Event ID
+        event_name: Event
+        item_count: Item count
+        occurred_at: Occurred at
+        operation_ref: Operation reference
+        reason: Reason
       client_telephone:
         number: Telephone number
         number_digest: Telephone number digest
@@ -737,6 +750,7 @@ en:
     base: Base
     birthdate: Birthdate
     body: Body
+    canceled_at: Canceled at
     capability_id: Capability
     client_emails: Email addresses
     client_id: Client ID
@@ -754,6 +768,7 @@ en:
     confirm_policy: Terms of service
     confirm_reset: Reset confirmation
     confirm_using_mfa: MFA confirmation
+    confirmed_at: Confirmed at
     cooldown_until: Cooldown until
     current_refresh_token: Current refresh token
     description: Description
@@ -778,10 +793,12 @@ en:
     initiator_actor_id: Initiator actor
     invited_by: Invited by
     ip_occurrence_id: IP occurrence
+    issuance: Issuance
     jti: JTI
     kid: KID
     kind_id: Kind
     last_otp_at: Last OTP at
+    lookup_digest: Lookup digest
     member_id: Member
     metadata: Metadata
     method: Method
@@ -803,6 +820,7 @@ en:
     performant: Performance
     preference: Preference
     preference_id: Preference
+    presented_at: Presented at
     principal_effect: Principal effect
     private_key: Private key
     public_id: Public ID
@@ -928,6 +946,7 @@ en:
   base:
     app:
       avatars:
+        already_assigned: You already have an avatar, so another one cannot be created.
         moniker_validation:
           blank: Name can't be blank.
           invalid: Name contains unsupported characters or surrounding whitespace.
@@ -987,6 +1006,15 @@ en:
             page_title: Telephone
           update:
             page_title: Telephone updated
+      navigation:
+        edit_membership: Edit Membership %{id}
+        groups_empty: No groups
+        membership: Membership %{id}
+        membership_unavailable: Membership management is not yet available.
+        memberships: Memberships
+        memberships_empty: No memberships
+        new_membership: New Membership
+        telephone_registration: Telephone verification registration
       preference:
         emails:
           edit:
@@ -3202,8 +3230,6 @@ en:
   sign:
     app:
       authentication:
-        emergency:
-          placeholder: Emergency sign-in is not implemented yet.
         device:
           placeholder: Sign-in using another device is not implemented yet.
         email:
@@ -3224,7 +3250,6 @@ en:
           back_link: Back
           description: Select the method that fits your current session.
           links:
-            emergency: Emergency access
             device: Sign in using another device
             apple: Continue with Apple
             email: Email
@@ -3714,9 +3739,11 @@ en:
           submit: Continue
           title: Verification
         setup:
-          description: Please register a passkey before continuing.
+          description: Please register a passkey, an authenticator app, or an email address before continuing.
           methods:
+            email: Register email
             passkey: Register passkey
+            totp: Register authenticator app (TOTP)
           title: Set up verification methods
         success:
           complete: Verification completed.
@@ -3896,6 +3923,12 @@ en:
           page_title: Settings
           security_settings: Security Settings
           withdrawal: Withdrawal
+      verification:
+        edit:
+          authenticate_with_passkey: Authenticate with Passkey
+          back: Back
+          description: Use your passkey to verify your identity.
+          title: Verification
     common:
       birthdate_parts:
         day: DD

@@ -6,7 +6,7 @@ require "test_helper"
 
 class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   fixtures :client_statuses, :client_token_kinds, :client_token_statuses, :client_email_statuses,
-           :client_telephone_statuses, :client_secret_credential_kinds, :client_secret_credential_statuses,
+           :client_telephone_statuses,
            :client_totp_credential_statuses, :client_passkey_statuses
 
   setup do
@@ -51,7 +51,17 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   test "passkey removal preserves aal2 even when aal1 and contactability remain" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110002")
-    create_active_secret_credential(client)
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: client, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "passkey-removal-secret-fixture", planned_count: 1,
+      presented_at: now, confirmed_at: now, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    ClientSecretCredential.create!(
+      client: client, issuance: issuance, name: "Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+    )
     passkey = create_active_passkey(client)
 
     assert_no_difference("ClientPasskey.count") do
@@ -65,7 +75,17 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   test "totp removal preserves aal2 even when aal1 and contactability remain" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110003")
-    create_active_secret_credential(client)
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: client, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "totp-removal-secret-fixture", planned_count: 1,
+      presented_at: now, confirmed_at: now, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    ClientSecretCredential.create!(
+      client: client, issuance: issuance, name: "Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+    )
     totp = create_active_totp(client)
 
     assert_no_difference("ClientTotpCredential.count") do
@@ -79,7 +99,17 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   test "totp removal is allowed when another aal2 method remains" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110004")
-    create_active_secret_credential(client)
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: client, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "totp-removal-alternative-fixture", planned_count: 1,
+      presented_at: now, confirmed_at: now, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    ClientSecretCredential.create!(
+      client: client, issuance: issuance, name: "Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+    )
     create_active_passkey(client)
     totp = create_active_totp(client)
 
@@ -213,16 +243,6 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     )
     passkey.save!(validate: false)
     passkey
-  end
-
-  def create_active_secret_credential(client)
-    ClientSecretCredential.create!(
-      user: client,
-      name: "Removal guard secret_credential",
-      password_digest: "digest",
-      user_secret_kind_id: ClientSecretCredentialKinds::LOGIN,
-      user_identity_secret_status_id: ClientSecretCredentialStatus::ACTIVE,
-    )
   end
 
   def create_active_totp(client)

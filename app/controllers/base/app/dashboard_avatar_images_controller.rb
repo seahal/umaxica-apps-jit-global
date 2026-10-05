@@ -13,7 +13,6 @@ module Base
       DEFAULT_IMAGE_PATH = Rails.root.join("app/assets/images/base/default_avatar.png").freeze
       DEFAULT_IMAGE_ETAG = "base-default-avatar-v1"
 
-      before_action :authenticate_client!
       skip_before_action :set_preferences_cookie
 
       public
@@ -30,6 +29,10 @@ module Base
       end
 
       protected
+
+      def authentication_redirect_allowed?
+        false
+      end
 
       def track_authenticated_session_activity?
         return false if request.get? || request.head?

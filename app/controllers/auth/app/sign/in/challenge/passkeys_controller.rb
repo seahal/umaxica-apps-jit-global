@@ -135,41 +135,59 @@ module Auth
             end
 
             def active_passkeys_for(user)
-              user.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE)
+              ClientPasskey.connection_class_for_self.connected_to(role: :writing) do
+                user.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE)
+                  .where("discard_at > ?", ClientPasskey.database_now).to_a
+              end
             end
 
             def passkey_params
               params.fetch(:mfa_passkey_form, {}).permit(:challenge_id, :credential_json)
             end
 
-            def verify_passkey!(challenge)
-              credential_payload = JSON.parse(passkey_params[:credential_json].to_s)
-              passkey = ClientPasskey.find_by(webauthn_id: credential_payload["id"])
-
-              user = pending_mfa_user
-              unless passkey && user && passkey.user_id == user.id
-                SignRiskEmitter.emit(
-                  "auth_failed", user_id: user&.id, ip: request.remote_ip,
-                                 reason: "mfa_passkey_mismatch",
-                )
-                redirect_to(
-                  auth_app_sign_in_challenge_path,
-                  status: :see_other,
-                )
-                return
+            def mfa_credential_payload
+              payload = JSON.parse(passkey_params[:credential_json].to_s)
+              identifier = payload["id"] if payload.is_a?(Hash)
+              unless identifier.is_a?(String) && identifier.present? && identifier.exclude?("\0")
+                raise Webauthn::AssertionVerifier::VerificationError, "invalid WebAuthn credential payload"
               end
 
-              context = Webauthn::AssertionVerifier.verify!(
-                credential_params: credential_payload,
-                challenge: challenge,
-                config: webauthn_relying_party_config,
-                public_key: passkey.public_key,
-                sign_count: passkey.sign_count,
-                purpose: :mfa_challenge,
-              )
-              passkey.update!(sign_count: context.sign_count, last_used_at: Time.current)
+              payload
+            end
 
-              complete_mfa_login!(user)
+            def verify_passkey!(challenge)
+              credential_payload = mfa_credential_payload
+              ClientPasskey.connection_class_for_self.connected_to(role: :writing) do
+                user = pending_mfa_user
+                return redirect_to(auth_app_sign_in_challenge_path, status: :see_other) unless user
+
+                user.with_lock do
+                  passkey = user.client_passkeys.lock.find_by(webauthn_id: credential_payload["id"])
+                  unless passkey && user.login_allowed? && passkey.status_id == ClientPasskeyStatus::ACTIVE &&
+                      ClientPasskey.where(id: passkey.id).exists?(["discard_at > ?", ClientPasskey.database_now])
+                    SignRiskEmitter.emit(
+                      "auth_failed", user_id: user.id, ip: request.remote_ip,
+                                     reason: "mfa_passkey_mismatch",
+                    )
+                    return redirect_to(auth_app_sign_in_challenge_path, status: :see_other)
+                  end
+
+                  context = Webauthn::AssertionVerifier.verify!(
+                    credential_params: credential_payload,
+                    challenge: challenge,
+                    config: webauthn_relying_party_config,
+                    public_key: passkey.public_key,
+                    sign_count: passkey.sign_count,
+                    purpose: :mfa_challenge,
+                  )
+                  passkey.update!(
+                    sign_count: context.sign_count, last_used_at: context.verified_at,
+                    uv_verified_at: context.verified_at,
+                  )
+
+                  complete_mfa_login!(user)
+                end
+              end
             rescue JSON::ParserError
               redirect_to(
                 auth_app_sign_in_challenge_path,
@@ -188,6 +206,19 @@ module Auth
                 redirect_to_sign_in_sequence!(
                   pt: result[:redirect_path],
                 )
+              when :invalid_request
+                if local_authentication_ceremony?
+                  clear_auth_ceremony_context!
+                  redirect_to(
+                    base_app_sign_show_url(
+                      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https",
+                      ri: RequestContextContract.normalize_region(params[:ri]),
+                    ),
+                    status: :see_other, allow_other_host: true,
+                  )
+                else
+                  redirect_to(auth_app_sign_in_path(ri: params[:ri]), status: :see_other)
+                end
               else
                 redirect_to(
                   auth_app_sign_in_path,

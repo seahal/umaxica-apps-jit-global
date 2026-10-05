@@ -2,272 +2,202 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
-require "base64"
 
 class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
-  fixtures :clients
+  self.fixture_table_names = []
 
-  setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    @user = clients(:one)
-    @headers = as_user_headers(@user, host: @host)
-    ClientEmail.create!(
-      user: @user,
-      address: "verification-link-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: "otp_private_key",
-      otp_counter: "0",
+  fixtures :client_statuses
+
+  test "GET with a Base admission reference shows a continuation and consumes nothing" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: "/identity/birthdate",
     )
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+
+    2.times do
+      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+
+      assert_response :success
+      form = response.parsed_body.at_css("form#auth-admission-continuation-form")
+
+      assert_equal "post", form["method"]
+      assert_equal auth_app_verification_path, URI.parse(form["action"]).path
+      assert_equal issuance.reference, form.at_css('input[name="entry_ref"]')["value"]
+      assert_equal "private, no-store", response.headers["Cache-Control"]
+      assert_equal "no-referrer", response.headers["Referrer-Policy"]
+    end
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_equal 0, ClientAuthCeremonySession.where(
+      step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+    ).count
   end
 
-  test "should get show" do
-    get auth_app_verification_url(ri: "jp"), headers: @headers
+  test "POST redeems the admission once and the clean entry page lists only the actor's usable methods" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    ClientEmail.create!(
+      user: actor, address: "verification-entry-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: "/identity/birthdate",
+    )
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+
+    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_not_includes response.location, issuance.reference
+
+    get auth_app_verification_path(ri: "jp")
 
     assert_response :success
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_equal(
+      [{ "key" => "email_otp",
+         "label" => I18n.t("sign.app.verification.new.methods.email_otp"),
+         "href" => new_auth_app_verification_email_path(ri: "jp"), }],
+      props.fetch("methods"),
+    )
+    assert_nil props.fetch("no_methods_notice")
     assert_equal(
       { "label" => I18n.t("actions.cancel"),
         "action" => auth_app_verification_cancellation_path(ri: "jp"),
         "method" => "post", },
-      inertia_props.fetch("cancel"),
+      props.fetch("cancel"),
     )
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
-  test "redirects to setup page when no verification methods are registered" do
-    user = Client.create!
-    headers = as_user_headers(user, host: @host)
-
-    get auth_app_verification_url(ri: "jp"), headers: headers
-
-    assert_response :redirect
-    uri = URI.parse(response.location)
-    query = Rack::Utils.parse_query(uri.query)
-
-    assert_equal "/verification/setup/new", uri.path
-    assert_predicate query["pt"], :present?
-  end
-
-  test "show renders method links when scope and return_to are provided" do
-    return_to = Base64.urlsafe_encode64("/settings/emails?ri=jp")
-
-    get auth_app_verification_url(scope: "settings_email", return_to: return_to, ri: "jp"),
-        headers: @headers
-
-    assert_response :success
-    assert_equal "auth/app/verifications/show", inertia_component
-    assert_equal I18n.t("sign.app.verification.index.title"), inertia_props.fetch("title")
-    assert inertia_method_hrefs.any? { |href| href.start_with?(new_auth_app_verification_email_path(ri: "jp")) }
-  end
-
-  test "show handles bad request error" do
-    get auth_app_verification_url(scope: "settings_email", return_to: "%%%INVALID%%%", ri: "jp"),
-        headers: @headers
-
-    assert_response :success
-    assert inertia_method_hrefs.any? { |href| href.start_with?(new_auth_app_verification_email_path(ri: "jp")) }
-  end
-
-  test "show handles scope and return target mismatch without redirecting back to verification" do
-    return_to = Base64.urlsafe_encode64("/settings/mfa/challenge?ri=jp")
-
-    get auth_app_verification_url(scope: "settings_email", pt: return_to, ri: "jp"),
-        headers: @headers
-
-    assert_response :redirect
-    assert_redirected_to auth_app_settings_path(ri: "jp")
-  end
-
-  test "show discards expired step_up session instead of redirecting to itself" do
-    token = ClientToken.find_by!(public_id: @headers["X-TEST-SESSION-PUBLIC-ID"])
-    ClientStepUpSession.create!(
-      user_token: token,
-      scope: "settings_email",
-      return_to: "/settings/emails?ri=jp",
-      status: "PENDING",
-      discard_at: 1.minute.ago,
-      purge_eligible_at: 1.minute.from_now,
+  test "an admission reference cannot be redeemed twice" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: "/identity/birthdate",
     )
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
 
-    get auth_app_verification_url(ri: "jp"), headers: @headers
+    assert_response :see_other
 
-    assert_response :redirect
-    assert_redirected_to auth_app_settings_path(ri: "jp")
-    assert_nil token.reload.step_up_session
+    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_equal 1, ClientAuthCeremonySession.where(
+      step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+    ).count
   end
 
-  test "show with recent verification shows success message" do
-    # Create a token with recent step_up
-    token = ClientToken.find_by(user_id: @user.id)
-    token&.update!(last_step_up_at: 5.minutes.ago, last_step_up_scope: "settings_email")
+  # Sentinels of the reference parameter: missing, empty, unknown, NUL-bearing, and two references at once.
+  test "the entry refuses a missing, empty, unknown or ambiguous admission reference without redirecting to sign-in" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
 
-    get auth_app_verification_url(ri: "jp"), headers: @headers
+    get auth_app_verification_path(ri: "jp")
 
-    # Should show success or verification page
-    assert_response :success
-  end
+    assert_response :bad_request
+    assert_nil response.headers["Location"]
 
-  private
+    [
+      {}, { entry_ref: "" }, { entry_ref: "unknown-reference" }, { entry_ref: "abc\u0000def" }, { entry_ref: "0" },
+      { entry_ref: "a", transaction_ref: "b" },
+    ].each do |params|
+      post auth_app_verification_path(ri: "jp"), params: params
 
-  def inertia_method_hrefs
-    inertia_props.fetch("methods").map { |method| method.fetch("href") }
-  end
-
-  def host_headers(host = nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]
-    headers = {
-      "Client-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    }
-    headers["Host"] = host_value if host_value.present?
-    headers
-  end
-
-  def browser_headers
-    csrf_token = "test_csrf_token"
-    headers = {
-      "Client-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "X-CSRF-Token" => csrf_token,
-    }
-
-    if respond_to?(:cookies, true)
-      cookies["csrf_token"] = csrf_token
-    else
-      headers["Cookie"] = "csrf_token=#{csrf_token}"
+      assert_response :bad_request, params.inspect
+      assert_equal I18n.t("errors.messages.invalid_request"), response.body
+      assert_nil response.headers["Location"]
     end
-
-    headers
+    assert_equal 0, ClientAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-
-    if user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-      token =
-        if session_public_id.present?
-          ClientToken.find_by(public_id: session_public_id)
-        else
-          ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
-        end
-      token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-
-    if staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-      token =
-        if session_public_id.present?
-          OperatorToken.find_by(public_id: session_public_id)
-        else
-          OperatorToken.where(staff_id: staff.id).where(
-            "discard_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    VisitorTokenBindingMethod.ensure_defaults! if defined?(VisitorTokenBindingMethod)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB) if defined?(VisitorTokenKind)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-
-    if visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-      token =
-        if session_public_id.present?
-          VisitorToken.find_by(public_id: session_public_id)
-        else
-          VisitorToken.where(visitor_id: visitor.id).where(
-            "discard_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= VisitorToken.create!(visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def bearer_headers(token, host: nil, headers: {})
-    host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-end
-
-# DAMP auth header helpers for this test class.
-class Auth::App::VerificationsControllerTest
-  private
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
+  test "a bootstrap admission is not accepted by the verification entry and stays redeemable for setup" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false, allowed_methods: %i(passkey totp),
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true, ttl: 15.minutes,
+      ), return_to: "/identity/birthdate",
     )
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+
+    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+
+    assert_response :bad_request
+    assert_equal "pending", issuance.transaction.reload.status
+
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
+
+    assert_response :see_other
+    assert_equal new_auth_app_verification_setup_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
-  def jwt_issuer_id_for_test_host(host, resource_type)
-    normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
-    surface =
-      if service == "AUTH"
-        case resource_type
-        when "operator" then "ORG"
-        when "visitor" then "COM"
-        else "APP"
-        end
-      elsif normalized.include?(".org") || normalized.include?("org.")
-        "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
-      else
-        "APP"
-      end
-    "surface:#{service}_#{surface}"
+  test "an admission issued for the app surface is refused on the com host" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: "/identity/birthdate",
+    )
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+
+    post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+
+    assert_response :bad_request
+    assert_equal 0, VisitorAuthCeremonySession.where.not(step_up_ceremony_transaction_ref: nil).count
+    assert_equal "pending", issuance.transaction.reload.status
+  end
+
+  test "the entry page is refused once the Base session behind the ceremony is revoked" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: "/identity/birthdate",
+    )
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
+    token.revoke!
+
+    get auth_app_verification_path(ri: "jp")
+
+    assert_response :bad_request
+    assert_nil response.headers["Location"]
+    assert_equal "revoked", issuance.transaction.reload.status
   end
 end

@@ -8,6 +8,7 @@ module AuthCeremonyAdmission
 
   include AuthCeremonySidCookie
   include AuthCeremonyContext
+  include StepUpCeremonyLogging
 
   public
 
@@ -55,7 +56,7 @@ module AuthCeremonyAdmission
     )
     if BaseAuthAdmissionCoordinator.local_entry_purpose?(payload: payload, intent: expected_intent)
       admit_local_entry_payload!(payload)
-    elsif %w(step_up reauthentication).include?(expected_intent.to_s)
+    elsif BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
       transaction = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
         payload: payload, surface: auth_ceremony_surface, expected_intent: expected_intent,
       )
@@ -63,12 +64,19 @@ module AuthCeremonyAdmission
         admission_purpose: payload.fetch("purpose"),
         step_up_ceremony_transaction_ref: transaction.transaction_id,
       )
+      log_step_up_ceremony(
+        "ceremony_accepted", transaction: transaction, outcome: "accepted", stage: "auth_admission",
+                             state_before: transaction.status,
+      )
     else
       admit_oidc_payload!(payload, expected_intent: expected_intent)
     end
     redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
-         AuthCeremonySession::InvalidTransition
+         AuthCeremonySession::InvalidTransition => e
+    if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+      log_step_up_refusal(e, stage: "auth_admission", admission_intent: expected_intent.to_s)
+    end
     render_invalid_admission_request!
   end
 
@@ -77,7 +85,7 @@ module AuthCeremonyAdmission
     model.connection_class_for_self.connected_to(role: :writing) do
       flow = model.find_by!(public_id: payload.fetch("subject_ref"))
       unless flow.sign_in_primary_pending? && !flow.expired?(model.database_now) && flow.principal_id.nil?
-        raise BaseAuthAdmissionCoordinator::Denied, "local entry is not pending"
+        raise BaseAuthAdmissionCoordinator::Denied.new("local entry is not pending", code: "invalid_admission")
       end
 
       rotate_auth_ceremony_session!(
@@ -93,15 +101,21 @@ module AuthCeremonyAdmission
     )
     decision_time = transaction.class.database_now
     if transaction.login_challenge_expired?(now: decision_time) || transaction.expired?(now: decision_time)
-      raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction expired"
+      raise BaseAuthAdmissionCoordinator::Denied.new("authorization transaction expired", code: "expired_admission")
     end
 
     if transaction.consumed?
-      raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction already consumed"
+      raise BaseAuthAdmissionCoordinator::Denied.new(
+        "authorization transaction already consumed",
+        code: "admission_replay",
+      )
     end
 
     unless auth_ceremony_intent_matches?(transaction.intent, expected_intent)
-      raise BaseAuthAdmissionCoordinator::Denied, "authorization transaction intent mismatch"
+      raise BaseAuthAdmissionCoordinator::Denied.new(
+        "authorization transaction intent mismatch",
+        code: "invalid_admission",
+      )
     end
 
     rotate_auth_ceremony_session!(
@@ -142,7 +156,7 @@ module AuthCeremonyAdmission
     render "auth/shared/admission_continuation",
            layout: false,
            locals: {
-             action_url: request.path,
+             action_url: auth_ceremony_admission_action_url,
              reference_param: admission_reference_param_name,
              reference: admission_reference_param,
              ri: params[:ri],
@@ -153,6 +167,8 @@ module AuthCeremonyAdmission
   def render_invalid_admission_request!
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
+
+  def auth_ceremony_admission_action_url = request.path
 
   def admission_reference_param
     refs = {
@@ -174,7 +190,7 @@ module AuthCeremonyAdmission
   end
 
   def auth_ceremony_clean_url(expected_intent:)
-    return auth_step_up_ceremony_clean_url if %w(step_up reauthentication).include?(expected_intent.to_s)
+    return auth_step_up_ceremony_clean_url if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
 
     ri = params[:ri]
     path = (expected_intent.to_s == "sign_up") ? "sign_up" : "sign_in"

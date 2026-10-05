@@ -1,0 +1,25 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0" as NOTHING
+    state "REQUESTED id=10" as REQUESTED
+    state "CLOSING id=20" as CLOSING
+    state "DISCARDED id=30" as DISCARDED
+    state "RECOVERED id=40" as RECOVERED
+    state "TERMINATED id=100" as TERMINATED
+    state "FAILED id=900" as FAILED
+    [*] --> REQUESTED
+    NOTHING --> REQUESTED: request_withdrawal!
+    REQUESTED --> CLOSING: confirm_withdrawal!
+    CLOSING --> DISCARDED: discard_withdrawal!
+    DISCARDED --> RECOVERED: recover_withdrawal!
+    DISCARDED --> TERMINATED: terminate_withdrawal!
+    REQUESTED --> FAILED: fail_withdrawal!
+    CLOSING --> FAILED: fail_withdrawal!
+    DISCARDED --> FAILED: fail_withdrawal!
+    RECOVERED --> [*]
+    TERMINATED --> [*]
+    note right of NOTHING
+        FAILED id=900 has no outgoing edge.
+        terminal? recognizes only RECOVERED and TERMINATED.
+        Actor retention deadlines are separate facts.
+    end note

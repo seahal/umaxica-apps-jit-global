@@ -6,6 +6,11 @@ class IdentityTotpCeremonyCandidate < AppTicketRecord
 
   encrypts :private_key
 
-  validates :private_key, :last_otp_at, presence: true
+  validates :private_key, presence: true
+  validates :last_otp_at, presence: true, if: :unbound_candidate?
   validates :surface, inclusion: { in: IdentityTotpCeremonyContract::SURFACES }
+
+  private
+
+  def unbound_candidate? = step_up_ceremony_transaction_ref.nil?
 end

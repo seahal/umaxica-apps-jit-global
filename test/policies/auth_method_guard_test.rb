@@ -15,7 +15,7 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     @user.client_external_identities.delete_all
     ClientEmail.where(user: @user).delete_all
     ClientTelephone.where(user: @user).delete_all
-    ClientSecretCredential.where(user: @user).delete_all
+    ClientSecretCredential.where(client: @user).delete_all
     ClientPasskey.where(user: @user).delete_all
     ClientTotpCredential.where(user: @user).delete_all
   end
@@ -66,22 +66,24 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     assert_equal 0, AuthMethodGuard.remaining_count(user)
   end
 
-  test "active legacy secret credentials do not count as AAL1 sign-in methods" do
-    ClientSecretCredentialStatus.find_or_create_by!(id: ClientSecretCredentialStatus::ACTIVE)
-    ClientSecretCredentialKind.find_or_create_by!(id: ClientSecretCredentialKind::LOGIN)
-    ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
-    ClientEmail.create!(
-      user: @user,
-      address: "legacy-secret-inventory-#{SecureRandom.hex(4)}@example.test",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
+  test "confirmed app Secret counts as normal login without contact or Step-Up capability" do
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "synthetic-browser", planned_count: 1, expires_at: now + 1.minute,
+      presented_at: now, confirmed_at: now,
     )
-    ClientSecretCredential.issue!(
-      name: "Legacy login secret",
-      user: @user,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
+    raw = SecureRandom.base58(32)
+    credential = ClientSecretCredential.create!(
+      client: @user, issuance: issuance, name: "Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
     )
+    inventory = AuthenticationCredentialInventory.call(@user)
 
-    assert_equal [:email_otp], AuthenticationCredentialInventory.call(@user).aal1_methods
+    assert_equal [:secret], inventory.login_methods
+    assert_empty inventory.step_up_methods
+    assert_empty inventory.contact_identifiers
+    assert AuthMethodGuard.last_method?(@user, excluding: credential)
   end
 
   test "remaining_count excludes verified telephones because telephone is not aal1" do

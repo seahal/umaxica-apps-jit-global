@@ -314,3 +314,63 @@ remain `OIDC_CLIENT_SIDE_*`, the MCP realm remains `side`, logout transaction ro
 Flipper keys. The public `www-jp.umaxica.app`, `www-jp.umaxica.com`, and `www-jp.umaxica.org`
 hosts and their route paths remain unchanged. Jump RT uses independent `WARP_APP`, `WARP_COM`, and
 `WARP_ORG` issuer namespaces.
+
+## Registration evidence separation amendment (2026-10-04)
+
+The approved actor-specific step-up transactions also carry `bootstrap` and
+`credential_registration` permissions. A verified registration records `aal = none`,
+`phishing_resistant = false`, and no verified existing credential reference. The database constraints,
+normal verification API, and Base freshness consumer enforce this separation. Confirming an
+authenticator candidate authorizes its registration only; a separate assertion is required before
+the original protected operation can use normal step-up freshness.
+
+Base decides first-registration eligibility from writer credential state, including unavailable
+credential history. It issues the purpose-specific admission from a CSRF-protected POST. Auth GET
+displays a nonconsuming continuation; Auth POST redeems it into scoped continuity and a clean URL.
+An APP TOTP candidate is encrypted server-side, belongs to the exact registration permission, and
+retains its original deadline and failures across redisplay or repeated start. Auth verifies its
+first code; Base creates the credential and spends the parent, child, candidate and continuity on
+the ticket connection. Auth neither receives a root credential nor establishes freshness.
+
+Principal creation and ticket consumption use different databases. The principal actor lock spans
+the ticket commit, but there is no distributed atomic commit. A principal failure after ticket
+consumption may leave a terminal ticket without a credential. Retrying that result returns only
+the same existing active owned credential and never recreates a missing or revoked credential.
+A fresh Base permission is required for a new enrollment after that safe refusal. This amendment
+does not declare Passkey registration, credential changes, audit/notification integration, or
+legacy retirement complete.
+
+## Initial-contact and credential-history enforcement (2026-10-04)
+
+The Base initial-registration guard uses the same writer credential-history predicate as the
+bootstrap admission issuer. An empty set of currently configured methods does not itself authorize
+bootstrap after credential loss, lockout or revocation. True first-contact registration remains
+Base-owned; a confirmed Email becomes an available Email OTP method and ends that exception.
+
+COM email confirmation explicitly invalidates step-up freshness and unfinished ceremonies across
+the actor's sessions while retaining their root sessions. The concrete surface chooses that policy;
+the shared registration hook does not copy APP's root-session revocation policy to COM or ORG.
+This is not a claim that every credential-management path has been connected.
+
+## Credential removal and capacity serialization (2026-10-04)
+
+A removal inventory decision and its terminal-state transition hold the actor lock also used by
+Passkey insertion and Base credential confirmation. Principal credential rows remain as terminal
+history; existing APP/COM DELETED and ORG REVOKED states do not consume Passkey registration
+slots. Deleted TOTP rows also retain history without occupying slots. The existing four Passkey
+slots are checked on writer state and repeated during insertion under that actor lock.
+
+Removal rechecks the current session under its ticket lock and invalidates freshness and unfinished
+ceremonies before the principal mutation. Separate databases remain separate commit boundaries;
+a failure may invalidate authority while retaining a credential, requiring safe reauthentication.
+The existing Auth caller wiring retains its policy and verification guards. Purpose-limited Base
+permission and Auth credential-management context migration remain implementation requirements.
+
+## Retained credential expiry in inventory (2026-10-04)
+
+An active/verified status alone does not make a retained APP/COM credential usable. The existing
+inventory decision reads the surface writer and applies one database-clock instant to discard_at;
+exact expiry is unavailable. UV Passkey fallback and contactability use the same retained-row
+condition. ORG records without that lifetime column remain governed by their existing statuses.
+This changes the authoritative source and classification of existing inventory reads, rather than
+adding credential checks to every ordinary page or API access.

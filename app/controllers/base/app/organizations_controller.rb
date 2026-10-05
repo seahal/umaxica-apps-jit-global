@@ -32,10 +32,43 @@ module Base
         organization = find_organization!
         authorize!(organization, to: :show?, with: OrganizationPolicy)
 
-        render inertia: true, props: { title: "Organization", body: "organization" }
+        render inertia: true, props: {
+          title: "Organization",
+          body: "organization",
+          up_link: { label: t("actions.up"), href: base_app_organizations_path(ri: params[:ri]) },
+          links: organization_membership_links(organization),
+        }
       end
 
       private
+
+      def organization_membership_links(organization)
+        return [] unless allowed_to?(:index?, organization, with: OrganizationMembershipPolicy)
+
+        links = [{ label: t("base.app.navigation.memberships"),
+                   href: base_app_organization_memberships_path(organization.public_id, ri: params[:ri]), }]
+        if allowed_to?(:new?, organization, with: OrganizationMembershipPolicy)
+          links << { label: t("base.app.navigation.new_membership"),
+                     href: new_base_app_organization_membership_path(organization.public_id, ri: params[:ri]), }
+        end
+        organization.persona_memberships.order(:id).each do |membership|
+          next unless allowed_to?(:show?, membership, with: OrganizationMembershipPolicy)
+
+          links << { label: t("base.app.navigation.membership", id: membership.id),
+                     href: base_app_organization_membership_path(
+                       organization.public_id, membership.id,
+                       ri: params[:ri],
+                     ), }
+          if allowed_to?(:edit?, membership, with: OrganizationMembershipPolicy)
+            links << { label: t("base.app.navigation.edit_membership", id: membership.id),
+                       href: edit_base_app_organization_membership_path(
+                         organization.public_id, membership.id,
+                         ri: params[:ri],
+                       ), }
+          end
+        end
+        links
+      end
 
       def serialize_organization(organization)
         {

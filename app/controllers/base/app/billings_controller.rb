@@ -14,6 +14,7 @@ module Base
         render inertia: true, props: {
           title: "Billings",
           description: t("billings.signed_in_required"),
+          up_link: dashboard_up_link,
         }
       end
     end

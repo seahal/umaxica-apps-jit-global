@@ -23,7 +23,7 @@ class StepUpResolverAalTest < ActiveSupport::TestCase
         public_id: "token-public-id",
         id: 1,
       )
-    token.define_singleton_method(:currently_usable?) { true }
+    token.define_singleton_method(:currently_usable?) { |_now = Time.current| true }
     token
   end
 

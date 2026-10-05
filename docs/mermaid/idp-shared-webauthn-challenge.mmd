@@ -1,0 +1,9 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "session entry issued" as issued
+    state "entry deleted / absent" as removed
+    [*] --> issued
+    issued --> removed: consume! / consume_with_actor!
+    issued --> removed: discard
+    issued --> removed: issue! cleanup / capacity eviction
+    removed --> [*]

@@ -16,6 +16,7 @@ type Props = {
   empty_message: string;
   back_link: IdentityLink;
   new_link: IdentityLink;
+  registration_link: IdentityLink;
   table_headings: { number: string; status: string; actions: string };
   telephones: TelephoneRow[];
 };
@@ -25,6 +26,7 @@ export default function TelephonesIndex({
   empty_message: emptyMessage,
   back_link: backLink,
   new_link: newLink,
+  registration_link: registrationLink,
   table_headings: headings,
   telephones,
 }: Props) {
@@ -34,13 +36,23 @@ export default function TelephonesIndex({
       up={backLink}
       width="wide"
       actions={
-        <ButtonLink
-          href={newLink.href}
-          size="sm"
-          inertia
-        >
-          {newLink.label}
-        </ButtonLink>
+        <>
+          <ButtonLink
+            href={newLink.href}
+            size="sm"
+            inertia
+          >
+            {newLink.label}
+          </ButtonLink>
+          <ButtonLink
+            href={registrationLink.href}
+            size="sm"
+            variant="secondary"
+            inertia
+          >
+            {registrationLink.label}
+          </ButtonLink>
+        </>
       }
     >
       <Table>

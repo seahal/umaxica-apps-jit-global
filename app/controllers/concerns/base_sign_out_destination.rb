@@ -61,7 +61,7 @@ module BaseSignOutDestination
 
   def sign_out_return_link_props(back_to_dashboard:)
     if back_to_dashboard
-      { back_link: { label: t("actions.up"), href: sign_out_root_path } }
+      { back_link: { label: t("actions.cancel"), href: sign_out_root_path } }
     else
       { home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path } }
     end

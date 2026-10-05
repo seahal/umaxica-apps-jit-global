@@ -25,6 +25,7 @@ module Base
             title: t("base.shared.identity.sessions.title"),
             expires_at_description: t("base.shared.identity.sessions.expires_at_description"),
             session: serialize_session(@session),
+            columns: session_columns.except(:action),
             back_link: {
               label: t("sign.app.settings.show.back"),
               href: base_app_sessions_path(ri: params[:ri]),
@@ -60,7 +61,10 @@ module Base
         def sessions_index_props(sessions)
           serialized =
             sessions.map { |session|
-              serialize_session(session).merge(revoke: session_revoke_action(session))
+              serialize_session(session).merge(
+                show_href: base_app_session_path(session.public_id, ri: params[:ri]),
+                revoke: session_revoke_action(session),
+              )
             }
           {
             title: t("base.shared.identity.sessions.title"),

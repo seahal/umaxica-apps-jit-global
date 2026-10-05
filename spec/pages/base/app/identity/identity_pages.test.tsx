@@ -553,6 +553,22 @@ describe("identity session screens", () => {
     expect(html).not.toContain("Sign out everywhere");
   });
 
+  it("renders the app session detail as a GET link separately from revocation", () => {
+    const html = renderToStaticMarkup(
+      <SessionsIndex
+        title="Sessions"
+        back_link={backLink}
+        empty_message="No active sessions were found."
+        expires_at_description="Session expiry"
+        columns={headings}
+        bulk_revocations={null}
+        sessions={[{ ...sessionRow, show_href: "/sessions/session-1?ri=jp", revoke: null }]}
+      />,
+    );
+    expect(html).toContain('href="/sessions/session-1?ri=jp"');
+    expect(html).not.toContain('action="/sessions/session-1?ri=jp"');
+  });
+
   it("renders one session", () => {
     const html = renderToStaticMarkup(
       <SessionShow
@@ -581,7 +597,11 @@ describe("identity telephone screens", () => {
         title="Telephones"
         empty_message="No telephone numbers."
         back_link={backLink}
-        new_link={{ label: "Add", href: "/identity/telephones/registration/new" }}
+        new_link={{ label: "Add", href: "/identity/telephones/new" }}
+        registration_link={{
+          label: "Verification registration",
+          href: "/identity/telephones/registration/new",
+        }}
         table_headings={headings}
         telephones={[
           {
@@ -595,6 +615,8 @@ describe("identity telephone screens", () => {
     );
 
     expect(html).toContain("+819012345678");
+    expect(html).toContain('href="/identity/telephones/new"');
+    expect(html).toContain('href="/identity/telephones/registration/new"');
   });
 
   it("renders the empty telephone row", () => {
@@ -603,7 +625,11 @@ describe("identity telephone screens", () => {
         title="Telephones"
         empty_message="No telephone numbers."
         back_link={backLink}
-        new_link={{ label: "Add", href: "/identity/telephones/registration/new" }}
+        new_link={{ label: "Add", href: "/identity/telephones/new" }}
+        registration_link={{
+          label: "Verification registration",
+          href: "/identity/telephones/registration/new",
+        }}
         table_headings={headings}
         telephones={[]}
       />,

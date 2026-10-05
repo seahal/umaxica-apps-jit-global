@@ -4,7 +4,23 @@
 # Base issues and Auth/Base consume purpose-specific opaque admission/result
 # codes. Raw codes never persist; Valkey OpaqueAdmissionStore keys by digest.
 class BaseAuthAdmissionCoordinator < ApplicationService
-  class Denied < StandardError; end
+  # `code` is the internal refusal taxonomy for logs; responses stay generic.
+  class Denied < StandardError
+    attr_reader :code
+
+    public
+
+    def initialize(message = nil, code: "unclassified")
+      unless IdentityStepUpCeremonyContract::REFUSAL_CODES.include?(code)
+        raise ArgumentError, "unknown refusal code: #{code.inspect}"
+      end
+
+      super(message)
+      @code = code
+    end
+  end
+
+  TICKET_CEREMONY_PURPOSES = %w(step_up reauthentication bootstrap credential_registration credential_change).freeze
 
   SURFACE_ACTOR = {
     "app" => "client",
@@ -19,6 +35,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     "invitation" => "invitation_handoff",
     "step_up" => "step_up_handoff",
     "reauthentication" => "reauthentication_handoff",
+    "bootstrap" => "bootstrap_handoff",
+    "credential_registration" => "credential_registration_handoff",
+    "credential_change" => "credential_change_handoff",
   }.freeze
 
   RESULT_PURPOSE = {
@@ -28,6 +47,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     "invitation" => "invitation_result",
     "step_up" => "step_up_result",
     "reauthentication" => "reauthentication_result",
+    "bootstrap" => "bootstrap_result",
+    "credential_registration" => "credential_registration_result",
+    "credential_change" => "credential_change_result",
   }.freeze
 
   LOCAL_ENTRY_PURPOSE = {
@@ -110,10 +132,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raw_code: raw_code,
         expected: binding_expectations(surface: surface),
       )
-      raise Denied, "local admission missing" if result.missing?
-      raise Denied, "local admission replay" if result.replay?
-      raise Denied, "local admission binding mismatch" if result.binding_mismatch?
-      raise Denied, "local admission rejected" unless result.success?
+      raise Denied.new("local admission missing", code: "invalid_admission") if result.missing?
+      raise Denied.new("local admission replay", code: "admission_replay") if result.replay?
+      raise Denied.new("local admission binding mismatch", code: "invalid_admission") if result.binding_mismatch?
+      raise Denied.new("local admission rejected", code: "invalid_admission") unless result.success?
 
       payload = result.payload
       validate_payload!(payload, surface: surface)
@@ -126,10 +148,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         purposes: admission_reference_purposes(expected_intent),
         expected: binding_expectations(surface: surface),
       )
-      raise Denied, "local admission missing" if result.missing?
-      raise Denied, "local admission replay" if result.replay?
-      raise Denied, "local admission binding mismatch" if result.binding_mismatch?
-      raise Denied, "local admission rejected" unless result.success?
+      raise Denied.new("local admission missing", code: "invalid_admission") if result.missing?
+      raise Denied.new("local admission replay", code: "admission_replay") if result.replay?
+      raise Denied.new("local admission binding mismatch", code: "invalid_admission") if result.binding_mismatch?
+      raise Denied.new("local admission rejected", code: "invalid_admission") unless result.success?
 
       payload = result.payload
       validate_payload!(payload, surface: surface)
@@ -162,13 +184,13 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def resolve_step_up_admission!(payload:, surface:, expected_intent:)
-      unless %w(step_up reauthentication).include?(expected_intent.to_s)
-        raise Denied, "unsupported ceremony purpose"
+      unless TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+        raise Denied.new("unsupported ceremony purpose", code: "malformed_request")
       end
 
       validate_payload!(payload, surface: surface)
       unless payload.fetch("purpose") == handoff_purpose_for(expected_intent)
-        raise Denied, "admission purpose mismatch"
+        raise Denied.new("admission purpose mismatch", code: "invalid_admission")
       end
 
       model = STEP_UP_TRANSACTION.fetch(surface.to_s)
@@ -176,25 +198,37 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         transaction = model.find_by!(transaction_id: payload.fetch("subject_ref"), surface: surface.to_s)
         unless transaction.purpose == expected_intent.to_s && %w(pending verified).include?(transaction.status) &&
             !transaction.expired?(now: model.database_now)
-          raise Denied, "ceremony is unavailable"
+          raise Denied.new(
+            "ceremony is unavailable",
+            code: transaction.unavailable_refusal_code(
+              expected_purposes: [expected_intent.to_s],
+              now: model.database_now,
+            ),
+          )
         end
 
         transaction
       end
     rescue KeyError, ActiveRecord::RecordNotFound
-      raise Denied, "admission transaction missing"
+      raise Denied.new("admission transaction missing", code: "invalid_admission")
     end
 
     def read_result!(raw_code:, surface:, transaction_ref:, expected_intent:, store: default_store)
-      raise Denied, "admission binding mismatch" if transaction_ref.to_s.blank?
+      raise Denied.new("admission binding mismatch", code: "invalid_admission") if transaction_ref.to_s.blank?
 
       purpose = result_purpose_for(expected_intent)
       payload = store.read(raw_code, purpose: purpose)
-      raise Denied, "admission missing" if payload.blank?
+      raise Denied.new("admission missing", code: "invalid_admission") if payload.blank?
 
       validate_payload!(payload, surface: surface)
-      raise Denied, "admission purpose mismatch" unless payload.fetch("purpose") == purpose
-      raise Denied, "admission binding mismatch" unless payload.fetch("subject_ref") == transaction_ref.to_s
+      raise Denied.new(
+        "admission purpose mismatch",
+        code: "invalid_admission",
+      ) unless payload.fetch("purpose") == purpose
+      raise Denied.new(
+        "admission binding mismatch",
+        code: "invalid_admission",
+      ) unless payload.fetch("subject_ref") == transaction_ref.to_s
 
       transaction = result_transaction!(
         surface: surface, transaction_ref: transaction_ref,
@@ -202,14 +236,17 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       )
       generation = Integer(payload.fetch("result_generation").to_s, 10)
       digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose:, raw_code: raw_code)
-      raise Denied, "admission binding mismatch" unless transaction.result_delivery_matches?(
+      raise Denied.new(
+        "admission binding mismatch",
+        code: "invalid_admission",
+      ) unless transaction.result_delivery_matches?(
         result_digest: digest,
         result_generation: generation,
       )
 
       payload
     rescue KeyError, ArgumentError
-      raise Denied, "admission rejected"
+      raise Denied.new("admission rejected", code: "invalid_admission")
     end
 
     def register_result_and_issue!(surface:, login_challenge:, actor:, session_ref:, auth_method:, acr: nil,
@@ -220,7 +257,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         login_challenge: login_challenge,
       )
       if transaction.authenticated?
-        raise Denied, "authentication actor mismatch" unless transaction.actor_ref == actor.public_id
+        raise Denied.new(
+          "authentication actor mismatch",
+          code: "session_binding_mismatch",
+        ) unless transaction.actor_ref == actor.public_id
       else
         transaction = OidcAuthorizationTransactionCoordinator.register_result!(
           surface: surface,
@@ -267,10 +307,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raw_code: raw_code,
         expected: binding_expectations(surface: surface),
       )
-      raise Denied, "admission missing" if result.missing?
-      raise Denied, "admission replay" if result.replay?
-      raise Denied, "admission binding mismatch" if result.binding_mismatch?
-      raise Denied, "admission rejected" unless result.success?
+      raise Denied.new("admission missing", code: "invalid_admission") if result.missing?
+      raise Denied.new("admission replay", code: "admission_replay") if result.replay?
+      raise Denied.new("admission binding mismatch", code: "invalid_admission") if result.binding_mismatch?
+      raise Denied.new("admission rejected", code: "invalid_admission") unless result.success?
 
       payload = result.payload
       validate_payload!(payload, surface: surface)
@@ -278,11 +318,14 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def result_transaction!(surface:, transaction_ref:, expected_intent:)
-      if %w(step_up reauthentication).include?(expected_intent.to_s)
+      if TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
         model = STEP_UP_TRANSACTION.fetch(surface.to_s)
         model.connection_owner.connected_to(role: :writing) do
           transaction = model.find_by!(transaction_id: transaction_ref, surface: surface.to_s)
-          raise Denied, "admission purpose mismatch" unless transaction.purpose == expected_intent.to_s
+          raise Denied.new(
+            "admission purpose mismatch",
+            code: "invalid_admission",
+          ) unless transaction.purpose == expected_intent.to_s
 
           transaction
         end
@@ -292,15 +335,21 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         )
       end
     rescue ActiveRecord::RecordNotFound
-      raise Denied, "admission transaction missing"
+      raise Denied.new("admission transaction missing", code: "invalid_admission")
     end
 
     def validate_payload!(payload, surface:)
-      raise Denied, "admission rejected" if payload.blank?
-      raise Denied, "admission surface mismatch" unless payload.fetch("surface").to_s == surface.to_s
+      raise Denied.new("admission rejected", code: "invalid_admission") if payload.blank?
+      raise Denied.new(
+        "admission surface mismatch",
+        code: "invalid_admission",
+      ) unless payload.fetch("surface").to_s == surface.to_s
 
       actor = SURFACE_ACTOR.fetch(surface.to_s)
-      raise Denied, "admission actor mismatch" unless payload.fetch("actor_type").to_s == actor
+      raise Denied.new(
+        "admission actor mismatch",
+        code: "invalid_admission",
+      ) unless payload.fetch("actor_type").to_s == actor
     end
 
     def binding_expectations(surface:, subject_ref: nil)

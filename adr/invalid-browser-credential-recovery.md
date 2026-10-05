@@ -91,8 +91,20 @@ preference cookies prepared by a failed request are not committed by an exceptio
 failures, JSON responses, and Preference refusals register nothing.
 
 The Core browser JSON boundary answers every refused RP access cookie with the same
-`authentication-required` problem document and deletes its RP cookie pair with the RP cookie
-contract's deletion options.
+`authentication-required` problem document and deletes only the refused RP access
+cookie with the RP contract's deletion options. The independent RP refresh cookie
+is retained without being read as authentication evidence, consumed or rotated.
+
+Amended 2026-10-04 for the integrated Core continuity requirement: the previous
+RP cookie-pair deletion rule is superseded for access refusal. An access rejection,
+including ordinary JWT expiry, does not establish that the refresh credential is
+invalid. Deleting it here prevented the existing explicit POST from verifying a
+still-valid credential. The POST's existing CSRF, Origin, rotation, replay and
+session-lifecycle checks retain authority; no transparent GET renewal, new endpoint,
+browser retry protocol or grace period is introduced. Malformed access, wrong
+binding and unavailable principals still receive the same refusal, with no actor
+data or new public reason. Root auth, preference and explicit logout rules above
+are unchanged. See the [Core request boundary](../docs/security/core-browser-request-boundary.md).
 
 ## Preference
 

@@ -73,6 +73,12 @@ Auth cancellation POST closes the admitted transaction and its continuity, then 
 existing Jump redirect to that surface's fixed Base dashboard. It grants no freshness and
 does not resume the protected change request.
 
+The category also includes Auth app/com/org `GET /verification/setup/new` and
+`POST /verification/setup`. Setup GET displays nonconsuming admission continuation; POST redeems
+only the exact Base bootstrap permission. Its clean page requires scoped registration continuity,
+actor/session ownership and policy authorization. Available registration methods come from that
+transaction, and registration evidence cannot satisfy ordinary step-up freshness.
+
 `PUBLIC_SIGN_IN_UP` also covers Auth app/com/org `GET` and `POST /sign/handoff` and
 Base app/com/org `POST /sign/completion`. Auth requires a matching admitted local flow and only
 returns its credential evidence. Base requires the issuing browser's flow binding and the exact

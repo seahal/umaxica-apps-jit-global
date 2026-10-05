@@ -120,11 +120,11 @@ CREATE TABLE public.client_auth_ceremony_sessions (
     local_sign_up_flow_ref character varying,
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
-    CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying])::text[])))),
+    CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
     CONSTRAINT client_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
     CONSTRAINT client_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
+    CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT client_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
     CONSTRAINT client_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
 );
@@ -470,7 +470,8 @@ CREATE TABLE public.client_passkey_ceremony_transactions (
     consumed_at timestamp(6) with time zone,
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    step_up_ceremony_transaction_ref character varying
 );
 
 
@@ -584,6 +585,44 @@ CREATE SEQUENCE public.client_secret_credential_ceremony_transactions_id_seq
 --
 
 ALTER SEQUENCE public.client_secret_credential_ceremony_transactions_id_seq OWNED BY public.client_secret_credential_ceremony_transactions.id;
+
+
+--
+-- Name: client_secret_sign_in_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_secret_sign_in_receipts (
+    id bigint NOT NULL,
+    operation_id uuid NOT NULL,
+    credential_ref character varying(21) NOT NULL,
+    client_ref character varying(21) NOT NULL,
+    sign_in_flow_id bigint NOT NULL,
+    root_token_ref character varying(21) NOT NULL,
+    committed_at timestamp(6) with time zone NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: client_secret_sign_in_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_secret_sign_in_receipts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_secret_sign_in_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_secret_sign_in_receipts_id_seq OWNED BY public.client_secret_sign_in_receipts.id;
 
 
 --
@@ -1037,7 +1076,7 @@ CREATE TABLE public.client_step_up_ceremony_transactions (
     CONSTRAINT client_step_up_result_valid CHECK (((result_generation >= 0) AND (((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((result_digest IS NOT NULL) AND ((result_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (verified_at IS NOT NULL))))),
     CONSTRAINT client_step_up_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'verified'::character varying, 'consumed'::character varying, 'canceled'::character varying, 'expired'::character varying, 'revoked'::character varying])::text[]))),
     CONSTRAINT client_step_up_terminal_valid CHECK ((((canceled_at IS NULL) OR ((status)::text = 'canceled'::text)) AND ((revoked_at IS NULL) OR ((status)::text = 'revoked'::text)) AND (((status)::text <> 'revoked'::text) OR (revoked_at IS NOT NULL)) AND (((status)::text <> 'verified'::text) OR ((verified_at IS NOT NULL) AND (method IS NOT NULL) AND (aal IS NOT NULL))))),
-    CONSTRAINT client_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR ((verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
+    CONSTRAINT client_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY ((ARRAY['passkey'::character varying, 'totp'::character varying])::text[]))) OR (((purpose)::text <> ALL ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
 );
 
 
@@ -1318,7 +1357,7 @@ CREATE TABLE public.client_tokens (
     last_step_up_phishing_resistant boolean DEFAULT false NOT NULL,
     authentication_event_at timestamp(6) with time zone,
     root_login_established_at timestamp with time zone,
-    CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text])))),
+    CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying])::text[])))),
     CONSTRAINT chk_user_tokens_kind_id_positive CHECK ((user_token_kind_id >= 0)),
     CONSTRAINT chk_user_tokens_status_id_positive CHECK ((user_token_status_id >= 0))
 );
@@ -1363,7 +1402,8 @@ CREATE TABLE public.client_totp_ceremony_transactions (
     consumed_at timestamp(6) with time zone,
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    step_up_ceremony_transaction_ref character varying
 );
 
 
@@ -1520,12 +1560,14 @@ CREATE TABLE public.identity_totp_ceremony_candidates (
     session_ref character varying NOT NULL,
     private_key text NOT NULL,
     title character varying,
-    last_otp_at timestamp(6) with time zone NOT NULL,
+    last_otp_at timestamp(6) with time zone,
     expires_at timestamp(6) with time zone NOT NULL,
     consumed_at timestamp(6) with time zone,
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    step_up_ceremony_transaction_ref character varying,
+    CONSTRAINT totp_candidate_pending_authority CHECK (((last_otp_at IS NOT NULL) OR (step_up_ceremony_transaction_ref IS NOT NULL)))
 );
 
 
@@ -1808,6 +1850,13 @@ ALTER TABLE ONLY public.client_rp_sessions ALTER COLUMN id SET DEFAULT nextval('
 --
 
 ALTER TABLE ONLY public.client_secret_credential_ceremony_transactions ALTER COLUMN id SET DEFAULT nextval('public.client_secret_credential_ceremony_transactions_id_seq'::regclass);
+
+
+--
+-- Name: client_secret_sign_in_receipts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_secret_sign_in_receipts ALTER COLUMN id SET DEFAULT nextval('public.client_secret_sign_in_receipts_id_seq'::regclass);
 
 
 --
@@ -2161,6 +2210,14 @@ ALTER TABLE ONLY public.client_rp_sessions
 
 ALTER TABLE ONLY public.client_secret_credential_ceremony_transactions
     ADD CONSTRAINT client_secret_credential_ceremony_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: client_secret_sign_in_receipts client_secret_sign_in_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_secret_sign_in_receipts
+    ADD CONSTRAINT client_secret_sign_in_receipts_pkey PRIMARY KEY (id);
 
 
 --
@@ -2570,10 +2627,31 @@ CREATE UNIQUE INDEX idx_on_result_jti_b20b4e2f25 ON public.client_secret_credent
 
 
 --
+-- Name: idx_on_step_up_ceremony_transaction_ref_1dac192657; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_step_up_ceremony_transaction_ref_1dac192657 ON public.client_totp_ceremony_transactions USING btree (step_up_ceremony_transaction_ref);
+
+
+--
+-- Name: idx_on_step_up_ceremony_transaction_ref_5dbe753227; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_step_up_ceremony_transaction_ref_5dbe753227 ON public.identity_totp_ceremony_candidates USING btree (step_up_ceremony_transaction_ref);
+
+
+--
 -- Name: idx_on_step_up_ceremony_transaction_ref_7bec716b5b; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_on_step_up_ceremony_transaction_ref_7bec716b5b ON public.client_step_up_sessions USING btree (step_up_ceremony_transaction_ref);
+
+
+--
+-- Name: idx_on_step_up_ceremony_transaction_ref_d63907f9e6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_step_up_ceremony_transaction_ref_d63907f9e6 ON public.client_passkey_ceremony_transactions USING btree (step_up_ceremony_transaction_ref);
 
 
 --
@@ -2868,6 +2946,34 @@ CREATE UNIQUE INDEX index_client_rp_sessions_on_refresh_token_digest ON public.c
 --
 
 CREATE INDEX index_client_rp_sessions_on_revoked_at ON public.client_rp_sessions USING btree (revoked_at);
+
+
+--
+-- Name: index_client_secret_sign_in_receipts_on_credential_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_secret_sign_in_receipts_on_credential_ref ON public.client_secret_sign_in_receipts USING btree (credential_ref);
+
+
+--
+-- Name: index_client_secret_sign_in_receipts_on_operation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_secret_sign_in_receipts_on_operation_id ON public.client_secret_sign_in_receipts USING btree (operation_id);
+
+
+--
+-- Name: index_client_secret_sign_in_receipts_on_root_token_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_secret_sign_in_receipts_on_root_token_ref ON public.client_secret_sign_in_receipts USING btree (root_token_ref);
+
+
+--
+-- Name: index_client_secret_sign_in_receipts_on_sign_in_flow_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_client_secret_sign_in_receipts_on_sign_in_flow_id ON public.client_secret_sign_in_receipts USING btree (sign_in_flow_id);
 
 
 --
@@ -3541,11 +3647,27 @@ ALTER TABLE ONLY public.client_verifications
 
 
 --
+-- Name: client_totp_ceremony_transactions fk_rails_23f495015b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_totp_ceremony_transactions
+    ADD CONSTRAINT fk_rails_23f495015b FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_auth_ceremony_sessions fk_rails_268e296ad7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.client_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_268e296ad7 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: client_secret_sign_in_receipts fk_rails_33b6c86074; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_secret_sign_in_receipts
+    ADD CONSTRAINT fk_rails_33b6c86074 FOREIGN KEY (sign_in_flow_id) REFERENCES public.client_sign_in_flows(id);
 
 
 --
@@ -3578,6 +3700,14 @@ ALTER TABLE ONLY public.client_sign_in_flows
 
 ALTER TABLE ONLY public.client_sign_up_flows
     ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+
+
+--
+-- Name: identity_totp_ceremony_candidates fk_rails_5e9f08645d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_totp_ceremony_candidates
+    ADD CONSTRAINT fk_rails_5e9f08645d FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 
 
 --
@@ -3626,6 +3756,14 @@ ALTER TABLE ONLY public.client_step_up_sessions
 
 ALTER TABLE ONLY public.client_sign_up_flows
     ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id) NOT VALID;
+
+
+--
+-- Name: client_passkey_ceremony_transactions fk_rails_aac854f11a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_passkey_ceremony_transactions
+    ADD CONSTRAINT fk_rails_aac854f11a FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 
 
 --
@@ -3691,6 +3829,9 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261003221628'),
+('20261003215633'),
+('20261003215004'),
 ('20261003202100'),
 ('20261003185506'),
 ('20261003183659'),

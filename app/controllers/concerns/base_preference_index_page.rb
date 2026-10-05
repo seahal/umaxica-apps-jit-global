@@ -24,10 +24,10 @@ module BasePreferenceIndexPage
     pagination: :pagination_settings,
     theme: :theme_settings,
     cookie: :cookie_settings,
-    customization: :reset_settings,
     calendar: :calendar_settings,
     clock: :clock_settings,
     currency: :currency_settings,
+    customization: :reset_settings,
   }.freeze
 
   private

@@ -1,0 +1,24 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "STARTED id=10" as STARTED
+    state "CONTACT_PENDING id=20" as CONTACT_PENDING
+    state "CREDENTIAL_PENDING id=30" as CREDENTIAL_PENDING
+    state "CHECKPOINT_PENDING id=40" as CHECKPOINT_PENDING
+    state "COMPLETED id=100" as COMPLETED
+    [*] --> STARTED
+    STARTED --> CONTACT_PENDING: advance_sign_up_to_contact!
+    STARTED --> CREDENTIAL_PENDING: advance_sign_up_to_credential!
+    CONTACT_PENDING --> CREDENTIAL_PENDING: advance_sign_up_to_credential!
+    STARTED --> CHECKPOINT_PENDING: advance_sign_up_to_checkpoint!
+    CONTACT_PENDING --> CHECKPOINT_PENDING: advance_sign_up_to_checkpoint!
+    CREDENTIAL_PENDING --> CHECKPOINT_PENDING: advance_sign_up_to_checkpoint!
+    STARTED --> COMPLETED: complete_sign_up!
+    CONTACT_PENDING --> COMPLETED: complete_sign_up!
+    CREDENTIAL_PENDING --> COMPLETED: complete_sign_up!
+    CHECKPOINT_PENDING --> COMPLETED: complete_sign_up!
+    COMPLETED --> [*]
+    note right of STARTED
+        Model-permitted edges are distinguished from service events.
+        Result failed is not necessarily stored FAILED.
+        Expiry after finalization is not a model edge.
+    end note

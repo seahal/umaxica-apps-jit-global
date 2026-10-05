@@ -12,10 +12,13 @@ module Auth
         include ::CloudflareTurnstile
         include ::SignAuthorityRedirect
         include ::SignSettingsTotpRegistration
+        include ::AuthStepUpCeremonyContext
 
         include ::VerificationClient
 
-        AUTHENTICATION_MODE = :private
+        AUTHENTICATION_MODE = :open
+        declare_authentication_mode! :open
+        declare_authentication_mode! :private, only: %i(index edit update destroy)
         TOTP_STATUS_TRANSLATION_KEYS = {
           ClientTotpCredentialStatus::ACTIVE => "messages.totp_status.active",
           ClientTotpCredentialStatus::INACTIVE => "messages.totp_status.inactive",
@@ -25,19 +28,24 @@ module Auth
         }.freeze
         layout :settings_totps_layout
 
-        before_action :authenticate_client!
-        step_up only: %i(new create), bootstrap: true
+        before_action :authenticate_client!, only: %i(index edit update destroy)
+        before_action :require_totp_registration_context!, only: %i(new create)
         step_up only: :destroy
 
         def index
           authorize!(ClientTotpCredential, to: :index?)
-          @totps = current_client.client_totp_credentials.order(created_at: :asc)
+          @totps = current_client.client_totp_credentials
+            .where.not(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::DELETED)
+            .order(created_at: :asc)
           render_inertia_page(props: index_page_props)
         end
 
         def new
-          authorize!(ClientTotpCredential, to: :new?)
-          if ClientTotpCredential.slot_consuming.where(user_id: current_client.id).count >=
+          authorize!(ClientTotpCredential, to: :new?, context: { user: @step_up_ceremony_actor })
+          if @step_up_ceremony_transaction.verified?
+            return redirect_to(auth_app_settings_totps_handoff_path(ri: params[:ri]), status: :see_other)
+          end
+          if ClientTotpCredential.slot_consuming.where(user_id: @step_up_ceremony_actor.id).count >=
               ClientTotpCredential::MAX_TOTP_SLOTS
             return render plain: t(
               "session_limit.totp_limit_reached", count: ClientTotpCredential::MAX_TOTP_SLOTS,
@@ -46,8 +54,11 @@ module Auth
 
           # Display only: the secret belongs to an enrolment started by POST, never to this GET.
           @totp = ClientTotpCredential.new
-          @totp_enrollment = active_totp_enrollment
-          @png = generate_qrcode(@totp_enrollment.fetch("private_key")) if @totp_enrollment
+          @totp_enrollment = IdentityTotpEnrollmentQuery.call(
+            actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+            transaction: @step_up_ceremony_transaction,
+          )
+          @png = generate_qrcode(@totp_enrollment.private_key) if @totp_enrollment
           render_inertia_page(props: new_page_props)
         end
 
@@ -58,26 +69,35 @@ module Auth
         end
 
         def create
-          authorize!(ClientTotpCredential, to: :create?)
-          @totp_enrollment = active_totp_enrollment
+          authorize!(ClientTotpCredential, to: :create?, context: { user: @step_up_ceremony_actor })
+          discard_legacy_totp_enrollment!
+          @totp_enrollment = IdentityTotpEnrollmentQuery.call(
+            actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+            transaction: @step_up_ceremony_transaction,
+          )
           # A page from a cancelled, expired or replaced enrolment cannot confirm the current one.
-          unless totp_enrollment_matches?(@totp_enrollment, submitted_totp_enrollment_id)
+          unless @totp_enrollment && submitted_totp_enrollment_id.is_a?(String) &&
+              @totp_enrollment.ref == submitted_totp_enrollment_id
             return render plain: t("errors.messages.invalid_request"), status: :conflict
           end
 
-          initialize_totp
+          submitted = params.expect(user_totp_credential: %i(enrollment_id first_token title))
+          @totp = ClientTotpCredential.new(title: submitted[:title], first_token: submitted[:first_token])
 
           unless cloudflare_turnstile_stealth_validation["success"]
             @totp.errors.add(:base, t("turnstile_error"))
-            render_totp_qrcode(@totp.private_key)
+            render_totp_qrcode(@totp_enrollment.private_key)
             render_new_totp_page_with_errors
             return
           end
 
-          last_otp_at = verify_totp(@totp.private_key, @totp.first_token)
-
-          if last_otp_at
-            handle_success(last_otp_at)
+          accepted = IdentityTotpEnrollmentVerificationCommitter.call!(
+            actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+            transaction: @step_up_ceremony_transaction, candidate_ref: @totp_enrollment.ref,
+            code: submitted[:first_token], title: submitted[:title],
+          )
+          if accepted
+            redirect_to(auth_app_settings_totps_handoff_path(ri: params[:ri]), status: :see_other)
           else
             handle_failure
           end
@@ -85,43 +105,6 @@ module Auth
           render plain: t(
             "session_limit.totp_limit_reached", count: ClientTotpCredential::MAX_TOTP_SLOTS,
           ), status: :unprocessable_content
-        end
-
-        def initialize_totp
-          @totp = ClientTotpCredential.new(totp_params)
-          @totp.private_key = @totp_enrollment.fetch("private_key")
-          @totp.user = current_client
-          @totp.user_totp_credential_status_id = ClientTotpCredentialStatus::ACTIVE
-        end
-
-        def handle_success(last_otp_at)
-          last_otp_at_time = Time.zone.at(last_otp_at)
-          finish_totp_ceremony!(
-            surface: "app",
-            actor: current_client,
-            session_ref: current_session_public_id,
-            private_key: @totp.private_key,
-            title: @totp.title,
-            last_otp_at: last_otp_at_time,
-          )
-          end_totp_enrollment!
-
-          redirect_to_surface_url(
-            bootstrap_return_path(
-              auth_app_settings_totps_url(
-                ri: params[:ri],
-                host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-              ),
-            ),
-            status: :see_other,
-          )
-        end
-
-        def handle_failure
-          @totp.valid?
-          @totp.errors.add(:first_token, t("sign.app.settings.totps.invalid_code"))
-          render_totp_qrcode(@totp.private_key)
-          render_new_totp_page_with_errors
         end
 
         def update
@@ -143,18 +126,67 @@ module Auth
         def destroy
           totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
           authorize!(totp)
-          unless AuthMethodGuard.can_remove_totp?(current_client, totp)
+          unless IdentityCredentialRemovalCommitter.call!(
+            actor: current_client, credential: totp, current_session: current_session, request: request,
+          )
             redirect_to(
               auth_app_settings_totps_path(ri: params[:ri]),
               status: :see_other,
             )
             return
           end
-          totp.destroy!
           redirect_to(auth_app_settings_totps_path(ri: params[:ri]), status: :see_other)
         end
 
         private
+
+        def handle_failure
+          @totp.errors.add(:first_token, t("sign.app.settings.totps.invalid_code"))
+          render_totp_qrcode(@totp_enrollment.private_key)
+          render_new_totp_page_with_errors
+        end
+
+        def current_policy_user
+          case action_name
+          when "new", "create" then @step_up_ceremony_actor
+          when "index", "edit", "update", "destroy" then current_client
+          else raise ActionController::BadRequest, "unsupported TOTP action"
+          end
+        end
+
+        def require_totp_registration_context!
+          return unless load_registration_ceremony_context!
+          return render_invalid_step_up_context! unless admitted_step_up_methods.include?(:totp)
+          return if @step_up_ceremony_transaction.status == "pending" ||
+            (@step_up_ceremony_transaction.verified? && @step_up_ceremony_transaction.method == "totp")
+
+          render_invalid_step_up_context!
+        end
+
+        def ceremony_actor_model = Client
+
+        def ceremony_step_up_session_model = ClientStepUpSession
+
+        def ceremony_session_token(record) = record.user_token
+
+        def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
+
+        def ceremony_supported_methods = [:totp]
+
+        def authorize_step_up_ceremony_actor!(actor)
+          authorize!(actor, to: :show?, context: { user: actor })
+        end
+
+        rescue_from IdentityTotpCeremonyContract::Error, with: :render_invalid_step_up_context!
+        rescue_from ActiveRecord::RecordNotFound, with: :render_missing_totp_record!
+
+        def render_missing_totp_record!
+          case action_name
+          when "new", "create" then render_invalid_step_up_context!
+          when "index", "edit", "update", "destroy" then head :not_found
+          else raise ActionController::BadRequest, "unsupported TOTP action"
+          end
+        end
 
         # Renders one Inertia page and tells `settings_totps_layout` that the slim Inertia shell is
         # the right layout for this response.
@@ -230,10 +262,12 @@ module Auth
             description: t("sign.app.settings.totp.new.description"),
             back_link: {
               label: t("sign.app.settings.show.back"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
+              href: (@step_up_ceremony_transaction.purpose == "bootstrap") ?
+                new_auth_app_verification_setup_path(ri: params[:ri]) :
+                base_app_identity_url(ri: params[:ri], host: base_authority_host, protocol: "https"),
             },
             # Without an active enrolment the page offers only the explicit start. With one, the QR
-            # code is rendered from that enrolment's secret; the secret itself never leaves the session.
+            # code carries its secret; the encrypted candidate remains on the ticket writer.
             start: @totp_enrollment ? nil : {
               action: auth_app_settings_totps_enrollment_path(ri: params[:ri]),
               label: t("sign.app.settings.totp.index.new_link"),
@@ -247,7 +281,7 @@ module Auth
               title_placeholder: t("messages.totp_title_placeholder"),
               title_hint: t("sign.app.settings.totp.new.title_hint"),
               title: @totp.title,
-              enrollment_id: @totp_enrollment&.fetch("id"),
+              enrollment_id: @totp_enrollment&.ref,
               first_token_label: t("views.sign.app.settings.totps.new.first_token_label"),
               first_token_placeholder: t("views.sign.app.settings.totps.new.first_token_placeholder"),
               first_token_help: t("views.sign.app.settings.totps.new.first_token_help"),
@@ -319,39 +353,21 @@ module Auth
           RQRCode::QRCode.new(totp.provisioning_uri(account_id)).as_png
         end
 
-        def verify_totp(private_key, token)
-          ROTP::TOTP.new(private_key).verify(normalized_totp_token(token))
-        end
-
-        def normalized_totp_token(token)
-          token.to_s.gsub(/\D/, "")
-        end
-
         def account_id
-          current_client.client_emails.first&.address || current_client.public_id
+          @step_up_ceremony_actor.client_emails.first&.address || @step_up_ceremony_actor.public_id
         end
 
         def submitted_totp_enrollment_id
           params.dig(:user_totp_credential, :enrollment_id)
         end
 
-        def totp_params
-          params(user_totp_credential: [:first_token, :title])
-        end
-
         def update_params
           params(user_totp_credential: [:title])
-        end
-
-        def verification_required_action?
-          step_up_bootstrap_active? && %w(new create).include?(action_name)
         end
 
         def verification_scope
           "settings_totp"
         end
-
-        private :initialize_totp, :handle_success, :handle_failure
       end
     end
   end

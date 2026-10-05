@@ -23,6 +23,7 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
       "cf-turnstile-response" => "turnstile-response",
       "turnstile_response" => "turnstile-response-alias",
       "uid" => "provider-user-id",
+      "entry_ref" => "opaque-admission-reference",
     )
 
     assert_equal "[FILTERED]", filtered.fetch("rt")
@@ -33,6 +34,7 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     assert_equal "[FILTERED]", filtered.fetch("cf-turnstile-response")
     assert_equal "[FILTERED]", filtered.fetch("turnstile_response")
     assert_equal "[FILTERED]", filtered.fetch("uid")
+    assert_equal "[FILTERED]", filtered.fetch("entry_ref")
   end
 
   test "filters social identity tokens from Active Record inspection and SQL logs" do

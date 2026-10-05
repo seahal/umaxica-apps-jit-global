@@ -1,11 +1,11 @@
 // Enrolling a new authenticator app.
 //
-// An enrolment is started by an explicit POST (`start`), which issues a fresh secret; until then the
-// page shows only that start. Cancelling is a DELETE that discards the enrolment and its secret. The
+// An enrolment is started once by an explicit POST (`start`); until then the
+// page shows only that start. Cancelling is a DELETE that ends the Base permission. The
 // form carries the enrolment id so a page from an earlier enrolment cannot confirm the current one.
 //
 // The provisioning QR code is rendered by the server into a data URI, the same image the ERB screen
-// displayed; the shared secret behind it stays in the session and never becomes a prop. The first
+// displayed; the QR carries the secret from an encrypted server-side candidate. The first
 // code the actor types is verified server-side, and an invisible Turnstile token travels with the
 // submission exactly as before.
 import { useForm } from "@inertiajs/react";
@@ -137,7 +137,7 @@ export default function TotpsNew({
                 id="totp-first-token"
                 label={formProps.first_token_label}
                 type="text"
-                maxLength={16}
+                maxLength={6}
                 inputMode="numeric"
                 placeholder={formProps.first_token_placeholder}
                 description={formProps.first_token_help}

@@ -29,7 +29,9 @@ module Auth
         before_action :set_passkey, only: %i(show edit update destroy)
 
         def index
-          @passkeys = current_visitor.visitor_passkeys.order(created_at: :asc)
+          @passkeys = current_visitor.visitor_passkeys.where.not(
+            status_id: [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED],
+          ).order(created_at: :asc)
           render inertia: true, props: passkey_index_props
         end
 
@@ -85,14 +87,15 @@ module Auth
 
         def destroy
           authorize!(@passkey)
-          unless AuthMethodGuard.can_remove_passkey?(current_visitor, @passkey)
+          unless IdentityCredentialRemovalCommitter.call!(
+            actor: current_visitor, credential: @passkey, current_session: current_session, request: request,
+          )
             redirect_to(
               auth_com_settings_passkeys_path(ri: params[:ri]),
               status: :see_other,
             )
             return
           end
-          @passkey.destroy!
           redirect_to(auth_com_settings_passkeys_path(ri: params[:ri]), status: :see_other)
         end
 

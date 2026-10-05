@@ -45,10 +45,9 @@ module Auth
         assert_equal [
           [new_auth_app_sign_in_email_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.email")],
           [new_auth_app_sign_in_passkey_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.passkey")],
-          [auth_app_sign_in_emergency_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.emergency")],
           [auth_app_sign_in_device_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.device")],
         ], inertia_props.fetch("methods").map { |method| [method.fetch("href"), method.fetch("label")] }
-        assert_equal %w(email passkey emergency device), inertia_props.fetch("methods").map { |method|
+        assert_equal %w(email passkey device), inertia_props.fetch("methods").map { |method|
           method.fetch("key")
         }
         assert_equal %w(google apple), inertia_props.fetch("social_providers").map { |provider| provider.fetch("key") }
@@ -89,7 +88,6 @@ module Auth
         assert_equal [
           new_auth_app_sign_in_email_path(ri: "jp"),
           new_auth_app_sign_in_passkey_path(ri: "jp"),
-          auth_app_sign_in_emergency_path(ri: "jp"),
           auth_app_sign_in_device_path(ri: "jp"),
         ], inertia_props.fetch("methods").map { |method| method.fetch("href") }
       end

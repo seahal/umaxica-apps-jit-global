@@ -11,7 +11,7 @@ class Auth::App::Settings::Passkeys::OptionsController < ::Auth::App::Applicatio
   declare_authentication_mode! :private
 
   before_action :authenticate_client!
-  step_up only: :create, bootstrap: true
+  step_up only: :create
   before_action :verify_settings_passkey_turnstile!, only: :create
 
   def create = (authorize!(ClientPasskey, to: :create?); render_passkey_registration_options)

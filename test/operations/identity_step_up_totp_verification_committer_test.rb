@@ -53,6 +53,7 @@ class IdentityStepUpTotpVerificationCommitterTest < ActiveSupport::TestCase
       user: outsider, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
+
     assert_not IdentityStepUpTotpVerificationCommitter.call!(
       actor: @actor, transaction: @transaction, session_record: @record,
       code: ROTP::TOTP.new(foreign_credential.private_key).now, credential_public_id: foreign_credential.public_id,

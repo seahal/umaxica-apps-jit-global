@@ -1,0 +1,68 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "STARTED id=10" as STARTED
+    state "CONTACT_PENDING id=20" as CONTACT_PENDING
+    state "CREDENTIAL_PENDING id=30" as CREDENTIAL_PENDING
+    state "CONTACT_VERIFIED id=35" as CONTACT_VERIFIED
+    state "SOCIAL_CALLBACK_PENDING id=36" as SOCIAL_CALLBACK_PENDING
+    state "GUARDRAIL_PENDING id=38" as GUARDRAIL_PENDING
+    state "CHECKPOINT_PENDING id=40" as CHECKPOINT_PENDING
+    state "FINALIZING id=60" as FINALIZING
+    state "FINALIZED id=70" as FINALIZED
+    state "SIGN_IN_HANDOFF_PENDING id=80" as SIGN_IN_HANDOFF_PENDING
+    state "COMPLETED id=100" as COMPLETED
+    state "FAILED id=900" as FAILED
+    state "EXPIRED id=910" as EXPIRED
+    state "CANCELLED id=920" as CANCELLED
+    [*] --> STARTED
+    STARTED --> CONTACT_PENDING: submit_contact
+    STARTED --> CREDENTIAL_PENDING: advance_sign_up_to_credential! / model map
+    STARTED --> SOCIAL_CALLBACK_PENDING: start_social_callback
+    STARTED --> FAILED: fail
+    STARTED --> EXPIRED: expire
+    STARTED --> CANCELLED: cancel
+    CONTACT_PENDING --> CREDENTIAL_PENDING: advance_sign_up_to_credential! / model map
+    CONTACT_PENDING --> CONTACT_VERIFIED: verify_contact
+    CONTACT_PENDING --> FAILED: fail
+    CONTACT_PENDING --> EXPIRED: expire
+    CONTACT_PENDING --> CANCELLED: cancel
+    CREDENTIAL_PENDING --> CONTACT_VERIFIED: verify_contact
+    CREDENTIAL_PENDING --> FAILED: fail
+    CREDENTIAL_PENDING --> EXPIRED: expire
+    CREDENTIAL_PENDING --> CANCELLED: cancel
+    CONTACT_VERIFIED --> GUARDRAIL_PENDING: enter_guardrail
+    CONTACT_VERIFIED --> FAILED: fail
+    CONTACT_VERIFIED --> EXPIRED: expire
+    CONTACT_VERIFIED --> CANCELLED: cancel
+    SOCIAL_CALLBACK_PENDING --> CONTACT_VERIFIED: transition_to! model-permitted
+    SOCIAL_CALLBACK_PENDING --> GUARDRAIL_PENDING: transition_to! model-permitted
+    SOCIAL_CALLBACK_PENDING --> CHECKPOINT_PENDING: complete_social_callback new identity
+    SOCIAL_CALLBACK_PENDING --> FAILED: fail
+    SOCIAL_CALLBACK_PENDING --> EXPIRED: expire
+    SOCIAL_CALLBACK_PENDING --> CANCELLED: cancel
+    GUARDRAIL_PENDING --> CHECKPOINT_PENDING: enter_checkpoint
+    GUARDRAIL_PENDING --> FAILED: fail
+    GUARDRAIL_PENDING --> EXPIRED: expire
+    GUARDRAIL_PENDING --> CANCELLED: cancel
+    CHECKPOINT_PENDING --> FINALIZING: finalize accepted
+    CHECKPOINT_PENDING --> FAILED: fail
+    CHECKPOINT_PENDING --> EXPIRED: expire
+    CHECKPOINT_PENDING --> CANCELLED: cancel
+    FINALIZING --> FINALIZED: finalize accepted
+    FINALIZING --> FAILED: fail
+    FINALIZED --> SIGN_IN_HANDOFF_PENDING: handoff_to_sign_in accepted
+    FINALIZED --> FAILED: fail
+    SIGN_IN_HANDOFF_PENDING --> COMPLETED: complete
+    SIGN_IN_HANDOFF_PENDING --> FAILED: fail
+    CHECKPOINT_PENDING --> CHECKPOINT_PENDING: clear_requirement
+    COMPLETED --> [*]
+    FAILED --> [*]
+    EXPIRED --> [*]
+    CANCELLED --> [*]
+    note right of STARTED
+        Accepted sign-up handoff starts a separate sign-in authority.
+        Stopped/failed handoff result leaves FINALIZED unchanged.
+        Model-permitted edges are distinguished from service events.
+        Result failed is not necessarily stored FAILED.
+        Expiry after finalization is not a model edge.
+    end note

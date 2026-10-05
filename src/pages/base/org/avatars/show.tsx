@@ -21,10 +21,12 @@ export default function AvatarShow({
   switcher_link: switcherLink,
   up_link: upLink,
 }: Props) {
+  const description = avatar?.moniker ?? emptyMessage;
+
   return (
     <Page
       title={title}
-      description={avatar?.moniker ?? emptyMessage ?? undefined}
+      {...(description === null ? {} : { description })}
       up={upLink}
     >
       {avatar && actionLink ? (

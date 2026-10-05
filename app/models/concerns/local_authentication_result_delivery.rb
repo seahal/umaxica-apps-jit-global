@@ -11,6 +11,10 @@ module LocalAuthenticationResultDelivery
       with_lock do
         now = self.class.database_now
         raise AuthCeremonySession::InvalidTransition, "local flow is expired" if expired?(now)
+        unless (state == "PRIMARY_PENDING" && sign_in_primary_pending?) ||
+            (state == "MFA_PENDING" && sign_in_mfa_pending?)
+          raise AuthCeremonySession::InvalidTransition, "local flow cannot accept authentication evidence"
+        end
         raise AuthCeremonySession::InvalidTransition, "local flow has no principal" if principal_id.nil?
         raise AuthCeremonySession::InvalidTransition, "local evidence is already recorded" if authentication_event_at
         unless AuthCeremonySession::AUTHENTICATION_METHODS.include?(method.to_s)

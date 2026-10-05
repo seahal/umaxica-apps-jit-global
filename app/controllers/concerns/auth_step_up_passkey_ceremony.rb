@@ -17,7 +17,7 @@ module AuthStepUpPasskeyCeremony
     return head :forbidden unless admitted_step_up_methods.include?(:passkey)
     return unless verify_turnstile_stealth!
 
-    credentials = ceremony_passkey_scope.where("discard_at > clock_timestamp()")
+    credentials = ceremony_passkey_scope
     return head :forbidden if credentials.empty?
 
     config = webauthn_relying_party_config
@@ -48,9 +48,14 @@ module AuthStepUpPasskeyCeremony
       session_record: @step_up_ceremony_session, config: webauthn_relying_party_config,
       reference: params[:challenge_id], credential_params: credential,
     )
+    log_step_up_ceremony(
+      "evidence_recorded", transaction: @step_up_ceremony_transaction, outcome: "verified", method: "passkey",
+                           state_after: @step_up_ceremony_transaction.status,
+    )
     render json: { status: "ok", redirect_url: ceremony_passkey_handoff_path }
   rescue StepUpSessionConsumable::ChallengeError, Webauthn::AssertionVerifier::VerificationError,
-         WebAuthn::Error, ActiveRecord::RecordNotFound, IdentityStepUpCeremonyContract::Error
+         WebAuthn::Error, ActiveRecord::RecordNotFound, IdentityStepUpCeremonyContract::Error => e
+    log_step_up_refusal(e, transaction: @step_up_ceremony_transaction, stage: "auth_passkey_verification")
     render json: { error: I18n.t("errors.webauthn.verification_failed") }, status: :unprocessable_content
   end
 end

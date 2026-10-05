@@ -171,22 +171,26 @@ module Base
         end
 
         def finalize_authorization_transaction!(resource, transaction, result_generation: nil)
-          transaction.finalize_base!(result_generation: result_generation) do |locked, _finalization_time|
-            if locked.base_finalized_at.present?
-              token_record = find_browser_session_for_oidc(resource, locked.browser_session_ref)
-              next { status: :login_failed } unless token_record
+          resource.class.connection_class_for_self.connected_to(role: :writing) do
+            resource.with_lock do
+              transaction.finalize_base!(result_generation: result_generation) do |locked, _finalization_time|
+                if locked.base_finalized_at.present?
+                  token_record = find_browser_session_for_oidc(resource, locked.browser_session_ref)
+                  next { status: :login_failed } unless token_record
 
-              reissue_login_credentials_for_existing_session(
-                resource: resource,
-                token_record: token_record,
-                token_kind_id: "BROWSER_WEB",
-                authentication_event_at: locked.authenticated_at,
-              ).merge(browser_session_ref: locked.browser_session_ref)
-            else
-              login_result = login_for_oidc(resource, locked)
-              next login_result unless login_result[:status] == :success
+                  reissue_login_credentials_for_existing_session(
+                    resource: resource,
+                    token_record: token_record,
+                    token_kind_id: "BROWSER_WEB",
+                    authentication_event_at: locked.authenticated_at,
+                  ).merge(browser_session_ref: locked.browser_session_ref)
+                else
+                  login_result = login_for_oidc(resource, locked)
+                  next login_result unless login_result[:status] == :success
 
-              { status: :success, browser_session_ref: current_session.public_id }
+                  { status: :success, browser_session_ref: current_session.public_id }
+                end
+              end
             end
           end
         end

@@ -22,8 +22,7 @@ class IdentityStepUpPasskeyVerificationCommitter
         actor.with_lock do
           raise IdentityStepUpCeremonyContract::Error, "actor unavailable" unless actor.login_allowed?
 
-          credential = credential_scope(actor).where("discard_at > clock_timestamp()")
-            .lock.find_by!(webauthn_id: credential_params.fetch("id"))
+          credential = credential_scope(actor).lock.find_by!(webauthn_id: credential_params.fetch("id"))
 
           context = Webauthn::AssertionVerifier.verify!(
             credential_params: credential_params, challenge: challenge, config: config,
@@ -35,7 +34,7 @@ class IdentityStepUpPasskeyVerificationCommitter
       end
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true,
-        verified_at: context.verified_at, verified_credential_ref: credential.public_id,
+        verified_at: context.verified_at, verified_credential_ref: credential_reference(credential),
       )
     end
 
@@ -81,9 +80,18 @@ class IdentityStepUpPasskeyVerificationCommitter
 
     def credential_scope(actor)
       case actor
-      when Client then actor.client_passkeys.active
-      when Visitor then actor.visitor_passkeys.active
+      when Client then actor.client_passkeys.active.where("discard_at > clock_timestamp()")
+      when Visitor then actor.visitor_passkeys.active.where("discard_at > clock_timestamp()")
       when Operator then actor.staff_passkeys.active
+      end
+    end
+
+    def credential_reference(credential)
+      case credential
+      when ClientPasskey, VisitorPasskey then credential.public_id
+      when OperatorPasskey then credential.external_id
+      else
+        raise IdentityStepUpCeremonyContract::Error, "unsupported credential reference"
       end
     end
   end

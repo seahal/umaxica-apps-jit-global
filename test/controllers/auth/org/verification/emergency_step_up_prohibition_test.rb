@@ -2,199 +2,225 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "base64"
+require "webauthn/fake_client"
 
-# Step-Up is unavailable to a Restricted Mode session.
-#
-# This is not "step-up has not happened yet". The authentication context is not
-# eligible to perform step-up-protected operations at all, so possessing a
-# perfectly valid step-up passkey changes nothing: the ceremony entry is
-# refused, a direct POST is refused, and no path can leave the session holding
-# usable step-up freshness.
+# Restricted Mode cannot initiate, complete, or reuse ordinary step-up authority.
+# HTTP cases use the Base admission contract without Auth root credentials.
 class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_tokens
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     @staff = operators(:one)
     @token = operator_tokens(:one)
+    @token.update!(authentication_context: nil)
     @passkey = OperatorPasskey.create!(
-      staff: @staff,
-      webauthn_id: "org_emergency_step_up_#{SecureRandom.hex(8)}",
-      external_id: SecureRandom.uuid,
-      public_key: "org-emergency-public-key",
-      sign_count: 0,
-      description: "Org step-up passkey",
-      status_id: OperatorPasskeyStatus::ACTIVE,
+      staff: @staff, webauthn_id: SecureRandom.uuid, external_id: SecureRandom.uuid,
+      public_key: "org-emergency-public-key", sign_count: 0,
+      description: "Org step-up passkey", status_id: OperatorPasskeyStatus::ACTIVE,
     )
+    @requirement = StepUpRequirement.new(
+      scope: "settings_passkey", required_aal: "aal1", allowed_methods: [:passkey],
+      session_binding: @token.public_id, token_binding: @token.public_id,
+      purpose: "step_up", audience: "step_up:org", require_session_binding: true,
+    )
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
   end
 
-  def headers_for(context)
-    @token.update!(authentication_context: context)
-    @token.reload
-
-    as_staff_headers(@staff, host: @host, session_public_id: @token.public_id)
+  teardown do
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
   end
 
-  test "an emergency session is refused at the step-up ceremony entry" do
-    return_to = auth_org_settings_passkeys_path(ri: "jp")
+  test "ORG Auth options and real assertion return scoped evidence without a root credential" do
+    origin = "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}"
+    fake = WebAuthn::FakeClient.new(origin, encoding: :base64url)
+    registration = fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)
+    relying_party = WebAuthn::RelyingParty.new(
+      id: URI.parse(origin).host, allowed_origins: [origin], encoding: :base64url,
+    )
+    credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
+    passkey = @staff.staff_passkeys.create!(
+      webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
+    )
+    record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_org_verification_path(ri: "jp"), params: {
+      entry_ref: issuance.reference, authenticity_token: csrf,
+    }
+    get new_auth_org_verification_passkey_path(ri: "jp")
 
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      get auth_org_verification_url(
-        scope: "settings_passkey",
-        pt: signed_step_up_pt(return_to),
-        ri: "jp",
-        step_up_ceremony_grant: signed_step_up_grant_for(
-          actor: @staff, token: @token, scope: "settings_passkey", return_to: return_to, surface: "org",
-        ),
-      ), headers: headers_for("emergency")
-    end
+    assert_response :success
+    assert_nil record.reload.passkey_challenge_ref
 
-    assert_response :forbidden
-    assert_includes response.body, I18n.t("auth.step_up.emergency_unavailable")
+    panel = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("panel")
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    post panel.fetch("options_url"), params: { "cf-turnstile-response" => "test-only" },
+                                     headers: { "X-CSRF-Token" => csrf }, as: :json
+
+    assert_response :success
+    assert_equal "required", response.parsed_body.fetch("options").fetch("userVerification")
+
+    assertion = fake.get(challenge: record.reload.passkey_challenge, user_verified: true, sign_count: 2)
+    post panel.fetch("verification_url"),
+         params: { credential: assertion, challenge_id: record.passkey_challenge_ref },
+         headers: { "X-CSRF-Token" => csrf }, as: :json
+
+    assert_response :success
+    assert_equal "verified", issuance.transaction.reload.status
+    assert_equal passkey.external_id, issuance.transaction.verified_credential_ref
+    assert_nil @token.reload.last_step_up_at
+
+    get response.parsed_body.fetch("redirect_url")
+
+    assert_response :success
+
+    form = response.parsed_body.at_css("form")
+    post form["action"], params: { authenticity_token: form.at_css('input[name="authenticity_token"]')["value"] }
+
+    assert_response :success
+
+    result_form = response.parsed_body.at_css("form")
+
+    assert_equal issuance.transaction.transaction_id, result_form.at_css('input[name="transaction_ref"]')["value"]
+    assert_not_empty result_form.at_css('input[name="result"]')["value"]
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
-  test "an emergency session is refused when it reaches the passkey ceremony page directly" do
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      get new_auth_org_verification_passkey_url(ri: "jp"), headers: headers_for("emergency")
-    end
+  test "Base refuses admission for an emergency session without creating a ticket" do
+    @token.update!(authentication_context: "emergency")
 
-    assert_response :forbidden
-    assert_includes response.body, I18n.t("auth.step_up.emergency_unavailable")
-  end
-
-  test "a direct step-up POST from an emergency session creates no freshness" do
-    emergency_headers = headers_for("emergency")
-
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
-      Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-        post auth_org_verification_passkey_url(ri: "jp"),
-             params: {
-               verification: {
-                 challenge_id: "anything",
-                 credential_json: { id: @passkey.webauthn_id }.to_json,
-               },
-             },
-             headers: emergency_headers
+    assert_no_difference ["OperatorStepUpCeremonyTransaction.count", "OperatorStepUpSession.count"] do
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        BaseStepUpAdmissionIssuer.call!(
+          actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
+        )
       end
     end
-
-    assert_response :forbidden
-
-    @token.reload
-
-    assert_nil @token.last_step_up_at
-    assert_nil @token.last_step_up_scope
+    assert_nil @token.reload.last_step_up_at
     assert_equal "emergency", @token.authentication_context
   end
 
-  # The resolver is the single authority every policy and controller consults,
-  # so a session that somehow held freshness columns still cannot satisfy a
-  # requirement while its context is Emergency.
-  test "recorded freshness cannot satisfy a requirement in an emergency context" do
+  test "a direct passkey page without admission is refused and grants no emergency freshness" do
+    @token.update!(authentication_context: "emergency")
+    get new_auth_org_verification_passkey_path(ri: "jp")
+
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
+  end
+
+  test "a direct passkey POST without admission creates no emergency freshness" do
+    @token.update!(authentication_context: "emergency")
+    post auth_org_verification_passkey_path(ri: "jp"), params: {
+      verification: { challenge_id: "anything", credential_json: { id: @passkey.webauthn_id }.to_json },
+    }
+
+    assert_response :bad_request
+    assert_nil @token.reload.last_step_up_at
+    assert_nil @token.last_step_up_scope
+    assert_equal "emergency", @token.authentication_context
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
+  end
+
+  test "recorded normal freshness cannot satisfy a requirement after an emergency context change" do
     now = Time.current
     @token.update!(
-      last_step_up_at: now,
-      last_step_up_scope: "settings_passkey",
-      last_step_up_method: "passkey",
-      last_step_up_aal: "aal1",
-      last_step_up_purpose: "step_up",
-      last_step_up_audience: "org",
+      last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
+      last_step_up_aal: "aal1", last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
       last_step_up_session_public_id: @token.public_id,
     )
-    requirement = StepUpRequirement.new(
-      scope: "settings_passkey",
-      required_aal: "aal1",
-      allowed_methods: [:passkey],
-      session_binding: @token.public_id,
-      token_binding: @token.public_id,
-      ttl: VerificationBase::STEP_UP_TTL,
-      purpose: :step_up,
-      audience: "org",
-      require_session_binding: true,
+
+    assert_predicate StepUpResolver.call(token: @token, requirement: @requirement, now: now), :satisfied?
+
+    @token.update!(authentication_context: "emergency")
+
+    assert_not_predicate StepUpResolver.call(token: @token.reload, requirement: @requirement, now: now), :satisfied?
+  end
+
+  test "Base refuses verified evidence when the session becomes emergency before finalization" do
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
     )
-
-    @token.update!(authentication_context: nil)
-
-    assert_predicate StepUpResolver.call(token: @token.reload, requirement: requirement), :satisfied?,
-                     "the fixture must satisfy the requirement in a normal context, or the next " \
-                     "assertion proves nothing"
-
+    transaction = issuance.transaction
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true,
+      verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
+    )
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+    )
     @token.update!(authentication_context: "emergency")
 
-    assert_not_predicate StepUpResolver.call(token: @token.reload, requirement: requirement), :satisfied?
-  end
-
-  test "the freshness committer refuses to write onto an emergency session" do
-    @token.update!(authentication_context: "emergency")
-
-    error =
-      assert_raises(IdentityStepUpCeremonyContract::Error) do
-        IdentityStepUpCeremonyFreshnessCommitter.call!(
-          result_token: "unused",
-          token: @token.reload,
-          expected_scope: "settings_passkey",
-          expected_aal: "aal1",
-          expected_method: "passkey",
-          audience: "org",
-          surface: "org",
-        )
-      end
-
-    assert_match(/authentication context/, error.message)
-    assert_nil @token.reload.last_step_up_at
-  end
-
-  test "normal step-up behaviour is unchanged" do
-    return_to = auth_org_settings_passkeys_path(ri: "jp")
-
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      get auth_org_verification_url(
-        scope: "settings_passkey",
-        pt: signed_step_up_pt(return_to),
-        ri: "jp",
-        step_up_ceremony_grant: signed_step_up_grant_for(
-          actor: @staff, token: @token, scope: "settings_passkey", return_to: return_to, surface: "org",
-        ),
-      ), headers: headers_for(nil)
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyFreshnessCommitter.call!(
+        actor: @staff, token: @token.reload, transaction: transaction,
+        requirement: @requirement, raw_result: result.code,
+      )
     end
+    assert_nil @token.reload.last_step_up_at
+    assert_equal "verified", transaction.reload.status
+    assert_nil transaction.consumed_at
+    assert_not_predicate ceremony.reload, :completed?
+  end
+
+  test "normal Base admission reaches Auth passkey selection without Auth root credentials" do
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
+    )
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
 
     assert_response :success
+
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_org_verification_path(ri: "jp"), params: {
+      entry_ref: issuance.reference, authenticity_token: csrf,
+    }
+
+    assert_response :redirect
+    follow_redirect!
+
+    assert_response :success
+
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_equal ["passkey"], props.fetch("methods").map { |method| method.fetch("key") }
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_nil @token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
   end
 
-  private
+  test "admitted Auth continuity refuses a session changed to emergency before passkey selection" do
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
+    )
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_org_verification_path(ri: "jp"), params: {
+      entry_ref: issuance.reference, authenticity_token: csrf,
+    }
 
-  def signed_step_up_pt(return_to)
-    issuer = Class.new do
-      include ::RedirectsSignedTargetSupport
+    assert_response :redirect
 
-      def issue(return_to:, surface:, session_nonce:)
-        path = signed_target_internal_path(return_to)
-        claims = signed_target_claims(flow: "step_up.bootstrap", surface: surface, session_nonce: session_nonce)
-        issue_signed_target_token(
-          payload: claims.merge("pt" => path),
-          purpose: VerificationBase::STEP_UP_PATH_TARGET_TOKEN_PURPOSE,
-          salt: VerificationBase::STEP_UP_PATH_TARGET_TOKEN_SALT,
-          expires_in: VerificationBase::STEP_UP_TTL,
-        )
-      end
-    end.new
+    @token.update!(authentication_context: "emergency")
+    get new_auth_org_verification_passkey_path(ri: "jp")
 
-    issuer.issue(return_to: return_to, surface: "org", session_nonce: @token.public_id)
-  end
-
-  def signed_step_up_grant_for(actor:, token:, scope:, return_to:, surface:, methods: %i(email_otp totp passkey),
-                               aal: "aal2")
-    IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: surface.to_s,
-      actor_ref: actor.public_id,
-      session_ref: token.public_id,
-      required_scope: scope.to_s,
-      required_aal: aal,
-      allowed_methods: methods,
-      return_to: return_to,
-      expires_at: 15.minutes.from_now,
-    ).grant
+    assert_response :bad_request
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_nil issuance.transaction.verified_at
+    assert_nil @token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
   end
 end

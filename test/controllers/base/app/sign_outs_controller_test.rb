@@ -38,7 +38,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal I18n.t("sign.shared.sign_out.title"), inertia_props.fetch("title")
     assert_equal I18n.t("sign.shared.sign_out.confirm_description"), inertia_props.fetch("description")
     assert_includes inertia_props.fetch("form").fetch("action"), base_app_sign_out_path
-    assert_equal I18n.t("actions.up"), inertia_props.dig("back_link", "label")
+    assert_equal I18n.t("actions.cancel"), inertia_props.dig("back_link", "label")
     assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("back_link", "href")
     assert_nil inertia_props["home_link"]
     assert_not_includes response.body, I18n.t("sign.shared.sign_out.home_link")
@@ -78,8 +78,11 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
 
     get base_app_dashboard_url(host: @host, ri: "jp"), headers: session_headers(token)
 
-    assert_response :not_found
-    assert_nil response.location
+    # Anonymous Dashboard now uses the passive local Sign entry, including after logout.
+    assert_response :found
+    assert_equal @host, URI.parse(response.location).host
+    assert_equal "/sign?ri=jp", URI.parse(response.location).request_uri
+    assert_predicate token.reload, :revoked?
   end
 
   test "sign out without a resolved session returns to Home" do

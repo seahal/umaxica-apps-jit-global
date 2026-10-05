@@ -121,13 +121,13 @@ Call `authorize!(record, to: :action?)`. Because a `before_action` cannot pass t
 directly, this application conventionally registers a named wrapper method:
 
 ```ruby
-class Sign::App::Settings::SessionsController < ...
-  before_action :authorize_sessions!, only: %i(index)
+class Base::Com::Identity::EmailsController < ...
+  before_action :authorize_emails!, only: :index
 
   private
 
-  def authorize_sessions!
-    authorize!(ClientToken, to: :index?)
+  def authorize_emails!
+    authorize!(VisitorEmail, to: :index?)
   end
 end
 ```

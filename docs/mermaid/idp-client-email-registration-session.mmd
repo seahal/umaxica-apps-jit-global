@@ -1,0 +1,24 @@
+stateDiagram-v2
+    %% CURRENT controller session state; no DB status FK.
+    state "init" as init
+    state "email_created" as email_created
+    state "email_verified" as email_verified
+    [*] --> init
+    init --> email_created: progress_email_flow!(:create)
+    init --> email_verified: progress_email_flow!(:update)
+    init --> init: reset_email_flow!
+    email_created --> email_created: progress_email_flow!(:create)
+    email_created --> email_verified: progress_email_flow!(:update)
+    email_created --> init: reset_email_flow!
+    email_verified --> email_created: progress_email_flow!(:create)
+    email_verified --> email_verified: progress_email_flow!(:update)
+    email_verified --> init: reset_email_flow!
+    init --> init: progress_email_flow!(:destroy) declared helper
+    email_created --> init: progress_email_flow!(:destroy) declared helper
+    email_verified --> init: progress_email_flow!(:destroy) declared helper
+    note right of init
+        Missing or invalid session values normalize to init.
+        Helper writes do not check the prior state.
+        HTTP entry guards and OTP verification narrow callers.
+        No persisted expiry or cancel value; reset is the escape.
+    end note

@@ -30,7 +30,7 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     assert_equal StepUpConfiguredMethodsQuery.call(@user), StepUpAvailableMethods.call(@user)
   end
 
-  test "cooldown stamp does not hide methods while cache-backed cooldowns are disabled" do
+  test "verified email and an active Passkey are both available" do
     @user.client_emails.create!(
       address: "available-cooldown@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -45,28 +45,14 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     )
     passkey.save!(validate: false)
 
-    StepUpCooldownStamp.call(@user, :email_otp)
-
     result = StepUpAvailableMethods.call(@user)
 
     assert_includes result, :email_otp
     assert_includes result, :passkey
   end
 
-  test "email otp cooldown window is sixty seconds" do
-    assert_equal 60.seconds, StepUpCooldowns::WINDOWS.fetch(:email_otp)
-    assert_equal StepUpCooldowns::WINDOWS.fetch(:email_otp),
-                 SignAppVerificationBase::EMAIL_OTP_RESEND_COOLDOWN
-  end
-
-  test "step up cooldown key uses the actor class, id, and method" do
-    actor = Client.new(id: 42)
-
-    assert_equal "step_up_cooldown:client:42:email_otp", StepUpCooldowns.key(actor, :email_otp)
-  end
-
-  test "step up cooldown active methods stays empty" do
-    assert_equal [], StepUpCooldowns.active_methods(Client.new(id: 42))
+  test "Email OTP issuer resend interval is sixty seconds" do
+    assert_equal 60.seconds, IdentityStepUpEmailCodeIssuer::RESEND_INTERVAL
   end
 
   test "ticket lockout returns no methods" do
@@ -161,7 +147,7 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     assert_not_includes StepUpAvailableMethods.call(@staff), :email_otp
   end
 
-  test "available methods ignore cooldown stamps for visitor actors while cache-backed cooldowns are disabled" do
+  test "a verified Visitor email is available" do
     ensure_visitor_reference_records!
     @visitor = Visitor.create!(
       status_id: VisitorStatus::ACTIVE,
@@ -171,10 +157,6 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
       address: "available-visitor@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
-
-    assert_includes StepUpAvailableMethods.call(@visitor), :email_otp
-
-    StepUpCooldownStamp.call(@visitor, :email_otp)
 
     assert_includes StepUpAvailableMethods.call(@visitor), :email_otp
   end

@@ -191,7 +191,7 @@ class Auth::Org::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "Test Passkey", passkey.reload.description
   end
 
-  test "destroy removes operator passkey on sign settings authority" do
+  test "destroy retains revoked operator passkey history on sign settings authority" do
     passkey = OperatorPasskey.create!(
       staff: @staff,
       webauthn_id: "test_webauthn_id_5",
@@ -212,11 +212,20 @@ class Auth::Org::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
 
     headers = headers_for_operator_token(@token, scope: "settings_passkey")
 
-    assert_difference -> { OperatorPasskey.count }, -1 do
+    assert_no_difference -> { OperatorPasskey.count } do
       delete auth_org_settings_passkey_url(passkey, ri: "jp"), headers: headers
     end
 
     assert_redirected_to auth_org_settings_passkeys_path(ri: "jp")
+    assert_equal OperatorPasskeyStatus::REVOKED, passkey.reload.status_id
+    assert_nil @token.reload.last_step_up_at
+    get auth_org_settings_passkeys_path(ri: "jp"),
+        headers: headers.merge("X-Inertia" => "true", "X-Inertia-Version" => ViteRuby.digest)
+
+    assert_response :success
+    rows = response.parsed_body.fetch("props").fetch("passkeys")
+
+    assert rows.none? { |row| row.fetch("edit_href").include?(passkey.external_id) }
   end
 
   test "destroy requires fresh settings passkey step up" do
@@ -310,7 +319,7 @@ class Auth::Org::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "Updated Name", passkey.reload.description
   end
 
-  test "destroy json removes operator passkey on sign settings authority" do
+  test "destroy json retains revoked operator passkey history on sign settings authority" do
     passkey = OperatorPasskey.create!(
       staff: @staff,
       webauthn_id: "test_webauthn_id_json_destroy",
@@ -331,11 +340,20 @@ class Auth::Org::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
 
     headers = headers_for_operator_token(@token, scope: "settings_passkey")
 
-    assert_difference -> { OperatorPasskey.count }, -1 do
+    assert_no_difference -> { OperatorPasskey.count } do
       delete auth_org_settings_passkey_url(passkey, ri: "jp"), headers: headers, as: :json
     end
 
     assert_redirected_to auth_org_settings_passkeys_path(ri: "jp")
+    assert_equal OperatorPasskeyStatus::REVOKED, passkey.reload.status_id
+    assert_nil @token.reload.last_step_up_at
+    get auth_org_settings_passkeys_path(ri: "jp"),
+        headers: headers.merge("X-Inertia" => "true", "X-Inertia-Version" => ViteRuby.digest)
+
+    assert_response :success
+    rows = response.parsed_body.fetch("props").fetch("passkeys")
+
+    assert rows.none? { |row| row.fetch("edit_href").include?(passkey.external_id) }
   end
 
   test "the registration ceremony refuses a challenge id it never issued" do

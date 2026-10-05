@@ -21,6 +21,7 @@ module Base
           render inertia: true, props: {
             title: "Account Standing",
             status_label: "Current status: #{@standing.level.to_s.humanize}",
+            up_link: { label: t("actions.up"), href: base_org_identity_path(ri: params[:ri]) },
             decisions: @standing.decisions.map { |decision| serialize_decision(decision) },
           }
         end

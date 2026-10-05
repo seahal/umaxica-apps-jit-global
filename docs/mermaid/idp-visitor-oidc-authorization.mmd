@@ -1,0 +1,17 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "authenticated" as authenticated
+    state "consumed" as consumed
+    [*] --> pending
+    pending --> authenticated: register_authentication!
+    authenticated --> authenticated: prepare_result_delivery!
+    authenticated --> consumed: consume!
+    authenticated --> consumed: finalize_base! success
+    consumed --> consumed: claim_authorization_grant!
+    consumed --> [*]
+    note right of pending
+        Auth proof returns through opaque result to Base finalization.
+        Consumed authorization can still claim its grant once for RP exchange.
+        TTL refusal does not write an expired state.
+    end note

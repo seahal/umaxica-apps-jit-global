@@ -61,12 +61,54 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
   test "cancelling ends only the waiting flow" do
     delete :destroy, params: { ri: "jp" }, session: { app_sign_in_flow_locator: @locator }
 
+    assert_redirected_to base_app_sign_show_path(ri: "jp")
     assert_predicate @flow.reload, :sign_in_failed?
     assert(@existing.all? { |token| token.reload.active_status? })
+    assert_nil session[:app_sign_in_flow_locator]
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER, ClientToken.where(user_id: @actor.id).count
+  end
+
+  test "an expired authenticated OIDC parent refuses capacity resolution before revoking a selected session" do
+    now = ClientOidcAuthorizationTransaction.database_now
+    parent = ClientOidcAuthorizationTransaction.create_transaction!(
+      surface: "app", intent: "authentication", client_id: "revocation-test",
+      redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
+      state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+      code_challenge_method: "S256", login_challenge: SecureRandom.hex(32),
+      login_challenge_expires_at: now + 5.minutes, expires_at: now + 5.minutes,
+    )
+    parent.register_authentication!(
+      actor_ref: @actor.public_id, session_ref: nil, auth_method: "passkey", acr: "aal1",
+      authentication_event_at: now,
+    )
+    issuance = ClientSessionLimitResolutionTransaction.issue_for_oidc!(actor: @actor, oidc_transaction: parent)
+    parent.update!(expires_at: now - 1.second)
+    ref = SessionLimitResolutionTokenRef.issue(@existing.first)
+
+    get :show, params: { ri: "jp", resolution_challenge: issuance.challenge }
+
+    assert_response :gone
+    assert_no_difference(-> { ClientToken.where(user_id: @actor.id).count }) do
+      patch :update, params: { ri: "jp", resolution_challenge: issuance.challenge, session_ref: ref }
+    end
+
+    assert_response :gone
+    assert_predicate @existing.first.reload, :currently_usable?
+    assert_nil parent.reload.base_finalized_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    assert_predicate issuance.transaction.reload, :pending?
   end
 
   test "local result waiting on capacity resumes on Base without renewing its authentication time" do
+    @flow.fail_sign_in!
+    @flow = ClientSignInFlow.create!(
+      principal_id: @actor.id, step: "primary",
+      nonce_digest: ClientSignInFlow.digest_nonce(@locator.fetch("nonce")),
+    )
+    @locator["public_id"] = @flow.public_id
     @flow.record_local_authentication_evidence!(method: "email")
+    @flow.advance_sign_in_to_session_limit!
     event_at = @flow.authentication_event_at
     @flow.prepare_local_result_delivery!(digest: "a" * 64, ttl: 1.minute)
     @flow.update!(result_expires_at: 1.second.ago)

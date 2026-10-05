@@ -294,6 +294,8 @@ module Security
         case entry.controller_path
         when %r{\Aauth/(app|com|org)/verifications\z}
           [%r{\A/verification\z}, { "show" => %w(GET), "create" => %w(POST) }]
+        when %r{\Aauth/(app|com|org)/verification/setups\z}
+          [%r{\A/verification/setup(?:/new)?\z}, { "new" => %w(GET), "create" => %w(POST) }]
         when %r{\Aauth/(app|com|org)/verification/handoffs\z}
           [%r{\A/verification/handoff\z}, { "show" => %w(GET), "create" => %w(POST) }]
         when %r{\Aauth/(app|com|org)/verification/cancellations\z}
@@ -301,6 +303,8 @@ module Security
         when %r{\Aauth/(app|com|org)/verification/passkeys\z}
           [%r{\A/verification/passkey(?:/(?:new|options))?\z},
            { "new" => %w(GET), "options" => %w(POST), "create" => %w(POST) },]
+        when "auth/app/verification/totps"
+          [%r{\A/verification/totp(?:/new)?\z}, { "new" => %w(GET), "create" => %w(POST) }]
         when %r{\Aauth/(app|com)/verification/emails\z}
           [%r{\A/verification/emails(?:/new|/:id(?:/edit)?)?\z},
            { "new" => %w(GET), "edit" => %w(GET), "create" => %w(POST), "update" => %w(PATCH PUT) },]

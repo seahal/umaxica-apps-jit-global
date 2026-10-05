@@ -111,6 +111,26 @@ success page; it cannot issue a token. If the post-commit response was lost and 
 that session, completion refuses with conflict. Recovery requires a new Base entry and remains
 subject to the login cooldown; result possession alone never recovers a Browser Session.
 
+### Credential changes and unfinished authentication results
+
+Credential security transitions acquire the actor lock before ending owned unfinished local
+admissions or expiring authenticated OIDC transactions. Their surface ticket transaction also
+revokes Auth continuity and cancels open APP OIDC capacity resolutions. Expiry is shortened using
+the writer clock; result digests, generations and original authentication times remain history.
+Consumed or Base-finalized transactions remain unchanged. Existing flags still decide which root
+sessions are retained.
+
+OIDC result transport expires at the earliest of its short delivery deadline, authorization
+transaction deadline and login challenge deadline. Result matching uses the stored generation as
+a positive integer and compares the exact digest; an oversized legacy transport expiry does not
+make an expired parent valid. Re-display and retry preserve the original authentication time.
+
+Base OIDC completion on APP, COM and ORG acquires the actor lock before the authorization transaction
+lock, matching credential transitions and final issuance. APP capacity resolution rejects an
+expired or mismatched parent before selecting a session for revocation. Its root promotion runs
+inside the authorization transaction's finalization, so expiry rejection occurs before issuance.
+This contract does not imply atomicity across principal, ticket, audit and transport databases.
+
 `RESTRICTED` tokens are no longer issued. The resolver authenticates only `ACTIVE`, unexpired,
 unrotated tokens, so an existing `RESTRICTED` row and its cookies authenticate nothing and are
 refused by refresh as before.

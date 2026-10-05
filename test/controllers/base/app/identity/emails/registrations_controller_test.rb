@@ -21,13 +21,29 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
-    _verification, raw_verification = ClientVerification.issue_for_token!(token: @token)
-    cookies[ClientVerification.cookie_name] = raw_verification
-    @token.update!(
-      last_step_up_at: Time.current, last_step_up_scope: "settings_email",
-      last_step_up_aal: "aal2", last_step_up_method: "passkey",
-      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app",
+    # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
+    passkey = @user.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
+    )
+    requirement = StepUpRequirement.new(
+      scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
+    )
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: @user, token: @token, requirement: requirement, return_to: "/identity/emails/registration/new",
+    ).transaction
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
+    )
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+    )
+    IdentityStepUpCeremonyFreshnessCommitter.call!(
+      actor: @user, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
     )
     access_token = AuthenticationToken.encode(
       @user, host: @host, session_public_id: @token.public_id,
@@ -38,7 +54,6 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
       "Authorization" => "Bearer #{access_token}",
       "Client-Agent" => "Mozilla/5.0",
       "Host" => @host,
-      "X-TEST-SESSION-PUBLIC-ID" => @token.public_id,
     }.freeze
 
     TurnstileVerifierStub.challenge_enabled = true
@@ -48,6 +63,48 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
+  end
+
+  test "unavailable credential history cannot authorize initial-contact registration" do
+    %i(revoked_passkey inactive_totp revoked_totp).each do |state|
+      actor = Client.create!
+      case state
+      when :revoked_passkey
+        actor.client_passkeys.create!(
+          webauthn_id: SecureRandom.uuid, public_key: "revoked-contact-public-key", sign_count: 0,
+          status_id: ClientPasskeyStatus::REVOKED,
+        )
+      when :inactive_totp, :revoked_totp
+        actor.client_totp_credentials.create!(
+          private_key: ROTP::Base32.random_base32,
+          user_totp_credential_status_id: (state == :inactive_totp) ?
+            ClientTotpCredentialStatus::INACTIVE : ClientTotpCredentialStatus::REVOKED,
+        )
+      end
+      token = ClientToken.create!(user: actor)
+      BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
+      BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
+      browser = open_session
+      browser.host!(@host)
+      browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
+        actor, host: @host, session_public_id: token.public_id,
+               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+      )
+
+      assert_empty StepUpConfiguredMethodsQuery.call(actor), state.to_s
+      assert_not StepUpBootstrapEligibilityQuery.call(actor: actor), state.to_s
+      assert_no_difference ["ClientEmail.count", "ClientStepUpCeremonyTransaction.count"] do
+        browser.post(
+          base_app_identity_emails_registration_path(ri: "jp"),
+          params: { user_email: { address: "unavailable-app-contact-#{SecureRandom.hex(4)}@example.com" } },
+          headers: { "Client-Agent" => "Mozilla/5.0" }, as: :json,
+        )
+      end
+
+      assert_equal 422, browser.response.status, state.to_s
+      assert_nil token.reload.last_step_up_at
+      assert_predicate token, :currently_usable?
+    end
   end
 
   test "new renders the registration form" do

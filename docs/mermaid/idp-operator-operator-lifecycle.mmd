@@ -1,0 +1,14 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "approved" as approved
+    state "rejected" as rejected
+    state "executed" as executed
+    state "cancelled" as cancelled
+    [*] --> pending
+    pending --> approved: approve
+    pending --> rejected: reject
+    approved --> executed: execute
+    rejected --> [*]
+    executed --> [*]
+    cancelled --> [*]

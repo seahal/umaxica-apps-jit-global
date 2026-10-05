@@ -222,7 +222,6 @@ scope(module: :base, as: :base) do
 
       namespace :identity do
         resource :standing, only: :show
-        resource :recovery_secret, only: :show, path: "recovery-secret"
         resource :recovery, only: :show do
           resource :completion, only: :create, module: :recovery
         end

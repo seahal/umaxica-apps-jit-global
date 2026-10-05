@@ -67,7 +67,7 @@ module Webauthn
 
       raise ChallengeNotFoundError, "Challenge not found" unless data
 
-      if Time.current.to_i > data["expires_at"].to_i
+      if Time.current.to_i >= data["expires_at"].to_i
         raise ChallengeExpiredError, "Challenge has expired"
       end
       if data["purpose"] != normalize_purpose(purpose)
@@ -94,7 +94,7 @@ module Webauthn
 
       raise ChallengeNotFoundError, "Challenge not found" unless data
 
-      if Time.current.to_i > data["expires_at"].to_i
+      if Time.current.to_i >= data["expires_at"].to_i
         raise ChallengeExpiredError, "Challenge has expired"
       end
       if data["purpose"] != normalize_purpose(purpose)
@@ -150,7 +150,7 @@ module Webauthn
 
     def cleanup_expired!(entries)
       now = Time.current.to_i
-      entries.delete_if { |_, data| data["expires_at"].to_i < now }
+      entries.delete_if { |_, data| data["expires_at"].to_i <= now }
     end
 
     def evict_oldest!(entries)

@@ -1,0 +1,10 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "ACTIVE id=1" as ACTIVE
+    state "REVOKED id=104" as REVOKED
+    [*] --> ACTIVE
+    ACTIVE --> REVOKED: revoke!
+    REVOKED --> REVOKED: revoke! replay
+    ACTIVE --> ACTIVE: bind_dbsc!
+    REVOKED --> REVOKED: bind_dbsc! public API
+    REVOKED --> [*]

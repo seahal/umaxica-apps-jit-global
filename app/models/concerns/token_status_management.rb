@@ -69,14 +69,45 @@ module TokenStatusManagement
     )
   end
 
-  def revoke!(now: nil)
-    now ||= self.class.database_now
-    ensure_token_status_defaults!
-    attrs = { self.class.token_status_foreign_key => self.class.token_status_model::REVOKED }
-    if has_attribute?(:discard_at)
-      attrs[:discard_at] = [now, created_at].compact.max
+  public
+
+  # Concrete token models provide step_up_authority_binding. Only explicit lifecycle changes
+  # touch these rows; normal requests do not acquire additional credential or ceremony locks.
+  def revoke_step_up_authority!(now: nil)
+    session_model, transaction_model, ceremony_model, token_key = step_up_authority_binding
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      with_lock do
+        decision_time = now || self.class.database_now
+        update!(
+          last_step_up_at: nil, last_step_up_scope: nil, last_step_up_aal: nil,
+          last_step_up_method: nil, last_step_up_purpose: nil, last_step_up_audience: nil,
+          last_step_up_session_public_id: nil, last_step_up_phishing_resistant: false,
+        )
+        record = session_model.where(token_key => id).lock.first
+        record&.update!(discard_at: decision_time)
+        transactions = transaction_model.where(session_ref: public_id, status: %w(pending verified))
+        transactions.order(:id).lock.each do |ceremony_transaction|
+          ceremony_transaction.commit_revocation!(now: decision_time)
+          ceremonies = ceremony_model.where(step_up_ceremony_transaction_ref: ceremony_transaction.transaction_id)
+          ceremonies.order(:id).lock.each do |ceremony|
+            ceremony.revoke!(now: decision_time) unless ceremony.terminal?
+          end
+        end
+      end
     end
-    update_status_transition!(attrs, now: now)
+  end
+
+  def revoke!(now: nil)
+    ensure_token_status_defaults!
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      with_lock do
+        decision_time = now || self.class.database_now
+        attrs = { self.class.token_status_foreign_key => self.class.token_status_model::REVOKED }
+        attrs[:discard_at] = [decision_time, created_at].compact.max if has_attribute?(:discard_at)
+        update_status_transition!(attrs, now: decision_time)
+        revoke_step_up_authority!(now: decision_time)
+      end
+    end
   end
 
   def expired?(now = Time.current)

@@ -88,6 +88,10 @@ class VisitorToken < ComTicketRecord
   include ::SessionOidcConnection
   include ::SelectedActorContext
 
+  SELECTED_ACTOR_CONTEXT_COLUMNS = %i(
+    selected_account_public_id selected_collective_public_id selected_collective_unit_public_id selected_at
+  ).freeze
+
   DBSC_BINDING_METHOD_CLASS = VisitorTokenBindingMethod
   DBSC_STATUS_CLASS = VisitorTokenDbscStatus
 
@@ -127,6 +131,10 @@ class VisitorToken < ComTicketRecord
   attr_accessor :skip_session_limit_check
 
   private
+
+  def step_up_authority_binding
+    [VisitorStepUpSession, VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession, :visitor_token_id]
+  end
 
   def enforce_concurrent_session_limit
     return if skip_session_limit_check

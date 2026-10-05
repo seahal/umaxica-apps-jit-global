@@ -5,10 +5,14 @@ import { useState } from "react";
 import type { SyntheticEvent } from "react";
 
 import Button from "@/components/ui/Button";
+import ErrorList from "@/components/ui/ErrorList";
+import type { PageUpLink } from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import TextLink from "@/components/ui/TextLink";
 
 export type AvatarFormProps = {
   title: string;
+  up_link?: PageUpLink | null;
   heading: string;
   action: string;
   method: "post" | "patch";
@@ -82,6 +86,7 @@ function monikerValidationError(value: string, moniker: AvatarFormProps["moniker
 
 export default function AvatarForm({
   title,
+  up_link: upLink = null,
   heading,
   action,
   method,
@@ -117,12 +122,21 @@ export default function AvatarForm({
       aria-label={title}
       className="flex flex-col gap-6"
     >
+      {upLink ? (
+        <TextLink
+          href={upLink.href}
+          inertia
+        >
+          {upLink.label}
+        </TextLink>
+      ) : null}
       <h1 className="text-2xl font-bold text-fg">{heading}</h1>
 
       <form
         onSubmit={submit}
         className="flex flex-col gap-4"
       >
+        <ErrorList errors={errors.avatar === undefined ? [] : [errors.avatar]} />
         <TextField
           id="avatar_moniker"
           label={moniker.label}
@@ -133,9 +147,7 @@ export default function AvatarForm({
             setClientMonikerError(null);
             setData("avatar", { ...data.avatar, moniker: value });
           }}
-          {...(monikerError === undefined
-            ? {}
-            : { errorMessage: monikerError })}
+          {...(monikerError === undefined ? {} : { errorMessage: monikerError })}
         />
 
         {handle ? (

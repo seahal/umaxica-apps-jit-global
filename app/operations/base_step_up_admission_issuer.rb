@@ -13,26 +13,40 @@ class BaseStepUpAdmissionIssuer
       validate_requirement!(requirement, token: token, return_to: return_to, binding: binding)
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
+          deny!("Base actor is unavailable", "authorization_denied") unless actor.login_allowed?
+
+          ensure_bootstrap_eligible!(actor) if requirement.purpose == "bootstrap"
+
           binding.transaction_model.connection_owner.connected_to(role: :writing) do
             token.with_lock do
               now = binding.transaction_model.database_now
-              raise BaseAuthAdmissionCoordinator::Denied, "Base session is unavailable" unless token.currently_usable?
+              unless token.currently_usable?(now)
+                deny!("Base session is unavailable", "session_expired")
+              end
+              if requirement.purpose == "bootstrap" && token.is_a?(ClientToken) &&
+                  token.established_authentication_method == "secret"
+                deny!("Secret session cannot bootstrap a credential", "authorization_denied")
+              end
               if token.is_a?(OperatorToken) && token.emergency_authentication_context?
-                raise BaseAuthAdmissionCoordinator::Denied, "Emergency session cannot initiate step-up"
+                deny!("Emergency session cannot initiate step-up", "authorization_denied")
+              end
+
+              if requirement.purpose == "credential_registration"
+                ensure_registration_authorized!(requirement, token: token, binding: binding, now: now)
               end
 
               methods = requirement.allowed_methods.map(&:to_s) & binding.methods
-              raise BaseAuthAdmissionCoordinator::Denied, "step-up method unavailable" if methods.empty?
+              deny!("step-up method unavailable", "unsupported_method") if methods.empty?
 
               pending = binding.session_model.lock.find_by(binding.token_foreign_key => token.id)
               transaction = existing_transaction(
                 pending, binding: binding, requirement: requirement,
-                         token: token, actor: actor, return_to: return_to, now: now,
+                         token: token, actor: actor, return_to: return_to,
               )
               transaction ||= create_transaction!(
                 binding: binding, token: token, actor: actor,
                 requirement: requirement, methods: methods,
-                return_to: return_to, now: now,
+                return_to: return_to, now: binding.transaction_model.database_now,
               )
               persist_session!(pending: pending, transaction: transaction, binding: binding, token: token)
               BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction, reference: SecureRandom.uuid)
@@ -44,23 +58,70 @@ class BaseStepUpAdmissionIssuer
 
     private
 
+    def deny!(message, code)
+      raise BaseAuthAdmissionCoordinator::Denied.new(message, code: code)
+    end
+
     def validate_requirement!(requirement, token:, return_to:, binding:)
-      unless requirement.is_a?(StepUpRequirement) && requirement.step_up_required? &&
-          requirement.purpose == "step_up" && requirement.audience == "step_up:#{binding.surface}" &&
+      unless requirement.is_a?(StepUpRequirement) && supported_requirement_purpose?(requirement, binding) &&
+          requirement.audience == "step_up:#{binding.surface}" &&
           requirement.session_binding == token.public_id && requirement.token_binding == token.public_id &&
           requirement.require_session_binding && requirement.ttl.positive? &&
           return_to.is_a?(String) && binding.scope_catalog.fetch(requirement.scope).match?(return_to)
-        raise BaseAuthAdmissionCoordinator::Denied, "step-up requirement binding missing"
+        deny!("step-up requirement binding missing", "malformed_request")
       end
     rescue KeyError
-      raise BaseAuthAdmissionCoordinator::Denied, "step-up scope is unavailable"
+      deny!("step-up scope is unavailable", "malformed_request")
+    end
+
+    def supported_requirement_purpose?(requirement, binding)
+      return requirement.step_up_required? if requirement.purpose == "step_up"
+
+      if requirement.purpose == "credential_registration"
+        method =
+          case requirement.scope
+          when "settings_passkey" then :passkey
+          when "settings_totp" then :totp if binding.surface == "app"
+          end
+        return method.present? && requirement.allowed_methods == [method] &&
+            !requirement.step_up_required? && !requirement.aal_required? &&
+            !requirement.phishing_resistant_required?
+      end
+      return false unless requirement.purpose == "bootstrap" && !requirement.step_up_required? &&
+        !requirement.aal_required? && !requirement.phishing_resistant_required?
+
+      # Signed-in app Secret management always requires an existing Step-Up proof.
+      return false if binding.surface == "app" && requirement.scope == "settings_secret_credential"
+
+      registration_methods = binding.methods & %w(passkey totp)
+      requirement.allowed_methods.present? &&
+        (requirement.allowed_methods.map(&:to_s) - registration_methods).empty?
+    end
+
+    def ensure_registration_authorized!(requirement, token:, binding:, now:)
+      authorization = StepUpRequirement.new(
+        scope: requirement.scope, allowed_methods: binding.methods, purpose: "step_up",
+        audience: requirement.audience, session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+      )
+      return if StepUpResolver.call(token: token, requirement: authorization, now: now).satisfied?
+
+      deny!("credential registration requires Base step-up", "authorization_denied")
+    end
+
+    # Credential history distinguishes first registration from recovery after loss or revocation.
+    # These writer queries run only when Base starts a bootstrap ceremony, never on ordinary access.
+    def ensure_bootstrap_eligible!(actor)
+      return if StepUpBootstrapEligibilityQuery.call(actor: actor)
+
+      deny!("bootstrap requires an unregistered actor", "authorization_denied")
     end
 
     def binding_for(actor, token)
       case token
       when ClientToken
         unless actor.is_a?(Client) && token.user_id == actor.id
-          raise BaseAuthAdmissionCoordinator::Denied, "Base actor mismatch"
+          deny!("Base actor mismatch", "session_binding_mismatch")
         end
 
         Binding.new(
@@ -70,7 +131,7 @@ class BaseStepUpAdmissionIssuer
         )
       when VisitorToken
         unless actor.is_a?(Visitor) && token.visitor_id == actor.id
-          raise BaseAuthAdmissionCoordinator::Denied, "Base actor mismatch"
+          deny!("Base actor mismatch", "session_binding_mismatch")
         end
 
         Binding.new(
@@ -80,7 +141,7 @@ class BaseStepUpAdmissionIssuer
         )
       when OperatorToken
         unless actor.is_a?(Operator) && token.staff_id == actor.id
-          raise BaseAuthAdmissionCoordinator::Denied, "Base actor mismatch"
+          deny!("Base actor mismatch", "session_binding_mismatch")
         end
 
         Binding.new(
@@ -89,22 +150,24 @@ class BaseStepUpAdmissionIssuer
           scope_catalog: StepUpScopeCatalog::ORG,
         )
       else
-        raise BaseAuthAdmissionCoordinator::Denied, "Base session type mismatch"
+        deny!("Base session type mismatch", "session_binding_mismatch")
       end
     end
 
-    def existing_transaction(pending, binding:, requirement:, token:, actor:, return_to:, now:)
+    def existing_transaction(pending, binding:, requirement:, token:, actor:, return_to:)
       return unless pending&.step_up_ceremony_transaction_ref
 
       transaction = binding.transaction_model.lock.find_by!(transaction_id: pending.step_up_ceremony_transaction_ref)
+      now = binding.transaction_model.database_now
       return unless %w(pending verified).include?(transaction.status) && !transaction.expired?(now: now)
 
       unless transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           transaction.required_scope == requirement.scope && transaction.required_aal ==
               (requirement.required_aal&.to_s || StepUpRequirement::NO_AAL) &&
           transaction.phishing_resistant_required == requirement.phishing_resistant_required? &&
-          transaction.return_to == return_to && transaction.purpose == "step_up"
-        raise BaseAuthAdmissionCoordinator::Denied, "another step-up transaction is pending"
+          transaction.return_to == return_to && transaction.purpose == requirement.purpose &&
+          transaction.allowed_methods_array.sort == (requirement.allowed_methods.map(&:to_s) & binding.methods).sort
+        deny!("another step-up transaction is pending", "transaction_conflict")
       end
 
       transaction
@@ -116,7 +179,7 @@ class BaseStepUpAdmissionIssuer
         required_scope: requirement.scope, required_aal: requirement.required_aal&.to_s || StepUpRequirement::NO_AAL,
         phishing_resistant_required: requirement.phishing_resistant_required?,
         allowed_methods: methods, return_to: return_to, now: now,
-        expires_at: now + requirement.ttl, purpose: "step_up",
+        expires_at: now + requirement.ttl, purpose: requirement.purpose,
       )
     end
 

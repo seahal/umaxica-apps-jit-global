@@ -51,6 +51,9 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
     names = page.fetch("props").fetch("groups").map { |group| group.fetch("name") }
 
     assert_equal ["Own active", "Own archived"], names.sort
+    page.fetch("props").fetch("groups").each do |group|
+      assert_equal base_app_group_path(group.fetch("public_id"), ri: "jp"), group.fetch("href")
+    end
   end
 
   test "unauthenticated cannot access groups" do

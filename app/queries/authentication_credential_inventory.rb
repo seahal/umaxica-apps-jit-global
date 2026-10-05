@@ -89,7 +89,24 @@ class AuthenticationCredentialInventory
   def call
     return empty_result unless actor
 
-    actor.reload if reload && actor.respond_to?(:persisted?) && actor.persisted?
+    writer =
+      case actor
+      when Client then AppZenithRecord
+      when Visitor then ComZenithRecord
+      when Operator then OrgZenithRecord
+      else raise ArgumentError, "credential inventory actor unavailable"
+      end
+    writer.connected_to(role: :writing) { read_inventory }
+  end
+
+  private
+
+  attr_reader :actor, :excluding, :reload, :decision_time
+
+  # One writer-clock snapshot classifies every retained credential in this decision.
+  def read_inventory
+    @decision_time = actor.class.database_now
+    actor.reload if reload && actor.persisted?
 
     Result.new(
       actor: actor,
@@ -103,10 +120,6 @@ class AuthenticationCredentialInventory
       phishing_resistant_methods: phishing_resistant_methods,
     )
   end
-
-  private
-
-  attr_reader :actor, :excluding, :reload
 
   def empty_result
     Result.new(
@@ -127,7 +140,18 @@ class AuthenticationCredentialInventory
     methods.concat(client_social_login_methods)
     methods << :email_otp if aal1_email_count.positive?
     methods << :passkey if active_passkey_count.positive?
+    methods << :secret if active_client_secret_count.positive?
     methods
+  end
+
+  def active_client_secret_count
+    return 0 unless actor.is_a?(Client)
+
+    AppZenithRecord.connected_to(role: :writing) do
+      scope = ClientSecretCredential.available_at(decision_time).where(client_id: actor.id)
+      scope = scope.where.not(id: excluding.id) if excluding.is_a?(ClientSecretCredential)
+      scope.count
+    end
   end
 
   def aal2_methods
@@ -147,10 +171,27 @@ class AuthenticationCredentialInventory
   # assertion can establish the fact, but cannot protect removal of another method.
   def uv_step_up_methods
     methods = []
-    methods << :email_otp if aal1_email_count.positive?
+    methods << :email_otp if unlocked_step_up_email_count.positive?
     methods << :passkey if uv_verified_passkey_count.positive?
     methods << :totp if active_totp_count.positive?
     methods
+  end
+
+  def unlocked_step_up_email_count
+    scope =
+      case actor
+      when Client
+        actor.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+      when Visitor
+        actor.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+      when Operator
+        return 0
+      else
+        raise ArgumentError, "credential inventory actor unavailable"
+      end
+    scope = scope.where.not(id: excluding.id) if excluding.is_a?(ClientEmail) || excluding.is_a?(VisitorEmail)
+    scope.where("discard_at > ?", decision_time)
+      .where("step_up_otp_locked_until IS NULL OR step_up_otp_locked_until <= ?", decision_time).count
   end
 
   def contact_identifiers
@@ -186,14 +227,16 @@ class AuthenticationCredentialInventory
   def contact_email_count
     if actor.respond_to?(:client_emails)
       return count_scope(
-        actor.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES),
+        actor.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+          .where("discard_at > ?", decision_time),
         "ClientEmail",
       )
     end
 
     if actor.respond_to?(:visitor_emails)
       return count_scope(
-        actor.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES),
+        actor.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+          .where("discard_at > ?", decision_time),
         "VisitorEmail",
       )
     end
@@ -218,7 +261,7 @@ class AuthenticationCredentialInventory
       return count_scope(
         actor.client_telephones.where(
           user_identity_telephone_status_id: AuthMethodGuard::VERIFIED_TELEPHONE_STATUSES,
-        ),
+        ).where("discard_at > ?", decision_time),
         "ClientTelephone",
       )
     end
@@ -227,7 +270,7 @@ class AuthenticationCredentialInventory
       return count_scope(
         actor.visitor_telephones.where(
           visitor_telephone_status_id: AuthMethodGuard::VISITOR_VERIFIED_TELEPHONE_STATUSES,
-        ),
+        ).where("discard_at > ?", decision_time),
         "VisitorTelephone",
       )
     end
@@ -249,11 +292,21 @@ class AuthenticationCredentialInventory
 
   def active_passkey_count
     if actor.respond_to?(:client_passkeys)
-      return count_scope(actor.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE), "ClientPasskey")
+      return count_scope(
+        actor.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE).where(
+          "discard_at > ?",
+          decision_time,
+        ), "ClientPasskey",
+      )
     end
 
     if actor.respond_to?(:visitor_passkeys)
-      return count_scope(actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE), "VisitorPasskey")
+      return count_scope(
+        actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE).where(
+          "discard_at > ?",
+          decision_time,
+        ), "VisitorPasskey",
+      )
     end
 
     if actor.respond_to?(:staff_passkeys)
@@ -271,8 +324,14 @@ class AuthenticationCredentialInventory
   end
 
   def active_passkeys_scope
-    return actor.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE) if actor.respond_to?(:client_passkeys)
-    return actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE) if actor.respond_to?(:visitor_passkeys)
+    return actor.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE).where(
+      "discard_at > ?",
+      decision_time,
+    ) if actor.respond_to?(:client_passkeys)
+    return actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE).where(
+      "discard_at > ?",
+      decision_time,
+    ) if actor.respond_to?(:visitor_passkeys)
     return actor.staff_passkeys.where(status_id: OperatorPasskeyStatus::ACTIVE) if actor.respond_to?(:staff_passkeys)
 
     nil

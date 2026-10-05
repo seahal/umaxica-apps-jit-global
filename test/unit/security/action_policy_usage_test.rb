@@ -52,11 +52,8 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
     "app/controllers/auth/app/sign/in/checks_controller.rb#update",
     "app/controllers/auth/app/verification/emails_controller.rb#create",
     "app/controllers/auth/app/verification/emails_controller.rb#update",
-    # Same ceremony, other verifier: the passkey and TOTP step-up endpoints are guarded by
-    # `require_step_up_session!` and `require_method_available!`, not by a resource record. They
-    # only appear here because the Inertia migration moved the actions out of
-    # SignVerificationPasskeyActions/SignVerificationTotpActions and into the controller file the
-    # scan reads.
+    # Scoped verification endpoints authorize the admitted actor through their ceremony context;
+    # the mutation applies to ceremony state rather than a standalone resource record.
     "app/controllers/auth/app/verification/passkeys_controller.rb#create",
     "app/controllers/auth/app/verification/redeliveries_controller.rb#create",
     "app/controllers/auth/app/verification/totps_controller.rb#create",

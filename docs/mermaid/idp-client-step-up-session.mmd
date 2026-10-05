@@ -1,0 +1,13 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "PENDING" as PENDING
+    state "VERIFIED (declared; writer UNKNOWN)" as VERIFIED
+    state "row destroyed" as removed
+    state "discard_at elapsed (derived)" as expired
+    [*] --> PENDING
+    PENDING --> removed: consume_pending! completion block
+    PENDING --> expired: clock reaches discard_at
+    PENDING --> PENDING: Base admission reissue
+    VERIFIED --> PENDING: Base admission replacement
+    expired --> PENDING: Base admission replacement
+    removed --> [*]

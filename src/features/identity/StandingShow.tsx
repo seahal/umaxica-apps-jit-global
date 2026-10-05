@@ -1,6 +1,6 @@
 // The account standing screen. Each decision arrives humanised and already scoped to the actor by
 // the server, so the page never re-derives a level or a reason.
-import Page from "@/components/ui/Page";
+import Page, { type PageUpLink } from "@/components/ui/Page";
 
 export type StandingDecision = {
   public_id: string;
@@ -13,12 +13,14 @@ export type StandingDecision = {
 export type StandingShowProps = {
   title: string;
   status_label: string;
+  up_link?: PageUpLink | null;
   decisions: StandingDecision[];
 };
 
 export default function StandingShow({
   title,
   status_label: statusLabel,
+  up_link: upLink = null,
   decisions,
 }: StandingShowProps) {
   return (
@@ -26,6 +28,8 @@ export default function StandingShow({
       title={title}
       description={statusLabel}
       width="wide"
+      up={upLink}
+      upVisit="inertia"
     >
       {decisions.map((decision) => (
         <section

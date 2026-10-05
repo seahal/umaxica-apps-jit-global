@@ -5,6 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 require "minitest/mock"
 require "base64"
+require "zlib"
 
 class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_email_statuses,
@@ -18,8 +19,14 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     @original_webauthn_env.each_key { |key| ENV.delete(key) }
 
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    @user = create_verified_user_with_email(email_address: "passkey_config_test_user@example.com")
-    @other_user = create_verified_user_with_email(email_address: "other_passkey_config_test_user@example.com")
+    # Retained rows in copied fixture databases must not become this test's credential inventory.
+    @user = Client.create!(
+      id: 9_107_000_000_000 + (Zlib.crc32(name) * 2), status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
+    @user.client_emails.create!(address: "passkey_config_test_user@example.com", user_email_status_id: ClientEmailStatus::VERIFIED)
+    @other_user = Client.create!(id: @user.id + 1, status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    @other_user.client_emails.create!(address: "other_passkey_config_test_user@example.com", user_email_status_id: ClientEmailStatus::VERIFIED)
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(@token, scope: "settings_passkey")
     @headers = as_user_headers(@user, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")).merge(
@@ -606,7 +613,7 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "Updated", @passkey.reload.description
   end
 
-  test "should destroy with public_id" do
+  test "removal with public_id retains deleted history" do
     ClientPasskey.create!(
       user: @user,
       webauthn_id: "webauthn_extra_#{SecureRandom.hex(4)}",
@@ -620,7 +627,16 @@ class Auth::App::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     delete auth_app_settings_passkey_path(@passkey.public_id, ri: "jp"), headers: headers
 
     assert_redirected_to auth_app_settings_passkeys_path(ri: "jp")
-    assert_equal before_count - 1, ClientPasskey.count
+    assert_equal before_count, ClientPasskey.count
+    assert_equal ClientPasskeyStatus::DELETED, @passkey.reload.status_id
+    assert_nil @token.reload.last_step_up_at
+    get auth_app_settings_passkeys_path(ri: "jp"),
+        headers: headers.merge("X-Inertia" => "true", "X-Inertia-Version" => ViteRuby.digest)
+
+    assert_response :success
+    rows = response.parsed_body.fetch("props").fetch("passkeys")
+
+    assert rows.none? { |row| row.fetch("public_id") == @passkey.public_id }
   end
 
   test "destroy requires fresh settings passkey step up" do

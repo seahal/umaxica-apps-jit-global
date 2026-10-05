@@ -42,6 +42,56 @@ module Webauthn
       end
     end
 
+    # The stored deadline is an integer Unix second; one second is its nearest representable neighbor.
+    test "bound consumption accepts before expiry and rejects at and after expiry without replay" do
+      issued_at = Time.utc(2026, 10, 4, 4, 0, 0)
+      [-1, 0, 1].each do |offset|
+        store = Webauthn::ChallengeStore.new({})
+        id = nil
+        travel_to issued_at do
+          id = store.issue!(challenge: "raw-challenge", purpose: :authentication, **APP_BINDING)
+        end
+        travel_to issued_at + Webauthn::ChallengeStore::TTL + offset.seconds do
+          if offset.negative?
+            assert_equal "raw-challenge", store.consume!(id, purpose: :authentication, **APP_BINDING)
+          else
+            assert_raises(Webauthn::ChallengeStore::ChallengeExpiredError) do
+              store.consume!(id, purpose: :authentication, **APP_BINDING)
+            end
+          end
+          assert_raises(Webauthn::ChallengeStore::ChallengeNotFoundError) do
+            store.consume!(id, purpose: :authentication, **APP_BINDING)
+          end
+        end
+      end
+    end
+
+    test "actor-returning consumption rejects exactly at its integer deadline and afterward" do
+      issued_at = Time.utc(2026, 10, 4, 4, 0, 0)
+      [-1, 0, 1].each do |offset|
+        store = Webauthn::ChallengeStore.new({})
+        id = nil
+        travel_to issued_at do
+          id = store.issue!(challenge: "raw-challenge", purpose: :authentication, **APP_BINDING)
+        end
+        travel_to issued_at + Webauthn::ChallengeStore::TTL + offset.seconds do
+          if offset.negative?
+            consumed = store.consume_with_actor!(id, purpose: :authentication, **APP_BINDING.except(:actor_global_key))
+
+            assert_equal "raw-challenge", consumed.challenge
+            assert_equal "client:1", consumed.actor_global_key
+          else
+            assert_raises(Webauthn::ChallengeStore::ChallengeExpiredError) do
+              store.consume_with_actor!(id, purpose: :authentication, **APP_BINDING.except(:actor_global_key))
+            end
+          end
+          assert_raises(Webauthn::ChallengeStore::ChallengeNotFoundError) do
+            store.consume_with_actor!(id, purpose: :authentication, **APP_BINDING.except(:actor_global_key))
+          end
+        end
+      end
+    end
+
     # Purposes are separate namespaces, not labels. Every ordered pair is checked
     # rather than a sample, so adding a purpose without deciding what it may be
     # confused with fails here.

@@ -63,23 +63,41 @@ class ClientPasskey < AppPrincipalRecord
   validates :description, presence: true
   validates :status_id, numericality: { only_integer: true }
   validates :sign_count, presence: true, numericality: { greater_than_or_equal_to: 0 }
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :user,
-                 association: :client_passkeys,
-                 foreign_key: :user_id,
-                 limit: :MAX_PASSKEYS_PER_USER,
-                 record_name: "passkeys",
-                 owner_name: "user"
-
+  validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
   before_validation :ensure_status_defaults, on: :create
+  around_create :create_with_slot_lock
 
   def to_param
     public_id
   end
 
   private
+
+  # Terminal history remains available to bootstrap/recovery checks without occupying a registration slot.
+  def validate_slot_limit
+    return if user_id.nil? || [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED].include?(status_id)
+
+    count =
+      self.class.connection_class_for_self.connected_to(role: :writing) do
+        self.class.where(user_id: user_id).where.not(status_id: [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED]).count
+      end
+    return if count < MAX_PASSKEYS_PER_USER
+
+    errors.add(:base, :too_many, message: "exceeds maximum passkeys per user (#{MAX_PASSKEYS_PER_USER})")
+  end
+
+  # Validation alone cannot reserve capacity; every INSERT repeats the check under the owner lock.
+  def create_with_slot_lock
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      user.with_lock do
+        validate_slot_limit
+        raise ActiveRecord::RecordInvalid, self if errors.any?
+
+        yield
+      end
+    end
+  end
 
   def set_defaults
     self.external_id ||= SecureRandom.uuid

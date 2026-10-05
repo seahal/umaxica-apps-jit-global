@@ -58,39 +58,48 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
   end
 
-  test "app base completion consumes result and commits freshness" do
+  test "app base completion consumes the opaque result and commits freshness for the admitted session" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
+    email = ClientEmail.create!(
+      user: user, address: "step-up-completion-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
     token = create_client_token!(user)
     return_to = base_app_identity_emails_path(ri: "jp")
-    issuance = issue_step_up_grant!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: return_to,
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "email_otp", aal: "none", phishing_resistant: false,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
     )
-    result = issue_step_up_result!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      transaction: issuance.transaction,
-      method: "passkey",
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction,
+      ceremony_session_ref: ceremony.id.to_s,
     )
 
     post base_app_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
+         params: { transaction_ref: transaction.transaction_id, result: result.code },
          headers: app_session_headers(host, token, user)
 
     assert_response :see_other
     assert_equal return_to, URI.parse(response.location).request_uri
+    assert_equal "consumed", transaction.reload.status
     token.reload
 
-    assert_not_nil token.last_step_up_at
+    assert_equal transaction.verified_at, token.last_step_up_at
     assert_equal "settings_email", token.last_step_up_scope
-    assert_equal "passkey", token.last_step_up_method
-    assert_equal "aal1", token.last_step_up_aal
+    assert_equal "email_otp", token.last_step_up_method
+    assert_equal "none", token.last_step_up_aal
+    assert_predicate ceremony.reload, :completed?
   end
 
   test "app base completion route is post only" do
@@ -139,64 +148,62 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_not_predicate issuance.transaction.reload, :consumed?
   end
 
-  test "app base intent supplies csrf token for sign completion post" do
+  test "app base completion refuses an invalid stored return target before consuming the result" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
-    ClientEmail.create!(
-      user: user,
-      address: "step-up-completion-csrf-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: "otp_private_key",
-      otp_counter: "0",
+    email = ClientEmail.create!(
+      user: user, address: "step-up-unsafe-return-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
     )
     token = create_client_token!(user)
-    pt = signed_step_up_pt_for(
-      base_app_identity_emails_path(ri: "jp"), surface: "app",
-                                               session_nonce: session_nonce_for(token),
-    )
-
-    get base_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
-        headers: app_session_headers(host, token, user)
+    return_to = base_app_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
 
     assert_response :see_other
-    query = redirect_query
-
-    assert_predicate query["step_up_completion_csrf"], :present?
-    assert_predicate query["step_up_ceremony_grant"], :present?
-    assert_not_equal query["step_up_completion_csrf"], query["step_up_ceremony_grant"]
-  end
-
-  test "app base completion ignores unsafe transaction return target" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    user = clients(:one)
-    token = create_client_token!(user)
-    issuance = issue_step_up_grant!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: "https://evil.example/steal",
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "email_otp", aal: "none", phishing_resistant: false,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
     )
-    result = issue_step_up_result!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      transaction: issuance.transaction,
-      method: "passkey",
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
     )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction,
+      ceremony_session_ref: ceremony.id.to_s,
+    )
+    # Written past the model on purpose: the issuer never stores such a target. Partitions: another
+    # host, a protocol-relative host, a path outside the scope, an empty value and a path carrying a
+    # control character. A NUL is not reachable: the column cannot store one.
+    [
+      "https://evil.example/steal", "//evil.example/steal", "/dashboard", "", "/identity/emails\n/x",
+    ].each do |stored_target|
+      transaction.update_columns(return_to: stored_target)
 
+      post base_app_verification_completion_url(ri: "jp", host: host),
+           params: { transaction_ref: transaction.transaction_id, result: result.code },
+           headers: app_session_headers(host, token, user)
+
+      assert_response :bad_request, stored_target.inspect
+      assert_nil response.headers["Location"], stored_target.inspect
+      assert_equal "verified", transaction.reload.status, stored_target.inspect
+      assert_nil transaction.consumed_at, stored_target.inspect
+      assert_nil token.reload.last_step_up_at, stored_target.inspect
+      assert_not ceremony.reload.completed?, stored_target.inspect
+    end
+
+    # The result was never consumed, so the original target still completes the ceremony.
+    transaction.update_columns(return_to: return_to)
     post base_app_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
+         params: { transaction_ref: transaction.transaction_id, result: result.code },
          headers: app_session_headers(host, token, user)
 
     assert_response :see_other
-    uri = URI.parse(response.location)
-
-    assert_not_equal "evil.example", uri.host
-    assert_includes [nil, host], uri.host
-    assert_equal base_app_dashboard_path(ri: "jp"), uri.request_uri
-    assert_equal "settings_email", token.reload.last_step_up_scope
+    assert_equal return_to, URI.parse(response.location).request_uri
+    assert_equal "consumed", transaction.reload.status
   end
 
   test "sign completion transport posts result body only to fixed base endpoint" do
@@ -221,74 +228,206 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "app base completion rejects replay without refreshing token" do
+  test "app base completion retried with the same result keeps the original freshness event" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
+    email = ClientEmail.create!(
+      user: user, address: "step-up-retry-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
     token = create_client_token!(user)
-    issuance = issue_step_up_grant!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_app_identity_emails_path(ri: "jp"),
+    return_to = base_app_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "email_otp", aal: "none", phishing_resistant: false,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
     )
-    result = issue_step_up_result!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      transaction: issuance.transaction,
-      method: "passkey",
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction,
+      ceremony_session_ref: ceremony.id.to_s,
     )
 
+    2.times do
+      post base_app_verification_completion_url(ri: "jp", host: host),
+           params: { transaction_ref: transaction.transaction_id, result: result.code },
+           headers: app_session_headers(host, token, user)
+
+      assert_response :see_other
+      assert_equal return_to, URI.parse(response.location).request_uri
+      assert_equal transaction.reload.verified_at, token.reload.last_step_up_at
+      assert_equal "consumed", transaction.status
+    end
+  end
+
+  test "app base verification returns to the protected page without a new ceremony while freshness is valid" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    email = ClientEmail.create!(
+      user: user, address: "step-up-fresh-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
+    token = create_client_token!(user)
+    return_to = base_app_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "email_otp", aal: "none", phishing_resistant: false,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
+    )
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+    )
     post base_app_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
+         params: { transaction_ref: transaction.transaction_id, result: result.code },
          headers: app_session_headers(host, token, user)
-    first_step_up_at = token.reload.last_step_up_at
+
+    assert_response :see_other
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      get base_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
+          headers: app_session_headers(host, token, user)
+
+      assert_response :see_other
+      assert_equal return_to, URI.parse(response.location).request_uri
+
+      post base_app_verification_url(ri: "jp", host: host),
+           params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+      assert_response :see_other
+      assert_equal return_to, URI.parse(response.location).request_uri
+    end
+  end
+
+  test "app base completion refuses a result that was not issued for the transaction" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    email = ClientEmail.create!(
+      user: user, address: "step-up-foreign-result-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
+    token = create_client_token!(user)
+    return_to = base_app_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "email_otp", aal: "none", phishing_resistant: false,
+      verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
+    )
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction,
+      ceremony_session_ref: ceremony.id.to_s,
+    )
 
     post base_app_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
+         params: { transaction_ref: transaction.transaction_id, result: "#{result.code}x" },
          headers: app_session_headers(host, token, user)
 
     assert_response :bad_request
-    assert_equal first_step_up_at, token.reload.last_step_up_at
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_nil token.reload.last_step_up_at
+    assert_equal "verified", transaction.reload.status
   end
 
-  test "app base cancellation closes pending transaction and blocks completion" do
+  test "app base cancellation closes the pending transaction and blocks a later completion" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
-    token = create_client_token!(user)
-    issuance = issue_step_up_grant!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_app_identity_emails_path(ri: "jp"),
+    ClientEmail.create!(
+      user: user, address: "step-up-cancel-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
     )
+    token = create_client_token!(user)
+    return_to = base_app_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
 
     post base_app_verification_cancellation_url(ri: "jp", host: host),
          headers: app_session_headers(host, token, user),
-         params: { scope: "settings_email", return_to: base_app_identity_emails_path(ri: "jp") }
+         params: { scope: "settings_email", return_to: return_to }
 
     assert_response :see_other
-    assert_predicate issuance.transaction.reload, :canceled?
+    assert_equal base_app_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_predicate transaction.reload, :canceled?
+    assert_not_nil transaction.canceled_at
+    assert_nil session[:base_step_up_transaction_ref]
     assert_nil token.reload.last_step_up_at
 
-    result = issue_step_up_result!(
-      surface: "app",
-      actor_ref: user.public_id,
-      session_ref: token.public_id,
-      transaction: issuance.transaction,
-      method: "passkey",
-    )
-
     post base_app_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
+         params: { transaction_ref: transaction.transaction_id, result: "opaque-result" },
          headers: app_session_headers(host, token, user)
 
     assert_response :bad_request
     assert_nil token.reload.last_step_up_at
+    assert_predicate transaction.reload, :canceled?
+  end
+
+  test "app base cancellation repeated after it succeeded is refused because the browser marker is gone" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    ClientEmail.create!(
+      user: user, address: "step-up-cancel-twice-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
+    token = create_client_token!(user)
+    return_to = base_app_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "app", session_nonce: session_nonce_for(token))
+    post base_app_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+    assert_response :see_other
+    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+
+    post base_app_verification_cancellation_url(ri: "jp", host: host), headers: app_session_headers(host, token, user)
+
+    assert_response :see_other
+    canceled_at = transaction.reload.canceled_at
+
+    post base_app_verification_cancellation_url(ri: "jp", host: host), headers: app_session_headers(host, token, user)
+
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_equal canceled_at, transaction.reload.canceled_at
+    assert_predicate transaction, :canceled?
+  end
+
+  test "app base cancellation without any started ceremony is refused" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    user = clients(:one)
+    token = create_client_token!(user)
+
+    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
+      post base_app_verification_cancellation_url(ri: "jp", host: host),
+           headers: app_session_headers(host, token, user)
+    end
+
+    assert_response :bad_request
+    assert_nil response.headers["Location"]
   end
 
   # The cancellation destination is Base's own entry point, resolved on the server. The posted
@@ -297,7 +436,14 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
   test "app base cancellation ignores every posted return_to" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
+    ClientEmail.create!(
+      user: user, address: "step-up-cancel-dest-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
+    )
     token = create_client_token!(user)
+    pt = signed_step_up_pt_for(
+      base_app_identity_emails_path(ri: "jp"), surface: "app", session_nonce: session_nonce_for(token),
+    )
     [
       base_app_identity_emails_path(ri: "jp"),
       "https://evil.example/steal",
@@ -305,11 +451,12 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
       "/%2F%2Fevil.example",
       "/identity\x00/emails",
       "/\\evil.example",
+      "",
     ].each do |return_to|
-      issue_step_up_grant!(
-        surface: "app", actor_ref: user.public_id, session_ref: token.public_id,
-        scope: "settings_email", methods: ["passkey"], return_to: base_app_identity_emails_path(ri: "jp"),
-      )
+      post base_app_verification_url(ri: "jp", host: host),
+           params: { scope: "settings_email", pt: pt }, headers: app_session_headers(host, token, user)
+
+      assert_response :see_other
 
       post base_app_verification_cancellation_url(ri: "jp", host: host),
            headers: app_session_headers(host, token, user).merge("Referer" => "https://#{host}/identity/emails"),
@@ -397,38 +544,6 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     assert_not_predicate issuance.transaction.reload, :consumed?
   end
 
-  test "sign ceremony accepts base issued grant without creating a compatibility transaction" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    user = clients(:one)
-    ClientEmail.create!(
-      user: user,
-      address: "sign-accepts-base-grant-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: "otp_private_key",
-      otp_counter: "0",
-    )
-    token = create_client_token!(user)
-    pt = signed_step_up_pt_for(
-      base_app_identity_emails_path(ri: "jp"), surface: "app",
-                                               session_nonce: session_nonce_for(token),
-    )
-
-    get base_app_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
-        headers: app_session_headers(host, token, user)
-    gateway = URI.parse(response.location)
-
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    sign_location = payload.fetch("url")
-
-    assert_no_difference -> { ClientStepUpCeremonyTransaction.count } do
-      get sign_location, headers: app_session_headers(sign_host, token, user)
-    end
-
-    assert_response :success
-  end
-
   test "app base verification intent rejects arbitrary scope" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
@@ -465,40 +580,46 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
 
   test "com base cancellation ignores a posted return_to" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    visitor = create_verified_visitor_with_email(email_address: "cancel-dest-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issue_step_up_grant!(
-      surface: "com", actor_ref: visitor.public_id, session_ref: token.public_id,
-      scope: "settings_email", methods: ["passkey"], return_to: base_com_identity_emails_path(ri: "jp"),
+    visitor = create_verified_visitor_with_email(
+      email_address: "visitor-cancel-dest-#{SecureRandom.hex(4)}@example.com",
     )
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    return_to = base_com_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
+    post base_com_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: com_session_headers(host, token, visitor)
+
+    assert_response :see_other
+    transaction = VisitorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
 
     post base_com_verification_cancellation_url(ri: "jp", host: host),
          headers: com_session_headers(host, token, visitor),
-         params: { scope: "settings_email", return_to: base_com_identity_emails_path(ri: "jp") }
+         params: { scope: "settings_email", return_to: "https://evil.example/steal" }
 
     assert_response :see_other
     assert_equal base_com_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal host, URI.parse(response.location).host
+    assert_predicate transaction.reload, :canceled?
   end
 
-  test "com base cancellation closes pending transaction and clears freshness" do
+  test "com base cancellation closes the pending transaction without granting freshness" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
     visitor = create_verified_visitor_with_email(email_address: "visitor-cancel-#{SecureRandom.hex(4)}@example.com")
     token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issuance = issue_step_up_grant!(
-      surface: "com",
-      actor_ref: visitor.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_com_identity_emails_path(ri: "jp"),
-    )
-
-    post base_com_verification_cancellation_url(ri: "jp", host: host),
-         headers: com_session_headers(host, token, visitor),
-         params: { scope: "settings_email", return_to: base_com_identity_emails_path(ri: "jp") }
+    return_to = base_com_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
+    post base_com_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: com_session_headers(host, token, visitor)
 
     assert_response :see_other
-    assert_predicate issuance.transaction.reload, :canceled?
+    transaction = VisitorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+
+    post base_com_verification_cancellation_url(ri: "jp", host: host),
+         headers: com_session_headers(host, token, visitor)
+
+    assert_response :see_other
+    assert_predicate transaction.reload, :canceled?
+    assert_nil session[:base_step_up_transaction_ref]
     assert_nil token.reload.last_step_up_at
   end
 
@@ -506,137 +627,155 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     operator = operators(:one)
     token = operator_tokens(:one)
-    issue_step_up_grant!(
-      surface: "org", actor_ref: operator.public_id, session_ref: token.public_id,
-      scope: "settings_email", methods: ["passkey"], return_to: base_org_identity_emails_path(ri: "jp"),
-    )
+    return_to = base_org_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "org", session_nonce: session_nonce_for(token))
+    post base_org_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: org_session_headers(host, token, operator)
+
+    assert_response :see_other
+    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
 
     post base_org_verification_cancellation_url(ri: "jp", host: host),
          headers: org_session_headers(host, token, operator),
-         params: { scope: "settings_email", return_to: base_org_identity_emails_path(ri: "jp") }
+         params: { scope: "settings_email", return_to: "https://evil.example/steal" }
 
     assert_response :see_other
     assert_equal base_org_dashboard_path(ri: "jp"), URI.parse(response.location).request_uri
+    assert_equal host, URI.parse(response.location).host
+    assert_predicate transaction.reload, :canceled?
   end
 
-  test "org base cancellation closes pending transaction and clears freshness" do
+  test "org base cancellation closes the pending transaction without granting freshness" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     operator = operators(:one)
     token = operator_tokens(:one)
-    issuance = issue_step_up_grant!(
-      surface: "org",
-      actor_ref: operator.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_org_identity_emails_path(ri: "jp"),
-    )
+    return_to = base_org_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "org", session_nonce: session_nonce_for(token))
+    post base_org_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: org_session_headers(host, token, operator)
+
+    assert_response :see_other
+    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
 
     post base_org_verification_cancellation_url(ri: "jp", host: host),
-         headers: org_session_headers(host, token, operator),
-         params: { scope: "settings_email", return_to: base_org_identity_emails_path(ri: "jp") }
-
-    assert_response :see_other
-    assert_predicate issuance.transaction.reload, :canceled?
-    assert_nil token.reload.last_step_up_at
-  end
-
-  test "com base verification intent creates visitor transaction" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    visitor = create_verified_visitor_with_email(email_address: "visitor-step-up-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    pt = signed_step_up_pt_for(
-      base_com_identity_emails_path(ri: "jp"), surface: "com",
-                                               session_nonce: session_nonce_for(token),
-    )
-
-    assert_difference -> { VisitorStepUpCeremonyTransaction.count }, 1 do
-      get base_com_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
-          headers: com_session_headers(host, token, visitor)
-    end
-
-    assert_response :see_other
-    grant = decode_grant(redirect_query["step_up_ceremony_grant"], surface: "com")
-
-    assert_equal visitor.public_id, grant["actor_ref"]
-    assert_equal token.public_id, grant["session_ref"]
-  end
-
-  test "com base completion consumes result and commits freshness" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-    visitor = create_verified_visitor_with_email(email_address: "visitor-completion-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issuance = issue_step_up_grant!(
-      surface: "com",
-      actor_ref: visitor.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_com_identity_emails_path(ri: "jp"),
-    )
-    result = issue_step_up_result!(
-      surface: "com",
-      actor_ref: visitor.public_id,
-      session_ref: token.public_id,
-      transaction: issuance.transaction,
-      method: "passkey",
-    )
-
-    post base_com_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
-         headers: com_session_headers(host, token, visitor)
-
-    assert_response :see_other
-    assert_equal "settings_email", token.reload.last_step_up_scope
-  end
-
-  test "org base verification intent creates operator transaction" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
-    operator = operators(:one)
-    token = operator_tokens(:one)
-    pt = signed_step_up_pt_for(
-      base_org_identity_emails_path(ri: "jp"), surface: "org",
-                                               session_nonce: session_nonce_for(token),
-    )
-
-    assert_difference -> { OperatorStepUpCeremonyTransaction.count }, 1 do
-      get base_org_verification_url(scope: "settings_email", pt: pt, ri: "jp", host: host),
-          headers: org_session_headers(host, token, operator)
-    end
-
-    assert_response :see_other
-    grant = decode_grant(redirect_query["step_up_ceremony_grant"], surface: "org")
-
-    assert_equal operator.public_id, grant["actor_ref"]
-    assert_equal token.public_id, grant["session_ref"]
-  end
-
-  test "org base completion consumes result and commits freshness" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
-    operator = operators(:one)
-    token = operator_tokens(:one)
-    issuance = issue_step_up_grant!(
-      surface: "org",
-      actor_ref: operator.public_id,
-      session_ref: token.public_id,
-      scope: "settings_email",
-      methods: ["passkey"],
-      return_to: base_org_identity_emails_path(ri: "jp"),
-    )
-    result = issue_step_up_result!(
-      surface: "org",
-      actor_ref: operator.public_id,
-      session_ref: token.public_id,
-      transaction: issuance.transaction,
-      method: "passkey",
-    )
-
-    post base_org_verification_completion_url(ri: "jp", host: host),
-         params: { step_up_ceremony_result: result },
          headers: org_session_headers(host, token, operator)
 
     assert_response :see_other
+    assert_predicate transaction.reload, :canceled?
+    assert_nil session[:base_step_up_transaction_ref]
+    assert_nil token.reload.last_step_up_at
+  end
+
+  test "com base verification intent creates a visitor transaction bound to the session" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    visitor = create_verified_visitor_with_email(email_address: "visitor-intent-#{SecureRandom.hex(4)}@example.com")
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    return_to = base_com_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
+    post base_com_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: com_session_headers(host, token, visitor)
+
+    assert_response :see_other
+    transaction = VisitorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+
+    assert_equal visitor.public_id, transaction.actor_ref
+    assert_equal token.public_id, transaction.session_ref
+    assert_equal "com", transaction.surface
+    assert_equal "step_up", transaction.purpose
+    assert_equal return_to, transaction.return_to
+    assert_predicate redirect_query["entry_ref"], :present?
+    assert_nil redirect_query["step_up_ceremony_grant"]
+  end
+
+  test "com base completion consumes the opaque result and commits freshness" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    visitor = create_verified_visitor_with_email(email_address: "visitor-completion-#{SecureRandom.hex(4)}@example.com")
+    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    return_to = base_com_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "com", session_nonce: session_nonce_for(token))
+    post base_com_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: com_session_headers(host, token, visitor)
+
+    assert_response :see_other
+    transaction = VisitorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    email = visitor.visitor_emails.first
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "email_otp", aal: "none", phishing_resistant: false,
+      verified_at: VisitorStepUpCeremonyTransaction.database_now, verified_credential_ref: email.public_id,
+    )
+    ceremony, = VisitorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction,
+      ceremony_session_ref: ceremony.id.to_s,
+    )
+
+    post base_com_verification_completion_url(ri: "jp", host: host),
+         params: { transaction_ref: transaction.transaction_id, result: result.code },
+         headers: com_session_headers(host, token, visitor)
+
+    assert_response :see_other
+    assert_equal return_to, URI.parse(response.location).request_uri
     assert_equal "settings_email", token.reload.last_step_up_scope
+    assert_equal "consumed", transaction.reload.status
+  end
+
+  test "org base verification intent creates an operator transaction bound to the session" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    operator = operators(:one)
+    token = operator_tokens(:one)
+    return_to = base_org_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "org", session_nonce: session_nonce_for(token))
+    post base_org_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: org_session_headers(host, token, operator)
+
+    assert_response :see_other
+    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+
+    assert_equal operator.public_id, transaction.actor_ref
+    assert_equal token.public_id, transaction.session_ref
+    assert_equal "org", transaction.surface
+    assert_equal "step_up", transaction.purpose
+    assert_equal ["passkey"], transaction.allowed_methods_array
+    assert_predicate redirect_query["entry_ref"], :present?
+    assert_nil redirect_query["step_up_ceremony_grant"]
+  end
+
+  test "org base completion consumes the opaque result and commits freshness" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    operator = operators(:one)
+    token = operator_tokens(:one)
+    return_to = base_org_identity_emails_path(ri: "jp")
+    pt = signed_step_up_pt_for(return_to, surface: "org", session_nonce: session_nonce_for(token))
+    post base_org_verification_url(ri: "jp", host: host),
+         params: { scope: "settings_email", pt: pt }, headers: org_session_headers(host, token, operator)
+
+    assert_response :see_other
+    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    passkey = operator.staff_passkeys.first
+    # Synthetic evidence: the Auth verification itself is covered by the ceremony committer tests.
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true,
+      verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.external_id,
+    )
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction,
+      ceremony_session_ref: ceremony.id.to_s,
+    )
+
+    post base_org_verification_completion_url(ri: "jp", host: host),
+         params: { transaction_ref: transaction.transaction_id, result: result.code },
+         headers: org_session_headers(host, token, operator)
+
+    assert_response :see_other
+    assert_equal return_to, URI.parse(response.location).request_uri
+    assert_equal "settings_email", token.reload.last_step_up_scope
+    assert_equal "consumed", transaction.reload.status
   end
 
   private

@@ -40,6 +40,12 @@ Avatar capability differs by surface: app requires an Avatar, org's is optional,
     the default image.
   - A storage read failure or an unexpected stored MIME type raises; it is not rendered as absence.
 - The image GET does not track session activity and does not issue the Preference cookie.
+- Anonymous app/org image GET and HEAD use the existing private authentication
+  gate and return bodyless 401 instead of an interactive Sign redirect. Headers
+  claiming HTML, an image destination or a valid Inertia request do not bypass
+  authentication or change this endpoint into a login document. JSON retains the
+  gate's existing error representation; HEAD has no body. No admission, root
+  login or image read is initiated by refusal. com still has no image endpoint.
 
 ## Consequences
 
@@ -57,3 +63,23 @@ and logs, and CSP must allow the bucket host.
 ### Public derivative bucket
 
 Rejected: Avatar images would become world-readable by URL, contradicting the private boundary.
+
+## 2026-10-04 response clarification
+
+The integrated Base authentication guidance contract applies interactive Sign
+navigation to protected documents, while non-document image retrieval remains a
+refusal. The old app image test expected a redirect; that expectation is replaced
+by 401 with no Location or image body. org's previous broad non-200 assertion is
+made explicit. Authenticated delivery, missing-image/invalid-selection 404,
+private storage and ETag behavior are unchanged.
+
+AuthenticationBase supplies the response extension authentication_redirect_allowed?
+to both its mode gate and explicit authentication method. The two image
+controllers opt out; all other controllers retain the default. The image-specific
+app authenticate_client! callback is removed because PreAccessController already
+registers it in addition to the private mode gate. No gate is skipped and no
+second authentication redirect concern is introduced.
+
+The existing Inertia version check remains independent and may return its own
+409 before this boundary on a mismatched version. Tests of the authentication
+response use the configured version and do not disable that adapter check.

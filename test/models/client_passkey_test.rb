@@ -46,6 +46,45 @@
 require "test_helper"
 
 class ClientPasskeyTest < ActiveSupport::TestCase
+  test "retained terminal history does not consume the four Passkey slots" do
+    actor = Client.create!
+    [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED].each do |terminal_status|
+      historical = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
+      historical.update!(status_id: terminal_status)
+    end
+    3.times { actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+
+    assert_equal 3, actor.client_passkeys.active.count
+    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fourth-slot-public-key")
+
+    assert_equal 4, actor.client_passkeys.active.count
+    assert_no_difference(-> { actor.client_passkeys.count }) do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key")
+      end
+    end
+
+    assert_equal 6, actor.client_passkeys.count
+    assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
+  end
+
+  test "a stale loaded owner association cannot admit a fifth Passkey" do
+    actor = Client.create!
+    stale_actor = Client.find(actor.id)
+    stale_actor.client_passkeys.load
+    4.times { actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+    candidate = ClientPasskey.new(
+      user: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
+    )
+
+    assert_not candidate.valid?
+    assert_no_difference(-> { actor.client_passkeys.count }) do
+      assert_raises(ActiveRecord::RecordInvalid) { candidate.save! }
+    end
+
+    assert_equal 4, actor.client_passkeys.active.count
+  end
+
   def setup
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
@@ -80,23 +119,17 @@ class ClientPasskeyTest < ActiveSupport::TestCase
     assert_equal ClientPasskeyStatus::ACTIVE, default.to_i
   end
 
-  test "repairs missing active status before create" do
-    ClientPasskeyStatus.where(id: ClientPasskeyStatus::ACTIVE).delete_all
+  test "referenced active status cannot be removed while its Passkey remains" do
+    @passkey.save!
 
-    passkey = ClientPasskey.new(
-      user: @user,
-      webauthn_id: "repair-test",
-      public_key: "repair-key",
-      description: "Repair Test",
-    )
-
-    assert_difference -> { ClientPasskeyStatus.where(id: ClientPasskeyStatus::ACTIVE).count }, 1 do
-      assert_difference("ClientPasskey.count", 1) do
-        passkey.save!
+    assert_raises(ActiveRecord::InvalidForeignKey) do
+      ClientPasskeyStatus.transaction(requires_new: true) do
+        ClientPasskeyStatus.where(id: ClientPasskeyStatus::ACTIVE).delete_all
       end
     end
 
-    assert_equal ClientPasskeyStatus::ACTIVE, passkey.status_id
+    assert_equal ClientPasskeyStatus::ACTIVE, @passkey.reload.status_id
+    assert ClientPasskeyStatus.exists?(ClientPasskeyStatus::ACTIVE)
   end
 
   test "status association uses status_id" do

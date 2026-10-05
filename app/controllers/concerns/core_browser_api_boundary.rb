@@ -85,10 +85,9 @@ module CoreBrowserApiBoundary
       OidcRpBrowserCredentialContract::ACCESS_COOKIE,
       OidcRpBrowserCredentialContract.access_cookie_deletion_options,
     )
-    cookies.delete(
-      OidcRpBrowserCredentialContract::REFRESH_COOKIE,
-      OidcRpBrowserCredentialContract.refresh_cookie_deletion_options,
-    )
+    # Refusing access does not verify the independent refresh credential. Its
+    # existing explicit POST must decide rotation or refusal; GET grants no
+    # authority from refresh presence and never consumes or deletes it here.
     install_unauthenticated_actor!
   end
 
@@ -151,7 +150,10 @@ module CoreBrowserApiBoundary
     return if request.get? || request.head? || request.options?
 
     token = request.headers["X-CSRF-Token"].to_s
-    return if token.present? && valid_authenticity_token?(session, token)
+    if valid_request_origin? && token.present? && valid_authenticity_token?(session, token) &&
+        verified_request_for_forgery_protection?
+      return
+    end
 
     render_csrf_failure
   end

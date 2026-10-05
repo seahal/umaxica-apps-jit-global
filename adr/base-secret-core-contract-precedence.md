@@ -28,6 +28,12 @@ defines the evidence needed to judge delivery. Neither is a parallel active back
 For Base app/com/org, anonymous HTML Dashboard navigation uses the existing gate
 to the same Base's `/sign`. Only the Dashboard action becomes private; public Home,
 authenticated Home rejection, authorization, and selector contracts remain intact.
+
+After Base context selection succeeds, its existing `next` field names
+`/dashboard`, consistent with the direct-login destination in
+`home-dashboard-authentication-boundary.md`. Returning `/` would send an
+authenticated browser to the intentionally rejected Home boundary. This corrects
+the destination value without adding a return protocol or accepting caller URLs.
 JSON/API, Inertia, and HEAD retain their respective response contracts. HEAD does
 not start authentication.
 
@@ -98,6 +104,12 @@ session, transaction binding, and applicable one-time consumption. Do not replac
 authorization with a numeric AAL threshold. Newly registering a Passkey is not
 self-authorization. Signed-in Secret operations have no bootstrap exemption; initial
 sign-up uses its separate verified enrollment authorization.
+
+App retains the existing `settings_secret_credential` scope identifier and binds
+its return namespace to `/secrets`. Retired settings paths do not remain aliases.
+The Base admission operation rejects bootstrap for this app scope; com/org keep
+their existing scope paths and bootstrap contracts. Starting a scoped ceremony
+does not itself establish freshness or authorize a credential mutation.
 
 Core's browser calls Rails-owned paths on the configured public Core origin.
 Workers/TanStack do not proxy user requests to Rails, store authentication credentials,

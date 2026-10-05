@@ -1,0 +1,26 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "initiated" as initiated
+    state "in_progress" as in_progress
+    state "finalized" as finalized
+    state "failed" as failed
+    state "expired" as expired
+    [*] --> initiated
+    initiated --> in_progress: advance expected logout step
+    in_progress --> in_progress: advance expected logout step
+    expired --> in_progress: advance expected logout step
+    initiated --> finalized: finalize!
+    in_progress --> finalized: finalize!
+    failed --> finalized: finalize!
+    expired --> finalized: finalize!
+    initiated --> failed: fail!
+    in_progress --> failed: fail!
+    expired --> failed: fail!
+    finalized --> [*]
+    note right of initiated
+        Steps: origin_cleared, acme_cleared, sign_cleared; then finalized.
+        sign uses origin/acme; acme and base use origin/sign.
+        core, side and palm use origin/acme/sign.
+        Stored expired entry writer UNKNOWN; clock expiry only refuses.
+        failed can finalize if live and expected_step is finalized.
+    end note

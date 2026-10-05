@@ -23,8 +23,7 @@ module Base
           action_link: avatar && { label: t("actions.edit"), href: edit_base_org_avatar_path(ri: params[:ri]) },
           switcher_link: { label: t("base.shared.dashboard.links.switcher"),
                            href: base_org_switcher_path(ri: params[:ri]), },
-          up_link: { label: t("base.shared.dashboard.links.dashboard"),
-                     href: base_org_dashboard_path(ri: params[:ri]), },
+          up_link: dashboard_up_link,
         }
       end
 

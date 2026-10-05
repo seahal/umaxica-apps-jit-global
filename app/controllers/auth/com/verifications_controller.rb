@@ -34,9 +34,7 @@ module Auth
         { label: t("actions.cancel"), action: auth_com_verification_cancellation_path(ri: params[:ri]), method: "post" }
       end
 
-      # The entry screen lists only the step-up methods this actor may use. Guards, step-up session
-      # handling and redirects stay in SignVerificationEntry; this surface only answers with an
-      # Inertia component instead of an ERB template.
+      # AuthStepUpCeremonyEntry enforces admission; this surface renders the permitted method list.
       def render_verification_entry_page
         render inertia: true, props: verification_entry_props
       end

@@ -132,9 +132,8 @@ class Client < AppPrincipalRecord
            dependent: :destroy,
            inverse_of: :user
   has_many :client_secret_credentials,
-           foreign_key: :user_id,
-           dependent: :destroy,
-           inverse_of: :user
+           dependent: :restrict_with_error,
+           inverse_of: :client
   has_many :client_totp_credentials,
            foreign_key: :user_id,
            dependent: :destroy,

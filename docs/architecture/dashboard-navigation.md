@@ -29,6 +29,26 @@ The org Avatar show page exposes its existing edit page through a normal GET nav
 is a navigation-only reachability link: it does not add Avatar lifecycle, ownership, RBAC, or create
 behavior. The app Avatar create decision remains unchanged.
 
+## Base app resource links
+
+The Base app dashboard links directly to `/preference`; the separate Identity link remains the
+signed-in identity hub. Preference is available even after the Cookie banner is dismissed.
+
+Resource lists link to their implemented GET children. Avatars exposes New, Show, and Edit, with
+parent links back to the list or detail. The telephone list exposes `/identity/telephones/new` and
+retains the existing verification-registration entry. Session inventory links device names to the
+canonical `/sessions/:id` detail independently of DELETE revocation controls. Groups renders its
+authorized entries and follows their existing JSON detail endpoints with ordinary document links.
+
+Organization detail exposes the membership index, new entry, and policy-authorized membership show
+and edit links, keeping those entries within three links from Dashboard. The membership pages are
+navigation shells around the existing incomplete management endpoints; they show that management
+is unavailable and do not introduce mutation forms. Existing JSON index/show responses remain
+unchanged. Membership links are filtered by the same policy used at their destination.
+
+These additions apply to Base app only. Shared React components render additional links only when
+the app controller supplies their destination props; com and org controllers retain their payloads.
+
 ## Exclusions from normal navigation
 
 The following are not dashboard or hub destinations:

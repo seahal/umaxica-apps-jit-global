@@ -62,24 +62,6 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
       [:prepare_secret_credential_turnstile_create_failure],
       [:render_secret_credential_turnstile_create_failure],
     ],
-    SignVerificationAuditAndCookie => [
-      [:verification_audit_event_class], [:verification_audit_level_class],
-      [:verification_default_activity_level_id], [:verification_activity_model],
-      [:current_verification_actor], [:verification_actor_type],
-    ],
-    SignVerificationCancellation => [[:verification_cancellation_fallback_path]],
-    SignVerificationCommonBase => [[:verification_unavailable_redirect_path]],
-    SignVerificationEntry => [[:verification_success_notice_key]],
-    SignVerificationPasskeyChecks => [
-      [:verification_passkeys_scope], [:verification_passkey_model],
-      [:passkey_actor_matches?, :passkey], [:verification_no_passkey_i18n_key],
-    ],
-    SignVerificationStepUpLifecycle => [
-      [:valid_step_up_session?, {}], [:handle_invalid_step_up_session!], [:clear_step_up_state!],
-      [:verification_model], [:verification_success_event_id], [:verification_success_notice_key],
-      [:verification_success_fallback_path],
-    ],
-    SignVerificationTotpChecks => [[:active_totp_credentials]],
     SocialCeremonyEntry => [
       [:social_ceremony_surface], [:social_ceremony_providers], [:social_ceremony_abort_path],
     ],

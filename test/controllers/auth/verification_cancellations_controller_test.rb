@@ -7,143 +7,183 @@ require "test_helper"
 class Auth::VerificationCancellationsControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :operators, :client_tokens, :operator_tokens, :client_statuses, :operator_passkeys
 
-  test "app cancellation clears local step-up session and renders acme cancellation handoff" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    user = clients(:one)
-    ensure_user_token_reference_records!
-    active_token = ClientToken.create!(
-      user: user,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+  test "app cancellation closes the admitted ceremony and returns to the Base dashboard through Jump" do
+    actor = clients(:one)
+    token = ClientToken.create!(user: actor)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_email", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: base_app_identity_emails_path(ri: "jp"),
     )
-    headers = as_user_headers(user, host: host, session_public_id: active_token.public_id)
-    token = ClientToken.find_by!(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
-    return_to = base_app_identity_emails_path(ri: "jp")
-    grant = signed_step_up_grant_for(
-      actor: user, token: token, scope: "settings_email", return_to: return_to, surface: "app",
-    )
-
-    get auth_app_verification_url(
-      scope: "settings_email",
-      pt: signed_step_up_pt_for(return_to, surface: "app", session_nonce: token.public_id),
-      ri: "jp",
-      step_up_ceremony_grant: grant,
-    ),
-        headers: headers
-
-    post auth_app_verification_cancellation_url(ri: "jp"), headers: headers
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_equal auth_app_settings_path(ri: "jp"), URI.parse(response.location).request_uri
-    assert_nil token.reload.step_up_session
+
+    post auth_app_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
+
+    assert_response :see_other
+    jump = URI.parse(response.location)
+
+    assert_equal "jump.umaxica.net", jump.host
+    target, = JWT.decode(Rack::Utils.parse_nested_query(jump.query).fetch("rt"), nil, false)
+    destination = URI.parse(target.fetch("url"))
+
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), destination.host
+    assert_equal base_app_dashboard_path(ri: "jp"), destination.request_uri
+    assert_equal "canceled", issuance.transaction.reload.status
+    assert_not_nil issuance.transaction.canceled_at
+    assert_nil token.reload.last_step_up_at
+    assert_predicate token, :currently_usable?
+    assert_equal 0,
+                 ClientStepUpCeremonyTransaction.where(session_ref: token.public_id, status: %w(pending verified)).count
   end
 
-  test "com cancellation clears local step-up session and renders acme cancellation handoff" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
-    visitor = create_verified_visitor_with_email(email_address: "cancel-com-#{SecureRandom.hex(4)}@example.com")
-    visitor.visitor_telephones.create!(
-      number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+  test "com cancellation closes the admitted ceremony and returns to the Base dashboard through Jump" do
+    actor = create_verified_visitor_with_email(email_address: "cancel-com-#{SecureRandom.hex(4)}@example.com")
+    token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_email", allowed_methods: %i(email_otp passkey), purpose: "step_up",
+        audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: base_com_identity_emails_path(ri: "jp"),
     )
-    ensure_visitor_token_reference_records!
-    active_token = VisitorToken.create!(
-      visitor: visitor,
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    headers = as_visitor_headers(visitor, host: host, session_public_id: active_token.public_id)
-    token = VisitorToken.find_by!(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
-    return_to = base_com_identity_emails_path(ri: "jp")
-    grant = signed_step_up_grant_for(
-      actor: visitor, token: token, scope: "settings_email", return_to: return_to, surface: "com",
-    )
-
-    get auth_com_verification_url(
-      scope: "settings_email",
-      pt: signed_step_up_pt_for(return_to, surface: "com", session_nonce: token.public_id),
-      ri: "jp",
-      step_up_ceremony_grant: grant,
-    ),
-        headers: headers
-
-    post auth_com_verification_cancellation_url(ri: "jp"), headers: headers
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    get auth_com_verification_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_com_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_equal auth_com_settings_path(ri: "jp"), URI.parse(response.location).request_uri
-    assert_nil token.reload.step_up_session
+
+    post auth_com_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
+
+    assert_response :see_other
+    jump = URI.parse(response.location)
+
+    assert_equal "jump.umaxica.net", jump.host
+    target, = JWT.decode(Rack::Utils.parse_nested_query(jump.query).fetch("rt"), nil, false)
+    destination = URI.parse(target.fetch("url"))
+
+    assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), destination.host
+    assert_equal base_com_dashboard_path(ri: "jp"), destination.request_uri
+    assert_equal "canceled", issuance.transaction.reload.status
+    assert_not_nil issuance.transaction.canceled_at
+    assert_nil token.reload.last_step_up_at
+    assert_predicate token, :currently_usable?
+    assert_equal 0,
+                 VisitorStepUpCeremonyTransaction.where(
+                   session_ref: token.public_id,
+                   status: %w(
+                     pending verified
+                   ),
+                 ).count
   end
 
-  test "org cancellation clears local step-up session and renders acme cancellation handoff" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
-    staff = operators(:one)
-    ensure_staff_token_reference_records!
-    active_token = OperatorToken.create!(
-      staff: staff,
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
+  test "org cancellation closes the admitted ceremony and returns to the Base dashboard through Jump" do
+    actor = operators(:one)
+    token = operator_tokens(:one)
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token,
+      requirement: StepUpRequirement.new(
+        scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up",
+        audience: "step_up:org", session_binding: token.public_id, token_binding: token.public_id,
+        require_session_binding: true,
+      ), return_to: base_org_identity_emails_path(ri: "jp"),
     )
-    headers = as_staff_headers(staff, host: host, session_public_id: active_token.public_id)
-    token = OperatorToken.find_by!(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
-    return_to = auth_org_settings_path(ri: "jp")
-    grant = signed_step_up_grant_for(
-      actor: staff, token: token, scope: "settings_email", return_to: return_to, surface: "org",
-    )
-
-    get auth_org_verification_url(
-      scope: "settings_email",
-      pt: signed_step_up_pt_for(return_to, surface: "org", session_nonce: token.public_id),
-      ri: "jp",
-      step_up_ceremony_grant: grant,
-    ),
-        headers: headers
-
-    post auth_org_verification_cancellation_url(ri: "jp"), headers: headers
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_org_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_equal auth_org_settings_path(ri: "jp"), URI.parse(response.location).request_uri
-    assert_nil token.reload.step_up_session
+
+    post auth_org_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
+
+    assert_response :see_other
+    jump = URI.parse(response.location)
+
+    assert_equal "jump.umaxica.net", jump.host
+    target, = JWT.decode(Rack::Utils.parse_nested_query(jump.query).fetch("rt"), nil, false)
+    destination = URI.parse(target.fetch("url"))
+
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), destination.host
+    assert_equal base_org_dashboard_path(ri: "jp"), destination.request_uri
+    assert_equal "canceled", issuance.transaction.reload.status
+    assert_not_nil issuance.transaction.canceled_at
+    assert_nil token.reload.last_step_up_at
+    assert_predicate token, :currently_usable?
+    assert_equal 0,
+                 OperatorStepUpCeremonyTransaction.where(
+                   session_ref: token.public_id,
+                   status: %w(
+                     pending verified
+                   ),
+                 ).count
   end
 
   # The destination is fixed by the server-held ceremony origin: neither a posted return_to nor the
   # Referer can steer it.
   test "app cancellation ignores a posted return_to and the referer" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    user = clients(:one)
-    ensure_user_token_reference_records!
-    active_token = ClientToken.create!(
-      user: user,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    headers = as_user_headers(user, host: host, session_public_id: active_token.public_id)
-    token = ClientToken.find_by!(public_id: headers["X-TEST-SESSION-PUBLIC-ID"])
-    return_to = base_app_identity_emails_path(ri: "jp")
-    grant = signed_step_up_grant_for(
-      actor: user, token: token, scope: "settings_email", return_to: return_to, surface: "app",
-    )
-    get auth_app_verification_url(
-      scope: "settings_email",
-      pt: signed_step_up_pt_for(return_to, surface: "app", session_nonce: token.public_id),
-      ri: "jp",
-      step_up_ceremony_grant: grant,
-    ),
-        headers: headers
+    [
+      "https://evil.example/steal", "//evil.example/steal", "/identity/emails", "", "/identity\x00/emails",
+    ].each do |posted_return_to|
+      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(user: actor)
+      issuance = BaseStepUpAdmissionIssuer.call!(
+        actor: actor, token: token,
+        requirement: StepUpRequirement.new(
+          scope: "settings_email", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+          audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+          require_session_binding: true,
+        ), return_to: base_app_identity_emails_path(ri: "jp"),
+      )
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
-    post auth_app_verification_cancellation_url(ri: "jp"),
-         params: { return_to: "/sign/in/challenge" },
-         headers: headers.merge("Referer" => "http://#{host}/settings/passkeys")
+      post auth_app_verification_cancellation_path(ri: "jp"),
+           params: { authenticity_token: csrf, return_to: posted_return_to, pt: posted_return_to },
+           headers: { "Referer" => "https://evil.example/referer" }
 
-    assert_response :see_other
-    assert_equal auth_app_settings_path(ri: "jp"), URI.parse(response.location).request_uri
-    assert_nil token.reload.step_up_session
+      assert_response :see_other
+      target, = JWT.decode(
+        Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false,
+      )
+      destination = URI.parse(target.fetch("url"))
+
+      assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), destination.host, posted_return_to
+      assert_equal base_app_dashboard_path(ri: "jp"), destination.request_uri, posted_return_to
+    end
+  end
+
+  # Sentinels for the ceremony context: no cookie at all, and a cookie that names no ceremony.
+  test "cancellation without an admitted ceremony is refused on every surface and changes nothing" do
+    [
+      ["PUBLIC_AUTH_SERVICE_URL", auth_app_verification_cancellation_path(ri: "jp")],
+      ["PUBLIC_AUTH_CORPORATE_URL", auth_com_verification_cancellation_path(ri: "jp")],
+      ["PUBLIC_AUTH_STAFF_URL", auth_org_verification_cancellation_path(ri: "jp")],
+    ].each do |host_key, path|
+      host! ENV.fetch(host_key)
+      post path
+
+      assert_response :bad_request, host_key
+      assert_equal I18n.t("errors.messages.invalid_request"), response.body
+      assert_nil response.headers["Location"]
+
+      cookies["auth_sid"] = "not-a-ceremony"
+      post path
+
+      assert_response :bad_request, host_key
+      assert_nil response.headers["Location"]
+    end
   end
 
   test "step-up cancellation is not reachable by GET" do

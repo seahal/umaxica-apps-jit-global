@@ -74,16 +74,8 @@ module Base
             else
               @resolution.cancel!
             end
-            redirect_to_surface_url(
-              auth_app_sign_in_url(
-                host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-                protocol: "https",
-              ),
-              status: :see_other,
-            )
-            # The cancel button issues an Inertia visit, and sign-in lives on the Auth host, so a
-            # plain 303 would be followed by fetch cross-origin and the page would never change.
-            convert_redirect_to_inertia_location!
+            # Base's neutral entry owns fresh admission. Cancellation grants no Auth continuity.
+            redirect_to(base_app_sign_show_path(ri: params[:ri]), status: :see_other)
           end
 
           private
@@ -140,7 +132,16 @@ module Base
               return unless @resolution
 
               @actor = Client.find_by(public_id: @resolution.actor_ref)
-              @oidc_transaction = @resolution.oidc_authorization_transaction
+              @oidc_transaction =
+                AppTicketRecord.connected_to(role: :writing) do
+                  @resolution.oidc_authorization_transaction
+                end
+              now = ClientOidcAuthorizationTransaction.database_now
+              unless @actor && @oidc_transaction.actor_ref == @actor.public_id &&
+                  @oidc_transaction.authenticated? && @oidc_transaction.base_finalized_at.nil? &&
+                  !@oidc_transaction.expired?(now: now) && !@oidc_transaction.login_challenge_expired?(now: now)
+                @resolution = nil
+              end
               return
             end
 
@@ -218,16 +219,23 @@ module Base
           end
 
           def resume_authorization_after_resolution
-            return render_invalid_resolution unless promote_oidc_resolution_session!
-
             finalization =
-              @oidc_transaction.finalize_base! do |_locked, _finalization_time|
-                { status: :success, browser_session_ref: current_session.public_id }
+              @actor.class.connection_class_for_self.connected_to(role: :writing) do
+                @actor.with_lock do
+                  @oidc_transaction.finalize_base! do |locked, _finalization_time|
+                    next { status: :invalid_request } if locked.base_finalized_at
+                    next { status: :login_failed } unless promote_oidc_resolution_session!
+
+                    { status: :success, browser_session_ref: current_session.public_id }
+                  end
+                end
               end
             return render_invalid_resolution unless finalization[:status] == :success
 
             @resolution.finalize!
             issue_authorization_code!
+          rescue ArgumentError
+            render_invalid_resolution
           end
 
           # The OIDC resume issued nothing while the limit was full. The root login

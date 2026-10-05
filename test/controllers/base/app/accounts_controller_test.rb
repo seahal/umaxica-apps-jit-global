@@ -45,6 +45,7 @@ class Base::App::AccountsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/accounts/show", inertia_component
     assert_equal "account", inertia_props.fetch("body")
+    assert_equal base_app_accounts_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "show rejects account outside the current client membership set" do

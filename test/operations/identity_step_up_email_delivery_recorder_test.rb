@@ -3,6 +3,8 @@
 require "test_helper"
 
 class IdentityStepUpEmailDeliveryRecorderTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   fixtures :clients, :client_statuses
 
   setup do
@@ -24,6 +26,57 @@ class IdentityStepUpEmailDeliveryRecorderTest < ActiveSupport::TestCase
       transaction: @transaction, credential_ref: @credential.public_id, code: "012345",
     )
     @ciphertext = OutboundSensitivePayload.encrypt_email_otp("012345")
+    ActionMailer::Base.deliveries.clear
+    @email_was_suspended = Flipper.enabled?(:outbound_email_suspended)
+    Flipper.disable(:outbound_email_suspended)
+  end
+
+  teardown do
+    ActionMailer::Base.deliveries.clear
+    if @email_was_suspended
+      Flipper.enable(:outbound_email_suspended)
+    else
+      Flipper.disable(:outbound_email_suspended)
+    end
+  end
+
+  test "encrypted Noticed job delivers the current code and records delivery before verification" do
+    perform_enqueued_jobs(only: StepUpEmailDeliveryJob) do
+      Notify::App::StepUpOtpNotifier.issue(
+        record: @credential, otp_code: "012345",
+        transaction_ref: @transaction.transaction_id, generation: @generation,
+      )
+    end
+
+    assert_equal 1, ActionMailer::Base.deliveries.length
+    mail = ActionMailer::Base.deliveries.last
+
+    assert_equal [@credential.address], mail.to
+    assert_includes mail.text_part.body.decoded, "012345"
+    assert_equal "delivered", @record.reload.email_delivery_state
+    assert_nil @record.email_code_consumed_at
+    assert IdentityStepUpEmailVerificationCommitter.call!(
+      actor: @actor, credential: @credential, transaction: @transaction,
+      session_record: @record, code: "012345",
+    )
+    assert_equal "verified", @transaction.reload.status
+    assert_nil @token.reload.last_step_up_at
+  end
+
+  test "suspended delivery records failure and cannot authenticate an undelivered code" do
+    Flipper.enable(:outbound_email_suspended)
+
+    assert_not IdentityStepUpEmailDeliveryRecorder.call!(
+      credential: @credential, transaction_ref: @transaction.transaction_id,
+      generation: @generation, encrypted_code: @ciphertext,
+    )
+    assert_empty ActionMailer::Base.deliveries
+    assert_equal "failed", @record.reload.email_delivery_state
+    assert_not IdentityStepUpEmailVerificationCommitter.call!(
+      actor: @actor, credential: @credential, transaction: @transaction,
+      session_record: @record, code: "012345",
+    )
+    assert_equal "pending", @transaction.reload.status
   end
 
   test "stale generation and canceled transaction never reach the mailer" do

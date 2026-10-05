@@ -1,0 +1,11 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "consumed" as consumed
+    [*] --> pending
+    pending --> consumed: consume_result! / Base final committer
+    consumed --> [*]
+    note right of pending
+        Auth result returns to Base final committer.
+        TTL expiry is a predicate; no stored failure/cancel state.
+    end note

@@ -87,6 +87,28 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
     end
   end
 
+  test "persona with an active binding gets a taken error and no partial rows" do
+    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+
+    assert_no_difference -> {
+      Avatar.count + Handle.count + AvatarPersonaBinding.count + AvatarOwnershipPeriod.count
+    } do
+      result = AvatarProvisioning::Create.call(
+        actor: user,
+        subject_type: :persona,
+        subject: bootstrap.account,
+        avatar_params: { moniker: "Second Avatar" },
+        handle_params: { handle: "second" },
+        owner_surface: "app",
+        owner_collective_public_id: bootstrap.collective.public_id,
+      )
+
+      assert_not_predicate result, :success?
+      assert result.errors.fetch(0).record.errors.of_kind?(:persona_id, :taken)
+    end
+  end
+
   test "new Avatar does not write transitional direct subject or owner columns" do
     user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)

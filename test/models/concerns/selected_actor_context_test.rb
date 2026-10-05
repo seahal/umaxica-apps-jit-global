@@ -4,44 +4,41 @@
 require "test_helper"
 
 class SelectedActorContextTest < ActiveSupport::TestCase
-  self.fixture_table_names = []
+  self.fixture_table_names = %w(client_statuses client_visibilities)
 
-  class FakeSelectedActor
-    include SelectedActorContext
+  test "selected_actor_context? requires every account collective and unit identifier" do
+    token = ClientToken.new
 
-    attr_accessor :selected_account_public_id, :selected_collective_public_id,
-                  :selected_collective_unit_public_id, :selected_avatar_public_id, :selected_at
+    assert_not_predicate token, :selected_actor_context?
+    token.selected_account_public_id = "account"
+    token.selected_collective_public_id = "collective"
 
-    def update!(attributes)
-      attributes.each do |key, value|
-        public_send("#{key}=", value)
-      end
-    end
+    assert_not_predicate token, :selected_actor_context?
+    token.selected_collective_unit_public_id = "unit"
+
+    assert_predicate token, :selected_actor_context?
+    token.selected_collective_unit_public_id = ""
+
+    assert_not_predicate token, :selected_actor_context?
   end
 
-  test "selected_actor_context? returns true when all context public ids are present" do
-    actor = FakeSelectedActor.new
-    actor.selected_account_public_id = "account"
-    actor.selected_collective_public_id = "collective"
-    actor.selected_collective_unit_public_id = "unit"
+  test "clear_selected_actor_context! clears the real persisted selection and freshness" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    token = ClientToken.create!(
+      user: actor, selected_account_public_id: "account", selected_collective_public_id: "collective",
+      selected_collective_unit_public_id: "unit", selected_avatar_public_id: "avatar", selected_at: Time.current,
+      last_step_up_at: Time.current, last_step_up_scope: "settings_birthdate",
+    )
 
-    assert_predicate actor, :selected_actor_context?
-  end
+    token.clear_selected_actor_context!
+    token.reload
 
-  test "clear_selected_actor_context! clears all selected context attributes" do
-    actor = FakeSelectedActor.new
-    actor.selected_account_public_id = "account"
-    actor.selected_collective_public_id = "collective"
-    actor.selected_collective_unit_public_id = "unit"
-    actor.selected_avatar_public_id = "avatar"
-    actor.selected_at = Time.current
-
-    actor.clear_selected_actor_context!
-
-    assert_nil actor.selected_account_public_id
-    assert_nil actor.selected_collective_public_id
-    assert_nil actor.selected_collective_unit_public_id
-    assert_nil actor.selected_avatar_public_id
-    assert_nil actor.selected_at
+    assert_nil token.selected_account_public_id
+    assert_nil token.selected_collective_public_id
+    assert_nil token.selected_collective_unit_public_id
+    assert_nil token.selected_avatar_public_id
+    assert_nil token.selected_at
+    assert_nil token.last_step_up_at
+    assert_predicate token, :currently_usable?
   end
 end

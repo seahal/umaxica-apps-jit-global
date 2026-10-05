@@ -56,8 +56,7 @@ module Base
 
         {
           title: "Switcher",
-          up_link: { label: t("base.shared.dashboard.links.dashboard"),
-                     href: base_com_dashboard_path(ri: params[:ri]), },
+          up_link: dashboard_up_link,
           current: current && {
             account_public_id: current[:account_public_id],
             organization_public_id: current[:organization_public_id],

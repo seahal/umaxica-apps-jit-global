@@ -1,5 +1,13 @@
 # Detailed Design Specification (DDS)
 
+> Current implementation (2026-10-04): parts of this document describe an earlier shape of the
+> application. The `Sign` and `Top` namespaces,
+> `app/controllers/sign/app/registration/emails_controller.rb`, `UserIdentityEmail`,
+> `ServiceSiteContact`, and `src/pages/app/inquiry/before_submit.js` are not in the current code.
+> Current controllers live under `Auth`, `Base`, `Core`, `Warp`, `Palm`, `Edit`, `Xper`, `Guid`, and
+> the content surfaces `Docs`, `Help`, `Info`, and `News`, one route file each in `config/routes/`.
+> Use `README.md` ("Routing") and `docs/architecture/` for the current topology.
+
 ## Project: Umaxica App (JIT)
 
 ### Conforms to IEEE 1016:2009 and ISO/IEC/IEEE 42010:2011
@@ -383,7 +391,9 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 
 1. Flesh out staff/admin flows (owner/customer/news/docs CRUD).
 2. Continue replacing legacy helper-style checks with explicit Action Policy authorization.
-3. Publish OpenAPI via Rswag and mount `/api-docs`.
+3. OpenAPI publication is in place for development: `rswag-api` serves the descriptions under
+   `openapi/` at `/openapi` and `rswag-ui` serves Swagger UI on the swagger host
+   (`config/routes/swagger.rb`). There is no `/api-docs` mount.
 4. Add geolocation- and cookie-based personalization to `Top::*` once privacy reviewed.
 5. Automate Fastly cache purges after docs/news updates.
 6. Expand SMS providers and add delivery receipt handling.

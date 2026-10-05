@@ -15,7 +15,7 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
     result = BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
 
     assert_equal "selected", result[:status]
-    assert_equal "/", result[:next]
+    assert_equal "/dashboard", result[:next]
     assert_predicate @token.reload, :selected_actor_context?
     assert_predicate @token.selected_avatar_public_id, :present?
   end
@@ -50,6 +50,17 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
 
     assert_equal "selection_required", result[:status]
     assert_equal 2, result[:accounts].size
+  end
+
+  test "com automatic selection returns its authenticated Dashboard" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    token = VisitorToken.create!(visitor: visitor)
+    BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
+    result = BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
+
+    assert_equal "selected", result[:status]
+    assert_equal "/dashboard", result[:next]
+    assert_predicate token.reload, :selected_actor_context?
   end
 
   test "rejects another identity selection" do

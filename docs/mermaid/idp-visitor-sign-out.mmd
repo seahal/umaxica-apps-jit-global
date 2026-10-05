@@ -1,0 +1,30 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0" as NOTHING
+    state "REQUESTED id=10" as REQUESTED
+    state "ACCESS_DISCARDED id=20" as ACCESS_DISCARDED
+    state "LOGICALLY_REVOKED id=30" as LOGICALLY_REVOKED
+    state "AWAITING_EXPIRY id=40" as AWAITING_EXPIRY
+    state "COMPLETED id=100" as COMPLETED
+    state "FAILED id=900" as FAILED
+    [*] --> REQUESTED
+    NOTHING --> REQUESTED: request_sign_out!
+    REQUESTED --> ACCESS_DISCARDED: mark_access_discarded!
+    ACCESS_DISCARDED --> LOGICALLY_REVOKED: mark_logically_revoked!
+    LOGICALLY_REVOKED --> AWAITING_EXPIRY: await_sign_out_expiry!
+    AWAITING_EXPIRY --> COMPLETED: complete_sign_out!
+    REQUESTED --> FAILED: fail_sign_out!
+    ACCESS_DISCARDED --> FAILED: fail_sign_out!
+    LOGICALLY_REVOKED --> FAILED: fail_sign_out!
+    AWAITING_EXPIRY --> FAILED: fail_sign_out!
+    COMPLETED --> [*]
+    FAILED --> [*]
+    note right of NOTHING
+        Database default REQUESTED id=10.
+        NOTHING id=0 is an optional model predecessor.
+        Cancel UI does not create a CANCELLED state.
+    end note
+    note right of REQUESTED
+        Browser/RP logout transport crosses Auth and Acme boundaries.
+        No flow TTL; UI cancel clears pre-commit browser context.
+    end note

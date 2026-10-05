@@ -10,8 +10,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
            :client_statuses,
            :client_token_statuses,
            :client_token_kinds,
-           :client_secret_credential_kinds,
-           :client_secret_credential_statuses,
            :client_totp_credential_statuses,
            :app_preference_chronicle_levels,
            :client_chronicle_events,
@@ -62,7 +60,8 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
-    IdentityTotpCeremonyCandidate.find_each(&:destroy!)
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
   end
 
   def with_prosopite_paused
@@ -204,16 +203,49 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   # with a fresh secret; DELETE ends it; a successful first code consumes it.
   # ===================================================================
 
-  test "GET new generates no secret and starts no enrollment" do
-    with_prosopite_paused do
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-    end
+  # Explicit identities isolate these admissions from retained rows in the copied fixture database.
+  test "admitted GET new starts no candidate and preserves the deadline" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_000, status_id: ClientStatus::ACTIVE)
 
-    assert_response :success
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    deadline = issuance.transaction.expires_at
+    record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
+    record.update!(attempt_count: 2)
+    assert_no_difference("IdentityTotpCeremonyCandidate.count") do
+      2.times do
+        get new_auth_app_settings_totp_path(ri: "jp")
+
+        assert_response :success
+        page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+        assert_nil page.fetch("qr_code_image")
+        assert_equal auth_app_settings_totps_enrollment_path(ri: "jp"), page.fetch("start").fetch("action")
+      end
+    end
     assert_nil session[:private_key]
     assert_nil session[:totp_enrollment]
-    assert_nil inertia_props["qr_code_image"]
-    assert_equal auth_app_settings_totps_enrollment_path(ri: "jp"), inertia_props.fetch("start").fetch("action")
+    assert_equal deadline, issuance.transaction.reload.expires_at
+    assert_equal 2, record.reload.attempt_count
   end
 
   test "the cancel link of the old flow no longer leaves a reusable secret behind" do
@@ -226,105 +258,254 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil session[:totp_enrollment]
   end
 
-  test "starting an enrollment creates a secret that a refresh keeps" do
-    with_prosopite_paused do
-      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-    end
+  test "admitted enrollment POST and redisplay retain the same encrypted candidate" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_001, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_redirected_to new_auth_app_settings_totp_url(ri: "jp")
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
 
-    with_prosopite_paused { get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers }
-    first_image = inertia_props.fetch("qr_code_image")
-    enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    initial_image_digest = Digest::SHA256.hexdigest(props.fetch("qr_code_image"))
+    initial_deadline = candidate.expires_at
+    initial_ref = candidate.ref
+    parent_deadline = issuance.transaction.expires_at
+    2.times do
+      assert_no_difference("IdentityTotpCeremonyCandidate.count") do
+        post auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+        follow_redirect!
+      end
+      page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
-    with_prosopite_paused { get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers }
-
-    assert_equal first_image, inertia_props.fetch("qr_code_image")
-    assert_equal enrollment_id, inertia_props.fetch("form").fetch("enrollment_id")
-    assert_equal(
-      { "label" => I18n.t("actions.cancel"),
-        "action" => auth_app_settings_totps_enrollment_path(ri: "jp"),
-        "method" => "delete", },
-      inertia_props.fetch("cancel"),
-    )
+      assert_equal initial_image_digest, Digest::SHA256.hexdigest(page.fetch("qr_code_image"))
+      assert_equal initial_ref, page.fetch("form").fetch("enrollment_id")
+      assert_equal initial_deadline, candidate.reload.expires_at
+      assert_equal parent_deadline, issuance.transaction.reload.expires_at
+    end
+    assert_nil session[:private_key]
+    assert_nil session[:totp_enrollment]
+    assert_nil token.reload.last_step_up_at
   end
 
-  test "cancelling ends the enrollment and a new enrollment gets a new secret" do
-    with_prosopite_paused do
-      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-    end
-    first_image = inertia_props.fetch("qr_code_image")
+  test "canceling admission requires a new Base permission and a new candidate" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_002, status_id: ClientStatus::ACTIVE)
 
-    with_prosopite_paused { delete auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers }
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_redirected_to auth_app_settings_totps_url(ri: "jp")
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    first_ref = candidate.ref
+    first_secret_digest = Digest::SHA256.hexdigest(candidate.private_key)
+    delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+
+    assert_response :see_other
+    gateway = URI.parse(response.location)
+    redirect_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
+    assert_equal base_app_dashboard_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https", ri: "jp"),
+                 redirect_payload.fetch("url")
+    assert_equal "canceled", issuance.transaction.reload.status
     assert_nil session[:totp_enrollment]
     assert_nil session[:private_key]
-    assert_nil session[:totp_ceremony]
+    assert_nil token.reload.last_step_up_at
+    assert_no_difference("IdentityTotpCeremonyCandidate.count") do
+      post auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
 
-    with_prosopite_paused do
-      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
+      assert_response :bad_request
     end
+    replacement = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"),
+         params: { entry_ref: replacement.reference, authenticity_token: csrf }
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    next_candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
 
-    assert_not_equal first_image, inertia_props.fetch("qr_code_image")
+    assert_not_equal issuance.transaction.transaction_id, replacement.transaction.transaction_id
+    assert_not_equal first_ref, next_candidate.ref
+    assert_not_equal first_secret_digest, Digest::SHA256.hexdigest(next_candidate.private_key)
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil token.reload.last_step_up_at
   end
 
-  test "a code for a cancelled enrollment cannot be confirmed from a stale page" do
-    @user.client_totp_credentials.destroy_all
-    stale_secret = "JBSWY3DPEHPK3PXP"
-    ROTP::Base32.stub(:random_base32, stale_secret) do
-      with_prosopite_paused do
-        post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-      end
-    end
-    stale_enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
+  test "a canceled candidate cannot confirm a replacement Base permission" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_003, status_id: ClientStatus::ACTIVE)
 
-    with_prosopite_paused do
-      delete auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-      post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-    end
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    stale_ref = candidate.ref
+    stale_code = ROTP::TOTP.new(candidate.private_key).now
+    delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+
+    assert_response :see_other
+    gateway = URI.parse(response.location)
+    redirect_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
+    assert_equal base_app_dashboard_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https", ri: "jp"),
+                 redirect_payload.fetch("url")
+    assert_equal "canceled", issuance.transaction.reload.status
+    assert_nil session[:totp_enrollment]
+    assert_nil session[:private_key]
+    assert_nil token.reload.last_step_up_at
+    replacement = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"),
+         params: { entry_ref: replacement.reference, authenticity_token: csrf }
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    current_ref = props.fetch("form").fetch("enrollment_id")
     assert_no_difference("ClientTotpCredential.count") do
-      with_prosopite_paused do
-        post auth_app_settings_totps_url(ri: "jp"),
-             params: { user_totp_credential: { first_token: ROTP::TOTP.new(stale_secret).now,
-                                               enrollment_id: stale_enrollment_id, } },
-             headers: @headers
-      end
+      post auth_app_settings_totps_path(ri: "jp"), params: {
+        authenticity_token: csrf, user_totp_credential: { enrollment_id: stale_ref, first_token: stale_code },
+      }
     end
 
     assert_response :conflict
-    assert_equal "text/plain", response.media_type
-    assert_nil response.location
+    assert_equal "pending", replacement.transaction.reload.status
+    assert_nil IdentityTotpCeremonyCandidate.find_by!(ref: current_ref).consumed_at
+    assert_nil token.reload.last_step_up_at
   end
 
-  test "a code posted after cancellation cannot be confirmed" do
-    @user.client_totp_credentials.destroy_all
-    secret = "JBSWY3DPEHPK3PXP"
-    ROTP::Base32.stub(:random_base32, secret) do
-      with_prosopite_paused do
-        post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers
-        get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-      end
-    end
-    enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
-    with_prosopite_paused { delete auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers }
+  test "cancelled admission refuses confirmation and retains no Auth root credentials" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_004, status_id: ClientStatus::ACTIVE)
 
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    code = ROTP::TOTP.new(candidate.private_key).now
+    candidate_ref = candidate.ref
+    delete auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf }
+
+    assert_response :see_other
+    gateway = URI.parse(response.location)
+    redirect_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+
+    assert_equal base_app_dashboard_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https", ri: "jp"),
+                 redirect_payload.fetch("url")
+    assert_equal "canceled", issuance.transaction.reload.status
+    assert_nil session[:totp_enrollment]
+    assert_nil session[:private_key]
+    assert_nil token.reload.last_step_up_at
     assert_no_difference("ClientTotpCredential.count") do
-      with_prosopite_paused do
-        post auth_app_settings_totps_url(ri: "jp"),
-             params: { user_totp_credential: { first_token: ROTP::TOTP.new(secret).now,
-                                               enrollment_id: enrollment_id, } },
-             headers: @headers
-      end
+      post auth_app_settings_totps_path(ri: "jp"), params: {
+        authenticity_token: csrf, user_totp_credential: { enrollment_id: candidate_ref, first_token: code },
+      }
     end
 
-    assert_response :conflict
+    assert_response :bad_request
+    assert_equal "canceled", issuance.transaction.reload.status
+    assert_nil candidate.reload.consumed_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
   test "enrollment endpoints are not reachable by GET" do
@@ -346,109 +527,237 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "should get new" do
-    with_prosopite_paused do
-      open_totp_enrollment!(@headers)
-    end
+  test "admitted TOTP page uses scoped actions and no store QR presentation" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_005, status_id: ClientStatus::ACTIVE)
 
-    assert_response :success
-    assert_equal "auth/app/settings/totps/new", inertia_component
-    assert_equal(
-      auth_app_settings_totps_path(ri: "jp"),
-      inertia_props.fetch("back_link").fetch("href"),
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
     )
-
-    form = inertia_props.fetch("form")
-
-    assert_equal auth_app_settings_totps_path(ri: "jp"), form.fetch("action")
-    assert_equal "user_totp_credential", form.fetch("scope")
-    assert_equal(
-      I18n.t("views.sign.app.settings.totps.new.first_token_label"),
-      form.fetch("first_token_label"),
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
-    assert_equal(
-      I18n.t("views.sign.app.settings.totps.new.first_token_placeholder"),
-      form.fetch("first_token_placeholder"),
-    )
-    assert_equal I18n.t("views.sign.app.settings.totps.new.submit"), form.fetch("submit_label")
-    assert_includes response.body, "認証アプリ"
-    assert_equal(
-      I18n.t("views.sign.app.settings.totps.new.first_token_delivery_help"),
-      form.fetch("first_token_delivery_help"),
-    )
-    assert_not_includes response.body, "届きます"
-    assert_not_includes response.body, "送信され"
-    assert_predicate inertia_props.fetch("turnstile").fetch("site_key"), :present?
-    assert_match %r{\Adata:image/png;base64,}, inertia_props.fetch("qr_code_image")
-  end
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
-  test "new refuses to start another authenticator once the limit is reached" do
-    @user.client_totp_credentials.destroy_all
-    ClientTotpCredential::MAX_TOTP_SLOTS.times do |index|
-      ClientTotpCredential.create!(
-        user: @user,
-        private_key: ROTP::Base32.random_base32,
-        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-        title: "totp-#{index}",
-      )
-    end
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
 
-    with_prosopite_paused do
-      get new_auth_app_settings_totp_url(ri: "jp"), headers: @headers
-    end
-
-    assert_response :success
-    assert_equal I18n.t(
-      "session_limit.totp_limit_reached",
-      count: ClientTotpCredential::MAX_TOTP_SLOTS,
-    ), response.body
-  end
-
-  test "an enrollment cannot be started once the limit is reached" do
-    @user.client_totp_credentials.destroy_all
-    ClientTotpCredential::MAX_TOTP_SLOTS.times do |index|
-      ClientTotpCredential.create!(
-        user: @user,
-        private_key: ROTP::Base32.random_base32,
-        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-        title: "totp-#{index}",
-      )
-    end
-
-    with_prosopite_paused { post auth_app_settings_totps_enrollment_url(ri: "jp"), headers: @headers }
-
-    assert_response :unprocessable_content
-    assert_nil session[:totp_enrollment]
-  end
-
-  test "new is available without recovery passcodes" do
-    @user.client_totp_credentials.destroy_all
-    open_totp_enrollment!(@headers)
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
 
     assert_response :success
     assert_equal "text/html", response.media_type
+    assert_equal new_auth_app_verification_setup_path(ri: "jp"), props.fetch("back_link").fetch("href")
+    assert_equal auth_app_settings_totps_path(ri: "jp"), props.fetch("form").fetch("action")
+    assert_equal "user_totp_credential", props.fetch("form").fetch("scope")
+    assert_equal I18n.t("views.sign.app.settings.totps.new.first_token_delivery_help"),
+                 props.fetch("form").fetch("first_token_delivery_help")
+    assert props.fetch("qr_code_image").start_with?("data:image/png;base64,")
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "create does not issue recovery passcodes after TOTP registration" do
-    @user.client_totp_credentials.destroy_all
+  test "admitted GET displays the two slot limit after a competing registration" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_006, status_id: ClientStatus::ACTIVE)
 
-    with_mocked_totp do |secret_credential|
-      open_totp_enrollment!(@headers)
-      freeze_time do
-        token = ROTP::TOTP.new(secret_credential).now
-
-        assert_difference("ClientTotpCredential.count", 1) do
-          assert_no_difference("ClientSecretCredential.count") do
-            post auth_app_settings_totps_url(ri: "jp"),
-                 params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: token } },
-                 headers: @headers
-          end
-        end
-      end
-    end
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_redirected_to auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    ClientTotpCredential.create_for_user!(user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    get new_auth_app_settings_totp_path(ri: "jp")
+
+    assert_response :success
+    ClientTotpCredential.create_for_user!(user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    assert_raises(ClientTotpCredential::SlotLimitExceeded) do
+      ClientTotpCredential.create_for_user!(user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    end
+    assert_no_difference("IdentityTotpCeremonyCandidate.count") do
+      get new_auth_app_settings_totp_path(ri: "jp")
+
+      assert_response :success
+      assert_equal I18n.t("session_limit.totp_limit_reached", count: 2), response.body
+    end
+    assert_equal 2, actor.client_totp_credentials.slot_consuming.count
+    assert_equal "pending", issuance.transaction.reload.status
+  end
+
+  test "admitted enrollment POST refuses the two slot limit after a competing registration" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_007, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    2.times do
+      ClientTotpCredential.create_for_user!(user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    end
+    assert_raises(ClientTotpCredential::SlotLimitExceeded) do
+      ClientTotpCredential.create_for_user!(user: actor, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    end
+    assert_no_difference("IdentityTotpCeremonyCandidate.count") do
+      post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+      assert_response :unprocessable_content
+    end
+    assert_equal 2, actor.client_totp_credentials.slot_consuming.count
+    assert_nil token.reload.last_step_up_at
+  end
+
+  test "admitted initial registration is available without Secret credentials" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_008, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+
+    assert_equal 0, ClientSecretCredential.where(client_id: actor.id).count
+    assert_equal "text/html", response.media_type
+    assert_response :success
+    assert_nil token.reload.last_step_up_at
+  end
+
+  test "admitted TOTP registration creates no Secret credentials" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_009, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    now = ClientStepUpCeremonyTransaction.database_now
+    code = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
+    before_secrets = ClientSecretCredential.where(client_id: actor.id).count
+    assert_no_difference("ClientTotpCredential.count") do
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          :authenticity_token => csrf,
+          :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
+          "cf-turnstile-response" => "test-only",
+        }
+      end
+    end
+    assert_redirected_to auth_app_settings_totps_handoff_path(ri: "jp")
+    assert_equal "verified", issuance.transaction.reload.status
+    assert_nil issuance.transaction.verified_credential_ref
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    follow_redirect!
+    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    credential = nil
+    assert_difference("ClientTotpCredential.count", 1) do
+      credential = IdentityTotpEnrollmentFinalCommitter.call!(
+        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+      )
+    end
+
+    assert_equal actor.id, credential.user_id
+    assert_equal "New TOTP", credential.title
+    assert_equal candidate.reload.last_otp_at, credential.last_otp_at
+    assert_equal "consumed", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
+    assert_equal before_secrets, ClientSecretCredential.where(client_id: actor.id).count
   end
 
   test "should get edit with public_id" do
@@ -477,7 +786,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Updated TOTP", @totp.reload.title
   end
 
-  test "should destroy with public_id" do
+  test "removal with public_id retains deleted TOTP history" do
     headers = headers_for_client_token(@token, scope: "settings_totp")
 
     before_count = ClientTotpCredential.count
@@ -486,7 +795,16 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to auth_app_settings_totps_path(ri: "jp")
-    assert_equal before_count - 1, ClientTotpCredential.count
+    assert_equal before_count, ClientTotpCredential.count
+    assert_predicate @totp.reload, :deleted?
+    assert_nil @token.reload.last_step_up_at
+    get auth_app_settings_totps_path(ri: "jp"),
+        headers: headers.merge("X-Inertia" => "true", "X-Inertia-Version" => ViteRuby.digest)
+
+    assert_response :success
+    rows = response.parsed_body.fetch("props").fetch("totps")
+
+    assert rows.none? { |row| row.fetch("public_id") == @totp.public_id }
   end
 
   test "destroy requires fresh settings totp step up" do
@@ -520,171 +838,373 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "should create totp with valid token" do
-    # Clear TOTP created in setup to allow creation of a new one (limit is 2)
-    @user.client_totp_credentials.destroy_all
+  test "admitted valid first code creates a credential only at Base finalization" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_010, status_id: ClientStatus::ACTIVE)
 
-    with_mocked_totp do |secret_credential|
-      with_prosopite_paused do
-        open_totp_enrollment!(@headers)
-      end
-
-      assert_response :success
-      assert_predicate inertia_props.fetch("turnstile").fetch("site_key"), :present?
-      step_up_before = Time.current
-
-      # TOTP codes are only valid for a 30-second window, so the generation and the
-      # verifying request are pinned to the same instant -- otherwise the assertion
-      # under a slow run (e.g. line-coverage instrumentation) can straddle a window
-      # boundary and turn a valid code invalid before the request reaches it.
-      travel_to(step_up_before) do
-        token = ROTP::TOTP.new(secret_credential).now
-
-        assert_difference("ClientTotpCredential.count", 1) do
-          assert_no_difference(-> { @user.reload.client_secret_credentials.count }) do
-            with_prosopite_paused do
-              post auth_app_settings_totps_url(ri: "jp"),
-                   params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: token } },
-                   headers: @headers
-            end
-          end
-        end
-      end
-
-      assert_response :see_other
-      assert_equal auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")), response.location
-      assert_operator @token.reload.last_step_up_at, :<, step_up_before
-      assert_equal "settings_totp", @token.last_step_up_scope
-    end
-  end
-
-  test "should assign attributes to created totp" do
-    @user.client_totp_credentials.destroy_all
-
-    with_mocked_totp do |secret_credential|
-      with_prosopite_paused do
-        open_totp_enrollment!(@headers)
-      end
-
-      assert_response :success
-      assert_predicate inertia_props.fetch("turnstile").fetch("site_key"), :present?
-      freeze_time do
-        token = ROTP::TOTP.new(secret_credential).now
-
-        with_prosopite_paused do
-          post auth_app_settings_totps_url(ri: "jp"),
-               params: {
-                 user_totp_credential: { enrollment_id: @enrollment_id, first_token: token, title: "New TOTP" },
-               },
-               headers: @headers
-        end
-      end
-
-      created_totp = ClientTotpCredential.order(created_at: :desc).first
-
-      assert_equal "New TOTP", created_totp.title
-      assert_not_nil created_totp.last_otp_at
-    end
-  end
-
-  test "should create totp with pasted token containing spaces" do
-    @user.client_totp_credentials.destroy_all
-
-    with_mocked_totp do |secret_credential|
-      with_prosopite_paused do
-        open_totp_enrollment!(@headers)
-      end
-
-      freeze_time do
-        raw_token = ROTP::TOTP.new(secret_credential).now
-        pasted_token = "#{raw_token.first(3)} #{raw_token.last(3)}"
-
-        assert_difference("ClientTotpCredential.count", 1) do
-          with_prosopite_paused do
-            post auth_app_settings_totps_url(ri: "jp"),
-                 params: {
-                   user_totp_credential: { enrollment_id: @enrollment_id,
-                                           first_token: pasted_token,
-                                           title: "Pasted TOTP", },
-                 },
-                 headers: @headers
-          end
-        end
-      end
-    end
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_equal auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")), response.location
-  end
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
 
-  test "should not create totp with invalid token" do
-    with_prosopite_paused do
-      open_totp_enrollment!(@headers)
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    now = ClientStepUpCeremonyTransaction.database_now
+    code = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
+    assert_no_difference("ClientTotpCredential.count") do
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          :authenticity_token => csrf,
+          :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
+          "cf-turnstile-response" => "test-only",
+        }
+      end
+    end
+    assert_redirected_to auth_app_settings_totps_handoff_path(ri: "jp")
+    assert_equal "verified", issuance.transaction.reload.status
+    assert_nil issuance.transaction.verified_credential_ref
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    follow_redirect!
+    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    credential = nil
+    assert_difference("ClientTotpCredential.count", 1) do
+      credential = IdentityTotpEnrollmentFinalCommitter.call!(
+        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+      )
     end
 
-    assert_response :success
-    assert_predicate inertia_props.fetch("turnstile").fetch("site_key"), :present?
+    assert_equal actor.id, credential.user_id
+    assert_equal "New TOTP", credential.title
+    assert_equal candidate.reload.last_otp_at, credential.last_otp_at
+    assert_equal "consumed", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
+  end
 
+  test "Base finalization preserves the admitted TOTP title and first accepted window" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_011, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    now = ClientStepUpCeremonyTransaction.database_now
+    code = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
     assert_no_difference("ClientTotpCredential.count") do
-      with_prosopite_paused do
-        post auth_app_settings_totps_url(ri: "jp"),
-             params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: "000000" } },
-             headers: @headers
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          :authenticity_token => csrf,
+          :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
+          "cf-turnstile-response" => "test-only",
+        }
+      end
+    end
+    assert_redirected_to auth_app_settings_totps_handoff_path(ri: "jp")
+    assert_equal "verified", issuance.transaction.reload.status
+    assert_nil issuance.transaction.verified_credential_ref
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    follow_redirect!
+    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    credential = nil
+    assert_difference("ClientTotpCredential.count", 1) do
+      credential = IdentityTotpEnrollmentFinalCommitter.call!(
+        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+      )
+    end
+
+    assert_equal actor.id, credential.user_id
+    assert_equal "New TOTP", credential.title
+    assert_equal candidate.reload.last_otp_at, credential.last_otp_at
+    assert_equal "consumed", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
+    assert_no_difference("ClientTotpCredential.count") do
+      repeated = IdentityTotpEnrollmentFinalCommitter.call!(
+        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+      )
+
+      assert_equal credential.id, repeated.id
+      assert_equal credential.last_otp_at, repeated.last_otp_at
+    end
+  end
+
+  test "admitted first code accepts the existing space separated paste format" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_012, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    now = ClientStepUpCeremonyTransaction.database_now
+    code = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
+    code = "#{code.first(3)} #{code.last(3)}"
+    assert_no_difference("ClientTotpCredential.count") do
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          :authenticity_token => csrf,
+          :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
+          "cf-turnstile-response" => "test-only",
+        }
+      end
+    end
+    assert_redirected_to auth_app_settings_totps_handoff_path(ri: "jp")
+    assert_equal "verified", issuance.transaction.reload.status
+    assert_nil issuance.transaction.verified_credential_ref
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    follow_redirect!
+    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    credential = nil
+    assert_difference("ClientTotpCredential.count", 1) do
+      credential = IdentityTotpEnrollmentFinalCommitter.call!(
+        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+      )
+    end
+
+    assert_equal actor.id, credential.user_id
+    assert_equal "New TOTP", credential.title
+    assert_equal candidate.reload.last_otp_at, credential.last_otp_at
+    assert_equal "consumed", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
+  end
+
+  test "admitted incorrect first code preserves the candidate and records one failure" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_013, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    now = ClientStepUpCeremonyTransaction.database_now
+    valid = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
+    incorrect = format("%06d", (valid.to_i + 1) % 1_000_000)
+    assert_no_difference("ClientTotpCredential.count") do
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          authenticity_token: csrf,
+          user_totp_credential: { enrollment_id: candidate.ref, first_token: incorrect },
+        }
       end
     end
 
     assert_response :unprocessable_content
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_nil candidate.reload.last_otp_at
+    assert_nil token.reload.last_step_up_at
+    record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
+
+    assert_equal 1, record.attempt_count
   end
 
-  test "should not create totp with empty token" do
-    with_prosopite_paused do
-      open_totp_enrollment!(@headers)
-    end
+  test "admitted empty first code returns localized failure without confirming the candidate" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_014, status_id: ClientStatus::ACTIVE)
 
-    assert_response :success
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
     assert_no_difference("ClientTotpCredential.count") do
-      with_prosopite_paused do
-        post auth_app_settings_totps_url(ri: "jp"),
-             params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: "", title: "" } },
-             headers: @headers
-      end
+      post props.fetch("form").fetch("action"), params: {
+        authenticity_token: csrf,
+        user_totp_credential: { enrollment_id: candidate.ref, first_token: "", title: "" },
+      }
     end
 
     assert_response :unprocessable_content
-    assert_equal "auth/app/settings/totps/new", inertia_component
-    assert_includes inertia_props.fetch("error_messages").join("\n"),
+    page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+
+    assert_equal "auth/app/settings/totps/new", page.fetch("component")
+    assert_includes page.fetch("props").fetch("error_messages").join("\n"),
                     I18n.t("sign.app.settings.totps.invalid_code")
+    assert_nil candidate.reload.last_otp_at
+    assert_nil token.reload.last_step_up_at
   end
 
-  test "should not create totp when turnstile stealth fails" do
-    with_mocked_totp do |secret_credential|
-      with_prosopite_paused do
-        open_totp_enrollment!(@headers)
-      end
+  test "Turnstile refusal does not verify an admitted correct first code" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_015, status_id: ClientStatus::ACTIVE)
 
-      assert_response :success
-      assert_predicate inertia_props.fetch("turnstile").fetch("site_key"), :present?
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
-      TurnstileVerifierStub.challenge_response = { "success" => false }
-      freeze_time do
-        token = ROTP::TOTP.new(secret_credential).now
+    assert_response :see_other
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
 
-        assert_no_difference("ClientTotpCredential.count") do
-          with_prosopite_paused do
-            post auth_app_settings_totps_url(ri: "jp"),
-                 params: {
-                   user_totp_credential: { enrollment_id: @enrollment_id, first_token: token, title: "Blocked TOTP" },
-                 },
-                 headers: @headers
-          end
-        end
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => false }
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+    now = ClientStepUpCeremonyTransaction.database_now
+    code = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
+    assert_no_difference("ClientTotpCredential.count") do
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          :authenticity_token => csrf,
+          :user_totp_credential => { enrollment_id: candidate.ref, first_token: code },
+          "cf-turnstile-response" => "test-only",
+        }
       end
     end
 
     assert_response :unprocessable_content
-    assert_equal "auth/app/settings/totps/new", inertia_component
-    assert_includes inertia_props.fetch("error_messages").join("\n"), I18n.t("turnstile_error")
+    page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+
+    assert_includes page.fetch("props").fetch("error_messages").join("\n"), I18n.t("turnstile_error")
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_nil candidate.reload.last_otp_at
+    record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
+
+    assert_equal 0, record.attempt_count
   end
 
   test "initial setup user can access totp pages without step-up" do
@@ -715,48 +1235,74 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
-  test "initial setup user can create first totp without step-up" do
-    user = create_verified_user_with_email(email_address: "initial_totp_create@example.com")
-    token = ClientToken.create!(user_id: user.id)
-    token.rotate_refresh_token!
-    token.update!(last_step_up_at: 5.minutes.ago, last_step_up_scope: "settings_totp")
-    satisfy_user_verification(token)
-    access_token = AuthenticationToken.encode(
-      user,
-      host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      session_public_id: token.public_id,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
+  test "first TOTP registration uses explicit bootstrap without granting step up freshness" do
+    reset!
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    actor = Client.create!(id: 9_104_000_000_016, status_id: ClientStatus::ACTIVE)
+
+    assert_equal 0, actor.client_passkeys.count
+    assert_equal 0, actor.client_totp_credentials.count
+    assert_equal 0, actor.client_emails.count
+    token = ClientToken.create!(user: actor)
+    requirement = StepUpRequirement.new(
+      scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true,
     )
-    headers = {
-      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      "Authorization" => "Bearer #{access_token}",
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
-    cookies["csrf_token"] = "test_csrf_token"
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    satisfy_user_verification(token)
-
-    with_mocked_totp do |secret_credential|
-      with_prosopite_paused do
-        open_totp_enrollment!(headers)
-      end
-
-      assert_response :success
-      freeze_time do
-        first_code = ROTP::TOTP.new(secret_credential).now
-
-        assert_difference("ClientTotpCredential.count", 1) do
-          with_prosopite_paused do
-            post auth_app_settings_totps_url(ri: "jp"),
-                 params: { user_totp_credential: { enrollment_id: @enrollment_id, first_token: first_code } },
-                 headers: headers
-          end
-        end
-      end
-    end
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+    )
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
     assert_response :see_other
-    assert_equal auth_app_settings_totps_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")), response.location
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    get new_auth_app_settings_totp_path(ri: "jp")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("start").fetch("action"), params: { authenticity_token: csrf }
+
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
+    follow_redirect!
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    now = ClientStepUpCeremonyTransaction.database_now
+    code = ROTP::TOTP.new(candidate.private_key).at(now.to_i)
+    assert_no_difference("ClientTotpCredential.count") do
+      ClientStepUpCeremonyTransaction.stub(:database_now, now) do
+        post props.fetch("form").fetch("action"), params: {
+          :authenticity_token => csrf,
+          :user_totp_credential => { enrollment_id: candidate.ref, first_token: code, title: "New TOTP" },
+          "cf-turnstile-response" => "test-only",
+        }
+      end
+    end
+    assert_redirected_to auth_app_settings_totps_handoff_path(ri: "jp")
+    assert_equal "verified", issuance.transaction.reload.status
+    assert_nil issuance.transaction.verified_credential_ref
+    assert_nil token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    follow_redirect!
+    post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
+    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    credential = nil
+    assert_difference("ClientTotpCredential.count", 1) do
+      credential = IdentityTotpEnrollmentFinalCommitter.call!(
+        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+      )
+    end
+
+    assert_equal actor.id, credential.user_id
+    assert_equal "New TOTP", credential.title
+    assert_equal candidate.reload.last_otp_at, credential.last_otp_at
+    assert_equal "consumed", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
+    assert_equal "bootstrap", issuance.transaction.purpose
+    assert_equal "none", issuance.transaction.aal
+    assert_not issuance.transaction.phishing_resistant
+    assert_equal credential.public_id, issuance.transaction.verified_credential_ref
   end
 
   private
@@ -764,48 +1310,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   private
 
   # Starts an enrolment the way the page does (POST), then shows it, keeping its id for the form.
-  def open_totp_enrollment!(headers)
-    post(auth_app_settings_totps_enrollment_url(ri: "jp"), headers: headers)
-    get(new_auth_app_settings_totp_url(ri: "jp"), headers: headers)
-    @enrollment_id = inertia_props.fetch("form").fetch("enrollment_id")
-  end
-
-  def with_mocked_totp
-    known_secret_credential = "JBSWY3DPEHPK3PXP"
-    ROTP::Base32.stub(:random_base32, known_secret_credential) do
-      yield known_secret_credential
-    end
-  end
-end
-
-# DAMP local helper copy for former shared test support.
-class Auth::App::Settings::TotpsControllerTest
-  TEST_BROWSER_USER_AGENT =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-  TEST_VERIFICATION_COOKIE_PREFIX = "test_verified:"
-
   private
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
@@ -839,20 +1344,6 @@ class Auth::App::Settings::TotpsControllerTest
     ClientPasskeyStatus.find_or_create_by!(id: ClientPasskeyStatus::ACTIVE)
   end
 
-  def ensure_user_token_reference_records!
-    ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
-    ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
-    ClientTokenBindingMethod.find_or_create_by!(id: ClientTokenBindingMethod::LEGACY)
-    ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
-  end
-
-  def ensure_staff_token_reference_records!
-    OperatorTokenKind.find_or_create_by!(id: OperatorTokenKind::BROWSER_WEB)
-    OperatorTokenStatus.find_or_create_by!(id: OperatorTokenStatus::ACTIVE)
-    OperatorTokenBindingMethod.find_or_create_by!(id: OperatorTokenBindingMethod::LEGACY)
-    OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
-  end
-
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
     user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
@@ -873,42 +1364,9 @@ class Auth::App::Settings::TotpsControllerTest
     )
   end
 
-  def insert_verified_visitor_email!(visitor_id:, address:)
-    VisitorEmail.insert_all(
-      [
-        {
-          visitor_id: visitor_id,
-          address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
-          visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
-          otp_attempts_count: 0,
-          public_id: SecureRandom.alphanumeric(21),
-          created_at: Time.current,
-          updated_at: Time.current,
-        },
-      ],
-    )
-  end
-
   def satisfy_user_verification(token, scope: nil)
     _verification, raw_token = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
-  def satisfy_staff_verification(token, scope: nil)
-    _verification, raw_token = OperatorVerification.issue_for_token!(token: token)
-    cookies[OperatorVerification.cookie_name] = raw_token
-    mark_token_step_up_satisfied_for_test(token, scope: scope)
-    true
-  end
-
-  def satisfy_visitor_verification(token, scope: nil)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
     mark_token_step_up_satisfied_for_test(token, scope: scope)
     true
   end
@@ -920,305 +1378,11 @@ class Auth::App::Settings::TotpsControllerTest
     else "step_up:app"
     end
   end
-
-  def signed_step_up_pt_for(path, surface:, session_nonce:)
-    safe_path = path.to_s
-    return nil if safe_path.blank? || !safe_path.start_with?("/") || safe_path.match?(/[\x00-\x1F\x7F]/)
-
-    verifier = ActiveSupport::MessageVerifier.new(
-      Rails.application.key_generator.generate_key("path_target_token", 32),
-      digest: "SHA256",
-      serializer: JSON,
-      url_safe: true,
-    )
-    verifier.generate(
-      { "flow" => "step_up.bootstrap",
-        "surface" => surface.to_s,
-        "session_nonce" => session_nonce.to_s,
-        "pt" => safe_path, },
-      purpose: :path_target,
-      expires_in: 15.minutes,
-    )
-  end
-
-  def signed_step_up_grant_for(actor:, token:, scope:, return_to:, surface:, methods: %i(email_otp totp passkey),
-                               aal: "aal2")
-    IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: surface.to_s,
-      actor_ref: actor.public_id,
-      session_ref: token.public_id,
-      required_scope: scope.to_s,
-      required_aal: aal,
-      allowed_methods: methods,
-      return_to: return_to,
-      expires_at: 15.minutes.from_now,
-    ).grant
-  end
-
-  def with_forgery_protection
-    ActionController::Base.allow_forgery_protection = true
-    yield
-  ensure
-    # Restore the environment default, not the value observed on entry: if the flag was
-    # already leaked as true, restoring the observation would pin the leak for the rest
-    # of the process and every later test expecting protection off would fail.
-    ActionController::Base.allow_forgery_protection =
-      Rails.configuration.action_controller.allow_forgery_protection
-  end
-
-  def csrf_headers(token)
-    { "X-CSRF-Token" => token }
-  end
-
-  def fetch_csrf_token(path)
-    get(path)
-    response.body[/name="authenticity_token" value="([^"]+)"/, 1] || response.body
-  end
-
-  def social_callback_headers(host)
-    scheme = host.to_s.include?("localhost") ? "http" : "https"
-    origin = "#{scheme}://#{host}"
-    cookies["csrf_token"] = csrf_token_value if respond_to?(:cookies)
-    {
-      "Host" => host,
-      "Origin" => origin,
-      "Referer" => "#{origin}/",
-      "Sec-Fetch-Site" => "same-origin",
-      "X-STRICT-SOCIAL-STATE" => "1",
-      "X-CSRF-Token" => csrf_token_value,
-    }
-  end
-
-  def social_auth_state_from_response
-    session[:social_auth_state].presence || begin
-      uri = URI.parse(response.location.to_s)
-      Rack::Utils.parse_nested_query(uri.query.to_s)["state"].presence
-    rescue URI::InvalidURIError
-      nil
-    end
-  end
-
-  def seed_social_auth_session(provider:, intent: "login", user: nil, entry: nil, ri: "jp", rt: nil, referer: nil)
-    host = configured_host(:sign_service)
-    host!(host) if respond_to?(:host!)
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path =
-      if intent.to_s == "link"
-        public_send(:"auth_app_settings_#{normalized_provider}_path", ri: ri)
-      elsif entry.to_s == "sign_up"
-        public_send(:"auth_app_social_#{normalized_provider}_registration_path", ri: ri, rt: rt)
-      else
-        public_send(:"auth_app_social_#{normalized_provider}_session_path", ri: ri, rt: rt)
-      end
-    headers = social_callback_headers(host)
-    headers["Referer"] = referer if referer.present?
-    if user
-      user_headers = as_user_headers(user, host: host)
-      token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
-      mark_token_step_up_satisfied_for_test(
-        token,
-        scope: SocialAuth::SOCIAL_LINK_SCOPE,
-      ) if intent.to_s == "link" && token
-      headers = headers.merge(user_headers)
-    end
-    post(continue_path, headers: headers)
-    social_auth_state_from_response
-  end
-
-  def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
-    uri = URI.parse(location)
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-    assert_equal host, uri.host
-    assert_equal "/oauth/authorize", uri.path
-    assert_equal client_id, query["client_id"]
-    assert_predicate query["state"], :present?
-  end
 end
 
 # DAMP local helper copy on the test class.
 class Auth::App::Settings::TotpsControllerTest
-  TEST_BROWSER_USER_AGENT =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
-      :TEST_BROWSER_USER_AGENT, false,
-    )
-  PREFERENCE_JWT_KEY = OpenSSL::PKey::EC.generate("secp384r1") unless const_defined?(:PREFERENCE_JWT_KEY, false)
-
   private
-
-  def configured_host(surface_name)
-    Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
-  end
-
-  def set_access_cookie(token)
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = token
-  end
-
-  def set_refresh_cookie(token)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token
-  end
-
-  def jump_rt_url_from_location(location)
-    uri = URI.parse(location.to_s)
-    return location unless uri.host == "jump.umaxica.net"
-
-    token = Rack::Utils.parse_nested_query(uri.query.to_s)["rt"]
-    return location if token.blank?
-
-    payload, = JWT.decode(token, nil, false)
-    payload["url"].presence || location
-  rescue JWT::DecodeError, URI::InvalidURIError
-    location
-  end
-
-  def with_preference_jwt_keys(host: nil)
-    audiences = host ? [host] : PreferenceJwtConfiguration.audiences
-    pub_key_for_stub = ->(_kid, **_options) { self.class::PREFERENCE_JWT_KEY }
-    PreferenceJwtConfiguration.stub(:private_key, self.class::PREFERENCE_JWT_KEY) do
-      PreferenceJwtConfiguration.stub(:public_key, self.class::PREFERENCE_JWT_KEY) do
-        PreferenceJwtConfiguration.stub(:private_key_for_active, self.class::PREFERENCE_JWT_KEY) do
-          PreferenceJwtConfiguration.stub(:public_key_for, pub_key_for_stub) do
-            PreferenceJwtConfiguration.stub(:active_kid, "default") do
-              PreferenceJwtConfiguration.stub(:issuer, "jit-preference") do
-                PreferenceJwtConfiguration.stub(:audiences, audiences) { yield }
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-
-  def host_headers(host = nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]
-    headers = { "Client-Agent" => self.class::TEST_BROWSER_USER_AGENT }
-    headers["Host"] = host_value if host_value.present?
-    headers
-  end
-
-  def browser_headers
-    csrf_token = csrf_token_value
-    cookies["csrf_token"] = csrf_token if respond_to?(:cookies, true)
-    host_headers.merge("X-CSRF-Token" => csrf_token)
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discard_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discard_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def bearer_headers(token, host: nil, headers: {})
-    host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def ensure_visitor_reference_records!
-    VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
-    VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
-    VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
-    VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
-    VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-  end
-
-  def ensure_visitor_token_reference_records!
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
-    VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::LEGACY)
-    VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
-  end
-
-  def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
-    VisitorEmail.create!(
-      visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
-      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
-      otp_attempts_count: 0,
-      public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-  end
 
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
@@ -1234,65 +1398,5 @@ class Auth::App::Settings::TotpsControllerTest
       updated_at: Time.current,
     }.compact
     token.update_columns(attrs)
-  end
-
-  def load_jump_rt_env!
-    @jump_rt_env_originals ||= {}
-    jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
-      ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
-      ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
-    end
-    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
-    JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
-  end
-
-  def csrf_token_value
-    "test-csrf-token"
-  end
-
-  def response_set_cookie_lines
-    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
-    lines = raw.is_a?(Array) ? raw : raw.to_s.split("\n")
-    lines.flat_map { |line| line.to_s.split("\n") }.compact_blank
-  end
-
-  def extract_cookies_from_response
-    response_set_cookie_lines.each_with_object({}) do |line, parsed|
-      pair = line.to_s.split(";", 2).first
-      name, value = pair.to_s.split("=", 2)
-      parsed[name] = CGI.unescape(value.to_s) if name.present?
-    end
-  end
-
-  def state_changing_application_route_targets
-    Rails.application.routes.routes.filter_map do |route|
-      verbs = route.verb.to_s.delete("^A-Z|").split("|")
-      next if verbs.empty? || (verbs - %w(GET HEAD)).empty?
-
-      controller = route.required_defaults[:controller].to_s
-      action = route.required_defaults[:action].to_s
-      next if controller.blank? || action.blank?
-
-      controller_class_name = "#{controller.camelize}Controller"
-      next unless Rails.root.join("app/controllers/#{controller}_controller.rb").exist?
-
-      { verb: verbs.join("|"),
-        path: route.path.spec.to_s,
-        controller: controller,
-        action: action,
-        controller_class: Object.const_get(controller_class_name), }
-    rescue NameError
-      nil
-    end
-  end
-
-  def setup_google_mock_auth(uid: "google_uid_123", email: "google@example.com")
-    OmniAuth.config.mock_auth[:google_app] =
-      OmniAuth::AuthHash.new(
-        provider: "google_app", uid: uid, info: { email: email, name: "Google Client" },
-        credentials: { token: "google_token", expires_at: 1.hour.from_now.to_i },
-      )
   end
 end

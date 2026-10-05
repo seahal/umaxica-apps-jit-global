@@ -75,13 +75,15 @@ detailed cases, and acceptance criteria derived from the SRS and HLD.
   disables PostgreSQL query/maintenance parallelism for test connections, and prepares separate
   writer/reader database names for each configured connection. Valkey rate-limit and auth-state use
   KVS logical DBs 4 and 6 with run/worker key namespaces. Test cache is `MemoryStore`.
-- **Unit tests (JS/TS)**: `bun vitest run` runs the JavaScript test baseline directly through
-  Vitest.
-- **Integration/system tests**: Rails integration and system tests remain the automated baseline.
-  Browser-level Playwright scenarios are deferred until a concrete release flow requires them.
+- **Unit tests (JS/TS)**: `bun run test` runs the JavaScript test baseline directly through Vitest.
+- **Integration tests**: Rails integration tests are the automated baseline. The repository has no
+  Rails system tests (`test/system` does not exist). Browser-level Playwright scenarios are deferred
+  until a concrete release flow requires them.
 - **API/contract tests**: Rails controller/integration tests cover API behavior, with
-  `committee-rails` available for OpenAPI response validation where schemas exist. Rswag is not an
-  adopted dependency.
+  `committee-rails` available for OpenAPI response validation where schemas exist. `rswag-api` and
+  `rswag-ui` (development group) serve the OpenAPI documents and Swagger UI on the swagger host;
+  `rswag-specs` is not used, so contract tests are Minitest with Committee
+  (`test/support/openapi_contract.rb`).
 - **Security tests**: RSpec/Minitest cases for rate limiting, JWT signature validation, redirect
   sanitization, Turnstile failure handling, PII encryption.
 - **Cache and rate-limit stores in test**: Rails.cache is `MemoryStore`. Rate-limit uses namespaced
@@ -223,7 +225,7 @@ must be synthetic. Contact forms require Turnstile test keys or bypass for autom
 | Rails system       | Not adopted                                  | Not gated                                                       | No `test/system` directory exists and `config/ci.rb` has no system-test step. |
 | JavaScript checks  | `bun run check`                              | `bin/ci`; format, lint, typecheck in `.github/workflows/ci.yml` | Adopted baseline.                                                             |
 | JavaScript tests   | `bun run test`                               | `bun run test:coverage` in `.github/workflows/ci.yml`           | Adopted baseline; keep expanding behavior-specific coverage.                  |
-| API contracts      | Rails tests with selective `committee-rails` | Covered when Rails tests exercise schema validation             | Adopted selectively; no Rswag dependency.                                     |
+| API contracts      | Rails tests with selective `committee-rails` | Covered when Rails tests exercise schema validation             | Adopted selectively; `rswag-specs` is not used.                               |
 | Browser E2E        | Not adopted                                  | Not gated                                                       | Deferred until a named cross-browser release flow needs it.                   |
 | Performance/load   | Not adopted                                  | Not gated                                                       | Deferred until load targets and an execution environment are specified.       |
 
@@ -244,8 +246,8 @@ must be synthetic. Contact forms require Turnstile test keys or bypass for autom
 
 ## 9. Tooling, Data, and Automation
 
-- **Tools**: Minitest, Rails system tests, `committee-rails`, Vitest, Oxlint, Oxfmt, Brakeman,
-  Bundler Audit, curl scripts for manual smoke checks.
+- **Tools**: Minitest, `committee-rails`, Vitest, Oxlint, Oxfmt, Brakeman, Bundler Audit, curl
+  scripts for manual smoke checks.
 - **Fixtures**: Stored per DB context; use `ActiveRecord::FixtureSet.create_fixtures` per database
   connection. Sensitive examples anonymized.
 - **Data cleanup**: Multi-DB tests must wrap in transactions (Rails 8 multi-db test helpers) or rely

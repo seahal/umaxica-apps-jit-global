@@ -121,5 +121,4 @@ class Auth::App::Verification::TotpsController < ::Auth::App::ApplicationControl
   def step_up_cancellation_props
     { label: t("actions.cancel"), action: auth_app_verification_cancellation_path(ri: params[:ri]), method: "post" }
   end
-
 end

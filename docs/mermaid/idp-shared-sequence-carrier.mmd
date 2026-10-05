@@ -1,0 +1,29 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "Nonterminal STATES: STARTED, PRIMARY_VERIFIED, MFA_PENDING, SESSION_LIMIT_PENDING, GUARDRAIL_PENDING, SESSION_ISSUED, CHECKPOINT_PENDING, DASHBOARD_PENDING" as open
+    state "COMPLETED" as COMPLETED
+    state "FAILED" as FAILED
+    state "EXPIRED" as EXPIRED
+    state "missing / cleared" as missing
+    [*] --> open
+    [*] --> missing
+    open --> COMPLETED: complete!
+    open --> FAILED: fail!
+    open --> EXPIRED: expire!
+    open --> missing: clear!
+    COMPLETED --> COMPLETED: complete!
+    COMPLETED --> FAILED: fail!
+    COMPLETED --> EXPIRED: expire!
+    COMPLETED --> missing: clear!
+    FAILED --> COMPLETED: complete!
+    FAILED --> FAILED: fail!
+    FAILED --> EXPIRED: expire!
+    FAILED --> missing: clear!
+    EXPIRED --> COMPLETED: complete!
+    EXPIRED --> FAILED: fail!
+    EXPIRED --> EXPIRED: expire!
+    EXPIRED --> missing: clear!
+    open --> open: advance! to nonterminal
+    open --> COMPLETED: advance! to COMPLETED
+    open --> FAILED: advance! to FAILED
+    open --> EXPIRED: advance! to EXPIRED

@@ -25,13 +25,6 @@ module SignSettingsSecretCredentialRegistration
   def create_settings_secret_credential!(surface:, actor:, record_class:, name:, enabled:, raw_secret_credential:) # rubocop:disable Lint/UnusedMethodArgument
     params = { name: name, enabled: enabled }
     case surface.to_s
-    when "app"
-      ClientSecretCredentialsCreate.call(
-        actor: actor,
-        user: actor,
-        params: params,
-        raw_secret_credential: raw_secret_credential,
-      )
     when "com"
       VisitorSecretCredentialsCreate.call(
         actor: actor,

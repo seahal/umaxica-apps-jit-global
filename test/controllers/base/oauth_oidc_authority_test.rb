@@ -956,13 +956,28 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       auth_method: "passkey",
     )
 
-    post "/oauth/authorize", params: {
-      result: result.code,
-      transaction_ref: result.transaction.transaction_id,
-    }, headers: browser_headers.merge(
-      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
-      "Sec-Fetch-Site" => "same-site",
-    )
+    locks = []
+    subscriber =
+      ->(_name, _start, _finish, _id, payload) do
+        sql = payload.fetch(:sql)
+        if sql.include?("FOR UPDATE")
+          locks << :actor if sql.include?('FROM "clients"')
+          locks << :transaction if sql.include?('FROM "client_oidc_authorization_transactions"')
+        end
+      end
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      post "/oauth/authorize", params: {
+        result: result.code,
+        transaction_ref: result.transaction.transaction_id,
+      }, headers: browser_headers.merge(
+        "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}",
+        "Sec-Fetch-Site" => "same-site",
+      )
+    end
+
+    assert_not_nil locks.index(:actor)
+    assert_not_nil locks.index(:transaction)
+    assert_operator locks.index(:actor), :<, locks.index(:transaction)
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
@@ -987,6 +1002,53 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_equal browser_session_ref, issuance.transaction.reload.browser_session_ref
     assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
+  end
+
+  test "credential changes reject previously issued OIDC results on all Base surfaces without root issuance" do
+    %i(app com org).each do |surface|
+      reset!
+      actor, model, tokens, owner_key, base_host, auth_host =
+        case surface
+        when :app
+          [Client.create!(id: 9_125_000_000_000), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
+           ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),]
+        when :com
+          [Visitor.create!(id: 9_125_000_000_000), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
+           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
+        when :org
+          [Operator.create!(id: 9_125_000_000_000), OperatorOidcAuthorizationTransaction, OperatorToken, :staff_id,
+           ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),]
+        end
+      host!(base_host)
+      now = model.database_now
+      parent = model.create_transaction!(
+        surface: surface, intent: "authentication", client_id: "revocation-test",
+        redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
+        state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+        code_challenge_method: "S256", login_challenge: SecureRandom.hex(32),
+        login_challenge_expires_at: now + 5.minutes, expires_at: now + 5.minutes,
+      )
+      # Synthetic Auth proof isolates stale result rejection; this is not an Auth ceremony test.
+      result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+        surface: surface.to_s, login_challenge: parent.login_challenge, actor: actor,
+        authentication_event_at: now, session_ref: nil, auth_method: "passkey",
+      )
+      CredentialSecurityTransition.call(
+        actor: actor, current_session: nil, reason: :mfa_reset, affected_surface: surface,
+        revoke_other_sessions: false,
+      )
+      assert_no_difference(-> { tokens.where(owner_key => actor.id).count }) do
+        post "/oauth/authorize", params: { result: result.code, transaction_ref: parent.transaction_id },
+                                 headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site", "Accept" => "text/html" }
+      end
+
+      assert_response :bad_request
+      assert_equal "invalid_request", response.parsed_body.fetch("error")
+      assert_nil parent.reload.base_finalized_at
+      assert_nil parent.browser_session_ref
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
   end
 
   test "base oauth authorize rejects expired login challenge" do

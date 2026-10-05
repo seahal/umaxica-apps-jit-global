@@ -1,80 +1,64 @@
-# typed: false
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 class ClientSecretCredentialPolicyTest < ActiveSupport::TestCase
-  def setup
-    @user = nil
-    @record = nil
-    @policy = ClientSecretCredentialPolicy.new(@record, user: @user)
+  self.fixture_table_names = %w(
+    clients client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    client_secret_credentials client_secret_issuances
+  )
+
+  test "anonymous cannot list create view rename or delete Secret credentials" do
+    policy = ClientSecretCredentialPolicy.new(client_secret_credentials(:one), user: nil)
+
+    %i(index? new? create? show? edit? update? destroy?).each do |rule|
+      assert_not policy.apply(rule)
+    end
   end
 
-  def test_index
-    assert_not @policy.index?
+  test "persisted owner may access metadata and ownership layer of management" do
+    policy = ClientSecretCredentialPolicy.new(client_secret_credentials(:one), user: clients(:one))
+
+    %i(index? new? create? show? edit? update? destroy?).each do |rule|
+      assert policy.apply(rule)
+    end
   end
 
-  def test_show
-    assert_not @policy.show?
+  test "another Client cannot view rename or delete the credential" do
+    policy = ClientSecretCredentialPolicy.new(client_secret_credentials(:one), user: clients(:two))
+
+    %i(show? edit? update? destroy?).each do |rule|
+      assert_not policy.apply(rule)
+    end
   end
 
-  def test_create
-    assert_not @policy.create?
+  test "foreign surface and unsaved actors cannot manage app Secrets even with matching numeric IDs" do
+    owner_id = clients(:one).id
+    [Operator.new(id: owner_id), Visitor.new(id: owner_id), Client.new(id: owner_id), Client.new].each do |actor|
+      policy = ClientSecretCredentialPolicy.new(client_secret_credentials(:one), user: actor)
+
+      %i(index? new? create? show? update? destroy?).each do |rule|
+        assert_not policy.apply(rule)
+      end
+    end
   end
 
-  def test_new
-    assert_not @policy.new?
+  test "scope returns only the persisted Client's credentials using the new owner key" do
+    policy = ClientSecretCredentialPolicy.new(ClientSecretCredential, user: clients(:one))
+    scoped = policy.apply_scope(ClientSecretCredential.all, type: :active_record_relation)
+
+    assert_equal [client_secret_credentials(:one).id], scoped.pluck(:id)
+    policy = ClientSecretCredentialPolicy.new(ClientSecretCredential, user: nil)
+
+    assert_empty policy.apply_scope(ClientSecretCredential.all, type: :active_record_relation)
   end
 
-  def test_update
-    assert_not @policy.update?
-  end
+  test "new record has no object management permission before persistence" do
+    policy = ClientSecretCredentialPolicy.new(ClientSecretCredential.new(client: clients(:one)), user: clients(:one))
 
-  def test_edit
-    assert_not @policy.edit?
-  end
-
-  def test_destroy
-    assert_not @policy.destroy?
-  end
-
-  # index?/new?/create? allow any client actor (registration has no persisted record yet).
-  def test_index_and_create_allow_client
-    policy = ClientSecretCredentialPolicy.new(ClientSecretCredential.new, user: Client.new(id: 1))
-
-    assert_predicate policy, :index?
-    assert_predicate policy, :create?
-    assert_predicate policy, :new?
-  end
-
-  def test_index_and_create_deny_other_actor_types
-    policy = ClientSecretCredentialPolicy.new(ClientSecretCredential.new, user: Operator.new(id: 1))
-
-    assert_not policy.index?
-    assert_not policy.create?
-  end
-
-  # Per-record actions require ownership (record.user_id == user.id).
-  def test_owner_may_manage_own_record
-    owner = Client.new(id: 1)
-    record = ClientSecretCredential.new(user_id: owner.id)
-    policy = ClientSecretCredentialPolicy.new(record, user: owner)
-
-    assert_predicate policy, :show?
-    assert_predicate policy, :update?
-    assert_predicate policy, :edit?
-    assert_predicate policy, :destroy?
-    assert_predicate policy, :regenerate?
-  end
-
-  def test_non_owner_may_not_manage_record
-    record = ClientSecretCredential.new(user_id: 1)
-    policy = ClientSecretCredentialPolicy.new(record, user: Client.new(id: 2))
-
-    assert_not policy.show?
-    assert_not policy.update?
-    assert_not policy.destroy?
-    assert_not policy.regenerate?
+    assert policy.apply(:create?)
+    assert_not policy.apply(:show?)
+    assert_not policy.apply(:update?)
+    assert_not policy.apply(:destroy?)
   end
 end

@@ -40,5 +40,9 @@ class Base::App::BillingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/billings/index", inertia_component
     assert_equal "Billings", inertia_props.fetch("title")
     assert_equal I18n.t("billings.signed_in_required"), inertia_props.fetch("description")
+    assert_equal(
+      { "label" => I18n.t("actions.up"), "href" => base_app_dashboard_path(ri: "jp") },
+      inertia_props.fetch("up_link"),
+    )
   end
 end

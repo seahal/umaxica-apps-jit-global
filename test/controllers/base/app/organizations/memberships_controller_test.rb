@@ -31,20 +31,56 @@ class Base::App::Organizations::MembershipsControllerTest < ActionDispatch::Inte
     assert_equal [], response.parsed_body
   end
 
-  test "new renders plain text" do
+  test "new renders the existing membership entry with a parent link" do
     get new_base_app_organization_membership_url(@organization_public_id, ri: "jp", host: @host),
         headers: as_user_headers(@user, host: @host)
 
     assert_response :success
-    assert_equal "New Membership", response.body
+    page = JSON.parse(css_select("script[data-page='app']").first.text)
+
+    assert_equal "base/app/organizations/memberships/new", page.fetch("component")
+    assert_equal base_app_organization_memberships_path(@organization_public_id, ri: "jp"),
+                 page.fetch("props").dig("up_link", "href")
   end
 
-  test "edit renders plain text" do
+  test "edit renders the existing membership entry with a parent link" do
     get edit_base_app_organization_membership_url(@organization_public_id, @membership.id, ri: "jp", host: @host),
         headers: as_user_headers(@user, host: @host)
 
     assert_response :success
-    assert_equal "Edit Membership", response.body
+    page = JSON.parse(css_select("script[data-page='app']").first.text)
+
+    assert_equal "base/app/organizations/memberships/edit", page.fetch("component")
+    assert_equal base_app_organization_membership_path(@organization_public_id, @membership.id, ri: "jp"),
+                 page.fetch("props").dig("up_link", "href")
+  end
+
+  test "HTML membership index links only to memberships the principal can read" do
+    other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
+    foreign_membership = @bootstrap.collective.persona_memberships.create!(
+      persona: other_bootstrap.account, enterprise_unit: @membership.enterprise_unit,
+      membership_kind_id: @membership.membership_kind_id,
+      membership_state_id: @membership.membership_state_id,
+    )
+    get base_app_organization_memberships_url(@organization_public_id, ri: "jp", host: @host),
+        headers: as_user_headers(@user, host: @host)
+
+    assert_response :success
+    page = JSON.parse(css_select("script[data-page='app']").first.text)
+    props = page.fetch("props")
+
+    assert_equal "base/app/organizations/memberships/index", page.fetch("component")
+    assert_equal [base_app_organization_membership_path(@organization_public_id, @membership.id, ri: "jp")],
+                 props.fetch("entries").map { |entry| entry.fetch("href") }
+    assert_equal new_base_app_organization_membership_path(@organization_public_id, ri: "jp"),
+                 props.dig("create_action", "href")
+    assert_not props.fetch("entries").any? { |entry| entry.fetch("public_id") == foreign_membership.id.to_s }
+
+    get base_app_organization_membership_url(@organization_public_id, foreign_membership.id, ri: "jp", host: @host),
+        headers: as_user_headers(@user, host: @host), as: :json
+
+    assert_response :forbidden
   end
 
   test "create returns unprocessable content" do

@@ -1,0 +1,21 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "empty" as empty
+    state "pending" as pending
+    state "delivered" as delivered
+    state "failed" as failed
+    state "consumed" as consumed
+    state "expired" as expired
+    [*] --> empty
+    empty --> pending: issue_bound_email_code!
+    pending --> pending: issue_bound_email_code!
+    delivered --> pending: issue_bound_email_code!
+    failed --> pending: issue_bound_email_code!
+    consumed --> pending: issue_bound_email_code!
+    expired --> pending: issue_bound_email_code!
+    pending --> delivered: mark_bound_email_delivery! success
+    pending --> failed: mark_bound_email_delivery! failure
+    delivered --> consumed: consume_bound_email_code!
+    pending --> expired: clock reaches code deadline
+    delivered --> expired: clock reaches code deadline
+    failed --> expired: clock reaches code deadline

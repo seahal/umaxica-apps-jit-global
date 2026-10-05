@@ -1,0 +1,13 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "verified" as verified
+    state "fallback" as fallback
+    state "rejected" as rejected
+    [*] --> pending
+    pending --> verified: record_evp_verified!
+    pending --> fallback: record_evp_fallback!
+    pending --> rejected: record_evp_rejected!
+    verified --> [*]
+    fallback --> [*]
+    rejected --> [*]

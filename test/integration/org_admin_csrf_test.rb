@@ -4,8 +4,9 @@
 require "test_helper"
 
 # Browser-condition CSRF for the org administrative mutations. The requests are authenticated by the
-# access cookie alone (no bearer header), Step-Up is earned through the real base completion
-# endpoint, and forgery protection is on. The expected results follow the org surface's
+# access cookie alone (no bearer header), synthetic verified evidence is finalized through
+# the public Base committer, and forgery protection is on. This isolates mutation CSRF; the
+# administrative ceremony integration test exercises the HTTP completion and real signatures. The expected results follow the org surface's
 # `protect_from_forgery using: :header_or_legacy_token` contract in Rails:
 #
 # - `Sec-Fetch-Site: same-origin` or `same-site` is accepted without a token;
@@ -34,11 +35,14 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
       operator: @operator, capabilities: OperatorCapabilityGrant::CAPABILITIES, ticket_id: "TEST-CSRF",
       expires_at: 1.day.from_now,
     )
+    @passkey = @operator.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
       @operator, host: @host, session_public_id: @token.public_id, resource_type: "operator",
                  jwt_issuer_id: "surface:BASE_ORG",
     )
-    @session_headers = { "Host" => @host, "X-TEST-SESSION-PUBLIC-ID" => @token.public_id }.freeze
+    @session_headers = { "Host" => @host, "Client-Agent" => "Mozilla/5.0" }.freeze
     @mutations = {
       support: [
         "support_session_revoke",
@@ -78,20 +82,34 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
 
   test "each mutation follows the Fetch Metadata and token contract" do
     @mutations.each do |name, (scope, url, params, count)|
-      transaction = IdentityStepUpCeremonyGrantIssuer.issue!(
-        surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id, required_scope: scope,
-        required_aal: StepUpRequirement::NO_AAL, allowed_methods: ["passkey"], return_to: "/support",
-        expires_at: 5.minutes.from_now,
-      ).transaction
-      result = IdentityStepUpCeremonyResultIssuer.issue!(
-        surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-        transaction_id: transaction.transaction_id, grant_jti: transaction.grant_jti, scope: scope,
-        aal: "aal1", method: "passkey", challenge_id: "c-#{SecureRandom.hex(4)}", expires_at: transaction.expires_at,
+      return_to =
+        case scope
+        when "support_session_revoke" then "/support/clients/#{@client.public_id}/revocations/new"
+        when "operator_capability" then "/iam/grants/new"
+        when "enforcement_case_apply" then "/support/app/enforcement_cases/new"
+        end
+      requirement = StepUpRequirement.new(
+        scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
+        session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
       )
-      post base_org_verification_completion_url(ri: "jp", host: @host),
-           params: { step_up_ceremony_result: result }, headers: @session_headers
+      transaction = BaseStepUpAdmissionIssuer.call!(
+        actor: @operator, token: @token, requirement: requirement, return_to: return_to,
+      ).transaction
+      transaction.record_verification!(
+        method: "passkey", aal: "aal1", phishing_resistant: true,
+        verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
+      )
+      ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      )
+      result = BaseAuthAdmissionCoordinator.issue_result!(
+        transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+      )
+      IdentityStepUpCeremonyFreshnessCommitter.call!(
+        actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
+      )
 
-      assert_equal scope, @token.reload.last_step_up_scope, "#{name}: Step-Up through the real completion"
+      assert_equal scope, @token.reload.last_step_up_scope, "#{name}: canonical Base authority is established"
 
       rejected = [
         { "Sec-Fetch-Site" => "cross-site", "Origin" => "https://attacker.example" },
@@ -112,8 +130,8 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
         rejected.each do |fetch_headers|
           assert_no_difference(count, "#{name}: #{fetch_headers.inspect} must be rejected") do
             post(url.call, params: params.call, headers: @session_headers.merge(fetch_headers))
-          rescue ActionController::InvalidAuthenticityToken
-            nil
+
+            assert_response :unprocessable_content
           end
         end
         assert_no_difference(count, "#{name}: a JSON body gets no exemption") do
@@ -121,8 +139,8 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
             url.call, params: params.call.to_json,
                       headers: @session_headers.merge("Sec-Fetch-Site" => nil, "Content-Type" => "application/json"),
           )
-        rescue ActionController::InvalidAuthenticityToken
-          nil
+
+          assert_response :unprocessable_content
         end
 
         assert_difference(count, 1, "#{name}: same-origin without a token is accepted") do
@@ -142,18 +160,28 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
 
   test "a request without Fetch Metadata but with the page's CSRF token is accepted" do
     scope = "support_session_revoke"
-    transaction = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id, required_scope: scope,
-      required_aal: StepUpRequirement::NO_AAL, allowed_methods: ["passkey"], return_to: "/support",
-      expires_at: 5.minutes.from_now,
-    ).transaction
-    result = IdentityStepUpCeremonyResultIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      transaction_id: transaction.transaction_id, grant_jti: transaction.grant_jti, scope: scope,
-      aal: "aal1", method: "passkey", challenge_id: "c-#{SecureRandom.hex(4)}", expires_at: transaction.expires_at,
+    requirement = StepUpRequirement.new(
+      scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
+      session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
     )
-    post base_org_verification_completion_url(ri: "jp", host: @host),
-         params: { step_up_ceremony_result: result }, headers: @session_headers
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: @operator, token: @token, requirement: requirement,
+      return_to: "/support/clients/#{@client.public_id}/revocations/new",
+    ).transaction
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true,
+      verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
+    )
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+    )
+    IdentityStepUpCeremonyFreshnessCommitter.call!(
+      actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
+    )
+
     original = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
 

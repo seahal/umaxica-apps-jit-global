@@ -22,7 +22,11 @@ module Base
         groups = authorized_scope(AvatarGroup.all).order(:created_at, :id)
         render inertia: true, props: {
           title: "Groups",
-          groups: groups.map { |group| serialize_group(group) },
+          empty_message: t("base.app.navigation.groups_empty"),
+          up_link: dashboard_up_link,
+          groups: groups.map { |group|
+            serialize_group(group).merge(href: base_app_group_path(group.public_id, ri: params[:ri]))
+          },
         }
       end
 

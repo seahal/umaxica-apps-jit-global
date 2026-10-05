@@ -26,6 +26,10 @@ class RecoveryPasscodeTopUp
   end
 
   def call
+    if credential_class == ClientSecretCredential
+      raise ArgumentError, "app Secret does not use recovery passcode top-up"
+    end
+
     return empty_result(active_usable_count_before: 0) unless supported_recovery_passcode_kind?
 
     active_usable_count_before = current_active_usable_count
@@ -101,8 +105,6 @@ class RecoveryPasscodeTopUp
 
   def max_secret_count_limit
     case credential_class.name
-    when "ClientSecretCredential"
-      credential_class::MAX_SECRETS_PER_USER
     when "VisitorSecretCredential"
       credential_class::MAX_SECRETS_PER_VISITOR
     when "OperatorSecretCredential"
@@ -117,8 +119,6 @@ class RecoveryPasscodeTopUp
   end
 
   def preload_recovery_identity_associations!
-    actor.client_emails.load if actor.respond_to?(:client_emails)
-    actor.client_telephones.load if actor.respond_to?(:client_telephones)
     actor.visitor_emails.load if actor.respond_to?(:visitor_emails)
     actor.visitor_telephones.load if actor.respond_to?(:visitor_telephones)
     actor.staff_emails.load if actor.respond_to?(:staff_emails)
@@ -127,8 +127,6 @@ class RecoveryPasscodeTopUp
 
   def secret_credential_relation
     case credential_class.name
-    when "ClientSecretCredential"
-      actor.client_secret_credentials
     when "VisitorSecretCredential"
       actor.visitor_secret_credentials
     when "OperatorSecretCredential"
@@ -168,8 +166,6 @@ class RecoveryPasscodeTopUp
 
   def recovery_kind_association
     case credential_class.name
-    when "ClientSecretCredential"
-      :user_secret_credential_kind
     when "VisitorSecretCredential"
       :visitor_secret_credential_kind
     when "OperatorSecretCredential"
@@ -189,8 +185,7 @@ class RecoveryPasscodeTopUp
 
   def recovery_status_association
     credential_class.reflect_on_all_associations(:belongs_to).find do |association|
-      association.name == :user_secret_credential_status ||
-        association.name == :visitor_secret_credential_status ||
+      association.name == :visitor_secret_credential_status ||
         association.name == :staff_secret_credential_status
     end&.name
   end

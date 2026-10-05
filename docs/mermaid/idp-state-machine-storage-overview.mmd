@@ -1,0 +1,477 @@
+flowchart LR
+    %% CURRENT; dashed lines are code ownership, solid FK lines are database constraints.
+    LEGEND["Dashed: code reads/writes state; NOT FK. Solid: actual SQL FK fact to reference. No live DB claim."]
+    subgraph client_ownership["client state ownership"]
+        M0["idp-client-sign-in: FlowSignIn; participants; LocalAuthenticationSessionCommitter"]
+        T0["client_sign_in_flows: status_id"]
+        M0 -.->|"owns or evaluates state; not FK"| T0
+        R0_0["client_sign_in_flow_statuses.id"]
+        T0 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R0_0
+        M1["idp-client-sign-up: SignUpStateMachine + SignFlow; FlowSignUp"]
+        T1["client_sign_up_flows: status_id"]
+        M1 -.->|"owns or evaluates state; not FK"| T1
+        R1_0["client_sign_up_flow_statuses.id"]
+        T1 -->|"status_id FK; NOT VALID; DELETE RESTRICT"| R1_0
+        M2["idp-client-sign-out: FlowSignOut; AuthenticationLogoutCurrentSession"]
+        T2["client_sign_out_flows: status_id"]
+        M2 -.->|"owns or evaluates state; not FK"| T2
+        R2_0["client_sign_out_flow_statuses.id"]
+        T2 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R2_0
+        M3["idp-client-auth-ceremony-session: AuthCeremonySession"]
+        T3["client_auth_ceremony_sessions: admitted_at / authentication_event_at / terminal timestamps"]
+        M3 -.->|"owns or evaluates state; not FK"| T3
+        M4["idp-client-email-ceremony: EmailCeremonyTransactionable"]
+        T4["client_email_ceremony_transactions: status"]
+        M4 -.->|"owns or evaluates state; not FK"| T4
+        M5["idp-client-telephone-ceremony: TelephoneCeremonyTransactionable"]
+        T5["client_telephone_ceremony_transactions: status"]
+        M5 -.->|"owns or evaluates state; not FK"| T5
+        M6["idp-client-passkey-ceremony: PasskeyCeremonyTransactionable"]
+        T6["client_passkey_ceremony_transactions: status"]
+        M6 -.->|"owns or evaluates state; not FK"| T6
+        M7["idp-client-secret-credential-ceremony: SecretCredentialCeremonyTransactionable"]
+        T7["client_secret_credential_ceremony_transactions: status"]
+        M7 -.->|"owns or evaluates state; not FK"| T7
+        M8["idp-client-step-up-ceremony: StepUpCeremonyTransactionable; Base committers"]
+        T8["client_step_up_ceremony_transactions: status"]
+        M8 -.->|"owns or evaluates state; not FK"| T8
+        M9["idp-client-oidc-authorization: OidcAuthorizationTransactionable"]
+        T9["client_oidc_authorization_transactions: status"]
+        M9 -.->|"owns or evaluates state; not FK"| T9
+        M10["idp-client-oauth-callback: OauthCallbackStateable"]
+        T10["client_oauth_callback_states: consumed_at / expires_at"]
+        M10 -.->|"owns or evaluates state; not FK"| T10
+        M11["idp-client-local-result-delivery: LocalAuthenticationResultDelivery; LocalAuthenticationResultCoordinator"]
+        T11["client_sign_in_flows: result_generation / result_digest / base_finalized_at"]
+        M11 -.->|"owns or evaluates state; not FK"| T11
+        M12["idp-client-token: TokenStatusManagement; RefreshTokenable"]
+        T12["client_tokens: user_token_status_id"]
+        M12 -.->|"owns or evaluates state; not FK"| T12
+        R12_0["client_token_statuses.id"]
+        T12 -->|"user_token_status_id FK; NOT VALID; DELETE RESTRICT"| R12_0
+        M13["idp-client-dbsc: DbscBindable; DbscRegistrationService"]
+        T13["client_tokens: user_token_dbsc_status_id"]
+        M13 -.->|"owns or evaluates state; not FK"| T13
+        R13_0["client_token_dbsc_statuses.id"]
+        T13 -->|"user_token_dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R13_0
+        M14["idp-client-device-session: DeviceSessionable"]
+        T14["client_device_sessions: status_id"]
+        M14 -.->|"owns or evaluates state; not FK"| T14
+        M15["idp-client-rp-session: RpSession"]
+        T15["client_rp_sessions: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
+        M15 -.->|"owns or evaluates state; not FK"| T15
+        M16["idp-client-passkey-credential: IdentityPasskeyCeremonyFinalCommitter; IdentityCredentialRemovalCommitter"]
+        T16["client_passkeys: status_id"]
+        M16 -.->|"owns or evaluates state; not FK"| T16
+        R16_0["client_passkey_statuses.id"]
+        T16 -->|"status_id FK; VALID; DELETE NO ACTION"| R16_0
+        M50["idp-client-sign-up-cleanup: SignUpTermination; SignUpArtifactCleanup"]
+        T50["client_sign_up_flows: cleanup_status_id"]
+        M50 -.->|"owns or evaluates state; not FK"| T50
+        R50_0["client_sign_up_flow_cleanup_statuses.id"]
+        T50 -->|"cleanup_status_id FK; NOT VALID; DELETE NO ACTION"| R50_0
+        M51["idp-client-withdrawal-ceremony: WithdrawalCeremonyRecordable"]
+        T51["client_withdrawal_ceremonies: status_id"]
+        M51 -.->|"owns or evaluates state; not FK"| T51
+        M52["idp-client-enforcement-recovery-ceremony: EnforcementRecoveryCeremonyRecordable"]
+        T52["client_enforcement_recovery_ceremonies: status_id"]
+        M52 -.->|"owns or evaluates state; not FK"| T52
+        M56["idp-client-totp-ceremony: TotpCeremonyTransactionable"]
+        T56["client_totp_ceremony_transactions: status"]
+        M56 -.->|"owns or evaluates state; not FK"| T56
+        M57["idp-client-social-ceremony: SocialCeremonyTransactionable"]
+        T57["client_social_ceremony_transactions: status"]
+        M57 -.->|"owns or evaluates state; not FK"| T57
+        M58["idp-client-secret-issuance: ClientSecretIssuance; reservation, confirmation and invalidation operations"]
+        T58["client_secret_issuances: presented_at / confirmed_at / canceled_at / expires_at"]
+        M58 -.->|"owns or evaluates state; not FK"| T58
+        M59["idp-client-session-limit-resolution: ClientSessionLimitResolutionTransaction; Base::App::Sign::In::LimitationsController"]
+        T59["client_session_limit_resolution_transactions: status"]
+        M59 -.->|"owns or evaluates state; not FK"| T59
+        M60["idp-client-apple-notification: ClientAppleNotificationEvent; AppleNotificationProcessingJob"]
+        T60["client_apple_notification_events: status"]
+        M60 -.->|"owns or evaluates state; not FK"| T60
+        M61["idp-client-external-identity: ClientExternalIdentityRepositoryAdapter; Apple notification processor"]
+        T61["client_external_identities: state"]
+        M61 -.->|"owns or evaluates state; not FK"| T61
+        M62["idp-client-totp-credential: ClientTotpCredential; IdentityTotpEnrollmentFinalCommitter"]
+        T62["client_totp_credentials: user_identity_totp_credential_status_id"]
+        M62 -.->|"owns or evaluates state; not FK"| T62
+        R62_0["client_totp_credential_statuses.id"]
+        T62 -->|"user_identity_totp_credential_status_id FK; VALID; DELETE NO ACTION"| R62_0
+        M71["idp-client-secret-credential: ClientSecretCredential (current rebuild)"]
+        T71["client_secret_credentials: confirmed_at / claimed_at / claim_operation_id / revoked_at / discard_at"]
+        M71 -.->|"owns or evaluates state; not FK"| T71
+        M72["idp-client-dpop-nonce: DpopProofStateable"]
+        T72["client_dpop_proof_states: nonce_used_at / expires_at"]
+        M72 -.->|"owns or evaluates state; not FK"| T72
+        M73["idp-client-administrative-access: AdministrativeAccessLock"]
+        T73["clients: access_state"]
+        M73 -.->|"owns or evaluates state; not FK"| T73
+        M74["idp-client-email-verification-challenge: EmailVerificationChallengeable"]
+        T74["client_email_ceremony_transactions: evp_outcome / expires_at"]
+        M74 -.->|"owns or evaluates state; not FK"| T74
+        M75["idp-client-preference-dbsc: DbscBindable; DbscRegistrationService"]
+        T75["app_preferences: dbsc_status_id"]
+        M75 -.->|"owns or evaluates state; not FK"| T75
+        R75_0["app_preference_dbsc_statuses.id"]
+        T75 -->|"dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R75_0
+        M76["idp-client-email-otp: OtpLockable; Email"]
+        T76["client_emails: otp_expires_at / otp_attempts_count / locked_at"]
+        M76 -.->|"owns or evaluates state; not FK"| T76
+        M77["idp-client-telephone-otp: OtpLockable; Telephone"]
+        T77["client_telephones: otp_expires_at / otp_attempts_count / locked_at"]
+        M77 -.->|"owns or evaluates state; not FK"| T77
+        M92["idp-client-withdrawal: FlowWithdrawal; WithdrawalLifecycle"]
+        T92["client_withdrawal_flows: status_id"]
+        M92 -.->|"owns or evaluates state; not FK"| T92
+        R92_0["client_withdrawal_flow_statuses.id"]
+        T92 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R92_0
+        M96["idp-client-step-up-session: StepUpSessionConsumable; BaseStepUpAdmissionIssuer"]
+        T96["client_step_up_sessions: status / discard_at"]
+        M96 -.->|"owns or evaluates state; not FK"| T96
+        M97["idp-client-step-up-passkey-challenge: StepUpSessionConsumable"]
+        T97["client_step_up_sessions: passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at"]
+        M97 -.->|"owns or evaluates state; not FK"| T97
+        M98["idp-client-step-up-email-challenge: StepUpEmailChallenge"]
+        T98["client_step_up_sessions: email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at"]
+        M98 -.->|"owns or evaluates state; not FK"| T98
+        M99["idp-client-email-credential: Identity contact final committer; sign-up controllers; withdrawal anonymizer"]
+        T99["client_emails: user_email_status_id"]
+        M99 -.->|"owns or evaluates state; not FK"| T99
+        R99_0["client_email_statuses.id"]
+        T99 -->|"user_email_status_id FK; VALID; DELETE NO ACTION"| R99_0
+        M100["idp-client-telephone-credential: Identity contact final committer; sign-up controllers; withdrawal anonymizer"]
+        T100["client_telephones: user_identity_telephone_status_id"]
+        M100 -.->|"owns or evaluates state; not FK"| T100
+        R100_0["client_telephone_statuses.id"]
+        T100 -->|"user_identity_telephone_status_id FK; VALID; DELETE NO ACTION"| R100_0
+        M101["idp-client-actor-withdrawal: Withdrawable; app/services/withdrawal_lifecycle.rb"]
+        T101["clients: withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at"]
+        M101 -.->|"owns or evaluates state; not FK"| T101
+        M113["idp-client-actor-provisioning: ClientStatus; sign-up finalizers"]
+        T113["clients: status_id"]
+        M113 -.->|"owns or evaluates state; not FK"| T113
+        R113_0["client_statuses.id"]
+        T113 -->|"status_id FK; VALID; DELETE NO ACTION"| R113_0
+        M116["idp-client-enforcement-case: EnforcementCaseApplyOperation; EndOperation; convergence jobs"]
+        T116["app_enforcement_cases: state / ended_at"]
+        M116 -.->|"owns or evaluates state; not FK"| T116
+        M117["idp-client-enforcement-appeal: EnforcementAppeal; EnforcementReconciliationJob"]
+        T117["app_enforcement_appeals: state / resolution_code / reviewed_at"]
+        M117 -.->|"owns or evaluates state; not FK"| T117
+        M123["idp-client-mfa-readiness: MfaStatusTrackable; MfaStatusCredential"]
+        T123["clients: mfa_status_id"]
+        M123 -.->|"owns or evaluates state; not FK"| T123
+        R123_0["client_mfa_statuses.id"]
+        T123 -->|"mfa_status_id FK; VALID; DELETE NO ACTION"| R123_0
+    end
+    subgraph visitor_ownership["visitor state ownership"]
+        M17["idp-visitor-sign-in: FlowSignIn; participants; LocalAuthenticationSessionCommitter"]
+        T17["visitor_sign_in_flows: status_id"]
+        M17 -.->|"owns or evaluates state; not FK"| T17
+        R17_0["visitor_sign_in_flow_statuses.id"]
+        T17 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R17_0
+        M18["idp-visitor-sign-up: SignUpStateMachine + SignFlow; FlowSignUp"]
+        T18["visitor_sign_up_flows: status_id"]
+        M18 -.->|"owns or evaluates state; not FK"| T18
+        R18_0["visitor_sign_up_flow_statuses.id"]
+        T18 -->|"status_id FK; NOT VALID; DELETE RESTRICT"| R18_0
+        M19["idp-visitor-sign-out: FlowSignOut; AuthenticationLogoutCurrentSession"]
+        T19["visitor_sign_out_flows: status_id"]
+        M19 -.->|"owns or evaluates state; not FK"| T19
+        R19_0["visitor_sign_out_flow_statuses.id"]
+        T19 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R19_0
+        M20["idp-visitor-auth-ceremony-session: AuthCeremonySession"]
+        T20["visitor_auth_ceremony_sessions: admitted_at / authentication_event_at / terminal timestamps"]
+        M20 -.->|"owns or evaluates state; not FK"| T20
+        M21["idp-visitor-email-ceremony: EmailCeremonyTransactionable"]
+        T21["visitor_email_ceremony_transactions: status"]
+        M21 -.->|"owns or evaluates state; not FK"| T21
+        M22["idp-visitor-telephone-ceremony: TelephoneCeremonyTransactionable"]
+        T22["visitor_telephone_ceremony_transactions: status"]
+        M22 -.->|"owns or evaluates state; not FK"| T22
+        M23["idp-visitor-passkey-ceremony: PasskeyCeremonyTransactionable"]
+        T23["visitor_passkey_ceremony_transactions: status"]
+        M23 -.->|"owns or evaluates state; not FK"| T23
+        M24["idp-visitor-secret-credential-ceremony: SecretCredentialCeremonyTransactionable"]
+        T24["visitor_secret_credential_ceremony_transactions: status"]
+        M24 -.->|"owns or evaluates state; not FK"| T24
+        M25["idp-visitor-step-up-ceremony: StepUpCeremonyTransactionable; Base committers"]
+        T25["visitor_step_up_ceremony_transactions: status"]
+        M25 -.->|"owns or evaluates state; not FK"| T25
+        M26["idp-visitor-oidc-authorization: OidcAuthorizationTransactionable"]
+        T26["visitor_oidc_authorization_transactions: status"]
+        M26 -.->|"owns or evaluates state; not FK"| T26
+        M27["idp-visitor-local-result-delivery: LocalAuthenticationResultDelivery; LocalAuthenticationResultCoordinator"]
+        T27["visitor_sign_in_flows: result_generation / result_digest / base_finalized_at"]
+        M27 -.->|"owns or evaluates state; not FK"| T27
+        M28["idp-visitor-token: TokenStatusManagement; RefreshTokenable"]
+        T28["visitor_tokens: visitor_token_status_id"]
+        M28 -.->|"owns or evaluates state; not FK"| T28
+        R28_0["visitor_token_statuses.id"]
+        T28 -->|"visitor_token_status_id FK; NOT VALID; DELETE NO ACTION"| R28_0
+        M29["idp-visitor-dbsc: DbscBindable; DbscRegistrationService"]
+        T29["visitor_tokens: visitor_token_dbsc_status_id"]
+        M29 -.->|"owns or evaluates state; not FK"| T29
+        R29_0["visitor_token_dbsc_statuses.id"]
+        T29 -->|"visitor_token_dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R29_0
+        M30["idp-visitor-device-session: DeviceSessionable"]
+        T30["visitor_device_sessions: status_id"]
+        M30 -.->|"owns or evaluates state; not FK"| T30
+        M31["idp-visitor-rp-session: RpSession"]
+        T31["visitor_rp_sessions: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
+        M31 -.->|"owns or evaluates state; not FK"| T31
+        M32["idp-visitor-passkey-credential: IdentityPasskeyCeremonyFinalCommitter; IdentityCredentialRemovalCommitter"]
+        T32["visitor_passkeys: status_id"]
+        M32 -.->|"owns or evaluates state; not FK"| T32
+        R32_0["visitor_passkey_statuses.id"]
+        T32 -->|"status_id FK; VALID; DELETE NO ACTION"| R32_0
+        M53["idp-visitor-sign-up-cleanup: SignUpTermination; SignUpArtifactCleanup"]
+        T53["visitor_sign_up_flows: cleanup_status_id"]
+        M53 -.->|"owns or evaluates state; not FK"| T53
+        R53_0["visitor_sign_up_flow_cleanup_statuses.id"]
+        T53 -->|"cleanup_status_id FK; NOT VALID; DELETE NO ACTION"| R53_0
+        M54["idp-visitor-withdrawal-ceremony: WithdrawalCeremonyRecordable"]
+        T54["visitor_withdrawal_ceremonies: status_id"]
+        M54 -.->|"owns or evaluates state; not FK"| T54
+        M55["idp-visitor-enforcement-recovery-ceremony: EnforcementRecoveryCeremonyRecordable"]
+        T55["visitor_enforcement_recovery_ceremonies: status_id"]
+        M55 -.->|"owns or evaluates state; not FK"| T55
+        M78["idp-visitor-secret-credential: SecretCredential; SignSecretVerify"]
+        T78["visitor_secret_credentials: actor secret status FK"]
+        M78 -.->|"owns or evaluates state; not FK"| T78
+        M79["idp-visitor-dpop-nonce: DpopProofStateable"]
+        T79["visitor_dpop_proof_states: nonce_used_at / expires_at"]
+        M79 -.->|"owns or evaluates state; not FK"| T79
+        M80["idp-visitor-administrative-access: AdministrativeAccessLock"]
+        T80["visitors: access_state"]
+        M80 -.->|"owns or evaluates state; not FK"| T80
+        M81["idp-visitor-email-verification-challenge: EmailVerificationChallengeable"]
+        T81["visitor_email_ceremony_transactions: evp_outcome / expires_at"]
+        M81 -.->|"owns or evaluates state; not FK"| T81
+        M82["idp-visitor-preference-dbsc: DbscBindable; DbscRegistrationService"]
+        T82["com_preferences: dbsc_status_id"]
+        M82 -.->|"owns or evaluates state; not FK"| T82
+        R82_0["com_preference_dbsc_statuses.id"]
+        T82 -->|"dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R82_0
+        M83["idp-visitor-email-otp: OtpLockable; Email"]
+        T83["visitor_emails: otp_expires_at / otp_attempts_count / locked_at"]
+        M83 -.->|"owns or evaluates state; not FK"| T83
+        M84["idp-visitor-telephone-otp: OtpLockable; Telephone"]
+        T84["visitor_telephones: otp_expires_at / otp_attempts_count / locked_at"]
+        M84 -.->|"owns or evaluates state; not FK"| T84
+        M93["idp-visitor-withdrawal: FlowWithdrawal; WithdrawalLifecycle"]
+        T93["visitor_withdrawal_flows: status_id"]
+        M93 -.->|"owns or evaluates state; not FK"| T93
+        R93_0["visitor_withdrawal_flow_statuses.id"]
+        T93 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R93_0
+        M102["idp-visitor-step-up-session: StepUpSessionConsumable; BaseStepUpAdmissionIssuer"]
+        T102["visitor_step_up_sessions: status / discard_at"]
+        M102 -.->|"owns or evaluates state; not FK"| T102
+        M103["idp-visitor-step-up-passkey-challenge: StepUpSessionConsumable"]
+        T103["visitor_step_up_sessions: passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at"]
+        M103 -.->|"owns or evaluates state; not FK"| T103
+        M104["idp-visitor-step-up-email-challenge: StepUpEmailChallenge"]
+        T104["visitor_step_up_sessions: email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at"]
+        M104 -.->|"owns or evaluates state; not FK"| T104
+        M105["idp-visitor-email-credential: Identity contact final committer; sign-up controllers; withdrawal anonymizer"]
+        T105["visitor_emails: visitor_email_status_id"]
+        M105 -.->|"owns or evaluates state; not FK"| T105
+        R105_0["visitor_email_statuses.id"]
+        T105 -->|"visitor_email_status_id FK; VALID; DELETE NO ACTION"| R105_0
+        M106["idp-visitor-telephone-credential: Identity contact final committer; sign-up controllers; withdrawal anonymizer"]
+        T106["visitor_telephones: visitor_telephone_status_id"]
+        M106 -.->|"owns or evaluates state; not FK"| T106
+        R106_0["visitor_telephone_statuses.id"]
+        T106 -->|"visitor_telephone_status_id FK; VALID; DELETE NO ACTION"| R106_0
+        M107["idp-visitor-actor-withdrawal: Withdrawable; app/services/withdrawal_lifecycle.rb"]
+        T107["visitors: withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at"]
+        M107 -.->|"owns or evaluates state; not FK"| T107
+        M118["idp-visitor-enforcement-case: EnforcementCaseApplyOperation; EndOperation; convergence jobs"]
+        T118["com_enforcement_cases: state / ended_at"]
+        M118 -.->|"owns or evaluates state; not FK"| T118
+        M119["idp-visitor-enforcement-appeal: EnforcementAppeal; EnforcementReconciliationJob"]
+        T119["com_enforcement_appeals: state / resolution_code / reviewed_at"]
+        M119 -.->|"owns or evaluates state; not FK"| T119
+        M124["idp-visitor-mfa-readiness: MfaStatusTrackable; MfaStatusCredential"]
+        T124["visitors: mfa_status_id"]
+        M124 -.->|"owns or evaluates state; not FK"| T124
+        R124_0["visitor_mfa_statuses.id"]
+        T124 -->|"mfa_status_id FK; VALID; DELETE NO ACTION"| R124_0
+    end
+    subgraph operator_ownership["operator state ownership"]
+        M33["idp-operator-sign-in: FlowSignIn; participants; LocalAuthenticationSessionCommitter"]
+        T33["operator_sign_in_flows: status_id"]
+        M33 -.->|"owns or evaluates state; not FK"| T33
+        R33_0["operator_sign_in_flow_statuses.id"]
+        T33 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R33_0
+        M34["idp-operator-sign-up: FlowSignUp (model only)"]
+        T34["operator_sign_up_flows: status_id"]
+        M34 -.->|"owns or evaluates state; not FK"| T34
+        R34_0["operator_sign_up_flow_statuses.id"]
+        T34 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R34_0
+        M35["idp-operator-sign-out: FlowSignOut; AuthenticationLogoutCurrentSession"]
+        T35["operator_sign_out_flows: status_id"]
+        M35 -.->|"owns or evaluates state; not FK"| T35
+        R35_0["operator_sign_out_flow_statuses.id"]
+        T35 -->|"status_id FK; NOT VALID; DELETE NO ACTION"| R35_0
+        M36["idp-operator-auth-ceremony-session: AuthCeremonySession"]
+        T36["operator_auth_ceremony_sessions: admitted_at / authentication_event_at / terminal timestamps"]
+        M36 -.->|"owns or evaluates state; not FK"| T36
+        M37["idp-operator-email-ceremony: EmailCeremonyTransactionable"]
+        T37["operator_email_ceremony_transactions: status"]
+        M37 -.->|"owns or evaluates state; not FK"| T37
+        M38["idp-operator-telephone-ceremony: TelephoneCeremonyTransactionable"]
+        T38["operator_telephone_ceremony_transactions: status"]
+        M38 -.->|"owns or evaluates state; not FK"| T38
+        M39["idp-operator-passkey-ceremony: PasskeyCeremonyTransactionable"]
+        T39["operator_passkey_ceremony_transactions: status"]
+        M39 -.->|"owns or evaluates state; not FK"| T39
+        M40["idp-operator-secret-credential-ceremony: SecretCredentialCeremonyTransactionable"]
+        T40["operator_secret_credential_ceremony_transactions: status"]
+        M40 -.->|"owns or evaluates state; not FK"| T40
+        M41["idp-operator-step-up-ceremony: StepUpCeremonyTransactionable; Base committers"]
+        T41["operator_step_up_ceremony_transactions: status"]
+        M41 -.->|"owns or evaluates state; not FK"| T41
+        M42["idp-operator-oidc-authorization: OidcAuthorizationTransactionable"]
+        T42["operator_oidc_authorization_transactions: status"]
+        M42 -.->|"owns or evaluates state; not FK"| T42
+        M43["idp-operator-oauth-callback: OauthCallbackStateable"]
+        T43["operator_oauth_callback_states: consumed_at / expires_at"]
+        M43 -.->|"owns or evaluates state; not FK"| T43
+        M44["idp-operator-local-result-delivery: LocalAuthenticationResultDelivery; LocalAuthenticationResultCoordinator"]
+        T44["operator_sign_in_flows: result_generation / result_digest / base_finalized_at"]
+        M44 -.->|"owns or evaluates state; not FK"| T44
+        M45["idp-operator-token: TokenStatusManagement; RefreshTokenable"]
+        T45["operator_tokens: staff_token_status_id"]
+        M45 -.->|"owns or evaluates state; not FK"| T45
+        R45_0["operator_token_statuses.id"]
+        T45 -->|"staff_token_status_id FK; NOT VALID; DELETE RESTRICT"| R45_0
+        M46["idp-operator-dbsc: DbscBindable; DbscRegistrationService"]
+        T46["operator_tokens: staff_token_dbsc_status_id"]
+        M46 -.->|"owns or evaluates state; not FK"| T46
+        R46_0["operator_token_dbsc_statuses.id"]
+        T46 -->|"staff_token_dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R46_0
+        M47["idp-operator-device-session: DeviceSessionable"]
+        T47["operator_device_sessions: status_id"]
+        M47 -.->|"owns or evaluates state; not FK"| T47
+        M48["idp-operator-rp-session: RpSession"]
+        T48["operator_rp_sessions: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
+        M48 -.->|"owns or evaluates state; not FK"| T48
+        M49["idp-operator-passkey-credential: IdentityPasskeyCeremonyFinalCommitter; IdentityCredentialRemovalCommitter"]
+        T49["operator_passkeys: status_id"]
+        M49 -.->|"owns or evaluates state; not FK"| T49
+        R49_0["operator_passkey_statuses.id"]
+        T49 -->|"status_id FK; VALID; DELETE NO ACTION"| R49_0
+        M66["idp-operator-organization-invitation: OrganizationInvitation; OrgOperatorLifecycleInvitationAcceptance"]
+        T66["organization_invitations: consumed_at / expires_at"]
+        M66 -.->|"owns or evaluates state; not FK"| T66
+        M67["idp-operator-operator-lifecycle: OrgOperatorLifecycleApprove; Reject; Execute"]
+        T67["operator_lifecycle_requests: status"]
+        M67 -.->|"owns or evaluates state; not FK"| T67
+        M85["idp-operator-secret-credential: SecretCredential; SignSecretVerify"]
+        T85["operator_secret_credentials: actor secret status FK"]
+        M85 -.->|"owns or evaluates state; not FK"| T85
+        M86["idp-operator-dpop-nonce: DpopProofStateable"]
+        T86["operator_dpop_proof_states: nonce_used_at / expires_at"]
+        M86 -.->|"owns or evaluates state; not FK"| T86
+        M87["idp-operator-administrative-access: AdministrativeAccessLock"]
+        T87["operators: access_state"]
+        M87 -.->|"owns or evaluates state; not FK"| T87
+        M88["idp-operator-email-verification-challenge: EmailVerificationChallengeable"]
+        T88["operator_email_ceremony_transactions: evp_outcome / expires_at"]
+        M88 -.->|"owns or evaluates state; not FK"| T88
+        M89["idp-operator-preference-dbsc: DbscBindable; DbscRegistrationService"]
+        T89["org_preferences: dbsc_status_id"]
+        M89 -.->|"owns or evaluates state; not FK"| T89
+        R89_0["org_preference_dbsc_statuses.id"]
+        T89 -->|"dbsc_status_id FK; NOT VALID; DELETE NO ACTION"| R89_0
+        M90["idp-operator-email-otp: OtpLockable; Email"]
+        T90["operator_emails: otp_expires_at / otp_attempts_count / locked_at"]
+        M90 -.->|"owns or evaluates state; not FK"| T90
+        M91["idp-operator-telephone-otp: OtpLockable; Telephone"]
+        T91["operator_telephones: otp_expires_at / otp_attempts_count / locked_at"]
+        M91 -.->|"owns or evaluates state; not FK"| T91
+        M95["idp-operator-entra-identity: OperatorEntraIdentityProvisioner; Activation; OrgOperatorLifecycleExecute"]
+        T95["operator_entra_identities: status_id"]
+        M95 -.->|"owns or evaluates state; not FK"| T95
+        R95_0["operator_entra_identity_states.id"]
+        T95 -->|"status_id FK; VALID; DELETE NO ACTION"| R95_0
+        M108["idp-operator-step-up-session: StepUpSessionConsumable; BaseStepUpAdmissionIssuer"]
+        T108["operator_step_up_sessions: status / discard_at"]
+        M108 -.->|"owns or evaluates state; not FK"| T108
+        M109["idp-operator-step-up-passkey-challenge: StepUpSessionConsumable"]
+        T109["operator_step_up_sessions: passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at"]
+        M109 -.->|"owns or evaluates state; not FK"| T109
+        M110["idp-operator-email-credential: Identity contact final committer; sign-up controllers; withdrawal anonymizer"]
+        T110["operator_emails: staff_identity_email_status_id"]
+        M110 -.->|"owns or evaluates state; not FK"| T110
+        R110_0["operator_email_statuses.id"]
+        T110 -->|"staff_identity_email_status_id FK; VALID; DELETE NO ACTION"| R110_0
+        M111["idp-operator-telephone-credential: Identity contact final committer; sign-up controllers; withdrawal anonymizer"]
+        T111["operator_telephones: staff_identity_telephone_status_id"]
+        M111 -.->|"owns or evaluates state; not FK"| T111
+        R111_0["operator_telephone_statuses.id"]
+        T111 -->|"staff_identity_telephone_status_id FK; VALID; DELETE NO ACTION"| R111_0
+        M112["idp-operator-actor-withdrawal: Withdrawable; app/services/org_operator_lifecycle_execute.rb"]
+        T112["operators: withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at"]
+        M112 -.->|"owns or evaluates state; not FK"| T112
+        M120["idp-operator-enforcement-case: EnforcementCaseApplyOperation; EndOperation; convergence jobs"]
+        T120["org_enforcement_cases: state / ended_at"]
+        M120 -.->|"owns or evaluates state; not FK"| T120
+        M121["idp-operator-enforcement-appeal: EnforcementAppeal; EnforcementReconciliationJob"]
+        T121["org_enforcement_appeals: state / resolution_code / reviewed_at"]
+        M121 -.->|"owns or evaluates state; not FK"| T121
+        M125["idp-operator-mfa-readiness: MfaStatusTrackable; MfaStatusCredential"]
+        T125["operators: mfa_status_id"]
+        M125 -.->|"owns or evaluates state; not FK"| T125
+        R125_0["operator_mfa_statuses.id"]
+        T125 -->|"mfa_status_id FK; VALID; DELETE NO ACTION"| R125_0
+    end
+    subgraph identity_ownership["identity state ownership"]
+        M63["idp-identity-totp-enrollment: IdentityCeremonyCandidateRecord; app/services/identity_totp_ceremony_candidate_store.rb"]
+        T63["identity_totp_ceremony_candidates: consumed_at / expires_at"]
+        M63 -.->|"owns or evaluates state; not FK"| T63
+        M64["idp-identity-secret-credential-candidate: IdentityCeremonyCandidateRecord; app/services/identity_secret_credential_ceremony_candidate_store.rb"]
+        T64["identity_secret_credential_ceremony_candidates: consumed_at / expires_at"]
+        M64 -.->|"owns or evaluates state; not FK"| T64
+        M65["idp-identity-social-candidate: IdentityCeremonyCandidateRecord; app/services/identity_social_ceremony_candidate_store.rb"]
+        T65["identity_social_ceremony_candidates: consumed_at / expires_at"]
+        M65 -.->|"owns or evaluates state; not FK"| T65
+    end
+    subgraph shared_ownership["shared state ownership"]
+        M68["idp-shared-sequence-carrier: SignInSequenceCarrier; SignInSequence"]
+        T68["None (Rails session): state / terminal_state"]
+        M68 -.->|"owns or evaluates state; not FK"| T68
+        M69["idp-shared-authorization-code: Valkey::AuthState::AuthorizationCodeStore"]
+        T69["None (Valkey): state"]
+        M69 -.->|"owns or evaluates state; not FK"| T69
+        M70["idp-shared-opaque-admission: Valkey::AuthState::OpaqueAdmissionStore"]
+        T70["None (Valkey): state"]
+        M70 -.->|"owns or evaluates state; not FK"| T70
+        M114["idp-shared-acme-logout: AcmeLogoutTransactionable; AcmeLogoutTransactionCoordinator"]
+        T114["acme_logout_transactions: status / expected_step / completed_steps"]
+        M114 -.->|"owns or evaluates state; not FK"| T114
+        M115["idp-shared-webauthn-challenge: Webauthn::ChallengeStore"]
+        T115["None (Rails session): passkey_challenges entry / expires_at"]
+        M115 -.->|"owns or evaluates state; not FK"| T115
+        M122["idp-shared-sign-out-notice: Valkey::AuthState::SignOutNoticeStore"]
+        T122["None (Valkey): Key presence / payload expiry"]
+        M122 -.->|"owns or evaluates state; not FK"| T122
+    end
+    subgraph security_ownership["security state ownership"]
+        M94["idp-security-one-time-reveal: SecurityOneTimeReveal; IdentityOneTimeReveal"]
+        T94["security_one_time_reveals: consumed_at / expires_at"]
+        M94 -.->|"owns or evaluates state; not FK"| T94
+    end
+    M126["idp-client-email-registration-session: controller session state"]
+    T126["Rails session: session[:sign_up_email_flow_state]"]
+    M126 -.->|"code writes session key; not FK"| T126
+    M127["idp-visitor-email-registration-session: controller session state"]
+    T127["Rails session: session[:auth_com_up_email_flow_state]"]
+    M127 -.->|"code writes session key; not FK"| T127
+    RFIX78["visitor_secret_credential_statuses.id"]
+    T78 -->|"visitor_secret_credential_status_id FK; VALID; DELETE NO ACTION"| RFIX78
+    RFIX85["operator_secret_credential_statuses.id"]
+    T85 -->|"staff_identity_secret_status_id FK; VALID; DELETE NO ACTION"| RFIX85

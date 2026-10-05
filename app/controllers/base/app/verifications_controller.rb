@@ -32,10 +32,19 @@ module Base
           sign_url_builder: ->(**query) {
             auth_app_verification_url(query.merge(host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https"))
           },
+          setup_url_builder: ->(**query) {
+            new_auth_app_verification_setup_url(
+              query.merge(host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), protocol: "https"),
+            )
+          },
         )
       end
 
       private
+
+      def bootstrap_registration_methods = %i(passkey totp)
+
+      def bootstrap_scope_permitted?(scope) = scope != "settings_secret_credential"
 
       def actor_verification_path(**args)
         base_app_verification_path(**args)

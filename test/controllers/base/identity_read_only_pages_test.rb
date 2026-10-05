@@ -43,6 +43,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "Account Standing", inertia_props.fetch("title")
+    assert_equal(
+      { "label" => I18n.t("actions.up"), "href" => base_app_identity_path(ri: "jp") },
+      inertia_props.fetch("up_link"),
+    )
     assert_empty inertia_props.fetch("decisions")
   end
 
@@ -72,6 +76,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "Account Standing", inertia_props.fetch("title")
+    assert_equal(
+      { "label" => I18n.t("actions.up"), "href" => base_com_identity_path(ri: "jp") },
+      inertia_props.fetch("up_link"),
+    )
   end
 
   test "org standing page reports the signed-in operator's account standing" do
@@ -100,6 +108,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "Account Standing", inertia_props.fetch("title")
+    assert_equal(
+      { "label" => I18n.t("actions.up"), "href" => base_org_identity_path(ri: "jp") },
+      inertia_props.fetch("up_link"),
+    )
   end
 
   test "app activity log lists only normalized activity for the signed-in client" do
@@ -276,9 +288,8 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "app birthdate page sends a client without a step-up method to the auth setup host" do
+  test "app birthdate page sends an unregistered client to Base confirmation without starting a ceremony" do
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! base_host
     client = Client.create!
     token = ClientToken.create!(
@@ -292,6 +303,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    transaction_count = ClientStepUpCeremonyTransaction.count
 
     get base_app_identity_birthdate_url(ri: "jp", host: base_host),
         headers: {
@@ -304,16 +316,13 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     uri = URI.parse(response.location)
 
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(uri.query).fetch("rt"), nil, false)
-
-    assert_equal "jump.umaxica.net", uri.host
-    uri = URI.parse(payload.fetch("url"))
-
-    assert_equal auth_host, uri.host
-    assert_equal "/verification/setup/new", uri.path
+    assert_equal base_host, uri.host
+    assert_equal "/verification", uri.path
+    assert_equal "settings_birthdate", Rack::Utils.parse_nested_query(uri.query).fetch("scope")
+    assert_equal transaction_count, ClientStepUpCeremonyTransaction.count
   end
 
-  test "com birthdate page sends a visitor without a fresh step-up through the verification setup" do
+  test "com birthdate page sends an unregistered visitor to Base confirmation without starting a ceremony" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! host
     visitor = visitors(:reserved_visitor)
@@ -328,6 +337,7 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    transaction_count = VisitorStepUpCeremonyTransaction.count
 
     get base_com_identity_birthdate_url(ri: "jp", host: host),
         headers: {
@@ -340,13 +350,10 @@ class BaseIdentityReadOnlyPagesTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     uri = URI.parse(response.location)
 
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(uri.query).fetch("rt"), nil, false)
-
-    assert_equal "jump.umaxica.net", uri.host
-    uri = URI.parse(payload.fetch("url"))
-
-    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), uri.host
-    assert_equal "/verification/setup/new", uri.path
+    assert_equal host, uri.host
+    assert_equal "/verification", uri.path
+    assert_equal "settings_birthdate", Rack::Utils.parse_nested_query(uri.query).fetch("scope")
+    assert_equal transaction_count, VisitorStepUpCeremonyTransaction.count
   end
 
   test "app standing page rejects an unauthenticated request" do

@@ -452,7 +452,9 @@ code that exists on exactly one surface.
 
 ### 6.3 Controllers that look suspicious but are innocent (Fact)
 
-- `auth/{app,com,org}/verification/base_controller.rb` include `::PreferenceGlobal` a second time
+- Historical finding (the three unused controllers were removed on 2026-10-04 during the
+  purpose-scoped authentication migration): `auth/{app,com,org}/verification/base_controller.rb`
+  included `::PreferenceGlobal` a second time
   (`:11`, `:9`, `:9`) with no `before_action :set_region` of their own. This is a harmless no-op
   re-include: they inherit from the surface `ApplicationController`, so `set_region` is already in
   the chain, and they add `before_action :require_ri!` (`:27`, `:27`, `:25`) — which calls

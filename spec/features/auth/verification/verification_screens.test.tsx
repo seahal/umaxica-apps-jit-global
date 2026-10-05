@@ -252,23 +252,24 @@ describe("passkey verification screen", () => {
     heading: "検証",
     description: "パスキーで認証してください。",
     errors: [],
-    form: {
-      action: "/verification/passkey?ri=jp",
-      csrf_token: "csrf-token",
-      scope: "settings_passkey",
-      pt: "pt-value",
-      challenge_id: "challenge-1",
-      request_options: { challenge: "abc" },
+    panel: {
+      options_url: "/verification/passkey/options?ri=jp",
+      verification_url: "/verification/passkey?ri=jp",
+      region: "jp",
+      identifier_param: null,
+      field: null,
+      turnstile_site_key: "public-key",
+      turnstile_error_message: "Turnstile failed",
       submit_label: "パスキーで認証",
     },
     back,
   };
 
-  it("carries the challenge id and an empty credential field", () => {
+  it("renders the passkey panel, which fetches its challenge instead of embedding one", () => {
     const html = renderToStaticMarkup(<PasskeyVerification {...props} />);
 
-    expect(html).toContain('name="verification[challenge_id]" value="challenge-1"');
-    expect(html).toContain('name="verification[credential_json]" value=""');
+    expect(html).not.toContain('name="verification[challenge_id]"');
+    expect(html).not.toContain('name="verification[credential_json]"');
     expect(html).toContain("パスキーで認証");
   });
 

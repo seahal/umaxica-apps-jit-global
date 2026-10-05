@@ -97,11 +97,11 @@ module OidcAuthorizationTransactionable
   end
 
   def expired?(now: Time.current)
-    expires_at.to_i <= now.to_i
+    expires_at <= now
   end
 
   def login_challenge_expired?(now: Time.current)
-    login_challenge_expires_at.to_i <= now.to_i
+    login_challenge_expires_at <= now
   end
 
   # PostgreSQL records the current result generation and digest before the raw
@@ -115,6 +115,8 @@ module OidcAuthorizationTransactionable
         locked = self.class.lock.find(id)
         decision_time = now || self.class.database_now
         raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
+        raise ArgumentError,
+              "authorization login challenge expired" if locked.login_challenge_expired?(now: decision_time)
         raise ArgumentError, "authorization transaction is not authenticated" unless locked.authenticated?
         raise ArgumentError, "authorization result is already finalized" if locked.base_finalized_at.present?
 
@@ -122,7 +124,7 @@ module OidcAuthorizationTransactionable
         locked.update!(
           result_generation: generation,
           result_digest: result_digest.to_s,
-          result_expires_at: decision_time + ttl,
+          result_expires_at: [decision_time + ttl, locked.expires_at, locked.login_challenge_expires_at].min,
           result_consumed_at: nil,
           updated_at: decision_time,
         )
@@ -133,12 +135,14 @@ module OidcAuthorizationTransactionable
 
   def result_delivery_matches?(result_digest:, result_generation:, now: nil)
     decision_time = now || self.class.database_now
-    return false if result_digest.blank? || result_digest.to_s.length != 64
-    return false unless result_generation.to_i == self[:result_generation].to_i
-    return false if result_expires_at.blank? || result_expires_at <= decision_time
-    return false unless result_digest.to_s.match?(/\A[0-9a-f]{64}\z/i)
+    return false unless authenticated? || consumed?
+    return false unless result_digest.is_a?(String) && result_digest.match?(/\A[0-9a-f]{64}\z/)
+    return false unless result_generation.is_a?(Integer) && result_generation.positive?
+    return false unless self.result_digest && result_expires_at && result_expires_at > decision_time
+    return false if expired?(now: decision_time) || login_challenge_expired?(now: decision_time)
 
-    ActiveSupport::SecurityUtils.secure_compare(self[:result_digest].to_s, result_digest.to_s)
+    self.result_generation == result_generation &&
+      ActiveSupport::SecurityUtils.secure_compare(self.result_digest, result_digest)
   end
 
   # Base finalization is serialized by the surface-local transaction row. The

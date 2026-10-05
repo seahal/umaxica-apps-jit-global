@@ -25,8 +25,8 @@ module Base
           body: "avatars",
           empty: "None available",
           entries: avatars.map { |avatar| serialize_avatar_entry(avatar) },
-          create_action: { label: "Create Avatar" },
-          up_link: dashboard_up_link(label: t("base.shared.dashboard.links.dashboard")),
+          create_action: create_avatar_action,
+          up_link: dashboard_up_link,
         }
       end
 
@@ -37,6 +37,7 @@ module Base
         render inertia: true, props: {
           title: "Avatar",
           moniker: avatar.moniker,
+          up_link: { label: t("actions.up"), href: base_app_avatars_path(ri: params[:ri]) },
           handle: avatar.active_handle&.handle,
           edit: { label: "Edit", href: edit_base_app_avatar_path(avatar.public_id, ri: params[:ri]) },
         }
@@ -72,9 +73,14 @@ module Base
         if result.success?
           redirect_to(base_app_avatar_path(avatar.public_id, ri: params[:ri]), status: :see_other)
         else
+          error = result.errors.fetch(0)
+          # Only a validation failure carries a record to report on the form. A unique-index
+          # conflict that got past validation is raised and answered as 409 Conflict.
+          raise error unless error.is_a?(ActiveRecord::RecordInvalid)
+
           render inertia: "base/app/avatars/new",
                  props: new_avatar_props(moniker_value: avatar_params[:moniker])
-                   .merge(errors: serialize_errors(result.errors.fetch(0).record.errors.to_hash.slice(:moniker))),
+                   .merge(errors: creation_errors(error.record)),
                  status: :unprocessable_content
         end
       rescue AvatarProvisioning::Create::Unauthorized
@@ -129,6 +135,14 @@ module Base
 
       private
 
+      # Creation is offered only while the selected persona has no active Avatar binding, because
+      # the binding admits one active Avatar per persona.
+      def create_avatar_action
+        return nil if AvatarPersonaBinding.active.exists?(persona: current_persona)
+
+        { label: "Create Avatar", href: new_base_app_avatar_path(ri: params[:ri]) }
+      end
+
       def serialize_avatar_entry(avatar)
         {
           public_id: avatar.public_id,
@@ -141,6 +155,7 @@ module Base
         {
           title: "New Avatar",
           heading: "New Avatar",
+          up_link: { label: t("actions.up"), href: base_app_avatars_path(ri: params[:ri]) },
           action: base_app_avatars_path(ri: params[:ri]),
           method: "post",
           submit_label: "Create Avatar",
@@ -153,6 +168,7 @@ module Base
         {
           title: "Avatar",
           heading: "Avatar",
+          up_link: { label: t("actions.up"), href: base_app_avatar_path(avatar.public_id, ri: params[:ri]) },
           action: base_app_avatar_path(avatar.public_id, ri: params[:ri]),
           method: "patch",
           submit_label: "Update Avatar",
@@ -186,6 +202,14 @@ module Base
       def serialize_errors(errors)
         errors.transform_keys { |attribute| "avatar.#{attribute}" }
           .transform_values { |messages| messages.first }
+      end
+
+      # A persona holds at most one active Avatar binding. That conflict belongs to no form field, so
+      # it is reported under the form's own `avatar` key.
+      def creation_errors(record)
+        errors = serialize_errors(record.errors.to_hash.slice(:moniker, :handle))
+        errors["avatar"] = t("base.app.avatars.already_assigned") if record.errors.of_kind?(:persona_id, :taken)
+        errors
       end
 
       # Scoped to the principal's assigned avatars: a foreign or non-existent id raises

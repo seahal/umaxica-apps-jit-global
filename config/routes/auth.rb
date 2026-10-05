@@ -140,7 +140,6 @@ scope(module: :auth, as: :auth) do
 
         # Sign-in ceremony.
         namespace :in do
-          resource :emergency, only: :show
           resource :device, only: :show
 
           resource :email, only: %i(new create edit update)
@@ -212,7 +211,7 @@ scope(module: :auth, as: :auth) do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: :new
+        resource :setup, only: %i(new create)
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
@@ -231,6 +230,7 @@ scope(module: :auth, as: :auth) do
         # read as a credential id.
         namespace :totps do
           resource :enrollment, only: %i(create destroy)
+          resource :handoff, only: %i(show create)
         end
         resources :totps, only: %i(index new create edit update destroy)
 
@@ -395,7 +395,7 @@ scope(module: :auth, as: :auth) do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: :new
+        resource :setup, only: %i(new create)
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
@@ -580,7 +580,7 @@ scope(module: :auth, as: :auth) do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: :new
+        resource :setup, only: %i(new create)
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)

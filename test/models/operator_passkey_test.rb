@@ -41,6 +41,45 @@
 require "test_helper"
 
 class OperatorPasskeyTest < ActiveSupport::TestCase
+  test "retained terminal history does not consume the four Passkey slots" do
+    actor = Operator.create!
+    [OperatorPasskeyStatus::REVOKED].each do |terminal_status|
+      historical = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
+      historical.update!(status_id: terminal_status)
+    end
+    3.times { actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+
+    assert_equal 3, actor.staff_passkeys.active.count
+    actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fourth-slot-public-key")
+
+    assert_equal 4, actor.staff_passkeys.active.count
+    assert_no_difference(-> { actor.staff_passkeys.count }) do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key")
+      end
+    end
+
+    assert_equal 5, actor.staff_passkeys.count
+    assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
+  end
+
+  test "a stale loaded owner association cannot admit a fifth Passkey" do
+    actor = Operator.create!
+    stale_actor = Operator.find(actor.id)
+    stale_actor.staff_passkeys.load
+    4.times { actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+    candidate = OperatorPasskey.new(
+      staff: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
+    )
+
+    assert_not candidate.valid?
+    assert_no_difference(-> { actor.staff_passkeys.count }) do
+      assert_raises(ActiveRecord::RecordInvalid) { candidate.save! }
+    end
+
+    assert_equal 4, actor.staff_passkeys.active.count
+  end
+
   test "should create passkey with valid attributes" do
     passkey = OperatorPasskey.new(
       staff: Operator.find_by!(public_id: "BCDE2345FGHJ67KM"),
@@ -114,22 +153,19 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum passkeys per staff" do
-    staff = Operator.find_by!(public_id: "BCDE2345FGHJ67KM")
-    relation_stub = Struct.new(:count).new(OperatorPasskey::MAX_PASSKEYS_PER_STAFF)
+    staff = Operator.create!
+    4.times { staff.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+    extra_passkey = OperatorPasskey.new(
+      staff: staff,
+      description: "Overflow Staff Key",
+      public_key: "overflow-key",
+      sign_count: 0,
+      external_id: SecureRandom.uuid,
+      webauthn_id: SecureRandom.hex(32),
+    )
 
-    OperatorPasskey.stub(:where, relation_stub) do
-      extra_passkey = OperatorPasskey.new(
-        staff: staff,
-        description: "Overflow Staff Key",
-        public_key: "overflow-key",
-        sign_count: 0,
-        external_id: SecureRandom.uuid,
-        webauthn_id: SecureRandom.hex(32),
-      )
-
-      assert_not extra_passkey.valid?
-      assert_includes extra_passkey.errors[:base],
-                      "exceeds maximum passkeys per staff (#{OperatorPasskey::MAX_PASSKEYS_PER_STAFF})"
-    end
+    assert_not extra_passkey.valid?
+    assert_includes extra_passkey.errors[:base],
+                    "exceeds maximum passkeys per staff (#{OperatorPasskey::MAX_PASSKEYS_PER_STAFF})"
   end
 end

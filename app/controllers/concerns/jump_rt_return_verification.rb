@@ -25,7 +25,19 @@ module JumpRtReturnVerification
         )
       end
 
-    return redirect_to_jump_return_target!(return_url) if result.success?
+    if result.success?
+      Rails.logger.info(
+        JitLogEvent.format(
+          "jump_return.accepted",
+          occurred_at: Time.current.utc.iso8601(3),
+          request_id: request.request_id,
+          request_path: request.path,
+          jump_source: result.payload["src"],
+          jump_jti_digest: StepUpObservabilityDigest.jump_jti_ref(result.payload.fetch("jti")),
+        ),
+      )
+      return redirect_to_jump_return_target!(return_url)
+    end
 
     Rails.logger.info(
       JitLogEvent.format(

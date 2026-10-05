@@ -26,6 +26,42 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     assert_session_contract(:app)
   end
 
+  test "app session inventory links to its own GET detail with complete display columns" do
+    user = clients(:one)
+    user.update!(status_id: ClientStatus::ACTIVE)
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    token = ClientToken.create!(
+      user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+    BaseSelectorAuthority.prepare(surface: :app, principal: user, session: token)
+    credential = AuthenticationToken.encode(
+      user, host: host, session_public_id: token.public_id,
+            resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+    )
+    headers = { "Host" => host,
+                "Authorization" => "Bearer #{credential}",
+                "Client-Agent" => "Mozilla/5.0", }
+
+    get base_app_sessions_url(ri: "jp", host: host), headers: headers
+
+    assert_response :success
+    props = JSON.parse(css_select("script[data-page='app']").first.text).fetch("props")
+    href = props.fetch("sessions").find { |row| row.fetch("revoke").nil? }.fetch("show_href")
+
+    assert_equal base_app_session_path(token.public_id, ri: "jp"), href
+
+    get href, headers: headers
+
+    assert_response :success
+    page = JSON.parse(css_select("script[data-page='app']").first.text)
+
+    assert_equal "base/app/identity/sessions/show", page.fetch("component")
+    assert_equal %w(created device expires_at last_activity status), page.fetch("props").fetch("columns").keys.sort
+    assert_equal base_app_sessions_path(ri: "jp"), page.fetch("props").dig("back_link", "href")
+  end
+
   test "com session inventory contains only user-facing fields and refuses self-revocation" do
     assert_session_contract(:com)
   end
@@ -72,6 +108,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     assert_predicate row, :present?
     expected_keys = %w(created device expires_at last_activity revoke status)
     expected_keys << "mode" if surface == :org
+    expected_keys << "show_href" if surface == :app
 
     assert_equal expected_keys.sort, row.keys.sort
     assert_equal "不明なデバイス", row.fetch("device")

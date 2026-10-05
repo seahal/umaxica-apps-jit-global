@@ -92,7 +92,6 @@ module VerificationBase
     require_verification!(scope)
     return false unless enforce_step_up_prereqs!(scope_override: scope)
 
-    flash[:alert] = I18n.t("auth.step_up.required")
     if request.get? || request.head?
       redirect_to(
         actor_verification_path(
@@ -211,6 +210,10 @@ module VerificationBase
     return false if reject_step_up_for_authentication_context!
     return true if available_step_up_methods.present?
 
+    if signed_in_client_without_step_up_methods?
+      return reject_signed_in_client_without_step_up_methods
+    end
+
     if request.get? || request.head?
       return true if configured_step_up_methods.present? && verification_entry_request?
 
@@ -248,7 +251,6 @@ module VerificationBase
         destination,
         fallback: fallback,
         status: :see_other,
-        alert: I18n.t("auth.step_up.register_methods_required"),
       )
     end
     false
@@ -447,15 +449,30 @@ module VerificationBase
     ::StepUpMethodsResolver.call(
       actor: actor,
       ticket: current_step_up_ticket,
-      supported_methods: step_up_permitted_methods,
+      supported_methods: step_up_supported_methods,
     )
+  end
+
+  def reject_signed_in_client_without_step_up_methods
+    message = I18n.t("auth.step_up.register_methods_required")
+    if request.format.json?
+      render json: { error: message }, status: :unprocessable_content
+    else
+      render plain: message, status: :forbidden
+    end
+    false
+  end
+
+  def signed_in_client_without_step_up_methods?
+    current_verification_actor.is_a?(Client) && current_session_token.is_a?(ClientToken) &&
+      current_session_token.established_authentication_method == "secret"
   end
 
   def step_up_bootstrap_unconfigured?(actor = current_verification_actor)
     return false unless actor
 
     refresh_actor_mfa_status(actor)
-    configured_step_up_methods(actor).empty?
+    configured_step_up_methods(actor).empty? && StepUpBootstrapEligibilityQuery.call(actor: actor)
   end
 
   def step_up_bootstrap_active?(actor = current_verification_actor)
@@ -471,34 +488,6 @@ module VerificationBase
     return token.step_up_session if token&.respond_to?(:step_up_session)
 
     nil
-  end
-
-  # The signed acme transaction is the authoritative operation policy.  A local
-  # verification endpoint may offer only the intersection of that policy and the
-  # fixed surface policy; no client parameter can expand either set.
-  def step_up_permitted_methods
-    supported = step_up_supported_methods
-    return supported unless respond_to?(:current_step_up_session, true)
-
-    scope = current_step_up_session&.scope
-    return supported if scope.blank?
-
-    transaction = current_step_up_ceremony_transaction_for_policy(scope)
-    return supported unless transaction
-
-    supported & transaction.allowed_methods_array.map(&:to_sym)
-  end
-
-  def current_step_up_ceremony_transaction_for_policy(scope)
-    if respond_to?(:acme_step_up_completion_state?, true) && acme_step_up_completion_state?
-      return current_step_up_ceremony_transaction!(scope: scope)
-    end
-
-    IdentityStepUpCeremonyReplayStore.for(step_up_ceremony_surface).latest_pending_for(
-      actor_ref: step_up_ceremony_actor_ref,
-      session_ref: actor_token.public_id,
-      required_scope: scope,
-    )
   end
 
   def step_up_supported_methods

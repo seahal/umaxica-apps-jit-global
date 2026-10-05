@@ -41,16 +41,23 @@ module Auth::App::Settings
       assert_match %r{/verification}, response.location
     end
 
-    test "verification accepts google edit return target for social link step-up" do
+    # Pins the current state of social credential management, which is outside the Step-Up
+    # migration: the edit page still sends the browser to the Auth verification entry, and that
+    # entry starts a ceremony only from a Base admission. Moving social management behind Base
+    # admission is a separate workstream; this test changes with it.
+    test "google edit redirects to the Auth verification entry, which refuses to start without Base admission" do
       get edit_auth_app_settings_google_url(ri: "jp"), headers: @headers
 
       assert_response :redirect
       verification_location = response.location
 
+      assert_equal "/verification", URI.parse(verification_location).path
+      assert_equal "social_link", Rack::Utils.parse_query(URI.parse(verification_location).query).fetch("scope")
+
       get verification_location, headers: @headers
 
-      assert_response :success
-      assert_equal "/verification", URI.parse(verification_location).path
+      assert_response :forbidden
+      assert_nil response.headers["Location"]
     end
 
     test "edit redirects to verification with recorded social-link step-up" do

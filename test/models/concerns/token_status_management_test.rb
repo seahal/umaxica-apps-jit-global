@@ -4,6 +4,47 @@
 require "test_helper"
 
 class TokenStatusManagementTest < ActiveSupport::TestCase
+  test "token revocation closes admitted continuity before at and after expiry on all three surfaces" do
+    %i(app com org).each do |surface|
+      [-1, 0, 1].each do |microseconds|
+        actor, token, ceremony_model =
+          case surface
+          when :app
+            [@user, ClientToken.create!(user: @user), ClientAuthCeremonySession]
+          when :com
+            visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+            [visitor, VisitorToken.create!(visitor: visitor), VisitorAuthCeremonySession]
+          when :org
+            operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+            [operator, OperatorToken.create!(staff: operator), OperatorAuthCeremonySession]
+          else
+            raise ArgumentError, "unsupported test surface"
+          end
+        requirement = StepUpRequirement.new(
+          scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:#{surface}",
+          session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
+        )
+        parent = BaseStepUpAdmissionIssuer.call!(
+          actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
+        ).transaction
+        continuity, = ceremony_model.rotate_and_admit!(
+          admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: parent.transaction_id, ttl: 1.second,
+        )
+        decision_time = continuity.expires_at + Rational(microseconds, 1_000_000)
+
+        token.revoke!(now: decision_time)
+
+        assert_predicate token.reload, :revoked?
+        assert_equal "revoked", parent.reload.status
+        assert_equal decision_time.iso8601(6), continuity.reload.revoked_at.iso8601(6)
+        assert_not continuity.active?(now: decision_time)
+        assert_raises(AuthCeremonySession::InvalidTransition) do
+          continuity.record_authentication_evidence!(method: "passkey", now: decision_time)
+        end
+      end
+    end
+  end
+
   def setup
     @user = Client.create!(
       public_id: "u_#{SecureRandom.hex(8)}",

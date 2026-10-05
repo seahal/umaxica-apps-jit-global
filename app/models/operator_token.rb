@@ -91,6 +91,11 @@ class OperatorToken < OrgTicketRecord
   include ::SessionOidcConnection
   include ::SelectedActorContext
 
+  SELECTED_ACTOR_CONTEXT_COLUMNS = %i(
+    selected_account_public_id selected_collective_public_id selected_collective_unit_public_id
+    selected_avatar_public_id selected_at
+  ).freeze
+
   DBSC_BINDING_METHOD_CLASS = OperatorTokenBindingMethod
   DBSC_STATUS_CLASS = OperatorTokenDbscStatus
 
@@ -129,6 +134,10 @@ class OperatorToken < OrgTicketRecord
   attr_accessor :skip_session_limit_check
 
   private
+
+  def step_up_authority_binding
+    [OperatorStepUpSession, OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession, :staff_token_id]
+  end
 
   # This is a model-level validation to provide a friendly error message to the user.
   # The primary enforcement of the session limit is done by a database trigger,

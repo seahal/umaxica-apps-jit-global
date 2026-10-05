@@ -680,17 +680,6 @@ module SignUpSequenceControllerSupport
 
   def sign_up_recovery_passcode_config(surface)
     case surface.to_sym
-    when :app
-      {
-        credential_class: ClientSecretCredential,
-        reveal_purpose: "client.recovery_secret_credential",
-        reveal_url: ->(token) {
-          base_app_identity_recovery_secret_url(
-            ri: params[:ri], token: token,
-            host: base_authority_host,
-          )
-        },
-      }
     when :com
       {
         credential_class: VisitorSecretCredential,

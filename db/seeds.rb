@@ -15,7 +15,7 @@ return if Rails.env.production?
 # prepared database. Ensure the reference tables this file depends on are populated before use.
 [
   ClientStatus, ClientVisibility, ClientMfaLevel, ClientMfaStatus,
-  ClientEmailStatus, ClientSecretCredentialKind, ClientSecretCredentialStatus,
+  ClientEmailStatus,
   VisitorSecretCredentialKind, VisitorSecretCredentialStatus, VisitorPasskeyStatus,
   OperatorStatus, OperatorVisibility, OperatorMfaLevel, OperatorMfaStatus,
   OperatorEmailStatus, OperatorSecretCredentialKind,
@@ -58,7 +58,6 @@ if avatar_connection.data_source_exists?("avatar_lifecycle_states")
   CreateAvatarLifecycleStateAuthority.new.seed_into(avatar_connection)
 end
 
-sample_user_secret = "00000000000000000000000000000000"
 sample_staff_public_id = "2222222222222222"
 sample_staff_secret = "22222222222222222222222222222222"
 sample_staff_email_address = "sample-staff@example.test"
@@ -79,13 +78,6 @@ user_email = user.client_emails.with_address(sample_user_email_address).first ||
 user_email.user_email_status_id = ClientEmailStatus::VERIFIED
 user_email.confirm_policy = true
 user_email.save!
-
-user_secret = user.client_secret_credentials.find_or_initialize_by(name: "sample-user-secret")
-user_secret.user_secret_kind_id = ClientSecretCredentialKind::LOGIN
-user_secret.user_identity_secret_status_id = ClientSecretCredentialStatus::ACTIVE
-user_secret.uses_remaining = 10
-user_secret.password = sample_user_secret
-user_secret.save!
 
 staff = Operator.find_or_initialize_by(public_id: sample_staff_public_id)
 staff.status_id = OperatorStatus::ACTIVE

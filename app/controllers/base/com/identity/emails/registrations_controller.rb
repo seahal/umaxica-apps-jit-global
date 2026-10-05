@@ -308,6 +308,17 @@ module Base
             step_up_bootstrap_active?
           end
 
+          def on_email_registration_verified!(*)
+            CredentialSecurityTransition.call(
+              actor: current_visitor,
+              current_session: current_session,
+              reason: :email_address_verified,
+              affected_surface: "com",
+              revoke_other_sessions: false,
+              request: request,
+            )
+          end
+
           def verification_scope
             "settings_email"
           end

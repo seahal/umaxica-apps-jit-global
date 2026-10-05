@@ -28,7 +28,7 @@ class Auth::App::Verification::PasskeysController < ::Auth::App::ApplicationCont
 
   def ceremony_supported_methods = %i(passkey totp email_otp)
 
-  def ceremony_passkey_scope = @step_up_ceremony_actor.client_passkeys.active
+  def ceremony_passkey_scope = @step_up_ceremony_actor.client_passkeys.active.where("discard_at > clock_timestamp()")
 
   def ceremony_passkey_handoff_path = auth_app_verification_handoff_path(ri: params[:ri])
 

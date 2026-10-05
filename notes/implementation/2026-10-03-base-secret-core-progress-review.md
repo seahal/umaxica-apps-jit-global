@@ -87,3 +87,29 @@ contains concurrent authentication, controller, migration, and documentation cha
 The cause of implementation duration cannot be established from these records alone.
 This review identifies visible unfinished contracts and evidence gaps, not elapsed
 time estimates, agent activity, or a claim that implementation is stalled.
+
+## Subsequent read-only Secret inventory
+
+The checkout advanced to `f313b126931cfe3c9ecf64bbb72fb1cd3a0aada5` on the same
+UTC date. Existing dirty work remained. With code and test operations still excluded
+pending clarification of the implementation goal, source reading established:
+
+- `app/models/client_secret_credential.rb` still includes the kind concern, status
+  defaults/associations, `belongs_to :user`, and RecoveryIdentityRequiredValidator.
+  These executable declarations contradict the target app-only rebuilt model; the
+  conclusion does not depend on the older schema annotation or its database label.
+- `config/routes/auth.rb` still declares app Sign-in Emergency display. Its source
+  contains no Secret route declaration in the inspected route search. Runtime route
+  enumeration was not performed; this is source-level evidence only.
+- `PasskeyRegistrationFlow` retains the shared RecoveryPasscodeTopUp call, whose
+  service target remains 10. This shared target must not be changed to implement
+  app's 2/1/0 contract because com behavior must remain intact. Actual actor-specific
+  call selection and new app issuance need separate evidence before claiming cutover.
+- Other source references to ClientSecretCredentialStatus and the app Emergency
+  operation remain in final-commit and withdrawal handling. The retirement inventory
+  must include those dependencies rather than only the credential model.
+
+These observations strengthen the earlier "completion evidence not located"
+assessment: the inspected current model still requires the specified reconstruction.
+They do not establish live database ownership, migration safety, browser behavior,
+or test outcomes. No Rails boot, test invocation, DDL, or code edit was performed.

@@ -23,7 +23,10 @@ module ObservabilityRedactor
     authorization cookie set-cookie x-csrf-token x-request-id x-forwarded-for
     dpop dpop-proof
   ).freeze
-  NON_SENSITIVE_KEYS = %w(event_uuid reason_code).freeze
+  # Keys whose values are a fixed internal vocabulary, although their names match the pattern above.
+  NON_SENSITIVE_KEYS = %w(
+    event_uuid reason_code error_code state_before state_after authentication_state
+  ).freeze
   SENSITIVE_STRING_PATTERNS = [
     /\bBearer\s+[a-z0-9._~+\-\/=]+/i,
     /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/,

@@ -903,8 +903,8 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "app placeholder entrypoints are read-only and app-only" do
-    { "emergency" => "emergencies", "device" => "devices" }.each do |resource, controller|
+  test "app device placeholder remains read-only and app-only" do
+    { "device" => "devices" }.each do |resource, controller|
       assert_recognizes(
         { controller: "auth/app/sign/in/#{controller}", action: "show" },
         { path: "http://#{SIGN_APP_HOST}/sign/in/#{resource}", method: :get },

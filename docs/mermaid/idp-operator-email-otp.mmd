@@ -1,0 +1,17 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "OTP expired/cleared (derived)" as inactive
+    state "otp_active? true (derived)" as active
+    state "locked? true (derived)" as locked
+    [*] --> inactive
+    inactive --> active: store_otp
+    active --> active: store_otp reissue
+    active --> locked: increment_attempts! threshold
+    locked --> active: lockout clock elapsed
+    active --> inactive: OTP deadline elapsed / clear_otp
+    locked --> inactive: clear_otp reset_attempts true
+    note right of inactive
+        Labels are overlapping predicates, not an enum.
+        store_otp preserves an active lock.
+        clear_otp(false) can leave a locked expired OTP.
+    end note

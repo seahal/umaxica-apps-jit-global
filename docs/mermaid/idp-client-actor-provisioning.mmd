@@ -1,0 +1,19 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=11" as NOTHING
+    state "ACTIVE id=1" as ACTIVE
+    state "INACTIVE id=2" as INACTIVE
+    state "PENDING id=3" as PENDING
+    state "DELETED id=4" as DELETED
+    state "WITHDRAWN id=5" as WITHDRAWN
+    state "PENDING_DELETION id=6" as PENDING_DELETION
+    state "PRE_WITHDRAWAL_CONDITION id=7" as PRE_WITHDRAWAL_CONDITION
+    state "WITHDRAWAL_COMPLETED id=8" as WITHDRAWAL_COMPLETED
+    state "UNVERIFIED_WITH_SIGN_UP id=9" as UNVERIFIED_WITH_SIGN_UP
+    state "VERIFIED_WITH_SIGN_UP id=10" as VERIFIED_WITH_SIGN_UP
+    state "GHOST id=12" as GHOST
+    state "RESERVED id=13" as RESERVED
+    [*] --> UNVERIFIED_WITH_SIGN_UP
+    [*] --> VERIFIED_WITH_SIGN_UP
+    [*] --> NOTHING
+    UNVERIFIED_WITH_SIGN_UP --> VERIFIED_WITH_SIGN_UP: contact/signup final commit

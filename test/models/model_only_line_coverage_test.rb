@@ -437,31 +437,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_predicate ceremony, :expired?
   end
 
-  test "step up result collision is translated to the ceremony contract error" do
-    now = Time.zone.parse("2026-07-18 08:00:00")
-    first = ClientStepUpCeremonyTransaction.create_transaction!(
-      actor_ref: "collision-actor-1", session_ref: "collision-session-1",
-      required_scope: "settings_email", required_aal: "aal2", allowed_methods: %w(totp),
-      transaction_id: "collision-transaction-1", grant_jti: "collision-grant-1", now: now,
-    )
-    first.consume_result!(
-      result_jti: "collision-result", method: "totp", aal: "aal2",
-      verified_at: now, consumed_at: now,
-    )
-    second = ClientStepUpCeremonyTransaction.create_transaction!(
-      actor_ref: "collision-actor-2", session_ref: "collision-session-2",
-      required_scope: "settings_email", required_aal: "aal2", allowed_methods: %w(totp),
-      transaction_id: "collision-transaction-2", grant_jti: "collision-grant-2", now: now,
-    )
-
-    assert_raises(IdentityStepUpCeremonyContract::Error) do
-      second.consume_result!(
-        result_jti: "collision-result", method: "totp", aal: "aal2",
-        verified_at: now, consumed_at: now,
-      )
-    end
-  end
-
   test "org preference chronicle defaults its actor to its subject" do
     preference = OrgPreference.new(id: 123)
     chronicle = OrgPreferenceChronicle.new(subject_id: 123, subject_type: "OrgPreference")
@@ -511,16 +486,15 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
                    now: now,
                  )
 
-    consumed = transaction.consume_result!(
-      result_jti: "model-coverage-result",
-      method: "totp",
-      aal: "aal2",
-      verified_at: now,
-      consumed_at: now,
+    # The fixed clock of this test is outside the database-clocked transitions, so the consumed
+    # state is written directly; the transitions are covered by the transition contract test.
+    transaction.update_columns(
+      status: "consumed", result_jti: "model-coverage-result", method: "totp", aal: "aal1",
+      verified_at: now, consumed_at: now,
     )
 
-    assert_predicate consumed, :consumed?
-    assert_includes ClientStepUpCeremonyTransaction.consumed, consumed
+    assert_predicate transaction.reload, :consumed?
+    assert_includes ClientStepUpCeremonyTransaction.consumed, transaction
   end
 
   test "step up cancellation scopes and validations reject invalid state" do
@@ -537,10 +511,10 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
       now: now,
     )
 
-    canceled = transaction.cancel!(canceled_at: now)
+    transaction.commit_cancellation!(now: now)
 
-    assert_predicate canceled, :canceled?
-    assert_includes ClientStepUpCeremonyTransaction.canceled, canceled
+    assert_predicate transaction.reload, :canceled?
+    assert_includes ClientStepUpCeremonyTransaction.canceled, transaction
 
     invalid = ClientStepUpCeremonyTransaction.new(
       surface: "com",

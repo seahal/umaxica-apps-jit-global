@@ -10,7 +10,7 @@ class Auth::App::Settings::Passkeys::VerificationsController < ::Auth::App::Appl
   declare_authentication_mode! :private
 
   before_action :authenticate_client!
-  step_up only: :create, bootstrap: true
+  step_up only: :create
 
   def create = (authorize!(ClientPasskey, to: :create?); verify_passkey_registration)
 

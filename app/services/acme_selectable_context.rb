@@ -55,7 +55,8 @@ module AcmeSelectableContext
   end
 
   # Atomically write the chosen candidate's public ids onto the session token. Validation is
-  # the caller's responsibility (candidate must already be confirmed); this only persists.
+  # the caller's responsibility (candidate must already be confirmed). A changed selection
+  # invalidates prior ceremony authority in the same token transaction; revisiting does not.
   def persist_selection!(candidate)
     raise InvalidSelection, "session_required" if session.blank?
 
@@ -70,12 +71,12 @@ module AcmeSelectableContext
           selected_collective_unit_public_id: public_ids[:organization_unit_public_id],
           selected_at: Time.current,
         }
-        if session.respond_to?(:selected_avatar_public_id=)
+        if config.avatar_mode != :none
           attributes[:selected_avatar_public_id] = public_ids[:avatar_public_id]
-        elsif config.avatar_mode != :none
-          raise InvalidSelection, "avatar_selection_storage_required"
         end
 
+        selection = attributes.except(:selected_at)
+        session.revoke_step_up_authority! unless session.slice(*selection.keys) == selection.stringify_keys
         session.update!(attributes)
       end
     end

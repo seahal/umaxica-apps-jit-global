@@ -158,12 +158,18 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_equal "private, no-store", response.headers["Cache-Control"]
   end
 
-  test "anonymous direct dashboard request returns 404 without redirect" do
-    get "/dashboard", headers: host_headers(@host)
+  # The accepted Base guidance contract supersedes anonymous Dashboard's old 404.
+  # Authenticated Home remains a rendered 404 in its separate test above.
+  test "anonymous direct dashboard request reaches the same Base passive Sign entry" do
+    get "/dashboard", headers: { "Host" => @host }
 
-    assert_response :not_found
-    assert_nil response.location
-    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_response :redirect
+    destination = URI.parse(response.location)
+
+    assert_equal @host, destination.host
+    assert_equal "/sign", destination.path
+    assert_equal "jp", Rack::Utils.parse_query(destination.query).fetch("ri")
+    assert_equal "no-store", response.headers["Cache-Control"]
   end
 
   test "root_with_an_expired_com_session_renders_the_home" do
@@ -317,10 +323,13 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
       cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = credential
       get "/dashboard", headers: { "Host" => @host }
 
-      assert_response :not_found, label
-      assert_nil response.location, label
-      assert_equal Rails.public_path.join("404.html").read, response.body, label
-      assert_equal "private, no-store", response.headers["Cache-Control"], label
+      assert_response :redirect, label
+      destination = URI.parse(response.location)
+
+      assert_equal @host, destination.host, label
+      assert_equal "/sign", destination.path, label
+      assert_equal "jp", Rack::Utils.parse_query(destination.query).fetch("ri"), label
+      assert_equal "no-store", response.headers["Cache-Control"], label
     end
   end
 

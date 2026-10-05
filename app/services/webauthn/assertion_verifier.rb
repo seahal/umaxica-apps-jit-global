@@ -45,6 +45,8 @@ module Webauthn
       raise UserPresenceRequiredError, "assertion is not user-present" unless authenticator_data.user_present?
 
       AuthenticationContext.from_credential(credential)
+    rescue OpenSSL::PKey::PKeyError
+      raise VerificationError, "assertion signature verification failed"
     end
   end
 end

@@ -10,6 +10,7 @@ module Core
         class BaseController < ActionController::Base # rubocop:disable Rails/ApplicationController
           include ActionPolicy::Controller
           include ::CoreBrowserApiBoundary
+          include ::TrustedOriginForgeryProtection
 
           AUTHENTICATION_MODE = :bare
 

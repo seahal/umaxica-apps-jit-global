@@ -217,7 +217,7 @@ class Auth::Com::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "Updated Passkey", @passkey.reload.description
   end
 
-  test "destroy removes visitor passkey on sign settings authority" do
+  test "destroy retains deleted visitor passkey history on sign settings authority" do
     VisitorPasskey.create!(
       visitor: @visitor,
       webauthn_id: "test_webauthn_id_destroy_extra",
@@ -229,11 +229,20 @@ class Auth::Com::Settings::PasskeysControllerTest < ActionDispatch::IntegrationT
     )
     headers = headers_for_visitor_token(@token, scope: "settings_passkey")
 
-    assert_difference("VisitorPasskey.count", -1) do
+    assert_no_difference("VisitorPasskey.count") do
       delete auth_com_settings_passkey_path(@passkey.public_id, ri: "jp"), headers: headers
     end
 
     assert_redirected_to auth_com_settings_passkeys_path(ri: "jp")
+    assert_equal VisitorPasskeyStatus::DELETED, @passkey.reload.status_id
+    assert_nil @token.reload.last_step_up_at
+    get auth_com_settings_passkeys_path(ri: "jp"),
+        headers: headers.merge("X-Inertia" => "true", "X-Inertia-Version" => ViteRuby.digest)
+
+    assert_response :success
+    rows = response.parsed_body.fetch("props").fetch("passkeys")
+
+    assert rows.none? { |row| row.fetch("public_id") == @passkey.public_id }
   end
 
   test "destroy requires fresh settings passkey step up" do

@@ -5,37 +5,39 @@ module StepUpScopeCatalog
   APP = {
     "social_link" => %r{\A/settings/(?:google|apple)(?:/edit)?(?:\z|[?#])},
     "social_unlink" => %r{\A/settings/(?:google|apple)(?:/edit)?(?:\z|[?#])},
-    "session_revoke_all" => %r{\A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions)},
-    "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)},
-    "settings_email" => %r{\A(?:/settings/emails|/identity/emails)},
-    "settings_telephone" => %r{\A(?:/settings/telephones|/identity/telephones)},
-    "settings_passkey" => %r{\A/settings/passkeys},
+    "session_revoke_all" =>
+      %r{\A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions)(?:\z|[/?#])},
+    "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)(?:\z|[/?#])},
+    "settings_email" => %r{\A(?:/settings/emails|/identity/emails)(?:\z|[/?#])},
+    "settings_telephone" => %r{\A(?:/settings/telephones|/identity/telephones)(?:\z|[/?#])},
+    "settings_passkey" => %r{\A/settings/passkeys(?:\z|[/?#])},
     "settings_mfa" => %r{\A/identity/mfa/challenge(?:\z|[?#])},
-    "settings_secret_credential" => %r{\A/settings/(?:secrets|secret_credentials)},
+    "settings_secret_credential" => %r{\A/secrets(?:\z|[/?#])},
     "settings_birthdate" => %r{\A(?:/settings/birthdate|/identity/birthdate)(?:\z|[?#])},
-    "settings_totp" => %r{\A/settings/totps},
+    "settings_totp" => %r{\A/settings/totps(?:\z|[/?#])},
     "avatar_transfer_request" => %r{\A/avatar_ownership_transfers(?:\z|[?#])},
     "avatar_transfer_accept" => %r{\A/avatar_ownership_transfers/[^/?#]+/accept(?:\z|[?#])},
     "avatar_transfer_cancel" => %r{\A/avatar_ownership_transfers/[^/?#]+/cancel(?:\z|[?#])},
   }.freeze
 
   COM = APP.merge(
-    "settings_secret_credential" => %r{\A(?:/settings/(?:secrets|secret_credentials)|/identity/secrets)},
+    "settings_secret_credential" => %r{\A(?:/settings/(?:secrets|secret_credentials)|/identity/secrets)(?:\z|[/?#])},
   ).except(
     "settings_totp", "social_link", "social_unlink", "avatar_transfer_request", "avatar_transfer_accept",
     "avatar_transfer_cancel",
   ).freeze
 
   ORG = {
-    "session_revoke_all" => %r{\A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions)},
-    "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)},
-    "settings_email" => %r{\A(?:/settings/emails|/identity/emails)},
-    "settings_telephone" => %r{\A(?:/settings/telephones|/identity/telephones)},
-    "settings_passkey" => %r{\A/settings/passkeys},
+    "session_revoke_all" =>
+      %r{\A(?:/sign/settings/sessions|/settings/sessions|/sessions|/identity/sessions)(?:\z|[/?#])},
+    "withdrawal" => %r{\A(?:/settings/withdrawal|/identity/withdrawal)(?:\z|[/?#])},
+    "settings_email" => %r{\A(?:/settings/emails|/identity/emails)(?:\z|[/?#])},
+    "settings_telephone" => %r{\A(?:/settings/telephones|/identity/telephones)(?:\z|[/?#])},
+    "settings_passkey" => %r{\A/settings/passkeys(?:\z|[/?#])},
     "settings_mfa" => %r{\A/identity/mfa/challenge(?:\z|[?#])},
-    "settings_secret_credential" => %r{\A(?:/settings/(?:secrets|secret_credentials)|/identity/secrets)},
+    "settings_secret_credential" => %r{\A(?:/settings/(?:secrets|secret_credentials)|/identity/secrets)(?:\z|[/?#])},
     "settings_birthdate" => %r{\A(?:/settings/birthdate|/identity/birthdate)(?:\z|[?#])},
-    "operator_lifecycle" => %r{\A(?:/settings/operator_lifecycle_requests|/identity/withdrawal(?:\z|[?#]))},
+    "operator_lifecycle" => %r{\A(?:/settings/operator_lifecycle_requests(?:\z|[/?#])|/identity/withdrawal(?:\z|[?#]))},
     "avatar_transfer_request" => %r{\A/avatar_ownership_transfers(?:\z|[?#])},
     "avatar_transfer_accept" => %r{\A/avatar_ownership_transfers/[^/?#]+/accept(?:\z|[?#])},
     "avatar_transfer_cancel" => %r{\A/avatar_ownership_transfers/[^/?#]+/cancel(?:\z|[?#])},

@@ -70,6 +70,17 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "<script"
   end
 
+  # A form without `action` submits to the document's own URL, so retrying a failed /dashboard
+  # navigation requests /dashboard again rather than its directory, `/`.
+  test "the offline retry control is a GET form that targets the failed path, not its directory" do
+    host! HOSTS.first
+    get "/offline", headers: WORKER_HEADERS
+
+    assert_select "form[method=get]", 1
+    assert_select "form[action]", 0
+    assert_select "form input", 0
+  end
+
   test "both endpoints resolve to the framework PWA controller, not a surface controller" do
     assert_equal Rails::PwaController, "rails/pwa".camelize.concat("Controller").constantize
 

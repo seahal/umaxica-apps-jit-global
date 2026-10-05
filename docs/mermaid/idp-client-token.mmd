@@ -1,0 +1,32 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0 (reference; entry UNKNOWN)" as NOTHING
+    state "ACTIVE id=1" as ACTIVE
+    state "EXPIRED id=102 (declared)" as EXPIRED
+    state "RESTRICTED id=103" as RESTRICTED
+    state "REVOKED id=104" as REVOKED
+    state "rotated_at present (derived; status retained)" as rotated
+    [*] --> ACTIVE
+    [*] --> RESTRICTED
+    ACTIVE --> ACTIVE: promote_to_active!
+    ACTIVE --> RESTRICTED: mark_restricted!
+    ACTIVE --> REVOKED: revoke!
+    EXPIRED --> ACTIVE: promote_to_active!
+    EXPIRED --> RESTRICTED: mark_restricted!
+    EXPIRED --> REVOKED: revoke!
+    RESTRICTED --> ACTIVE: promote_to_active!
+    RESTRICTED --> RESTRICTED: mark_restricted!
+    RESTRICTED --> REVOKED: revoke!
+    REVOKED --> ACTIVE: promote_to_active!
+    REVOKED --> RESTRICTED: mark_restricted!
+    REVOKED --> REVOKED: revoke!
+    ACTIVE --> rotated: rotate_refresh!
+    RESTRICTED --> rotated: rotate_refresh!
+    NOTHING --> ACTIVE: promote_to_active!
+    NOTHING --> RESTRICTED: mark_restricted!
+    NOTHING --> REVOKED: revoke!
+    note right of ACTIVE
+        EXPIRED has no located production setter.
+        Public promote/restrict lack terminal-source guard.
+        Rotation replaces row; derived rotated node keeps status.
+    end note

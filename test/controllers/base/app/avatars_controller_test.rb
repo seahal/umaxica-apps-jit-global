@@ -33,10 +33,20 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/avatars/index", inertia_component
     assert_equal "Avatars", inertia_props.fetch("title")
-    assert_equal "Create Avatar", inertia_props.dig("create_action", "label")
-    assert_equal I18n.t("base.shared.dashboard.links.dashboard", locale: :ja),
-                 inertia_props.dig("up_link", "label")
+    assert_nil inertia_props.fetch("create_action")
+    assert_equal I18n.t("actions.up", locale: :ja), inertia_props.dig("up_link", "label")
     assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("up_link", "href")
+  end
+
+  test "avatar list offers creation only while the selected persona has no active binding" do
+    result = bootstrap_and_select!(@user, @token)
+    result.avatar.current_avatar_persona_binding.revoke!(force: true)
+
+    get base_app_avatars_url(ri: "jp", host: @host), headers: as_user_headers(@user, host: @host)
+
+    assert_response :success
+    assert_equal "Create Avatar", inertia_props.dig("create_action", "label")
+    assert_equal new_base_app_avatar_path(ri: "jp"), inertia_props.dig("create_action", "href")
   end
 
   test "avatar list loads current monikers in one association query" do
@@ -81,6 +91,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/avatars/show", inertia_component
     assert_equal result.avatar.moniker, inertia_props.fetch("moniker")
+    assert_equal base_app_avatars_path(ri: "jp"), inertia_props.dig("up_link", "href")
 
     get edit_base_app_avatar_url(result.avatar.public_id, ri: "jp", host: @host),
         headers: as_user_headers(@user, host: @host)
@@ -88,6 +99,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "base/app/avatars/edit", inertia_component
     assert_equal "patch", inertia_props.fetch("method")
+    assert_equal base_app_avatar_path(result.avatar.public_id, ri: "jp"), inertia_props.dig("up_link", "href")
 
     patch base_app_avatar_url(result.avatar.public_id, ri: "jp", host: @host),
           params: { avatar: { moniker: "Updated Avatar" } },
@@ -122,6 +134,7 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "base/app/avatars/new", inertia_component
     assert_equal "post", inertia_props.fetch("method")
     assert_equal "New Avatar", inertia_props.fetch("title")
+    assert_equal base_app_avatars_path(ri: "jp"), inertia_props.dig("up_link", "href")
   end
 
   test "create avatar persists owned avatar" do
@@ -203,6 +216,22 @@ class Base::App::AvatarsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
     assert_equal "base/app/avatars/new", inertia_component
     assert_not_empty inertia_props.dig("errors", "avatar.moniker")
+  end
+
+  test "create avatar reports the existing persona binding on the form and writes no rows" do
+    bootstrap_and_select!(@user, @token)
+
+    assert_no_difference ["Avatar.count", "Handle.count", "AvatarPersonaBinding.count",
+                          "AvatarOwnershipPeriod.current.count",] do
+      post base_app_avatars_url(ri: "jp", host: @host),
+           params: { avatar: { moniker: "Second Avatar", handle: "second" } },
+           headers: as_user_headers(@user, host: @host)
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "base/app/avatars/new", inertia_component
+    assert_equal I18n.t("base.app.avatars.already_assigned", locale: :ja), inertia_props.dig("errors", "avatar")
+    assert_nil inertia_props.dig("errors", "avatar.moniker")
   end
 
   test "cannot show another client's avatar" do

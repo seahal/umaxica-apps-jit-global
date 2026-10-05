@@ -8,7 +8,7 @@
 # helpers. It lets a sensitive controller declare its step-up requirement in
 # one line instead of hand-written hooks, reducing the risk that a new
 # sensitive action silently ships without a step-up gate. The runtime
-# behaviour (redirect/status/flash) is identical to calling the underlying
+# behaviour (redirect/status) is identical to calling the underlying
 # helper directly -- this concern only moves the declaration, not the logic.
 module VerificationStepUpGuard
   extend ActiveSupport::Concern

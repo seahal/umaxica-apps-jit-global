@@ -1,10 +1,45 @@
 # Step-Up Ceremony Delegation
 
-> **Legacy Sign/Acme vocabulary:** The `sign/id` → `acme/www` signed-result flow below is historical
-> context. It must not be used to design a new handoff. Current Rails Base/Auth OIDC finalization
-> follows the opaque, generation-bound result contract documented in
-> `docs/security/ceremony-grant-result.md`; the session-bound freshness decision remains owned by
-> the current session authority.
+## Current admitted path
+
+Base owns the existing Browser Session and the step-up requirement. A protected GET first returns
+to Base's verification confirmation page. Its CSRF-protected POST issues a purpose-specific opaque
+admission bound to the actor, surface, session, scope and destination. Auth GET displays a
+nonconsuming continuation; Auth POST accepts that admission, rotates ceremony-local continuity,
+and redirects to a clean URL. Auth root credentials are unnecessary for this path.
+
+Auth verifies an allowed credential against the exact PostgreSQL transaction. Its same-origin
+handoff POST issues an opaque result in a cross-host form body. Base requires its original browser
+transaction marker, current root session and configured Auth origin. Base rechecks the actual
+credential and requirement on writers, then commits freshness, transaction consumption and Auth
+continuity completion together on the actor-specific ticket connection. A result or redirect alone
+does not authorize a protected operation. The original mutation POST is never resubmitted.
+
+### First APP TOTP registration
+
+Base may issue `bootstrap` only when credential state permits first registration. Confirmed Email
+counts as configured; unavailable Passkey/TOTP history is not a bootstrap permission. Signed-in APP
+Secret management has no bootstrap exception. Setup admission is connected on APP, COM and ORG;
+Passkey registration and later credential-management integration remain unfinished.
+
+APP TOTP enrollment uses an encrypted server-side candidate and a child registration transaction
+bound to that Base permission. GET never starts or replaces enrollment. Repeated start preserves
+the secret, deadline and failures. Auth verifies the first code without creating a credential;
+Base consumes the opaque registration result and creates the credential. Registration evidence
+has no achieved AAL, phishing-resistance or freshness claim. A separate ordinary assertion must
+satisfy the original protected requirement. Cancellation closes the exact permission and returns
+to a fixed Base dashboard.
+
+Principal creation and ticket consumption span different databases. Their actor-lock protocol is
+fail-closed, not distributed atomicity. A result retry may return the same existing active owned
+credential; it cannot recreate or reactivate a missing or revoked credential. See the
+[registration separation decision](../../adr/base-auth-ceremony-and-seven-rp-boundary.md#registration-evidence-separation-amendment-2026-10-04).
+
+## Historical paths pending retirement
+
+The Sign/Acme signed-grant description below documents remaining legacy callers. It is not the
+contract for new admission or completion. Migration, credential changes, audit/notification
+integration, retention and the broader regression campaign remain open.
 
 ## Boundary
 

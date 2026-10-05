@@ -75,6 +75,14 @@ module AuthCeremonyContext
   end
 
   def auth_ceremony_step_up_transaction
+    auth_ceremony_ticket_transaction(%w(step_up reauthentication))
+  end
+
+  def auth_ceremony_registration_transaction
+    auth_ceremony_ticket_transaction(%w(bootstrap credential_registration))
+  end
+
+  def auth_ceremony_ticket_transaction(expected_purposes)
     record = admitted_auth_ceremony_session
     return nil if record&.step_up_ceremony_transaction_ref.blank?
 
@@ -82,8 +90,13 @@ module AuthCeremonyContext
       case record.admission_purpose
       when "step_up_handoff" then "step_up"
       when "reauthentication_handoff" then "reauthentication"
+      when "bootstrap_handoff" then "bootstrap"
+      when "credential_registration_handoff" then "credential_registration"
+      when "credential_change_handoff" then "credential_change"
       else return nil
       end
+    return nil unless expected_purposes.include?(intent)
+
     BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
       payload: {
         "purpose" => record.admission_purpose,
@@ -119,8 +132,8 @@ module AuthCeremonyContext
   end
 
   def auth_ceremony_matches_intent?(expected_intent)
-    if %w(step_up reauthentication).include?(expected_intent.to_s)
-      return auth_ceremony_step_up_transaction&.purpose == expected_intent.to_s
+    if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+      return auth_ceremony_ticket_transaction([expected_intent.to_s])&.purpose == expected_intent.to_s
     end
 
     transaction = auth_ceremony_authorization_transaction

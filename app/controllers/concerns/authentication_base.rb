@@ -724,6 +724,8 @@ module AuthenticationBase
 
     if request.format.json?
       render json: { error: "Unauthorized" }, status: :unauthorized
+    elsif !authentication_redirect_allowed?
+      head :unauthorized
     else
       SignRiskEmitter.emit(
         "auth_required",
@@ -1677,6 +1679,11 @@ module AuthenticationBase
 
   protected
 
+  # Non-document endpoints opt out of interactive Sign while retaining both gates.
+  def authentication_redirect_allowed?
+    true
+  end
+
   # Subclasses can opt out for authenticated GET-only informational pages whose contract
   # requires the request to leave session state unchanged.
   def track_authenticated_session_activity?
@@ -2093,6 +2100,8 @@ module AuthenticationBase
     # Branch HTML vs API (or delegate to your responder).
     if request.format.json? || options[:request_format] == :json
       handle_auth_required_json(options)
+    elsif !authentication_redirect_allowed?
+      head :unauthorized
     else
       handle_auth_required_html(options)
     end
@@ -2403,6 +2412,12 @@ module AuthenticationBase
       return false if Time.zone.at(issued_at) < pending_mfa_ttl.ago
     end
 
+    if local_authentication_ceremony?
+      cycle = auth_ceremony_local_sign_in_flow
+      return false unless cycle && cycle.state == "MFA_PENDING" && cycle.sign_in_mfa_pending? &&
+        cycle.principal_id == data[:user_id]
+    end
+
     true
   end
 
@@ -2626,18 +2641,10 @@ module AuthenticationBase
     end
 
     if local_authentication_ceremony?
-      ceremony = admitted_auth_ceremony_session
-      unless ceremony && ceremony.local_sign_in_flow_ref == cycle.public_id
-        raise AuthCeremonySession::InvalidTransition, "local authentication admission is missing"
-      end
-
-      cycle.record_local_authentication_evidence!(
-        method: established_authentication_method,
-        authenticated_at: authentication_event_at,
-        authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+      return record_local_ceremony_evidence!(
+        resource, cycle: cycle, method: established_authentication_method,
+                  authentication_event_at: authentication_event_at, authentication_context: authentication_context,
       )
-      ceremony.record_authentication_evidence!(method: established_authentication_method)
-      return { status: :authentication_evidence_recorded }
     end
 
     # A non-authoritative early answer: the final count happens again under
@@ -2662,6 +2669,38 @@ module AuthenticationBase
     return result unless result[:status] == :success
 
     result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
+  end
+
+  def record_local_ceremony_evidence!(resource, cycle:, method:, authentication_event_at:, authentication_context:)
+    ceremony = admitted_auth_ceremony_session
+    return { status: :invalid_request } unless cycle && ceremony
+
+    resource.class.connection_class_for_self.connected_to(role: :writing) do
+      resource.with_lock do
+        return { status: :login_forbidden } unless resource.login_allowed?
+
+        cycle.class.connection_class_for_self.connected_to(role: :writing) do
+          cycle.with_lock do
+            ceremony.lock!
+            now = cycle.class.database_now
+            valid_phase = (cycle.state == "PRIMARY_PENDING" && cycle.sign_in_primary_pending?) ||
+              (cycle.state == "MFA_PENDING" && cycle.sign_in_mfa_pending?)
+            unless valid_phase && cycle.principal_id == resource.id && !cycle.expired?(now) &&
+                ceremony.local_sign_in_flow_ref == cycle.public_id && ceremony.active?(now: now) &&
+                ceremony.admitted? && !cycle.authentication_event_at && !ceremony.authentication_evidence_recorded?
+              return { status: :invalid_request }
+            end
+
+            cycle.record_local_authentication_evidence!(
+              method: method, authenticated_at: authentication_event_at,
+              authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+            )
+            ceremony.record_authentication_evidence!(method: method)
+          end
+        end
+      end
+    end
+    { status: :authentication_evidence_recorded }
   end
 
   # The verified sign-in flow is the only pending state. The browser carries
@@ -3213,6 +3252,22 @@ module AuthenticationBase
       return redirect_to(withdrawal_required_session_entry_path, allow_other_host: false)
     end
 
+    # Presence flags only: they separate an access credential the browser stopped sending from a
+    # refused one, without recording either credential.
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.session.authentication_required",
+        occurred_at: Time.current.utc.iso8601(3),
+        request_id: request.request_id,
+        controller: self.class.name,
+        action: action_name,
+        failure_reason: @current_authentication_failure_reason,
+        access_credential_presented: request.cookies.key?(ACCESS_COOKIE_KEY),
+        refresh_credential_presented: request.cookies.key?(REFRESH_COOKIE_KEY),
+        # Strict credentials are withheld on a cross-site navigation; this tells that case apart.
+        fetch_site: request.headers["Sec-Fetch-Site"].presence_in(%w(same-origin same-site cross-site none)),
+      ),
+    )
     # sign_in_url_with_pt is part of this concern's contract (declared abstract above), so every
     # including controller answers it.
     store_authentication_return_target!(request.fullpath) unless respond_to?(

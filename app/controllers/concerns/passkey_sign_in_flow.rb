@@ -99,32 +99,51 @@ module PasskeySignInFlow
   # -- ceremony ------------------------------------------------------------
 
   def verify_and_login(challenge, actor_id)
-    passkey = passkey_sign_in_model.find_by(webauthn_id: credential_params[:id])
+    passkey_sign_in_model.connection_class_for_self.connected_to(role: :writing) do
+      passkey = passkey_sign_in_model.find_by(webauthn_id: credential_params[:id])
 
-    unless passkey && passkey_belongs_to_challenge_actor?(passkey, actor_id)
-      Rails.logger.warn(passkey_owner_mismatch_log_message)
-      emit_passkey_auth_failed(reason: "credential_not_found")
-      return render_error("errors.webauthn.credential_not_found", :unauthorized)
+      unless passkey && passkey_belongs_to_challenge_actor?(passkey, actor_id)
+        Rails.logger.warn(passkey_owner_mismatch_log_message)
+        emit_passkey_auth_failed(reason: "credential_not_found")
+        return render_error("errors.webauthn.credential_not_found", :unauthorized)
+      end
+
+      actor = passkey_sign_in_actor(passkey)
+      actor.with_lock do
+        passkey.with_lock do
+          return reject_passkey_sign_in unless passkey_sign_in_actor(passkey).id == actor.id
+          return reject_passkey_sign_in unless passkey_belongs_to_challenge_actor?(passkey, actor_id)
+
+          @_risk_actor_id = actor.id
+          return unless passkey_eligible_for_sign_in?(passkey)
+
+          context = Webauthn::AssertionVerifier.verify!(
+            credential_params: credential_params.to_h,
+            challenge: challenge,
+            config: webauthn_relying_party_config,
+            public_key: passkey.public_key,
+            sign_count: passkey.sign_count,
+            purpose: passkey_assertion_uv_purpose,
+          )
+
+          attrs = { sign_count: context.sign_count }
+          attrs[:last_used_at] = context.verified_at if passkey.has_attribute?(:last_used_at)
+          attrs[:uv_verified_at] = context.verified_at if passkey.has_attribute?(:uv_verified_at)
+          passkey.update!(attrs)
+
+          handle_login_result(perform_passkey_sign_in(passkey))
+        end
+      end
     end
+  end
 
-    @_risk_actor_id = passkey.public_send(webauthn_surface.actor_foreign_key)
-    return unless passkey_eligible_for_sign_in?(passkey)
-
-    context = Webauthn::AssertionVerifier.verify!(
-      credential_params: credential_params.to_h,
-      challenge: challenge,
-      config: webauthn_relying_party_config,
-      public_key: passkey.public_key,
-      sign_count: passkey.sign_count,
-      purpose: passkey_assertion_uv_purpose,
-    )
-
-    attrs = { sign_count: context.sign_count }
-    attrs[:last_used_at] = context.verified_at if passkey.has_attribute?(:last_used_at)
-    attrs[:uv_verified_at] = context.verified_at if passkey.has_attribute?(:uv_verified_at)
-    passkey.update!(attrs)
-
-    handle_login_result(perform_passkey_sign_in(passkey))
+  def passkey_sign_in_actor(passkey)
+    case passkey
+    when ClientPasskey then passkey.user
+    when VisitorPasskey then passkey.visitor
+    when OperatorPasskey then passkey.staff
+    else raise ArgumentError, "unsupported Passkey credential"
+    end
   end
 
   def credential_params
@@ -262,6 +281,11 @@ module PasskeySignInFlow
     status_class = webauthn_surface.passkey_status_class
 
     return reject_passkey_sign_in unless passkey.status_id == status_class::ACTIVE
+
+    if passkey.is_a?(ClientPasskey) || passkey.is_a?(VisitorPasskey)
+      return reject_passkey_sign_in unless passkey.class.where(id: passkey.id)
+        .exists?(["discard_at > ?", passkey.class.database_now])
+    end
     return reject_passkey_sign_in unless actor&.active?
 
     allow_passkey_sign_in?(passkey)

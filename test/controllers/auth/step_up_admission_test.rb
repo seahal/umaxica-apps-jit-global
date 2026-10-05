@@ -1,16 +1,118 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "support/webauthn_fake_client_helper"
+require "webauthn/fake_client"
 
 class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
-  include WebauthnFakeClientHelper
+  self.fixture_table_names = []
 
   fixtures :clients, :client_statuses, :visitor_statuses
 
   teardown do
     TurnstileVerifierStub.enabled = false
     TurnstileVerifierStub.response = nil
+  end
+
+  test "verification pages refuse missing admission on every supported surface" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    get new_auth_app_verification_passkey_path(ri: "jp")
+
+    assert_response :bad_request
+    get new_auth_app_verification_totp_path(ri: "jp")
+
+    assert_response :bad_request
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    get new_auth_com_verification_passkey_path(ri: "jp")
+
+    assert_response :bad_request
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+    get new_auth_org_verification_passkey_path(ri: "jp")
+
+    assert_response :bad_request
+    assert_nil cookies[AuthenticationCookieName.access]
+    assert_nil cookies[AuthenticationCookieName.refresh]
+  end
+
+  [["Turnstile rejection", false], ["malformed TOTP", true]].each do |failure, turnstile_success|
+    test "APP #{failure} retains the pending ceremony without granting authority" do
+      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      credential = ClientTotpCredential.create_for_user!(
+        user: actor, private_key: ROTP::Base32.random_base32,
+        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+      )
+
+      assert_nil credential.last_otp_at
+
+      token = ClientToken.create!(user: actor)
+      issuance = BaseStepUpAdmissionIssuer.call!(
+        actor: actor, token: token,
+        requirement: StepUpRequirement.new(
+          scope: "settings_birthdate", allowed_methods: [:totp], purpose: "step_up",
+          audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+          require_session_binding: true,
+        ), return_to: "/identity/birthdate",
+      )
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+      get new_auth_app_verification_totp_path(ri: "jp")
+      form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
+      TurnstileVerifierStub.enabled = true
+      TurnstileVerifierStub.response = { "success" => turnstile_success }
+      code = turnstile_success ? "invalid" : ROTP::TOTP.new(credential.private_key).now
+      post form.fetch("action"), params: {
+        :verification => { code: code, credential_public_id: credential.public_id },
+        :authenticity_token => form.fetch("csrf_token"),
+        "cf-turnstile-response" => "test-only",
+      }
+
+      assert_response :unprocessable_content
+      props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+      assert_not_empty props.fetch("errors")
+      assert_equal "pending", issuance.transaction.reload.status
+      assert_nil issuance.transaction.verified_at
+      assert_nil issuance.transaction.verified_credential_ref
+      assert_nil credential.reload.last_otp_at
+      assert_nil token.reload.last_step_up_at
+      assert_nil cookies[AuthenticationCookieName.access]
+      assert_nil cookies[AuthenticationCookieName.refresh]
+    end
+  end
+
+  test "bootstrap registration and credential-change continuity cannot enter ordinary step-up endpoints" do
+    %w(bootstrap credential_registration credential_change).each do |purpose|
+      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(user: actor)
+      transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+        actor_ref: actor.public_id, session_ref: token.public_id, purpose: purpose,
+        required_scope: "settings_totp", required_aal: "none", allowed_methods: %w(passkey totp),
+      )
+      record = ClientStepUpSession.create!(
+        user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
+        step_up_ceremony_transaction_ref: transaction.transaction_id, discard_at: transaction.expires_at,
+      )
+      # Fixture uses only the production continuity API, never an Auth root token or login cookie.
+      ceremony, sid = ClientAuthCeremonySession.rotate_and_admit!(
+        admission_purpose: "#{purpose}_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      )
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = sid
+      [auth_app_verification_path(ri: "jp"), new_auth_app_verification_passkey_path(ri: "jp"),
+       new_auth_app_verification_totp_path(ri: "jp"), auth_app_verification_handoff_path(ri: "jp"),].each do |path|
+        get path
+
+        assert_response :bad_request
+      end
+      assert_equal "pending", transaction.reload.status
+      assert_nil record.reload.passkey_challenge_ref
+      assert_equal 0, record.attempt_count
+      assert ceremony.reload.active?(now: ClientAuthCeremonySession.database_now)
+      assert_nil token.reload.last_step_up_at
+      assert_nil cookies[AuthenticationCookieName.access]
+      assert_nil cookies[AuthenticationCookieName.refresh]
+    end
   end
 
   test "APP TOTP verifies the admitted credential without an Auth login or Base freshness" do
@@ -36,14 +138,16 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "pending", issuance.transaction.reload.status
-    form = inertia_props.fetch("form")
+    form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
     TurnstileVerifierStub.enabled = true
     TurnstileVerifierStub.response = { "success" => true }
     now = ClientTotpCredential.database_now
     ClientTotpCredential.stub(:database_now, now) do
       post form.fetch("action"), params: {
-        verification: { code: ROTP::TOTP.new(credential.private_key).at(now.to_i), credential_public_id: credential.public_id },
-        authenticity_token: form.fetch("csrf_token"), "cf-turnstile-response" => "test-only",
+        :verification => { code: ROTP::TOTP.new(credential.private_key).at(now.to_i),
+                           credential_public_id: credential.public_id, },
+        :authenticity_token => form.fetch("csrf_token"),
+        "cf-turnstile-response" => "test-only",
       }
     end
 
@@ -79,7 +183,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal 0, record.reload.email_code_generation
-    form = inertia_props.fetch("form")
+    form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
     post form.fetch("action"), params: { authenticity_token: form.fetch("csrf_token") }
 
     assert_redirected_to edit_auth_app_verification_email_path(issuance.transaction.transaction_id, ri: "jp")
@@ -142,7 +246,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal 0, record.reload.email_code_generation
-    form = inertia_props.fetch("form")
+    form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
     post form.fetch("action"), params: { authenticity_token: form.fetch("csrf_token") }
 
     assert_redirected_to edit_auth_com_verification_email_path(issuance.transaction.transaction_id, ri: "jp")
@@ -154,8 +258,16 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
   test "Passkey GET creates no challenge and options POST binds the admitted transaction" do
     actor = clients(:one)
-    fake = webauthn_fake_client(origin: "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}")
-    actor.client_passkeys.create!(fake_credential_record_attrs(fake))
+    origin = "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}"
+    fake = WebAuthn::FakeClient.new(origin, encoding: :base64url)
+    registration = fake.create(
+      challenge: Base64.urlsafe_encode64(SecureRandom.random_bytes(32), padding: false), user_verified: true,
+    )
+    relying_party = WebAuthn::RelyingParty.new(
+      id: URI.parse(origin).host, allowed_origins: [origin], encoding: :base64url,
+    )
+    credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
+    actor.client_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
     token = ClientToken.create!(user: actor)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
@@ -174,7 +286,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_nil record.reload.passkey_challenge_ref
-    panel = inertia_props.fetch("panel")
+    panel = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("panel")
 
     assert_equal auth_app_verification_passkey_options_path(ri: "jp"), panel.fetch("options_url")
     TurnstileVerifierStub.enabled = true
@@ -188,7 +300,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal "pending", issuance.transaction.reload.status
     assert_nil token.reload.last_step_up_at
 
-    assertion = fake_assertion(fake, challenge: record.passkey_challenge, sign_count: 2)
+    assertion = fake.get(challenge: record.passkey_challenge, user_present: true, user_verified: true, sign_count: 2)
     post panel.fetch("verification_url"),
          params: { credential: assertion, challenge_id: record.passkey_challenge_ref },
          headers: { "X-CSRF-Token" => csrf }, as: :json
@@ -241,7 +353,9 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     get response.location
 
     assert_response :success
-    assert_equal ["passkey"], inertia_props.fetch("methods").map { |method| method.fetch("key") }
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+    assert_equal ["passkey"], props.fetch("methods").map { |method| method.fetch("key") }
     assert_equal "pending", issuance.transaction.reload.status
     assert_nil token.reload.last_step_up_at
 

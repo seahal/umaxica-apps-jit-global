@@ -45,6 +45,47 @@
 require "test_helper"
 
 class VisitorPasskeyTest < ActiveSupport::TestCase
+  test "retained terminal history does not consume the four Passkey slots" do
+    actor = Visitor.create!
+    actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].each do |terminal_status|
+      historical = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
+      historical.update!(status_id: terminal_status)
+    end
+    3.times { actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+
+    assert_equal 3, actor.visitor_passkeys.active.count
+    actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fourth-slot-public-key")
+
+    assert_equal 4, actor.visitor_passkeys.active.count
+    assert_no_difference(-> { actor.visitor_passkeys.count }) do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key")
+      end
+    end
+
+    assert_equal 6, actor.visitor_passkeys.count
+    assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
+  end
+
+  test "a stale loaded owner association cannot admit a fifth Passkey" do
+    actor = Visitor.create!
+    actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    stale_actor = Visitor.find(actor.id)
+    stale_actor.visitor_passkeys.load
+    4.times { actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
+    candidate = VisitorPasskey.new(
+      visitor: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
+    )
+
+    assert_not candidate.valid?
+    assert_no_difference(-> { actor.visitor_passkeys.count }) do
+      assert_raises(ActiveRecord::RecordInvalid) { candidate.save! }
+    end
+
+    assert_equal 4, actor.visitor_passkeys.active.count
+  end
+
   setup do
     ensure_visitor_reference_records!
     @visitor = create_verified_visitor_with_email

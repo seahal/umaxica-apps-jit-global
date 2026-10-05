@@ -25,6 +25,29 @@ module Base
 
         private
 
+        def finalize_completion_transaction!(actor:, token:, transaction:)
+          case transaction.purpose
+          when "step_up", "reauthentication"
+            super
+          when "bootstrap", "credential_registration"
+            unless transaction.method == "totp"
+              raise BaseAuthAdmissionCoordinator::Denied.new(
+                "registration method unavailable",
+                code: "unsupported_method",
+              )
+            end
+
+            IdentityTotpEnrollmentFinalCommitter.call!(
+              actor: actor, token: token, transaction: transaction, raw_result: params[:result],
+            )
+            transaction.reload
+          else
+            raise BaseAuthAdmissionCoordinator::Denied.new("completion purpose unavailable", code: "malformed_request")
+          end
+        rescue IdentityTotpCeremonyContract::Error
+          raise BaseAuthAdmissionCoordinator::Denied.new("TOTP registration unavailable", code: "unsupported_method")
+        end
+
         def completion_step_up_transaction(reference)
           ClientStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
             ClientStepUpCeremonyTransaction.find_by!(transaction_id: reference)

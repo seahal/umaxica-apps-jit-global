@@ -4,7 +4,29 @@
 require "jwt"
 
 module IdentityStepUpCeremonyContract
-  Error = Class.new(StandardError)
+  # Internal refusal taxonomy for ceremony logs. A code names why a request was refused; it is never
+  # an HTTP status and never part of a response body.
+  REFUSAL_CODES = %w(
+    malformed_request invalid_admission expired_admission admission_replay invalid_evidence
+    transaction_conflict transaction_expired transaction_canceled transaction_revoked
+    transaction_already_completed transaction_unavailable
+    session_expired session_binding_mismatch return_binding_mismatch
+    unsupported_method authorization_denied unclassified
+  ).freeze
+
+  class Error < StandardError
+    attr_reader :code
+
+    public
+
+    def initialize(message = nil, code: "unclassified")
+      raise ArgumentError, "unknown refusal code: #{code.inspect}" unless REFUSAL_CODES.include?(code)
+
+      super(message)
+      @code = code
+    end
+  end
+
   module_function
 
   ALGORITHM = "ES384"

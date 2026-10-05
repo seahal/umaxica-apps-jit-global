@@ -1,0 +1,13 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "no challenge" as empty
+    state "issued current ref; unconsumed" as issued
+    state "consumed_at present" as burned
+    state "challenge deadline elapsed" as expired
+    [*] --> empty
+    empty --> issued: issue_bound_passkey_challenge!
+    issued --> issued: issue_bound_passkey_challenge!
+    burned --> issued: issue_bound_passkey_challenge!
+    issued --> burned: consume_bound_passkey_challenge!
+    issued --> expired: clock reaches challenge deadline
+    expired --> burned: consume_bound_passkey_challenge!

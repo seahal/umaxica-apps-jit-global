@@ -5,6 +5,46 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class StepUpScopeCatalogTest < ActiveSupport::TestCase
+  [StepUpScopeCatalog::APP, StepUpScopeCatalog::COM, StepUpScopeCatalog::ORG].each_with_index do |catalog, index|
+    test "surface #{index} operation path prefixes require a segment boundary" do
+      paths = {
+        "session_revoke_all" => %w(/sign/settings/sessions /settings/sessions /sessions /identity/sessions),
+        "withdrawal" => %w(/settings/withdrawal /identity/withdrawal),
+        "settings_email" => %w(/settings/emails /identity/emails),
+        "settings_telephone" => %w(/settings/telephones /identity/telephones),
+        "settings_passkey" => %w(/settings/passkeys),
+      }
+      paths.each do |scope, roots|
+        roots.each do |root|
+          pattern = catalog.fetch(scope)
+
+          assert_match pattern, root
+          assert_match pattern, "#{root}?ri=jp"
+          assert_match pattern, "#{root}/existing-resource"
+          %w(-extra _extra 0 %2Fextra).each do |suffix|
+            assert_no_match pattern, "#{root}#{suffix}"
+          end
+        end
+      end
+    end
+  end
+
+  test "actor-specific registration and lifecycle path prefixes require a segment boundary" do
+    {
+      StepUpScopeCatalog::APP.fetch("settings_totp") => "/settings/totps",
+      StepUpScopeCatalog::COM.fetch("settings_secret_credential") => "/identity/secrets",
+      StepUpScopeCatalog::ORG.fetch("operator_lifecycle") => "/settings/operator_lifecycle_requests",
+    }.each do |pattern, root|
+      assert_match pattern, root
+      assert_match pattern, "#{root}/existing-resource"
+      assert_match pattern, "#{root}?ri=jp"
+      assert_no_match pattern, "#{root}-extra"
+      assert_no_match pattern, "#{root}_extra"
+    end
+    assert_no_match StepUpScopeCatalog::ORG.fetch("settings_secret_credential"), "/settings/secrets-extra"
+    assert_no_match StepUpScopeCatalog::COM.fetch("settings_secret_credential"), "/settings/secret_credentials-extra"
+  end
+
   test "settings mfa uses the mfa challenge path on every surface" do
     path = "/identity/mfa/challenge"
 

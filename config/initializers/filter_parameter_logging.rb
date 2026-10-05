@@ -37,6 +37,7 @@ Rails.application.config.filter_parameters += %i(
   state
   nonce
   assertion
+  entry_ref
   result
   social_ceremony_result
   step_up_ceremony_result

@@ -1,0 +1,19 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0" as NOTHING
+    state "ACTIVE id=1" as ACTIVE
+    state "SUSPENDED id=2" as SUSPENDED
+    state "REVOKED id=3" as REVOKED
+    [*] --> NOTHING
+    NOTHING --> ACTIVE: activate
+    NOTHING --> SUSPENDED: suspend
+    NOTHING --> REVOKED: revoke
+    ACTIVE --> ACTIVE: activate
+    ACTIVE --> SUSPENDED: suspend
+    ACTIVE --> REVOKED: revoke
+    SUSPENDED --> ACTIVE: activate
+    SUSPENDED --> SUSPENDED: suspend
+    SUSPENDED --> REVOKED: revoke
+    REVOKED --> ACTIVE: activate
+    REVOKED --> SUSPENDED: suspend
+    REVOKED --> REVOKED: revoke

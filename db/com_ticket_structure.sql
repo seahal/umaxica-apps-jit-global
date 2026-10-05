@@ -122,11 +122,11 @@ CREATE TABLE public.visitor_auth_ceremony_sessions (
     local_sign_up_flow_ref character varying,
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
-    CONSTRAINT visitor_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying])::text[])))),
+    CONSTRAINT visitor_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
     CONSTRAINT visitor_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
     CONSTRAINT visitor_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT visitor_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT visitor_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
+    CONSTRAINT visitor_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT visitor_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
     CONSTRAINT visitor_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
 );
@@ -403,7 +403,8 @@ CREATE TABLE public.visitor_passkey_ceremony_transactions (
     consumed_at timestamp(6) with time zone,
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    step_up_ceremony_transaction_ref character varying
 );
 
 
@@ -881,7 +882,7 @@ CREATE TABLE public.visitor_step_up_ceremony_transactions (
     CONSTRAINT visitor_step_up_result_valid CHECK (((result_generation >= 0) AND (((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((result_digest IS NOT NULL) AND ((result_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (verified_at IS NOT NULL))))),
     CONSTRAINT visitor_step_up_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'verified'::character varying, 'consumed'::character varying, 'canceled'::character varying, 'expired'::character varying, 'revoked'::character varying])::text[]))),
     CONSTRAINT visitor_step_up_terminal_valid CHECK ((((canceled_at IS NULL) OR ((status)::text = 'canceled'::text)) AND ((revoked_at IS NULL) OR ((status)::text = 'revoked'::text)) AND (((status)::text <> 'revoked'::text) OR (revoked_at IS NOT NULL)) AND (((status)::text <> 'verified'::text) OR ((verified_at IS NOT NULL) AND (method IS NOT NULL) AND (aal IS NOT NULL))))),
-    CONSTRAINT visitor_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR ((verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
+    CONSTRAINT visitor_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY ((ARRAY['passkey'::character varying, 'totp'::character varying])::text[]))) OR (((purpose)::text <> ALL ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
 );
 
 
@@ -1163,7 +1164,7 @@ CREATE TABLE public.visitor_tokens (
     root_login_established_at timestamp with time zone,
     CONSTRAINT chk_customer_tokens_kind_id_positive CHECK ((visitor_token_kind_id >= 0)),
     CONSTRAINT chk_customer_tokens_status_id_positive CHECK ((visitor_token_status_id >= 0)),
-    CONSTRAINT chk_visitor_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text]))))
+    CONSTRAINT chk_visitor_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying])::text[]))))
 );
 
 
@@ -1760,6 +1761,13 @@ CREATE UNIQUE INDEX idx_on_result_jti_9191bba74d ON public.visitor_secret_creden
 --
 
 CREATE UNIQUE INDEX idx_on_step_up_ceremony_transaction_ref_a7b9c7b4fe ON public.visitor_step_up_sessions USING btree (step_up_ceremony_transaction_ref);
+
+
+--
+-- Name: idx_on_step_up_ceremony_transaction_ref_f3463ea9d2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_step_up_ceremony_transaction_ref_f3463ea9d2 ON public.visitor_passkey_ceremony_transactions USING btree (step_up_ceremony_transaction_ref);
 
 
 --
@@ -2615,6 +2623,14 @@ ALTER TABLE ONLY public.visitor_auth_ceremony_sessions
 
 
 --
+-- Name: visitor_passkey_ceremony_transactions fk_rails_ebaeb32aa4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_passkey_ceremony_transactions
+    ADD CONSTRAINT fk_rails_ebaeb32aa4 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.visitor_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
+
+
+--
 -- Name: visitor_device_sessions fk_visitor_device_sessions_on_current_refresh_token_owner; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2645,6 +2661,8 @@ ALTER TABLE ONLY public.visitor_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261003221639'),
+('20261003215022'),
 ('20261003202134'),
 ('20261003185507'),
 ('20261003183734'),

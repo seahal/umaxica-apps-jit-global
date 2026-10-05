@@ -80,7 +80,7 @@ class StepUpResolver
   end
 
   def usable_token?
-    token.present? && token.currently_usable?
+    token.present? && token.currently_usable?(now)
   end
 
   def emergency_authentication_context?

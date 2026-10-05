@@ -5,8 +5,7 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
-  fixtures :client_statuses, :client_email_statuses, :client_totp_credential_statuses,
-           :client_secret_credential_statuses
+  fixtures :client_statuses, :client_email_statuses, :client_totp_credential_statuses
 
   PROVIDERS = {
     google: {
@@ -224,15 +223,26 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     assert_nil session[SocialAuth::SOCIAL_FLOW_ID_SESSION_KEY]
   end
 
-  test "Google settings unlink rejects passcode as the only remaining method" do
+  test "Google settings unlink keeps its existing refusal when Secret is the only remaining method" do
     user = create_social_client
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "passcode_google")
-    create_login_secret_credential(user)
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "social-unlink-secret-fixture", planned_count: 1,
+      presented_at: now, confirmed_at: now, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    secret = ClientSecretCredential.create!(
+      client: user, issuance: issuance, name: "Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+    )
 
     delete_with_verified_session(user, PROVIDERS.fetch(:google))
 
     assert_response :unprocessable_content
     assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
+    assert secret.reload.available_at?(at: Client.database_now)
   end
 
   test "Google settings unlink rejects failed Turnstile before unlinking" do
@@ -505,18 +515,6 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     token
   end
 
-  def create_login_secret_credential(user)
-    ClientSecretCredentialKind.find_or_create_by!(id: ClientSecretCredentialKind::LOGIN)
-    ClientSecretCredentialStatus.find_or_create_by!(id: ClientSecretCredentialStatus::ACTIVE)
-    secret_credential = ClientSecretCredential.new(
-      user: user,
-      name: "passcode",
-      password_digest: "digest",
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-      user_identity_secret_status_id: ClientSecretCredentialStatus::ACTIVE,
-    )
-    secret_credential.save!(validate: false)
-  end
   private
 
   def bearer_headers(token, host: nil, headers: {})

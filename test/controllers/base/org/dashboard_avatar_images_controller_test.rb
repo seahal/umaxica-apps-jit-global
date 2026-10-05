@@ -96,7 +96,9 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
 
     get base_org_dashboard_avatar_image_url(ri: "jp"), headers: host_headers(@host)
 
-    assert_not_equal 200, response.status
+    assert_response :unauthorized
+    assert_empty response.body
+    assert_nil response.location
     assert_not_equal STORED_PNG.b, response.body.b
   end
 

@@ -4,6 +4,37 @@
 require "test_helper"
 
 class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
+  test "registration and bootstrap admissions retain their distinct authoritative purpose" do
+    %w(bootstrap credential_registration credential_change).each do |purpose|
+      transaction = ClientStepUpCeremonyTransaction.create_transaction!(
+        actor_ref: "actor", session_ref: "session", required_scope: "settings_totp",
+        required_aal: "none", allowed_methods: ["totp"], purpose: purpose,
+      )
+      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction)
+      payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "app", expected_intent: purpose,
+      )
+      resolved = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+        payload: payload, surface: "app", expected_intent: purpose,
+      )
+
+      assert_equal transaction.id, resolved.id
+      assert_equal "#{purpose}_handoff", payload.fetch("purpose")
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
+          payload: payload, surface: "app", expected_intent: "step_up",
+        )
+      end
+      ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+        admission_purpose: "#{purpose}_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      )
+
+      assert_equal transaction.transaction_id, ceremony.step_up_ceremony_transaction_ref
+      assert_nil ceremony.local_sign_in_flow_ref
+      assert_nil ceremony.local_sign_up_flow_ref
+    end
+  end
+
   test "step-up admission resolves only its purpose-bound pending transaction" do
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",

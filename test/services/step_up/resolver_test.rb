@@ -20,7 +20,7 @@ module StepUp
         :last_step_up_phishing_resistant,
         keyword_init: true,
       ) do
-        def currently_usable? = currently_usable
+        def currently_usable?(_now = Time.current) = currently_usable
 
         def has_attribute?(attribute)
           members.include?(attribute.to_sym)

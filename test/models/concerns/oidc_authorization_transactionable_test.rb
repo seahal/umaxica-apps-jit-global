@@ -20,6 +20,106 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     end
   end
 
+  test "OIDC admission expiry uses PostgreSQL microsecond neighbors before at and after each deadline" do
+    [
+      [ClientOidcAuthorizationTransaction, "app"],
+      [VisitorOidcAuthorizationTransaction, "com"],
+      [OperatorOidcAuthorizationTransaction, "org"],
+    ].each do |model, surface|
+      deadline = Time.utc(2026, 10, 4, 6, 0, 0, 500_000)
+      [-1, 0, 1].each do |microseconds|
+        decision_time = deadline + Rational(microseconds, 1_000_000)
+        transaction = model.create_transaction!(
+          surface: surface, intent: "authentication", client_id: "expiry-test",
+          redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
+          state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+          code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-#{surface}-#{microseconds}",
+          login_challenge_expires_at: deadline, expires_at: deadline, now: deadline - 1.minute,
+        )
+
+        assert_equal microseconds >= 0, transaction.expired?(now: decision_time)
+        assert_equal microseconds >= 0, transaction.login_challenge_expired?(now: decision_time)
+        if microseconds.negative?
+          transaction = transaction.register_authentication!(
+            actor_ref: "expiry-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
+            authentication_event_at: deadline - 1.minute, now: decision_time,
+          )
+
+          assert_predicate transaction, :authenticated?
+          assert_equal deadline - 1.minute, transaction.authenticated_at
+        else
+          assert_raises(ArgumentError) do
+            transaction.register_authentication!(
+              actor_ref: "expiry-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
+              authentication_event_at: deadline - 1.minute, now: decision_time,
+            )
+          end
+          assert_equal "pending", transaction.reload.status
+          assert_nil transaction.authenticated_at
+        end
+      end
+    end
+  end
+
+  test "OIDC opaque result validation rejects malformed generations and all effective deadline boundaries" do
+    [
+      [ClientOidcAuthorizationTransaction, "app"],
+      [VisitorOidcAuthorizationTransaction, "com"],
+      [OperatorOidcAuthorizationTransaction, "org"],
+    ].each do |model, surface|
+      now = Time.utc(2026, 10, 4, 6, 1, 0, 500_000)
+      transaction = model.create_transaction!(
+        surface: surface, intent: "authentication", client_id: "result-test",
+        redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
+        state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+        code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-result-#{surface}",
+        login_challenge_expires_at: now + 20.seconds, expires_at: now + 30.seconds, now: now,
+      )
+      transaction = transaction.register_authentication!(
+        actor_ref: "result-test-actor", session_ref: nil, auth_method: "passkey", acr: "aal1",
+        authentication_event_at: now, now: now + 1.second,
+      )
+      digest = SecureRandom.hex(32)
+      transaction, generation = transaction.prepare_result_delivery!(
+        result_digest: digest, ttl: 1.minute, now: now + 1.second,
+      )
+
+      assert_equal transaction.login_challenge_expires_at, transaction.result_expires_at
+      assert transaction.result_delivery_matches?(
+        result_digest: digest, result_generation: generation,
+        now: now + 2.seconds,
+      )
+      [nil, 0, 2, "", "1", "1suffix", "1\0", 1.0, false, [], {}].each do |invalid_generation|
+        assert_not transaction.result_delivery_matches?(
+          result_digest: digest, result_generation: invalid_generation, now: now + 2.seconds,
+        ), invalid_generation.inspect
+      end
+      [nil, "", 0, false, [], {}, "a" * 63, "a" * 65, "\0" * 64].each do |invalid_digest|
+        assert_not transaction.result_delivery_matches?(
+          result_digest: invalid_digest, result_generation: generation, now: now + 2.seconds,
+        ), invalid_digest.inspect
+      end
+      [-1, 0, 1].each do |microseconds|
+        assert_equal microseconds.negative?, transaction.result_delivery_matches?(
+          result_digest: digest, result_generation: generation,
+          now: transaction.result_expires_at + Rational(microseconds, 1_000_000),
+        )
+      end
+      # Legacy oversized transport expiry must not outlive either durable admission deadline.
+      transaction.update!(result_expires_at: now + 10.minutes)
+
+      [transaction.login_challenge_expires_at, transaction.expires_at].each do |deadline|
+        assert_not transaction.result_delivery_matches?(
+          result_digest: digest, result_generation: generation,
+          now: deadline,
+        )
+      end
+
+      assert_equal now, transaction.authenticated_at
+      assert_equal generation, transaction.reload.result_generation
+    end
+  end
+
   test "create_transaction! persists a transaction and authorize_params mirrors the public contract" do
     transaction = create_transaction(ClientOidcAuthorizationTransaction, surface: "app")
 

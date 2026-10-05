@@ -2,13 +2,11 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "minitest/mock"
+require "webauthn/fake_client"
 
-# adr/operator-capability-authorization.md: a support session revocation completed through the real
-# Step-Up ceremony. Only the WebAuthn cryptographic assertion is stubbed (as in the other org
-# verification tests); the base intent, the signed grant, the auth ceremony, the signed result, the
-# base completion, the return to the confirmation screen, the mutation, and the audit all run as in
-# production. The operator's session token is never written to directly.
+# The support mutation case uses a pre-existing Base token, opaque admission/result transport
+# and real WebAuthn assertions with separate Base/Auth cookie jars. It does not prove root login.
+# Negative cases use synthetic verified evidence to isolate authority and transport checks.
 class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_tokens, :clients
 
@@ -33,7 +31,12 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "revocation passes capability, the real Step-Up ceremony, returns to the screen, and is audited" do
+  teardown do
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
+  end
+
+  test "support revocation passes opaque admission, real signature, Base completion and business authorization" do
     [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
      OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
       OperatorCapabilityGrant.create!(
@@ -42,91 +45,148 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       )
     end
     target_session = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    # A browser sends each host's session cookie alongside the access credential. An explicit Cookie
-    # header would replace the integration cookie jar and drop the auth host's session, which holds
-    # the WebAuthn challenge, so the access token travels only as the bearer credential here.
-    base_headers = as_staff_headers(@operator, host: @base_host, session_public_id: @token.public_id)
-      .except("Cookie", "HTTP_COOKIE")
-    auth_headers = as_staff_headers(@operator, host: @auth_host, session_public_id: @token.public_id)
-      .except("Cookie", "HTTP_COOKIE")
+    fake = WebAuthn::FakeClient.new("https://#{@auth_host}", encoding: :base64url)
+    registration = fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)
+    relying_party = WebAuthn::RelyingParty.new(
+      id: @auth_host, allowed_origins: [fake.origin], encoding: :base64url,
+    )
+    credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
+    passkey = @operator.staff_passkeys.create!(
+      webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    access = AuthenticationToken.encode(
+      @operator, host: @base_host, session_public_id: @token.public_id,
+                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+    )
+    base_headers = { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
     screen_path = new_base_org_support_client_revocation_path(@client.public_id, ri: "jp")
-
-    # 1. The confirmation screen asks for Step-Up and sends the operator to the base intent.
     get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: base_headers
 
     assert_response :redirect
-    intent_uri = URI.parse(response.location)
+    assert_equal "support_session_revoke", Rack::Utils.parse_query(URI.parse(response.location).query)["scope"]
 
-    assert_equal "support_session_revoke", Rack::Utils.parse_query(intent_uri.query)["scope"]
-
-    # 2. The base intent issues a signed grant bound to this operator, session, and scope.
     get response.location, headers: base_headers
 
+    assert_response :success
+
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    form = props.fetch("form")
+    post base_org_verification_url(ri: "jp", host: @base_host),
+         params: { scope: form.fetch("scope"), pt: form.fetch("pt") }, headers: base_headers
+
     assert_response :see_other
+
     gateway = URI.parse(response.location)
+    jump_payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    auth_location = jump_payload.fetch("url")
+    reference = Rack::Utils.parse_query(URI.parse(auth_location).query).fetch("entry_ref")
+    auth_browser = open_session
+    auth_browser.https!
+    auth_browser.host!(@auth_host)
+    auth_browser.get(auth_location)
 
-    assert_equal "jump.umaxica.net", gateway.host
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
-    auth_location = payload.fetch("url")
-    grant_query = Rack::Utils.parse_query(URI.parse(auth_location).query)
-    transaction = OperatorStepUpCeremonyTransaction.order(:created_at).last
+    admission_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
+    csrf = admission_form.at_css('input[name="authenticity_token"]')["value"]
+    auth_browser.post(
+      auth_org_verification_path(ri: "jp"), params: {
+        entry_ref: reference, authenticity_token: csrf,
+      },
+    )
 
-    assert_equal "support_session_revoke", transaction.required_scope
-    assert_predicate grant_query["step_up_ceremony_grant"], :present?
+    assert_equal 303, auth_browser.response.status
 
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "challenge")) do
-        assertion = Struct.new(:sign_count, :verified_at).new(1, Time.current)
-        Webauthn::AssertionVerifier.stub(:verify!, assertion) do
-          # 3. The auth ceremony accepts the grant and verifies the passkey.
-          get auth_location, headers: auth_headers
+    auth_browser.get(new_auth_org_verification_passkey_path(ri: "jp"))
 
-          assert_response :success
-          get new_auth_org_verification_passkey_url(ri: "jp", host: @auth_host), headers: auth_headers
-          post auth_org_verification_passkey_url(ri: "jp", host: @auth_host),
-               params: { verification: { challenge_id: session[:passkey_challenges].keys.first,
-                                         credential_json: { id: @passkey.webauthn_id }.to_json, } },
-               headers: auth_headers
+    page = Nokogiri::HTML(auth_browser.response.body)
+    panel = JSON.parse(page.at_css("script[data-page='app']").text).fetch("props").fetch("panel")
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
+    auth_browser.post(
+      panel.fetch("options_url"), params: { "cf-turnstile-response" => "test-only" },
+                                  headers: { "X-CSRF-Token" => csrf }, as: :json,
+    )
 
-          assert_response :success
-          assert_includes response.body, "step-up-completion-form"
-          assert_nil @token.reload.last_step_up_at, "the auth ceremony does not write base freshness"
+    assert_equal 200, auth_browser.response.status
 
-          # 4. The signed result is posted to the base completion, which commits freshness.
-          submit_step_up_completion_if_present!(host: @base_host, headers: base_headers)
-        end
-      end
-    end
+    options = auth_browser.response.parsed_body
+    assertion = fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 2)
+    auth_browser.post(
+      panel.fetch("verification_url"),
+      params: { credential: assertion, challenge_id: options.fetch("challenge_id") },
+      headers: { "X-CSRF-Token" => csrf }, as: :json,
+    )
+
+    assert_equal 200, auth_browser.response.status
+    assert_nil @token.reload.last_step_up_at
+
+    auth_browser.get(auth_browser.response.parsed_body.fetch("redirect_url"))
+    handoff_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
+    auth_browser.post(
+      handoff_form["action"], params: {
+        authenticity_token: handoff_form.at_css('input[name="authenticity_token"]')["value"],
+      },
+    )
+
+    assert_equal 200, auth_browser.response.status
+    assert_nil auth_browser.cookies[AuthenticationCookieName.access]
+    assert_nil auth_browser.cookies[AuthenticationCookieName.refresh]
+
+    result_form = Nokogiri::HTML(auth_browser.response.body).at_css("form")
+    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+    transaction = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: transaction_ref)
+
+    assert_equal passkey.external_id, transaction.verified_credential_ref
+
+    post result_form["action"], params: {
+      result: result_form.at_css('input[name="result"]')["value"], transaction_ref: transaction_ref,
+    }, headers: base_headers.merge("Origin" => fake.origin, "Sec-Fetch-Site" => "same-site")
 
     assert_response :see_other
     assert_equal screen_path, URI.parse(response.location).request_uri
-    @token.reload
-
+    assert_equal "consumed", transaction.reload.status
+    assert_equal transaction.verified_at, @token.reload.last_step_up_at
     assert_equal "support_session_revoke", @token.last_step_up_scope
     assert_equal "step_up:org", @token.last_step_up_audience
     assert_equal @token.public_id, @token.last_step_up_session_public_id
     assert_equal "passkey", @token.last_step_up_method
-    # The admin scopes carry no AAL floor (StepUpRequirement::NO_AAL); a passkey Step-Up records aal1.
     assert_equal "aal1", @token.last_step_up_aal
 
-    # 5. Back on the screen, the mutation succeeds and is audited.
     get response.location, headers: base_headers
 
     assert_response :ok
-    operation_id = inertia_props.fetch("fields").find { |field| field["name"] == "operation_id" }.fetch("value")
 
+    confirmation = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    operation_id = confirmation.fetch("fields").find { |field| field["name"] == "operation_id" }.fetch("value")
     post base_org_support_client_revocations_url(@client.public_id, host: @base_host),
          params: { reason_code: "security_incident", operation_id: operation_id }, headers: base_headers
 
     assert_response :see_other
     assert_predicate target_session.reload, :revoked?
+
     chronicle = Chronicle.find_by!(event_uuid: operation_id)
 
     assert_equal ["support.session.revoked", "succeeded"], [chronicle.action, chronicle.result]
     assert_equal ["Operator", @operator.id], [chronicle.actor_type, chronicle.actor_id]
+
+    replacement_session = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    OperatorCapabilityGrant.find_by!(
+      operator: @operator, capability: OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,
+    ).revoke!(by: operators(:two), reason_code: "duty_ended")
+    event = @token.last_step_up_at
+
+    assert_no_difference -> { Chronicle.where(action: "support.session.revoked", result: "succeeded").count } do
+      post base_org_support_client_revocations_url(@client.public_id, host: @base_host),
+           params: { reason_code: "security_incident", operation_id: SecureRandom.uuid },
+           headers: base_headers, as: :json
+    end
+    assert_response :forbidden
+    assert_predicate replacement_session.reload, :currently_usable?
+    assert_equal event, @token.reload.last_step_up_at
   end
 
-  test "Step-Up freshness for another scope does not satisfy the revocation" do
+  test "another canonical scope does not satisfy Support revocation" do
     [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
      OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
       OperatorCapabilityGrant.create!(
@@ -134,28 +194,41 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    issuance = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      required_scope: "session_revoke_all", required_aal: StepUpRequirement::NO_AAL, allowed_methods: ["passkey"],
-      return_to: "/identity/sessions", expires_at: 5.minutes.from_now,
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    requirement = StepUpRequirement.new(
+      scope: "session_revoke_all", allowed_methods: [:passkey], purpose: "step_up",
+      audience: "step_up:org", session_binding: @token.public_id, token_binding: @token.public_id,
+      require_session_binding: true,
     )
-    transaction = issuance.transaction
-    result = IdentityStepUpCeremonyResultIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      transaction_id: transaction.transaction_id, grant_jti: transaction.grant_jti,
-      scope: transaction.required_scope, aal: "aal1", method: "passkey",
-      challenge_id: "challenge-#{SecureRandom.hex(4)}", expires_at: transaction.expires_at,
+    transaction = BaseStepUpAdmissionIssuer.call!(
+      actor: @operator, token: @token, requirement: requirement, return_to: "/identity/sessions",
+    ).transaction
+    # Synthetic evidence isolates the scope consumer; the success case verifies actual signatures.
+    transaction.record_verification!(
+      method: "passkey", aal: "aal1", phishing_resistant: true,
+      verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
     )
-    base_headers = as_staff_headers(@operator, host: @base_host, session_public_id: @token.public_id)
-    post base_org_verification_completion_url(ri: "jp", host: @base_host),
-         params: { step_up_ceremony_result: result }, headers: base_headers
-
-    assert_equal "session_revoke_all", @token.reload.last_step_up_scope
-
-    get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: base_headers
+    ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+    )
+    result = BaseAuthAdmissionCoordinator.issue_result!(
+      transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+    )
+    IdentityStepUpCeremonyFreshnessCommitter.call!(
+      actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
+    )
+    access = AuthenticationToken.encode(
+      @operator, host: @base_host, session_public_id: @token.public_id,
+                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+    )
+    headers = { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
+    get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: headers
 
     assert_response :redirect
     assert_includes response.location, "scope=support_session_revoke"
+    assert_equal "session_revoke_all", @token.reload.last_step_up_scope
+    assert_equal "consumed", transaction.reload.status
   end
 
   test "an Emergency session cannot start the ceremony for an administrative scope" do
@@ -166,14 +239,14 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    OperatorToken.where(staff_id: @operator.id).destroy_all
-    emergency = OperatorToken.create!(
-      staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+    @token.update!(authentication_context: AuthenticationContextValue::EMERGENCY_KEY)
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    access = AuthenticationToken.encode(
+      @operator, host: @base_host, session_public_id: @token.public_id,
+                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
-    headers = as_staff_headers(@operator, host: @base_host, session_public_id: emergency.public_id)
+    headers = { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
 
     assert_no_difference -> { OperatorStepUpCeremonyTransaction.count } do
       get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: headers
@@ -182,111 +255,169 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
-  test "a result for another session, for another surface, or replayed does not satisfy Step-Up" do
-    [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
-     OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
-      OperatorCapabilityGrant.create!(
-        operator: @operator, origin: "bootstrap", capability: capability,
-        reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
+  %i(session surface).each do |mismatch|
+    test "opaque result for another #{mismatch} cannot complete the Base browser transaction" do
+      [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
+       OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
+        OperatorCapabilityGrant.create!(
+          operator: @operator, origin: "bootstrap", capability: capability,
+          reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
+        )
+      end
+      BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+      BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+      access = AuthenticationToken.encode(
+        @operator, host: @base_host, session_public_id: @token.public_id,
+                   resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
       )
-    end
-    other_session = OperatorToken.create!(staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-    base_headers = as_staff_headers(@operator, host: @base_host, session_public_id: @token.public_id)
-      .except("Cookie", "HTTP_COOKIE")
-    screen = new_base_org_support_client_revocation_path(@client.public_id, ri: "jp")
+      headers = { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
+      screen = new_base_org_support_client_revocation_path(@client.public_id, ri: "jp")
+      get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: headers
+      get response.location, headers: headers
+      form = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props").fetch("form")
+      post base_org_verification_url(ri: "jp", host: @base_host),
+           params: { scope: form.fetch("scope"), pt: form.fetch("pt") }, headers: headers
 
-    # Another session's ceremony.
-    foreign = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: other_session.public_id,
-      required_scope: "support_session_revoke", required_aal: StepUpRequirement::NO_AAL,
-      allowed_methods: ["passkey"], return_to: screen, expires_at: 5.minutes.from_now,
-    ).transaction
-    foreign_result = IdentityStepUpCeremonyResultIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: other_session.public_id,
-      transaction_id: foreign.transaction_id, grant_jti: foreign.grant_jti, scope: foreign.required_scope,
-      aal: "aal1", method: "passkey", challenge_id: "c-#{SecureRandom.hex(4)}", expires_at: foreign.expires_at,
-    )
-    post base_org_verification_completion_url(ri: "jp", host: @base_host),
-         params: { step_up_ceremony_result: foreign_result }, headers: base_headers
+      assert_response :see_other
 
-    assert_nil @token.reload.last_step_up_at, "another session's result is not committed to this session"
-
-    # A result signed for the app surface.
-    app_grant = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "app", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      required_scope: "session_revoke_all", required_aal: StepUpRequirement::NO_AAL,
-      allowed_methods: ["passkey"], return_to: "/identity/sessions", expires_at: 5.minutes.from_now,
-    ).transaction
-    app_result = IdentityStepUpCeremonyResultIssuer.issue!(
-      surface: "app", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      transaction_id: app_grant.transaction_id, grant_jti: app_grant.grant_jti, scope: app_grant.required_scope,
-      aal: "aal1", method: "passkey", challenge_id: "c-#{SecureRandom.hex(4)}", expires_at: app_grant.expires_at,
-    )
-    post base_org_verification_completion_url(ri: "jp", host: @base_host),
-         params: { step_up_ceremony_result: app_result }, headers: base_headers
-
-    assert_nil @token.reload.last_step_up_at, "a result signed for another surface is rejected"
-
-    # A valid result, then its replay.
-    own = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      required_scope: "support_session_revoke", required_aal: StepUpRequirement::NO_AAL,
-      allowed_methods: ["passkey"], return_to: screen, expires_at: 5.minutes.from_now,
-    ).transaction
-    own_result = IdentityStepUpCeremonyResultIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      transaction_id: own.transaction_id, grant_jti: own.grant_jti, scope: own.required_scope,
-      aal: "aal1", method: "passkey", challenge_id: "c-#{SecureRandom.hex(4)}", expires_at: own.expires_at,
-    )
-    post base_org_verification_completion_url(ri: "jp", host: @base_host),
-         params: { step_up_ceremony_result: own_result }, headers: base_headers
-    first_commit = @token.reload.last_step_up_at
-
-    assert_not_nil first_commit
-
-    travel 1.minute do
+      record = OperatorStepUpSession.find_by!(staff_token_id: @token.id)
+      own = OperatorStepUpCeremonyTransaction.find_by!(transaction_id: record.step_up_ceremony_transaction_ref)
+      if mismatch == :session
+        foreign_actor = @operator
+        foreign_token = OperatorToken.create!(staff: @operator)
+        reference = @passkey.external_id
+        foreign_requirement = StepUpRequirement.new(
+          scope: "support_session_revoke", allowed_methods: [:passkey], purpose: "step_up",
+          audience: "step_up:org", session_binding: foreign_token.public_id, token_binding: foreign_token.public_id,
+          require_session_binding: true,
+        )
+        foreign = BaseStepUpAdmissionIssuer.call!(
+          actor: foreign_actor, token: foreign_token, requirement: foreign_requirement, return_to: screen,
+        ).transaction
+        foreign_ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+          admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: foreign.transaction_id,
+        )
+      else
+        foreign_actor = @client
+        foreign_token = ClientToken.create!(user: @client)
+        reference = @client.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public").public_id
+        foreign_requirement = StepUpRequirement.new(
+          scope: "session_revoke_all", allowed_methods: [:passkey], purpose: "step_up",
+          audience: "step_up:app", session_binding: foreign_token.public_id, token_binding: foreign_token.public_id,
+          require_session_binding: true,
+        )
+        foreign = BaseStepUpAdmissionIssuer.call!(
+          actor: foreign_actor, token: foreign_token, requirement: foreign_requirement, return_to: "/identity/sessions",
+        ).transaction
+        foreign_ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+          admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: foreign.transaction_id,
+        )
+      end
+      # Synthetic evidence isolates cross-ticket transport, not signature verification.
+      foreign.record_verification!(
+        method: "passkey", aal: "aal1", phishing_resistant: true,
+        verified_at: foreign.class.database_now, verified_credential_ref: reference,
+      )
+      foreign_result = BaseAuthAdmissionCoordinator.issue_result!(
+        transaction: foreign, ceremony_session_ref: foreign_ceremony.id.to_s,
+      )
       post base_org_verification_completion_url(ri: "jp", host: @base_host),
-           params: { step_up_ceremony_result: own_result }, headers: base_headers
+           params: { transaction_ref: own.transaction_id, result: foreign_result.code },
+           headers: headers.merge("Origin" => "https://#{@auth_host}", "Sec-Fetch-Site" => "same-site")
 
-      assert_equal first_commit, @token.reload.last_step_up_at, "a replayed result does not refresh freshness"
+      assert_response :bad_request
+      assert_nil @token.reload.last_step_up_at
+      assert_nil foreign_token.reload.last_step_up_at
+      assert_equal "pending", own.reload.status
+      assert_equal "verified", foreign.reload.status
+      assert_not_predicate foreign_ceremony.reload, :completed?
+
+      own.record_verification!(
+        method: "passkey", aal: "aal1", phishing_resistant: true,
+        verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
+      )
+      ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: own.transaction_id,
+      )
+      own_result = BaseAuthAdmissionCoordinator.issue_result!(transaction: own, ceremony_session_ref: ceremony.id.to_s)
+      post base_org_verification_completion_url(ri: "jp", host: @base_host),
+           params: { transaction_ref: own.transaction_id, result: own_result.code },
+           headers: headers.merge("Origin" => "https://#{@auth_host}", "Sec-Fetch-Site" => "same-site")
+
+      assert_response :see_other
+      assert_equal screen, URI.parse(response.location).request_uri
+      event = @token.reload.last_step_up_at
+
+      assert_equal own.reload.verified_at, event
+      assert_equal "consumed", own.status
+      assert_predicate ceremony.reload, :completed?
+
+      travel 1.second do
+        post base_org_verification_completion_url(ri: "jp", host: @base_host),
+             params: { transaction_ref: own.transaction_id, result: own_result.code },
+             headers: headers.merge("Origin" => "https://#{@auth_host}", "Sec-Fetch-Site" => "same-site")
+
+        assert_response :see_other
+        assert_equal event, @token.reload.last_step_up_at
+        assert_equal "consumed", own.reload.status
+        assert_equal "verified", foreign.reload.status
+      end
     end
   end
 
-  test "Step-Up freshness expires after its window" do
-    [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
-     OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
-      OperatorCapabilityGrant.create!(
-        operator: @operator, origin: "bootstrap", capability: capability,
-        reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 2.days.from_now,
+  [-1, 0, 1].each do |microseconds|
+    test "Support confirmation evaluates canonical freshness #{microseconds} microseconds from expiry" do
+      [OperatorCapabilityGrant::SUPPORT_ACCOUNT_READ_APP,
+       OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,].each do |capability|
+        OperatorCapabilityGrant.create!(
+          operator: @operator, origin: "bootstrap", capability: capability,
+          reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 2.days.from_now,
+        )
+      end
+      BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+      BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+      requirement = StepUpRequirement.new(
+        scope: "support_session_revoke", allowed_methods: [:passkey], purpose: "step_up",
+        audience: "step_up:org", session_binding: @token.public_id, token_binding: @token.public_id,
+        require_session_binding: true,
       )
-    end
-    base_headers = as_staff_headers(@operator, host: @base_host, session_public_id: @token.public_id)
-      .except("Cookie", "HTTP_COOKIE")
-    screen = new_base_org_support_client_revocation_path(@client.public_id, ri: "jp")
-    grant = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      required_scope: "support_session_revoke", required_aal: StepUpRequirement::NO_AAL,
-      allowed_methods: ["passkey"], return_to: screen, expires_at: 5.minutes.from_now,
-    ).transaction
-    result = IdentityStepUpCeremonyResultIssuer.issue!(
-      surface: "org", actor_ref: @operator.public_id, session_ref: @token.public_id,
-      transaction_id: grant.transaction_id, grant_jti: grant.grant_jti, scope: grant.required_scope,
-      aal: "aal1", method: "passkey", challenge_id: "c-#{SecureRandom.hex(4)}", expires_at: grant.expires_at,
-    )
-    post base_org_verification_completion_url(ri: "jp", host: @base_host),
-         params: { step_up_ceremony_result: result }, headers: base_headers
+      screen = new_base_org_support_client_revocation_path(@client.public_id, ri: "jp")
+      transaction = BaseStepUpAdmissionIssuer.call!(
+        actor: @operator, token: @token, requirement: requirement, return_to: screen,
+      ).transaction
+      # Synthetic evidence isolates freshness consumption; the success case verifies signatures.
+      transaction.record_verification!(
+        method: "passkey", aal: "aal1", phishing_resistant: true,
+        verified_at: OperatorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.external_id,
+      )
+      ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
+        admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: transaction.transaction_id,
+      )
+      result = BaseAuthAdmissionCoordinator.issue_result!(
+        transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
+      )
+      IdentityStepUpCeremonyFreshnessCommitter.call!(
+        actor: @operator, token: @token, transaction: transaction, requirement: requirement, raw_result: result.code,
+      )
+      event = @token.reload.last_step_up_at
+      travel_to(event + requirement.ttl + Rational(microseconds, 1_000_000), with_usec: true) do
+        access = AuthenticationToken.encode(
+          @operator, host: @base_host, session_public_id: @token.public_id,
+                     resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+        )
+        get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host),
+            headers: { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
 
-    get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: base_headers
+        if microseconds < 0
+          assert_response :ok
+        else
+          assert_response :redirect
+          assert_includes response.location, "scope=support_session_revoke"
+        end
 
-    assert_response :ok, "fresh Step-Up opens the screen"
-
-    travel StepUpRequirement::DEFAULT_TTL + 1.second do
-      get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host),
-          headers: as_staff_headers(@operator, host: @base_host, session_public_id: @token.public_id)
-            .except("Cookie", "HTTP_COOKIE")
-
-      assert_response :redirect
-      assert_includes response.location, "scope=support_session_revoke"
+        assert_equal event, @token.reload.last_step_up_at
+        assert_equal "consumed", transaction.reload.status
+      end
     end
   end
 
@@ -298,8 +429,14 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    base_headers = as_staff_headers(@operator, host: @base_host, session_public_id: @token.public_id)
-      .except("Cookie", "HTTP_COOKIE")
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    access = AuthenticationToken.encode(
+      @operator, host: @base_host, session_public_id: @token.public_id,
+                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
+    )
+    base_headers = { "Authorization" => "Bearer #{access}", "Host" => @base_host, "Client-Agent" => "Mozilla/5.0" }
+
     get new_base_org_support_client_revocation_url(@client.public_id, ri: "jp", host: @base_host), headers: base_headers
     signed_pt = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("pt")
 
@@ -313,6 +450,13 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
           headers: base_headers
 
       assert_response :bad_request
+
+      [["support_session_revoke", "forged-target"], ["session_revoke_all", signed_pt]].each do |scope, target|
+        post base_org_verification_url(ri: "jp", host: @base_host),
+             params: { scope: scope, pt: target }, headers: base_headers
+
+        assert_response :bad_request
+      end
     end
   end
 end

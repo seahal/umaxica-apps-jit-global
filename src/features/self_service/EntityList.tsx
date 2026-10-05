@@ -3,6 +3,7 @@ import { Link } from "@inertiajs/react";
 // A self-service index listing. The server decides which entries exist and where each one links,
 // so the component only renders what the props already resolved.
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import Page, { type PageUpLink } from "@/components/ui/Page";
 
 export type EntityListEntry = {
@@ -17,7 +18,7 @@ export type EntityListProps = {
   empty: string;
   entries: EntityListEntry[];
   up_link?: PageUpLink | null;
-  create_action?: { label: string } | null;
+  create_action?: { label: string; href?: string } | null;
 };
 
 export default function EntityList({
@@ -36,7 +37,14 @@ export default function EntityList({
       up={upLink}
       upVisit="inertia"
       actions={
-        createAction ? (
+        createAction?.href ? (
+          <ButtonLink
+            href={createAction.href}
+            inertia
+          >
+            {createAction.label}
+          </ButtonLink>
+        ) : createAction ? (
           <Button
             isDisabled
             type="button"

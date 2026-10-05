@@ -1,0 +1,154 @@
+# CURRENT artifact manifest
+
+Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A and Phase B files below are local documentation artifacts.
+
+## Individual diagrams (128)
+
+- [idp-client-sign-in.mmd](./idp-client-sign-in.mmd) — STATE_MACHINE / client.
+- [idp-client-sign-up.mmd](./idp-client-sign-up.mmd) — STATE_MACHINE / client.
+- [idp-client-sign-out.mmd](./idp-client-sign-out.mmd) — STATE_MACHINE / client.
+- [idp-client-auth-ceremony-session.mmd](./idp-client-auth-ceremony-session.mmd) — STATE_MACHINE / client.
+- [idp-client-email-ceremony.mmd](./idp-client-email-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-telephone-ceremony.mmd](./idp-client-telephone-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-passkey-ceremony.mmd](./idp-client-passkey-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-secret-credential-ceremony.mmd](./idp-client-secret-credential-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-step-up-ceremony.mmd](./idp-client-step-up-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-oidc-authorization.mmd](./idp-client-oidc-authorization.mmd) — STATE_MACHINE / client.
+- [idp-client-oauth-callback.mmd](./idp-client-oauth-callback.mmd) — WORKFLOW_STATE / client.
+- [idp-client-local-result-delivery.mmd](./idp-client-local-result-delivery.mmd) — WORKFLOW_STATE / client.
+- [idp-client-token.mmd](./idp-client-token.mmd) — WORKFLOW_STATE / client.
+- [idp-client-dbsc.mmd](./idp-client-dbsc.mmd) — WORKFLOW_STATE / client.
+- [idp-client-device-session.mmd](./idp-client-device-session.mmd) — WORKFLOW_STATE / client.
+- [idp-client-rp-session.mmd](./idp-client-rp-session.mmd) — DERIVED_STATE / client.
+- [idp-client-passkey-credential.mmd](./idp-client-passkey-credential.mmd) — WORKFLOW_STATE / client.
+- [idp-visitor-sign-in.mmd](./idp-visitor-sign-in.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-sign-up.mmd](./idp-visitor-sign-up.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-sign-out.mmd](./idp-visitor-sign-out.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-auth-ceremony-session.mmd](./idp-visitor-auth-ceremony-session.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-email-ceremony.mmd](./idp-visitor-email-ceremony.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-telephone-ceremony.mmd](./idp-visitor-telephone-ceremony.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-passkey-ceremony.mmd](./idp-visitor-passkey-ceremony.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-secret-credential-ceremony.mmd](./idp-visitor-secret-credential-ceremony.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-step-up-ceremony.mmd](./idp-visitor-step-up-ceremony.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-oidc-authorization.mmd](./idp-visitor-oidc-authorization.mmd) — STATE_MACHINE / visitor.
+- [idp-visitor-local-result-delivery.mmd](./idp-visitor-local-result-delivery.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-token.mmd](./idp-visitor-token.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-dbsc.mmd](./idp-visitor-dbsc.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-device-session.mmd](./idp-visitor-device-session.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-rp-session.mmd](./idp-visitor-rp-session.mmd) — DERIVED_STATE / visitor.
+- [idp-visitor-passkey-credential.mmd](./idp-visitor-passkey-credential.mmd) — WORKFLOW_STATE / visitor.
+- [idp-operator-sign-in.mmd](./idp-operator-sign-in.mmd) — STATE_MACHINE / operator.
+- [idp-operator-sign-up.mmd](./idp-operator-sign-up.mmd) — STATE_MACHINE / operator.
+- [idp-operator-sign-out.mmd](./idp-operator-sign-out.mmd) — STATE_MACHINE / operator.
+- [idp-operator-auth-ceremony-session.mmd](./idp-operator-auth-ceremony-session.mmd) — STATE_MACHINE / operator.
+- [idp-operator-email-ceremony.mmd](./idp-operator-email-ceremony.mmd) — STATE_MACHINE / operator.
+- [idp-operator-telephone-ceremony.mmd](./idp-operator-telephone-ceremony.mmd) — STATE_MACHINE / operator.
+- [idp-operator-passkey-ceremony.mmd](./idp-operator-passkey-ceremony.mmd) — STATE_MACHINE / operator.
+- [idp-operator-secret-credential-ceremony.mmd](./idp-operator-secret-credential-ceremony.mmd) — STATE_MACHINE / operator.
+- [idp-operator-step-up-ceremony.mmd](./idp-operator-step-up-ceremony.mmd) — STATE_MACHINE / operator.
+- [idp-operator-oidc-authorization.mmd](./idp-operator-oidc-authorization.mmd) — STATE_MACHINE / operator.
+- [idp-operator-oauth-callback.mmd](./idp-operator-oauth-callback.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-local-result-delivery.mmd](./idp-operator-local-result-delivery.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-token.mmd](./idp-operator-token.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-dbsc.mmd](./idp-operator-dbsc.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-device-session.mmd](./idp-operator-device-session.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-rp-session.mmd](./idp-operator-rp-session.mmd) — DERIVED_STATE / operator.
+- [idp-operator-passkey-credential.mmd](./idp-operator-passkey-credential.mmd) — WORKFLOW_STATE / operator.
+- [idp-client-sign-up-cleanup.mmd](./idp-client-sign-up-cleanup.mmd) — WORKFLOW_STATE / client.
+- [idp-client-withdrawal-ceremony.mmd](./idp-client-withdrawal-ceremony.mmd) — WORKFLOW_STATE / client.
+- [idp-client-enforcement-recovery-ceremony.mmd](./idp-client-enforcement-recovery-ceremony.mmd) — WORKFLOW_STATE / client.
+- [idp-visitor-sign-up-cleanup.mmd](./idp-visitor-sign-up-cleanup.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-withdrawal-ceremony.mmd](./idp-visitor-withdrawal-ceremony.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-enforcement-recovery-ceremony.mmd](./idp-visitor-enforcement-recovery-ceremony.mmd) — WORKFLOW_STATE / visitor.
+- [idp-client-totp-ceremony.mmd](./idp-client-totp-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-social-ceremony.mmd](./idp-client-social-ceremony.mmd) — STATE_MACHINE / client.
+- [idp-client-secret-issuance.mmd](./idp-client-secret-issuance.mmd) — WORKFLOW_STATE / client.
+- [idp-client-session-limit-resolution.mmd](./idp-client-session-limit-resolution.mmd) — WORKFLOW_STATE / client.
+- [idp-client-apple-notification.mmd](./idp-client-apple-notification.mmd) — WORKFLOW_STATE / client.
+- [idp-client-external-identity.mmd](./idp-client-external-identity.mmd) — WORKFLOW_STATE / client.
+- [idp-client-totp-credential.mmd](./idp-client-totp-credential.mmd) — WORKFLOW_STATE / client.
+- [idp-identity-totp-enrollment.mmd](./idp-identity-totp-enrollment.mmd) — WORKFLOW_STATE / identity.
+- [idp-identity-secret-credential-candidate.mmd](./idp-identity-secret-credential-candidate.mmd) — WORKFLOW_STATE / identity.
+- [idp-identity-social-candidate.mmd](./idp-identity-social-candidate.mmd) — WORKFLOW_STATE / identity.
+- [idp-operator-organization-invitation.mmd](./idp-operator-organization-invitation.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-operator-lifecycle.mmd](./idp-operator-operator-lifecycle.mmd) — WORKFLOW_STATE / operator.
+- [idp-shared-sequence-carrier.mmd](./idp-shared-sequence-carrier.mmd) — WORKFLOW_STATE / shared.
+- [idp-shared-authorization-code.mmd](./idp-shared-authorization-code.mmd) — STATE_MACHINE / shared.
+- [idp-shared-opaque-admission.mmd](./idp-shared-opaque-admission.mmd) — STATE_MACHINE / shared.
+- [idp-client-secret-credential.mmd](./idp-client-secret-credential.mmd) — WORKFLOW_STATE / client.
+- [idp-client-dpop-nonce.mmd](./idp-client-dpop-nonce.mmd) — WORKFLOW_STATE / client.
+- [idp-client-administrative-access.mmd](./idp-client-administrative-access.mmd) — WORKFLOW_STATE / client.
+- [idp-client-email-verification-challenge.mmd](./idp-client-email-verification-challenge.mmd) — WORKFLOW_STATE / client.
+- [idp-client-preference-dbsc.mmd](./idp-client-preference-dbsc.mmd) — WORKFLOW_STATE / client.
+- [idp-client-email-otp.mmd](./idp-client-email-otp.mmd) — DERIVED_STATE / client.
+- [idp-client-telephone-otp.mmd](./idp-client-telephone-otp.mmd) — DERIVED_STATE / client.
+- [idp-visitor-secret-credential.mmd](./idp-visitor-secret-credential.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-dpop-nonce.mmd](./idp-visitor-dpop-nonce.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-administrative-access.mmd](./idp-visitor-administrative-access.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-email-verification-challenge.mmd](./idp-visitor-email-verification-challenge.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-preference-dbsc.mmd](./idp-visitor-preference-dbsc.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-email-otp.mmd](./idp-visitor-email-otp.mmd) — DERIVED_STATE / visitor.
+- [idp-visitor-telephone-otp.mmd](./idp-visitor-telephone-otp.mmd) — DERIVED_STATE / visitor.
+- [idp-operator-secret-credential.mmd](./idp-operator-secret-credential.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-dpop-nonce.mmd](./idp-operator-dpop-nonce.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-administrative-access.mmd](./idp-operator-administrative-access.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-email-verification-challenge.mmd](./idp-operator-email-verification-challenge.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-preference-dbsc.mmd](./idp-operator-preference-dbsc.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-email-otp.mmd](./idp-operator-email-otp.mmd) — DERIVED_STATE / operator.
+- [idp-operator-telephone-otp.mmd](./idp-operator-telephone-otp.mmd) — DERIVED_STATE / operator.
+- [idp-client-withdrawal.mmd](./idp-client-withdrawal.mmd) — STATE_MACHINE / client.
+- [idp-visitor-withdrawal.mmd](./idp-visitor-withdrawal.mmd) — STATE_MACHINE / visitor.
+- [idp-security-one-time-reveal.mmd](./idp-security-one-time-reveal.mmd) — WORKFLOW_STATE / security.
+- [idp-operator-entra-identity.mmd](./idp-operator-entra-identity.mmd) — WORKFLOW_STATE / operator.
+- [idp-client-step-up-session.mmd](./idp-client-step-up-session.mmd) — WORKFLOW_STATE / client.
+- [idp-client-step-up-passkey-challenge.mmd](./idp-client-step-up-passkey-challenge.mmd) — WORKFLOW_STATE / client.
+- [idp-client-step-up-email-challenge.mmd](./idp-client-step-up-email-challenge.mmd) — WORKFLOW_STATE / client.
+- [idp-client-email-credential.mmd](./idp-client-email-credential.mmd) — WORKFLOW_STATE / client.
+- [idp-client-telephone-credential.mmd](./idp-client-telephone-credential.mmd) — WORKFLOW_STATE / client.
+- [idp-client-actor-withdrawal.mmd](./idp-client-actor-withdrawal.mmd) — DERIVED_STATE / client.
+- [idp-visitor-step-up-session.mmd](./idp-visitor-step-up-session.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-step-up-passkey-challenge.mmd](./idp-visitor-step-up-passkey-challenge.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-step-up-email-challenge.mmd](./idp-visitor-step-up-email-challenge.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-email-credential.mmd](./idp-visitor-email-credential.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-telephone-credential.mmd](./idp-visitor-telephone-credential.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-actor-withdrawal.mmd](./idp-visitor-actor-withdrawal.mmd) — DERIVED_STATE / visitor.
+- [idp-operator-step-up-session.mmd](./idp-operator-step-up-session.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-step-up-passkey-challenge.mmd](./idp-operator-step-up-passkey-challenge.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-email-credential.mmd](./idp-operator-email-credential.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-telephone-credential.mmd](./idp-operator-telephone-credential.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-actor-withdrawal.mmd](./idp-operator-actor-withdrawal.mmd) — DERIVED_STATE / operator.
+- [idp-client-actor-provisioning.mmd](./idp-client-actor-provisioning.mmd) — STATUS_AXIS / client.
+- [idp-shared-acme-logout.mmd](./idp-shared-acme-logout.mmd) — STATE_MACHINE / shared.
+- [idp-shared-webauthn-challenge.mmd](./idp-shared-webauthn-challenge.mmd) — WORKFLOW_STATE / shared.
+- [idp-client-enforcement-case.mmd](./idp-client-enforcement-case.mmd) — WORKFLOW_STATE / client.
+- [idp-client-enforcement-appeal.mmd](./idp-client-enforcement-appeal.mmd) — WORKFLOW_STATE / client.
+- [idp-visitor-enforcement-case.mmd](./idp-visitor-enforcement-case.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-enforcement-appeal.mmd](./idp-visitor-enforcement-appeal.mmd) — WORKFLOW_STATE / visitor.
+- [idp-operator-enforcement-case.mmd](./idp-operator-enforcement-case.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-enforcement-appeal.mmd](./idp-operator-enforcement-appeal.mmd) — WORKFLOW_STATE / operator.
+- [idp-shared-sign-out-notice.mmd](./idp-shared-sign-out-notice.mmd) — WORKFLOW_STATE / shared.
+- [idp-client-mfa-readiness.mmd](./idp-client-mfa-readiness.mmd) — DERIVED_STATE / client.
+- [idp-visitor-mfa-readiness.mmd](./idp-visitor-mfa-readiness.mmd) — DERIVED_STATE / visitor.
+- [idp-operator-mfa-readiness.mmd](./idp-operator-mfa-readiness.mmd) — DERIVED_STATE / operator.
+- [idp-client-email-registration-session.mmd](./idp-client-email-registration-session.mmd) — WORKFLOW_STATE / client.
+- [idp-visitor-email-registration-session.mmd](./idp-visitor-email-registration-session.mmd) — WORKFLOW_STATE / visitor.
+
+## Overviews (2)
+
+- [idp-state-machine-storage-overview.mmd](./idp-state-machine-storage-overview.mmd)
+- [idp-state-machine-overview.mmd](./idp-state-machine-overview.mmd)
+
+## Inventory and evidence
+
+- [README.md](./README.md)
+- [idp-state-axis-classification.md](./idp-state-axis-classification.md)
+- [idp-state-machine-candidate-disposition.md](./idp-state-machine-candidate-disposition.md)
+- [idp-state-machine-file-manifest.md](./idp-state-machine-file-manifest.md)
+- [idp-state-machine-graph-analysis.md](./idp-state-machine-graph-analysis.md)
+- [idp-state-machine-investigation.md](./idp-state-machine-investigation.md)
+- [idp-state-machine-storage-topology.md](./idp-state-machine-storage-topology.md)
+- [idp-state-machine-transition-inventory.md](./idp-state-machine-transition-inventory.md)
+- [idp-state-value-coverage.md](./idp-state-value-coverage.md)
+- [idp-state-writer-coverage.md](./idp-state-writer-coverage.md)
+
+The `verification/` directory (extraction scripts and JSON outputs, 14 files) was removed on 2026-10-05 and is no longer listed.

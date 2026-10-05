@@ -1,0 +1,13 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "active" as active
+    state "consent_revoked" as consent_revoked
+    state "account_deleted" as account_deleted
+    [*] --> active
+    active --> consent_revoked: consent-revoked
+    active --> account_deleted: account-deleted
+    consent_revoked --> consent_revoked: consent-revoked
+    consent_revoked --> account_deleted: account-deleted
+    active --> active: repository.activate!
+    consent_revoked --> active: repository.activate!
+    account_deleted --> [*]

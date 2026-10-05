@@ -1,5 +1,12 @@
 # High-Level Design Document (HLD)
 
+> Current implementation (2026-10-04): parts of this document describe an earlier shape of the
+> application. The controller namespaces it names (`Top`, `Sign`, `Bff`, `Api`) and the help contact
+> form flow are not in the current code. Current controllers live under `Auth`, `Base`, `Core`,
+> `Warp`, `Palm`, `Edit`, `Xper`, `Guid`, and the content surfaces `Docs`, `Help`, `Info`, and
+> `News`, one route file each in `config/routes/`. Use `README.md` ("Routing") and
+> `docs/architecture/` for the current topology.
+
 ## Project: Umaxica App (JIT)
 
 ### Conforms to ISO/IEC/IEEE 42010:2011 and IEEE 1016:2009
@@ -316,7 +323,9 @@ Sensitive columns leverage Active Record encryption.
 
 1. Flesh out staff/admin CRUD for docs/news/help content and owner/customer management.
 2. Continue adding explicit Action Policy checks where object-level authorization is still missing.
-3. Publish OpenAPI docs with Rswag for API namespaces and mount `/api-docs` when ready.
+3. OpenAPI publication is in place for development: `rswag-api` serves the descriptions under
+   `openapi/` at `/openapi` and `rswag-ui` serves Swagger UI on the swagger host
+   (`config/routes/swagger.rb`). There is no `/api-docs` mount.
 4. Automate Fastly cache purges via `fastly` gem upon content updates.
 5. Expand geolocation- or cookie-based personalization once privacy review passes.
 

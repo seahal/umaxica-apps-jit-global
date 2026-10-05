@@ -79,7 +79,11 @@ module Base
             },
             new_link: {
               label: t("sign.app.settings.telephone.index.new_link"),
-              href: new_base_app_identity_telephones_registration_path,
+              href: new_base_app_identity_telephone_path(ri: params[:ri]),
+            },
+            registration_link: {
+              label: t("base.app.navigation.telephone_registration"),
+              href: new_base_app_identity_telephones_registration_path(ri: params[:ri]),
             },
             table_headings: {
               number: "Number",

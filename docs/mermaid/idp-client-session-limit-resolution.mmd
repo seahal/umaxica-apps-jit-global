@@ -1,0 +1,23 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "session_selected" as session_selected
+    state "resolved" as resolved
+    state "cancelled" as cancelled
+    state "expired" as expired
+    [*] --> pending
+    pending --> session_selected: mark_session_selected!
+    pending --> resolved: mark_resolved! / finalize!
+    pending --> cancelled: cancel!
+    session_selected --> session_selected: mark_session_selected!
+    session_selected --> resolved: mark_resolved! / finalize!
+    session_selected --> cancelled: cancel!
+    resolved --> session_selected: mark_session_selected!
+    resolved --> resolved: mark_resolved! / finalize!
+    resolved --> cancelled: cancel!
+    cancelled --> session_selected: mark_session_selected!
+    cancelled --> resolved: mark_resolved! / finalize!
+    cancelled --> cancelled: cancel!
+    expired --> session_selected: mark_session_selected!
+    expired --> resolved: mark_resolved! / finalize!
+    expired --> cancelled: cancel!
