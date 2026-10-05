@@ -42,7 +42,7 @@ export default function SelfServiceShell({
             ),
           })}
     >
-      <p className="text-sm text-fg-muted">Signed in</p>
+      <p className="text-base text-fg-muted">Signed in</p>
     </Page>
   );
 }

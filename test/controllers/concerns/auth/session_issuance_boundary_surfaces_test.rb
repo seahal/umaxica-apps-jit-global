@@ -37,6 +37,29 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     },
   }.freeze
 
+  test "app outer Ticket rollback leaves no root token or authentication cookies" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    request = ActionDispatch::TestRequest.create
+    request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    request.session = ActionController::TestSession.new
+    controller = Base::App::ApplicationController.new
+    controller.set_request!(request)
+    controller.set_response!(Base::App::ApplicationController.make_response!(request))
+
+    assert_no_difference -> { ClientToken.where(user_id: actor.id).count } do
+      AppTicketRecord.transaction(requires_new: true) do
+        controller.log_in(actor, establishment: :root_login)
+
+        assert_equal 1, ClientToken.where(user_id: actor.id).count
+        assert_nil request.cookie_jar[AuthenticationBase::ACCESS_COOKIE_KEY]
+        assert_nil request.cookie_jar[AuthenticationBase::REFRESH_COOKIE_KEY]
+        raise ActiveRecord::Rollback
+      end
+    end
+    assert_nil request.cookie_jar[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil request.cookie_jar[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
   SURFACES.each do |surface, config|
     test "#{surface}: one below the limit commits one ACTIVE root session with cookies and context" do
       resource = config[:resource].call

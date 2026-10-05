@@ -55,14 +55,14 @@ export default function EntityList({
       }
     >
       {entries.length === 0 ? (
-        <p className="text-sm text-fg-muted">{empty}</p>
+        <p className="text-base text-fg-muted">{empty}</p>
       ) : (
         <ul className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-2">
           {entries.map((entry) => (
             <li key={entry.public_id}>
               <Link
                 href={entry.href}
-                className="block rounded-md px-3 py-2 text-sm text-fg hover:bg-surface-muted hover:underline"
+                className="ui-text-link block rounded-md px-3 py-2 text-base text-fg hover:bg-surface-muted hover:underline"
               >
                 {entry.label}
               </Link>

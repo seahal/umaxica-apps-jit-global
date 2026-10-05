@@ -137,6 +137,14 @@
 }
 
 .social-provider-button--apple:focus-visible {
-  outline: 2px solid currentcolor;
+  outline: 4px solid var(--ui-focus-outer);
+  box-shadow: 0 0 0 2px var(--ui-focus-inner);
   outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .social-provider-button--apple:focus-visible {
+    outline-color: Highlight;
+    box-shadow: none;
+  }
 }

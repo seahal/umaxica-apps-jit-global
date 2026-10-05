@@ -20,11 +20,11 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
     Rails.configuration.x.rate_limit.fetch(:store).clear
   end
 
-  test "retired secret sign-in routes do not reach rate limiting or authentication" do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
+  test "app Secret requires admission before limiting while com and org Secret routes remain absent" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    post "/sign/in/secret", params: { secret: "" }
 
-    assert_response :not_found
+    assert_response :bad_request
 
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     post "/sign/in/secret", params: { secret_credential_login_form: { identifier: "", secret_credential_value: "" } }
@@ -39,6 +39,12 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
 
   test "app passkey options sign-in hits explicit rails rate limit" do
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: admission.reference, params: { ri: "jp" },
+    )
+
+    assert_response :see_other
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 

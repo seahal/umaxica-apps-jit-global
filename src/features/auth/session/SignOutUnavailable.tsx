@@ -1,6 +1,8 @@
 import { useForm } from "@inertiajs/react";
 
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 
 import type { SignOutLink } from "./SignOutConfirmation";
 
@@ -31,9 +33,11 @@ export default function SignOutUnavailable({
   };
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{heading}</h1>
-      <p className="text-sm text-fg-muted">{description}</p>
+    <Page
+      title={heading}
+      width="narrow"
+    >
+      <p className="text-base text-fg-muted">{description}</p>
 
       <form
         action={retry.action}
@@ -48,15 +52,10 @@ export default function SignOutUnavailable({
         </Button>
       </form>
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* A document visit: the destination is another surface entry point with its own guards. */}
-        <a
-          href={homeLink.href}
-          className="text-accent hover:underline"
-        >
-          {homeLink.label}
-        </a>
+        <TextLink href={homeLink.href}>{homeLink.label}</TextLink>
       </p>
-    </section>
+    </Page>
   );
 }

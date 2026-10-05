@@ -6,6 +6,11 @@ require_relative "../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class RetentionPurgeJobTest < ActiveJob::TestCase
+  setup do
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
+  end
+
   teardown { Flipper.disable(RetentionPurgeJob::FEATURE_NAME) }
 
   test "set-based Avatar purge cascades through encrypted moniker history" do

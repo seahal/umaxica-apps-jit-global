@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="<%= I18n.locale %>" data-theme="<%= theme_cookie_value %>" data-edition="app">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="turbo-cache-control" content="no-cache">
+  <title><%= t("base.app.secrets.present") %></title>
+  <%= vite_stylesheet_tag "styles/surfaces/base_app", nonce: true %>
+  <%= vite_typescript_tag "secret_presentation", nonce: true %>
+</head>
+<body class="min-h-dvh bg-canvas font-sans text-fg">
+  <main class="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-10 sm:px-6 sm:py-14">
+    <h1 class="text-2xl leading-snug font-semibold text-fg sm:text-3xl"><%= t("base.app.secrets.present") %></h1>
+    <p class="text-base text-fg-muted"><%= t("base.app.secrets.single_delivery") %></p>
+    <% if @issuance.origin == "passkey_registration" && @issuance.planned_count == 1 %>
+      <p role="status"><%= t("base.app.secrets.distribution_one_present") %></p>
+    <% end %>
+    <% @values.each do |value| %>
+      <p data-secret-value class="rounded-md border border-control bg-surface p-4 text-base wrap-anywhere"><code><%= value %></code></p>
+    <% end %>
+    <%= form_with url: confirmation_url, method: :patch, data: { turbo: false }, class: "flex flex-col items-start gap-4" do |form| %>
+      <%= form.hidden_field :checkpoint_version, value: checkpoint_version if checkpoint_version %>
+      <div class="flex min-h-11 items-center gap-3">
+        <%= form.check_box :stored, { required: true }, "1", "0" %>
+        <%= form.label :stored, t("base.app.secrets.confirm"), class: "inline-flex min-h-11 items-center" %>
+      </div>
+      <%= form.submit t("actions.continue"), class: "min-h-12 min-w-11 rounded-md bg-accent px-4 py-2.5 text-base font-medium text-accent-fg" %>
+    <% end %>
+    <%= form_with url: cancel_url, method: :delete, data: { turbo: false }, class: "flex flex-col items-start gap-4" do |form| %>
+      <%= form.submit t("actions.cancel"), class: "min-h-12 min-w-11 rounded-md border border-control bg-surface px-4 py-2.5 text-base font-medium text-fg" %>
+    <% end %>
+  </main>
+</body>
+</html>

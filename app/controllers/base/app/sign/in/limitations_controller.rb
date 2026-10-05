@@ -38,18 +38,19 @@ module Base
               return render_limitation_page(status: :unprocessable_content)
             end
 
-            @resolution&.mark_session_selected!(session_ref: params[:session_ref])
-            revocation = AuthenticationSelectedSessionRevoker.call(
-              owner: @actor,
-              token: token,
-              reason: "session_limit_limitation_selected_revoke",
-            )
+            revocation =
+              if @oidc_transaction&.secret_sign_in_flow_id
+                @resolution.with_secret_revocation_authority!(actor: @actor, challenge: @resolution_challenge) do
+                  revoke_selected_session(token)
+                end
+              else
+                revoke_selected_session(token)
+              end
             unless revocation.success?
               @form_error = t("base.app.sign.in.limitations.revoke_failed")
               load_session_inventory
               return render_limitation_page(status: :unprocessable_content)
             end
-            token.reload.revoke! if token.currently_usable?
 
             if hard_reject_still_applies?
               @form_notice = t("base.app.sign.in.limitations.capacity_still_full")
@@ -62,6 +63,8 @@ module Base
             else
               resume_authorization_after_resolution
             end
+          rescue ClientSessionLimitResolutionTransaction::InvalidSecretResolution
+            render_invalid_resolution
           end
 
           def destroy
@@ -69,8 +72,10 @@ module Base
 
             # Cancelling ends only this pending sign-in; no existing session is touched.
             if social_resolution?
-              AppTicketRecord.connected_to(role: :writing) { @pending_sign_in_flow.fail_sign_in! }
+              cancel_pending_local_login!
               clear_current_sign_in_flow_locator!
+            elsif @oidc_transaction.secret_sign_in_flow_id
+              return render_invalid_resolution unless cancel_oidc_secret_login!
             else
               @resolution.cancel!
             end
@@ -79,6 +84,58 @@ module Base
           end
 
           private
+
+          def revoke_selected_session(token)
+            @resolution&.mark_session_selected!(session_ref: params[:session_ref])
+            result = AuthenticationSelectedSessionRevoker.call(
+              owner: @actor, token: token, reason: "session_limit_limitation_selected_revoke",
+            )
+            token.reload.revoke! if result.success? && token.currently_usable?
+            result
+          end
+
+          def cancel_oidc_secret_login!
+            canceled =
+              @actor.with_lock do
+                @oidc_transaction.with_lock do
+                  @resolution.lock!
+                  flow = @oidc_transaction.secret_sign_in_flow
+                  flow.lock!
+                  next false if @oidc_transaction.base_finalized_at || flow.token_id || flow.session_issued_at ||
+                    !@oidc_transaction.authenticated? || !(@resolution.pending? || @resolution.session_selected?)
+
+                  flow.fail_sign_in!(now: ClientSignInFlow.database_now) unless flow.sign_in_failed?
+                  @resolution.cancel!(now: ClientSignInFlow.database_now)
+                  true
+                end
+              end
+            finalize_oidc_secret_claim! if canceled
+            canceled
+          end
+
+          def cancel_pending_local_login!
+            secret = @pending_sign_in_flow.authentication_method == "secret"
+            AppTicketRecord.connected_to(role: :writing) do
+              @pending_sign_in_flow.with_lock do
+                @pending_sign_in_flow.fail_sign_in!
+                if secret
+                  ClientAuthCeremonySession.where(local_sign_in_flow_ref: @pending_sign_in_flow.public_id)
+                    .lock.each { |ceremony| ceremony.cancel! unless ceremony.terminal? }
+                end
+              end
+            end
+            return unless secret
+
+            AppZenithRecord.connected_to(role: :writing) do
+              credential = ClientSecretCredential.find_by!(
+                client_id: @actor.id, claim_sign_in_flow_ref: @pending_sign_in_flow.public_id,
+              )
+              ClientSecretClaimFinalizer.call!(
+                credential: credential,
+                purge_after: ClientSecretLifetimesValue.purge_delay,
+              )
+            end
+          end
 
           def render_limitation_page(status:)
             render inertia: "base/app/sign/in/limitations/show", props: limitation_page_props, status: status
@@ -139,13 +196,23 @@ module Base
               now = ClientOidcAuthorizationTransaction.database_now
               unless @actor && @oidc_transaction.actor_ref == @actor.public_id &&
                   @oidc_transaction.authenticated? && @oidc_transaction.base_finalized_at.nil? &&
-                  !@oidc_transaction.expired?(now: now) && !@oidc_transaction.login_challenge_expired?(now: now)
+                  !@oidc_transaction.expired?(now: now) && !@oidc_transaction.login_challenge_expired?(now: now) &&
+                  pending_oidc_secret_flow?(now)
                 @resolution = nil
               end
               return
             end
 
             load_social_resolution
+          end
+
+          def pending_oidc_secret_flow?(now)
+            return true unless @oidc_transaction.secret_sign_in_flow_id
+
+            flow = @oidc_transaction.secret_sign_in_flow
+            flow.principal_id == @actor.id && flow.authentication_method == "secret" &&
+              flow.sign_in_session_limit_pending? && !flow.expired?(now) &&
+              flow.token_id.nil? && flow.session_issued_at.nil?
           end
 
           def render_invalid_resolution
@@ -194,8 +261,9 @@ module Base
 
           def hard_reject_still_applies?
             AppTicketRecord.connected_to(role: :writing) do
-              ClientToken.not_revoked.where(user_id: @actor.id, rotated_at: nil).count >=
-                ClientToken::MAX_TOTAL_SESSIONS_PER_USER
+              ClientToken.active_status.where(user_id: @actor.id).count >= ClientToken::MAX_SESSIONS_PER_USER ||
+                ClientToken.not_revoked.where(user_id: @actor.id, rotated_at: nil).count >=
+                  ClientToken::MAX_TOTAL_SESSIONS_PER_USER
             end
           end
 
@@ -206,7 +274,20 @@ module Base
               result = LocalAuthenticationSessionCommitter.resume_pending!(
                 controller: self, flow: @pending_sign_in_flow, actor: @actor, nonce: locator.fetch("nonce"),
               )
-              return render_invalid_resolution unless result.fetch(:status) == :success
+              if result.fetch(:status) == :session_limit_pending
+                @form_notice = t("base.app.sign.in.limitations.capacity_still_full")
+                load_session_inventory
+                return render_limitation_page(status: :unprocessable_content)
+              end
+              unless result.fetch(:status) == :success
+                Rails.logger.warn(
+                  JitLogEvent.format(
+                    "base.sign_in.local_resume.incomplete", result_status: result.fetch(:status).to_s,
+                                                            request_id: request.request_id,
+                  ),
+                )
+                return render_invalid_resolution
+              end
 
               return redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
             end
@@ -214,7 +295,14 @@ module Base
 
             redirect_to(base_app_dashboard_path(ri: params[:ri]), status: :see_other)
           rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
-                 ActiveRecord::SoleRecordExceeded, AuthCeremonySession::InvalidTransition
+                 ActiveRecord::SoleRecordExceeded, AuthCeremonySession::InvalidTransition => e
+            Rails.logger.warn(
+              JitLogEvent.format(
+                "base.sign_in.local_resume.refused", error_class: e.class.name,
+                                                     source_location: e.backtrace&.first,
+                                                     request_id: request.request_id,
+              ),
+            )
             render_invalid_resolution
           end
 
@@ -223,7 +311,9 @@ module Base
               @actor.class.connection_class_for_self.connected_to(role: :writing) do
                 @actor.with_lock do
                   @oidc_transaction.finalize_base! do |locked, _finalization_time|
-                    next { status: :invalid_request } if locked.base_finalized_at
+                    @resolution.lock!
+                    next { status: :invalid_request } if locked.base_finalized_at ||
+                      !(@resolution.pending? || @resolution.session_selected?) || @resolution.expired?
                     next { status: :login_failed } unless promote_oidc_resolution_session!
 
                     { status: :success, browser_session_ref: current_session.public_id }
@@ -232,15 +322,26 @@ module Base
               end
             return render_invalid_resolution unless finalization[:status] == :success
 
+            finalize_oidc_secret_claim! if @oidc_transaction.secret_sign_in_flow_id
             @resolution.finalize!
             issue_authorization_code!
-          rescue ArgumentError
+          rescue ArgumentError => e
+            Rails.logger.warn(
+              JitLogEvent.format(
+                "base.sign_in.oidc_resume.refused", error_class: e.class.name,
+                                                    source_location: e.backtrace&.first,
+                                                    request_id: request.request_id,
+              ),
+            )
             render_invalid_resolution
           end
 
           # The OIDC resume issued nothing while the limit was full. The root login
           # is committed here, through the same final boundary as any sign-in.
           def promote_oidc_resolution_session!
+            secret_options = oidc_secret_issuance_options
+            return false if secret_options.nil?
+
             login_result = log_in(
               @actor,
               establishment: :root_login,
@@ -249,8 +350,41 @@ module Base
               require_totp_check: false,
               audit_context: { auth_method: "session_limit_promotion", oidc_client_id: @oidc_transaction.client_id },
               authentication_event_at: @oidc_transaction.authenticated_at,
+              **secret_options,
             )
+            unless login_result[:status] == :success
+              Rails.logger.warn(
+                JitLogEvent.format(
+                  "base.sign_in.oidc_resume.issuance_refused", status: login_result[:status],
+                                                               request_id: request.request_id,
+                ),
+              )
+            end
             login_result[:status] == :success
+          end
+
+          def oidc_secret_issuance_options
+            return {} unless @oidc_transaction.secret_sign_in_flow_id
+            unless @oidc_transaction.auth_method == "passcode"
+              raise AuthenticationBase::SignInFlowIssuanceRejected, "Secret OIDC authentication method mismatch"
+            end
+
+            flow = @oidc_transaction.secret_sign_in_flow
+            flow.with_lock do
+              return nil if flow.sign_in_failed? || flow.expired?(ClientSignInFlow.database_now)
+
+              flow.prepare_secret_oidc_issuance!(authorization_transaction: @oidc_transaction)
+            end
+            { sign_in_flow: flow, established_authentication_method: "secret" }
+          end
+
+          def finalize_oidc_secret_claim!
+            credential = ClientSecretCredential.find_by!(
+              client_id: @actor.id, claim_sign_in_flow_ref: @oidc_transaction.secret_sign_in_flow.public_id,
+            )
+            ClientSecretClaimFinalizer.call!(
+              credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,
+            )
           end
 
           def issue_authorization_code!

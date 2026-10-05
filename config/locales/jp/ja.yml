@@ -629,6 +629,9 @@ ja:
   activerecord:
     actions: アクション
     attributes:
+      client_secret_credential:
+        client: 利用者
+        issuance: Secret の発行操作
       agent_assignment:
         assigned_at: 割当日時
       app_enforcement_appeal:
@@ -1086,6 +1089,7 @@ ja:
       emergency_unavailable:
         このセッションは緊急アクセスで確立されたため、段階的認証を行えません。サインアウトして通常モードで
         サインインし直してください。
+      fresh_sign_in_required: 最初の認証方法を登録するには、いったんサインアウトしてからサインインし直してください。
       invalid_request: 無効な認証リクエストです。
       method_unavailable: 選択した認証方法は利用できません。
       register_methods_required: 利用可能なステップアップ認証がありません。パスキー・メール・TOTPを登録してください。
@@ -1095,6 +1099,19 @@ ja:
     unauthorized: 権限がありません
   base:
     app:
+      secrets:
+        add: "Secretを1個追加"
+        capacity_conflict: "Secretの上限に達しているか、別の発行操作が進行中です。"
+        confirm: "提示されたSecretを保存しました"
+        distribution_omitted: "有効な Secret が上限の20個あるため、今回は新しい Secret を配布していません。保存済みの Secret は引き続き使用できます。"
+        distribution_one_confirmed: "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布しました。"
+        distribution_one_present: "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布します。"
+        payload_unavailable: "提示値を取得できません。新しい発行を明示的に開始してください。"
+        present: "Secretを一度だけ表示"
+        rename: "名前を変更"
+        revoke: "失効"
+        single_delivery: "この値を保存してください。再表示はできません。保存確認を完了するまでSign inには使えません。"
+        title: "Secret"
       avatars:
         already_assigned: すでにアバターをお持ちのため、新しいアバターは作成できません。
         moniker_validation:
@@ -1266,7 +1283,7 @@ ja:
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
-        message: Thin landing endpoint.
+        message: アカウントと各種設定をここから管理します。
       sign:
         in:
           limitations:
@@ -1409,10 +1426,10 @@ ja:
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
-        message: Thin landing endpoint.
+        message: アカウントと各種設定の操作へ進みます。
     dev:
       roots:
-        message: Thin landing endpoint.
+        message: 開発者向けアクセスとサポートの入口です。
     org:
       admin:
         dashboard:
@@ -1731,7 +1748,7 @@ ja:
         update_settings: 設定を更新
         update_success: 設定を更新しました
       roots:
-        message: Thin landing endpoint.
+        message: 組織用アカウントと各種設定へ進みます。
     shared:
       lobby:
         title: ロビー
@@ -2150,7 +2167,7 @@ ja:
           preference: 設定
     dev:
       roots:
-        message: Thin landing endpoint.
+        message: サポートと稼働状況の入口です。
     org:
       preference:
         emails:
@@ -3226,6 +3243,11 @@ ja:
   sign:
     app:
       authentication:
+        secret:
+          invalid: "Sign inできません。"
+          label: "Secret"
+          submit: "Sign in"
+          title: "SecretでSign in"
         device:
           placeholder: 別の端末でのサインインはまだ実装されていません。
         email:
@@ -3256,6 +3278,7 @@ ja:
           back_to_root: もどる
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
+            secret: Secret
             device: 別の端末でサインイン
             apple: Appleで続行
             email: メールアドレス
@@ -4933,3 +4956,17 @@ ja:
         verifications:
           show:
             no_methods: passkey を登録してください
+
+  ui:
+    skip_to_content: 本文へ移動
+  ui_presentation:
+    body_json: 文書をJSON形式で入力してください。
+    confirmation_required: 上の確認項目にチェックを入れると、この操作を実行できます。
+    information: お知らせ
+    navigation:
+      authentication: 認証メニュー
+      footer: フッターナビゲーション
+      pagination: ページ送り
+      preferences: 表示設定
+      primary: 主要ナビゲーション
+    processing: 処理中です。しばらくお待ちください。

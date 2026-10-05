@@ -30,7 +30,7 @@ export default function OrgPasskeyRegistrationPage({
     >
       <PasskeyRegistrationPanel {...registration} />
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink
           href={cancelLink.href}
           tone="muted"

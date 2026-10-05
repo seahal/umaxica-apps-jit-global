@@ -1,3 +1,4 @@
+import { within } from "@testing-library/react";
 // The passkey requirement of the sign-up checkpoint.
 //
 // The checkpoint version travels with the attestation because the server re-validates it before
@@ -149,7 +150,9 @@ describe("SignUpPasskeyRegistration", () => {
     const screen = await start();
 
     expect(location.href).toBe("/sign/up/checkpoint");
-    expect(screen.text("p.text-fg-muted")).toBe(PASSKEY_MESSAGES.registrationComplete);
+    expect(within(screen.container).getByRole("status").textContent).toBe(
+      PASSKEY_MESSAGES.registrationComplete,
+    );
   });
 
   it("reloads when neither the server nor the page names a destination", async () => {

@@ -61,7 +61,7 @@ export default function TotpEntry({
       up={back}
       width="narrow"
     >
-      <p className="text-sm text-fg-muted">{totpHelp}</p>
+      <p className="text-base text-fg-muted">{totpHelp}</p>
 
       <ErrorList errors={errors} />
 
@@ -83,12 +83,12 @@ export default function TotpEntry({
         />
 
         {form.credential_selector ? (
-          <label className="flex flex-col gap-1 text-sm font-medium">
+          <label className="flex flex-col gap-1 text-base font-medium">
             <span>{form.credential_selector.label}</span>
             <select
               name={form.credential_selector.name}
               defaultValue={form.credential_selector.options[0]?.value}
-              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg"
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-fg"
             >
               {form.credential_selector.options.map((option) => (
                 <option

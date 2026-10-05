@@ -32,60 +32,68 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       end
     end
 
-  test "anonymizes a client actor and purges cross-database children" do
-    client = Client.allocate
-    purge_calls = []
-
-    client_email = AnonymizedRecord.new(11, nil, nil, ClientEmail)
-    client_telephone = AnonymizedRecord.new(12, nil, nil, ClientTelephone)
-    client_passkey = AnonymizedRecord.new(13, nil, nil, ClientPasskey)
-    client_secret = AnonymizedRecord.new(14, nil, nil, ClientSecretCredential)
-    client_totp = AnonymizedRecord.new(15, nil, nil, ClientTotpCredential)
-    external_identity = AnonymizedRecord.new(18, nil, nil, ClientExternalIdentity)
-
-    define_client_actor(
-      client,
-      emails: [client_email],
-      telephones: [client_telephone],
-      passkeys: [client_passkey],
-      secrets: [client_secret],
-      totps: [client_totp],
-      google_identity: nil,
-      apple_identity: nil,
-      external_identities: [external_identity],
+  test "anonymizes persisted client credentials while retaining Secret terminal audit" do
+    now = Client.database_now
+    client = Client.create!(status_id: ClientStatus::ACTIVE)
+    email = ClientEmail.create!(
+      user: client, address: "withdrawal-#{SecureRandom.hex(8)}@example.com",
+      otp_counter: "0", otp_private_key: "withdrawal-test",
     )
+    original_address_digest = email.address_digest
+    telephone = ClientTelephone.create!(
+      user: client, number: "+14155552671", otp_counter: "0", otp_private_key: "withdrawal-test",
+    )
+    original_number_digest = telephone.number_digest
+    external_identity = ClientExternalIdentity.create!(
+      client: client, provider: "google", issuer: "https://accounts.google.com",
+      subject: SecureRandom.uuid, audience: "withdrawal-test", verification_authority: "google",
+      state: "active", verified_at: now,
+    )
+    passkey = ClientPasskey.create!(
+      user: client, webauthn_id: SecureRandom.base58(32), external_id: SecureRandom.uuid,
+      public_key: "withdrawal-test-key", description: "Withdrawal test",
+    )
+    totp = ClientTotpCredential.create!(
+      user: client, title: "Withdrawal test", private_key: ROTP::Base32.random_base32,
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
+    issuance = ClientSecretIssuance.create!(
+      client: client, origin: "manual", origin_operation_id: SecureRandom.uuid, attempt_number: 1,
+      browser_session_ref: SecureRandom.base58(21), planned_count: 1, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    secret = ClientSecretCredential.create!(
+      client: client, issuance: issuance, name: "Pending withdrawal", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw),
+    )
+    client.update!(withdrawn_at: now, terminated_at: now)
+    previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
 
-    RetentionCrossDatabaseChildPurge.stub(:call, ->(actor:) { purge_calls << actor }) do
-      result = WithdrawalPersonalDataAnonymizer.call(actor: client)
-
-      assert_same client, result
-    end
-
-    assert_equal [client], purge_calls
-    assert_equal "withdrawn-client-email-11@anonymous.invalid", client_email.updated_attrs.fetch(:address)
-    assert_nil client_email.updated_attrs.fetch(:address_digest)
-    assert_equal "withdrawn", client_email.updated_attrs.fetch(:otp_private_key)
-    assert_equal "0", client_email.updated_attrs.fetch(:otp_counter)
-    assert_equal ClientEmailStatus::SUSPENDED, client_email.updated_attrs.fetch(:user_email_status_id)
-
-    assert_equal "+100000000000012", client_telephone.updated_attrs.fetch(:number)
-    assert_nil client_telephone.updated_attrs.fetch(:number_digest)
-    assert_equal "withdrawn", client_telephone.updated_attrs.fetch(:otp_private_key)
-    assert_equal "0", client_telephone.updated_attrs.fetch(:otp_counter)
-    assert_equal ClientTelephoneStatus::SUSPENDED,
-                 client_telephone.updated_attrs.fetch(:user_identity_telephone_status_id)
-
-    assert_equal ClientPasskeyStatus::REVOKED, client_passkey.updated_attrs.fetch(:status_id)
-    assert_in_delta Time.current.to_f, Float(client_passkey.updated_attrs.fetch(:discard_at)), 1
-
-    assert_equal ClientSecretCredentialStatus::REVOKED, client_secret.updated_attrs.fetch(:user_secret_status_id)
-    assert_in_delta Time.current.to_f, Float(client_secret.updated_attrs.fetch(:discard_at)), 1
-
-    assert_equal ClientTotpCredentialStatus::REVOKED,
-                 client_totp.updated_attrs.fetch(:user_identity_totp_credential_status_id)
-    assert_in_delta Time.current.to_f, Float(client_totp.updated_attrs.fetch(:discard_at)), 1
-
-    assert external_identity.destroyed
+    assert_same client, WithdrawalPersonalDataAnonymizer.call(actor: client)
+    assert_equal "withdrawn-client-email-#{email.id}@anonymous.invalid", email.reload.address
+    assert_not_equal original_address_digest, email.address_digest
+    assert_equal IdentifierBlindIndex.bidx_for_email(email.address), email.address_digest
+    assert_equal "withdrawn", email.otp_private_key
+    assert_equal "0", email.otp_counter
+    assert_equal ClientEmailStatus::SUSPENDED, email.user_email_status_id
+    assert_equal "+100000#{telephone.id.to_s.rjust(9, "0")}", telephone.reload.number
+    assert_not_equal original_number_digest, telephone.number_digest
+    assert_equal "withdrawn", telephone.otp_private_key
+    assert_equal "0", telephone.otp_counter
+    assert_equal ClientTelephoneStatus::SUSPENDED, telephone.user_identity_telephone_status_id
+    assert_not ClientExternalIdentity.exists?(external_identity.id)
+    assert_equal ClientPasskeyStatus::REVOKED, passkey.reload.status_id
+    assert_kind_of Time, passkey.discard_at
+    assert_equal ClientTotpCredentialStatus::REVOKED, totp.reload.user_identity_totp_credential_status_id
+    assert secret.reload.revoked_at
+    assert_kind_of Time, secret.discard_at
+    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert issuance.reload.canceled_at
+    assert_equal %w(secret.discarded secret.revoked),
+                 ClientSecretAuditOutbox.where(credential_ref: secret.public_id).order(:event_name).pluck(:event_name)
+  ensure
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = previous_delay
   end
 
   test "anonymizes a visitor actor" do
@@ -131,18 +139,6 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
   end
 
   private
-
-  def define_client_actor(actor, emails:, telephones:, passkeys:, secrets:, totps:, google_identity:, apple_identity:,
-                          external_identities: [])
-    actor.define_singleton_method(:client_emails) { Scope.new(emails) }
-    actor.define_singleton_method(:client_telephones) { Scope.new(telephones) }
-    actor.define_singleton_method(:client_passkeys) { Scope.new(passkeys) }
-    actor.define_singleton_method(:client_secret_credentials) { Scope.new(secrets) }
-    actor.define_singleton_method(:client_totp_credentials) { Scope.new(totps) }
-    actor.define_singleton_method(:user_google_identity) { google_identity }
-    actor.define_singleton_method(:user_apple_identity) { apple_identity }
-    actor.define_singleton_method(:client_external_identities) { Scope.new(external_identities) }
-  end
 
   def define_visitor_actor(actor, emails:, telephones:, passkeys:, secrets:)
     actor.define_singleton_method(:visitor_emails) { Scope.new(emails) }

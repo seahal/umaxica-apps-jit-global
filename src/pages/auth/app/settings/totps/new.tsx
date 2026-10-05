@@ -118,7 +118,7 @@ export default function TotpsNew({
                 alt="QR Code"
                 className="size-48 rounded-lg border border-line bg-white p-2"
               />
-              <p className="text-center text-xs break-all text-fg-muted">{qrFallback}</p>
+              <p className="text-center text-base break-all text-fg-muted">{qrFallback}</p>
             </div>
 
             <TextField
@@ -144,7 +144,7 @@ export default function TotpsNew({
                 value={form.data.first_token}
                 onChange={(value) => form.setData("first_token", value)}
               />
-              <p className="text-xs text-fg-muted">{formProps.first_token_delivery_help}</p>
+              <p className="text-base text-fg-muted">{formProps.first_token_delivery_help}</p>
             </div>
 
             <TurnstileWidget

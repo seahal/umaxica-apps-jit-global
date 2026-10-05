@@ -10,7 +10,7 @@ class IdentityStepUpCeremonyTransactionPurger
   DEPENDENT_MODELS = {
     ClientStepUpCeremonyTransaction => [
       ClientAuthCeremonySession, ClientStepUpSession, ClientPasskeyCeremonyTransaction,
-      ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
+      ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate, IdentityPasskeyCeremonyCandidate,
     ],
     VisitorStepUpCeremonyTransaction => [
       VisitorAuthCeremonySession, VisitorStepUpSession, VisitorPasskeyCeremonyTransaction,
@@ -77,7 +77,8 @@ class IdentityStepUpCeremonyTransactionPurger
         scope.where(model.arel_table[column].eq(nil).or(model.arel_table[column].lteq(cutoff)))
       end
     elsif [ClientPasskeyCeremonyTransaction, VisitorPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
-           ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,].include?(model)
+           ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
+           IdentityPasskeyCeremonyCandidate,].include?(model)
       relation.where(model.arel_table[:expires_at].lteq(cutoff))
         .where(model.arel_table[:consumed_at].eq(nil).or(model.arel_table[:consumed_at].lteq(cutoff)))
     else

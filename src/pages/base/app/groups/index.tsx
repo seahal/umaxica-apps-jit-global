@@ -21,14 +21,14 @@ export default function GroupsIndex({
       upVisit="inertia"
     >
       {groups.length === 0 ? (
-        <p className="text-sm text-fg-muted">{emptyMessage}</p>
+        <p className="text-base text-fg-muted">{emptyMessage}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {groups.map((group) => (
             <li key={group.public_id}>
               <a
                 href={group.href}
-                className="text-fg underline underline-offset-4"
+                className="ui-text-link text-fg underline underline-offset-4"
               >
                 {group.name}
               </a>

@@ -26,7 +26,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
 
-    @token = ClientToken.create!(user_id: @user.id)
+    @token = ClientToken.create!(user_id: @user.id, root_login_established_at: Time.current)
     @token.rotate_refresh_token!
     access_token = AuthenticationToken.encode(
       @user,
@@ -130,7 +130,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   test "index stays accessible when no totp is registered" do
     user = Client.create!(status_id: ClientStatus::NOTHING)
-    token = ClientToken.create!(user_id: user.id)
+    token = ClientToken.create!(user_id: user.id, root_login_established_at: Time.current)
     satisfy_user_verification(token)
     access_token = AuthenticationToken.encode(
       user,
@@ -162,7 +162,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       address: "totp-active-with-email@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
-    token = ClientToken.create!(user_id: user.id)
+    token = ClientToken.create!(user_id: user.id, root_login_established_at: Time.current)
     token.update!(created_at: 1.hour.ago, last_step_up_at: nil, last_step_up_scope: nil)
     access_token = AuthenticationToken.encode(
       user,
@@ -212,7 +212,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -266,7 +266,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -318,7 +318,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -389,7 +389,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -459,7 +459,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -535,7 +535,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -579,7 +579,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -622,7 +622,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -662,7 +662,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -700,7 +700,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -846,7 +846,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -912,7 +912,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -986,7 +986,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -1053,7 +1053,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -1107,7 +1107,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -1157,7 +1157,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
@@ -1209,7 +1209,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   test "initial setup user can access totp pages without step-up" do
     user = create_verified_user_with_email(email_address: "initial_totp_access@example.com")
-    token = ClientToken.create!(user_id: user.id)
+    token = ClientToken.create!(user_id: user.id, root_login_established_at: Time.current)
     token.rotate_refresh_token!
     token.update!(last_step_up_at: 5.minutes.ago, last_step_up_scope: "settings_totp")
     satisfy_user_verification(token)
@@ -1243,7 +1243,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,

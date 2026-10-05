@@ -11,7 +11,7 @@ module IdentityStepUpCeremonyContract
     transaction_conflict transaction_expired transaction_canceled transaction_revoked
     transaction_already_completed transaction_unavailable
     session_expired session_binding_mismatch return_binding_mismatch
-    unsupported_method authorization_denied unclassified
+    unsupported_method authorization_denied bootstrap_not_fresh unclassified
   ).freeze
 
   class Error < StandardError

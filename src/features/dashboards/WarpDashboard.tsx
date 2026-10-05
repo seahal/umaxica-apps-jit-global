@@ -36,7 +36,7 @@ export default function WarpDashboard({ heading, description, sections }: WarpDa
               <li key={link.href}>
                 <a
                   href={link.href}
-                  className="text-sm text-fg underline-offset-4 hover:underline"
+                  className="ui-text-link text-base text-fg underline underline-offset-4 hover:underline"
                 >
                   {link.label}
                 </a>

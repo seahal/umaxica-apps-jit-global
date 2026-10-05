@@ -23,7 +23,7 @@ export default function PalmSignOutShow({ heading, description, state }: PalmSig
       </h1>
       <p className="max-w-prose text-lg text-pretty text-fg-muted">{description}</p>
       {state ? (
-        <p className="text-sm text-fg-muted">
+        <p className="text-base text-fg-muted">
           State{" "}
           <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-fg">{state}</code>{" "}
           was validated.

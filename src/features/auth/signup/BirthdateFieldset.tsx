@@ -29,19 +29,27 @@ export default function BirthdateFieldset({
     <fieldset
       aria-labelledby={labelledby}
       data-birthdate-format={format}
-      className="flex flex-wrap items-end gap-2"
+      className="flex min-w-0 flex-wrap items-end gap-2"
     >
       {parts.map((part, index) => (
         <span
           key={part.part}
-          className="flex items-end gap-2"
+          className="flex min-w-0 max-w-full items-end gap-2"
         >
           {index > 0 ? <span className="pb-2 text-fg-muted">{separator}</span> : null}
-          <label
-            htmlFor={`birthdate_${part.part}`}
-            className="flex flex-col gap-1 text-sm font-medium text-fg"
-          >
-            {part.label}
+          <span className="flex min-w-0 flex-col gap-2">
+            <label
+              htmlFor={`birthdate_${part.part}`}
+              className="text-base font-medium text-fg"
+            >
+              {part.label}
+            </label>
+            <span
+              id={`birthdate_${part.part}_example`}
+              className="text-base text-fg-muted"
+            >
+              {part.placeholder}
+            </span>
             <input
               type="number"
               id={`birthdate_${part.part}`}
@@ -53,11 +61,11 @@ export default function BirthdateFieldset({
               min={part.min}
               max={part.max}
               placeholder={part.placeholder}
+              aria-describedby={`birthdate_${part.part}_example`}
               data-birthdate-part={part.part}
-              className="w-20 rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
-                placeholder:text-fg-muted"
+              className={`${part.part === "year" ? "w-28" : "w-24"} min-h-12 max-w-full rounded-md border border-control bg-surface px-3 py-2 text-base text-fg placeholder:text-fg-muted`}
             />
-          </label>
+          </span>
         </span>
       ))}
     </fieldset>

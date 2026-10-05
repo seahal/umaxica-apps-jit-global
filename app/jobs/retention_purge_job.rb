@@ -68,8 +68,16 @@ class RetentionPurgeJob < ApplicationJob
 
     SignUpArtifactCleanup.cleanup_pending!(batch_size: limit)
 
+    if ClientSecretIssuance.exists? || ClientSecretCredential.exists? || ClientSecretAuditOutbox.exists?
+      ClientSecretLifecycleJob.perform_now(batch_size: limit)
+    end
+
     RETAINABLE_MODELS.each do |klass|
       now = klass.database_now
+
+      if klass == ClientSecretCredential
+        next
+      end
 
       if [Client, Visitor].include?(klass)
         anonymize_accounts(klass, now: now, batch_size: limit)
@@ -83,11 +91,42 @@ class RetentionPurgeJob < ApplicationJob
 
       next unless klass.column_names.include?("purge_eligible_at")
 
+      if [ClientSignInFlow, ClientSignUpFlow].include?(klass)
+        purge_client_authentication_flows(klass, now: now, batch_size: limit)
+        next
+      end
+
       klass.where(purge_eligible_at: ..now).in_batches(of: limit).delete_all
     end
   end
 
   private
+
+  def purge_client_authentication_flows(klass, now:, batch_size:)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      klass.transaction do
+        # Flow locking also excludes admission and session issuance. Source queries
+        # acquire no source row locks, preserving the Client-before-flow lock order.
+        references = batch.lock.pluck(:public_id)
+        protected_references =
+          if klass == ClientSignInFlow
+            ClientSecretCredential.where(claim_sign_in_flow_ref: references).pluck(:claim_sign_in_flow_ref) +
+              ClientSignInFlow.where(
+                public_id: references, id: ClientSecretSignInReceipt.select(:sign_in_flow_id),
+              ).pluck(:public_id) +
+              ClientAuthCeremonySession.where(local_sign_in_flow_ref: references).pluck(:local_sign_in_flow_ref) +
+              ClientSignInFlow.where(
+                public_id: references,
+                id: ClientOidcAuthorizationTransaction.select(:secret_sign_in_flow_id),
+              )
+                .pluck(:public_id)
+          else
+            ClientSecretIssuance.where(sign_up_flow_ref: references).pluck(:sign_up_flow_ref)
+          end
+        batch.where(public_id: references - protected_references).delete_all
+      end
+    end
+  end
 
   def normalized_batch_size(value)
     return value if value.is_a?(Integer)

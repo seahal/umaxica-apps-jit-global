@@ -48,4 +48,6 @@ class ClientOidcAuthorizationTransaction < AppTicketRecord
   include OidcAuthorizationTransactionable
 
   oidc_authorization_surface "app"
+
+  belongs_to :secret_sign_in_flow, class_name: "ClientSignInFlow", optional: true
 end

@@ -158,3 +158,22 @@ describe("TextField", () => {
     expect(screen.getByLabelText("Operator").getAttribute("autocapitalize")).toBe("characters");
   });
 });
+
+it("shows persistent input conditions before the input and keeps the error after it", () => {
+  render(
+    <TextField
+      label="Name"
+      description="Use your public name."
+      errorMessage="Check the name."
+    />,
+  );
+  const input = screen.getByRole("textbox");
+  expect(
+    screen.getByText("Use your public name.").compareDocumentPosition(input) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    input.compareDocumentPosition(screen.getByText("Check the name.")) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});

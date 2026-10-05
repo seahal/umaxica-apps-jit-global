@@ -1,9 +1,10 @@
 <% page_title controller.send(:content_namespace).titleize %>
 
-<main>
+<main id="main" class="ui-main" tabindex="-1">
+<div class="ui-page">
   <h1><%= controller.send(:content_namespace).titleize %></h1>
   <% if @content_entries.any? %>
-    <ul>
+    <ul class="ui-stack">
         <% @content_entries.each do |entry| %>
           <li>
             <%= link_to entry.title,
@@ -22,4 +23,5 @@
   <% else %>
     <p>No published content is available.</p>
   <% end %>
+</div>
 </main>

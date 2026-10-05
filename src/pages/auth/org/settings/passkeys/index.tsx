@@ -120,13 +120,13 @@ export default function OrgPasskeySettingsIndex({
         <a
           href={addLink.href}
           className="inline-flex items-center justify-center rounded-md bg-accent px-4 py-2
-            text-sm font-medium text-accent-fg hover:bg-accent-hover"
+            text-base font-medium text-accent-fg hover:bg-accent-hover"
         >
           {addLink.label}
         </a>
       }
     >
-      <Table>
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{columns.description}</th>

@@ -114,7 +114,7 @@ export default function TurnstileWidget({
       {failure ? (
         <p
           role="alert"
-          className="text-sm text-danger"
+          className="text-base text-error"
         >
           {failure}
         </p>

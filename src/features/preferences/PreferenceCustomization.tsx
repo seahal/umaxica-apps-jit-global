@@ -58,7 +58,7 @@ export default function PreferenceCustomization({
         className="flex flex-col gap-4"
       >
         {error ? (
-          <ul className="flex flex-col gap-1 text-sm text-danger">
+          <ul className="flex flex-col gap-1 text-base text-error">
             <li role="alert">{error}</li>
           </ul>
         ) : null}

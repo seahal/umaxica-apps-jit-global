@@ -6,51 +6,48 @@
 <% unless hide_theme_controls %>
   <aside
     aria-labelledby="theme-title"
-    class="border border-red-300 p-4 rounded"
+    class="ui-theme"
     data-controller="theme"
     data-theme-endpoint-url-value="<%= local_assigns.fetch(:endpoint_url) %>">
     <form>
-      <fieldset class="space-y-3">
+      <fieldset class="ui-stack">
 
         <!-- Title -->
-        <legend id="theme-title" class="text-sm font-semibold">
+        <legend id="theme-title">
           <%= t(".title") %>
         </legend>
 
         <!-- Description -->
-        <p class="text-xs text-gray-600">
+        <p class="ui-description">
           <%= t(".description") %>
         </p>
 
         <!-- Options -->
-        <div class="space-y-2">
+        <div class="ui-stack">
 
-          <label class="flex items-center gap-2 cursor-pointer">
+          <label class="ui-choice">
             <input
               type="radio"
               name="theme"
               value="system"
-              class="accent-gray-600"
               data-action="change->theme#select">
             <span><%= t(".options.system") %></span>
           </label>
 
-          <label class="flex items-center gap-2 cursor-pointer">
+          <label class="ui-choice">
             <input
               type="radio"
               name="theme"
               value="light"
-              class="accent-yellow-500"
               data-action="change->theme#select">
             <span><%= t(".options.light") %></span>
           </label>
 
-          <label class="flex items-center gap-2 cursor-pointer">
+          <label class="ui-choice">
             <input
               type="radio"
               name="theme"
               value="dark"
-              class="accent-black"
               data-action="change->theme#select">
             <span><%= t(".options.dark") %></span>
           </label>

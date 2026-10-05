@@ -52,12 +52,12 @@ export default function SwitcherShow({
             ]}
           />
         ) : (
-          <p className="text-sm text-fg-muted">No current context.</p>
+          <p className="text-base text-fg-muted">No current context.</p>
         )}
       </Card>
 
       <Card heading="Available contexts">
-        <ul className="flex flex-col gap-2 text-sm text-fg">
+        <ul className="flex flex-col gap-2 text-base text-fg">
           {candidates.map((candidate) => (
             <li
               key={`${candidate.account_public_id}/${candidate.organization_public_id}/${candidate.avatar_public_id}`}

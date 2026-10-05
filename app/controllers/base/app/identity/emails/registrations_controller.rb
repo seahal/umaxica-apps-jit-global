@@ -16,6 +16,7 @@ module Base
           include SignSettingsEmailRegistration
           include EnforcementIdentifierGate
           include VerificationClient
+          include StepUpCeremonyLogging
 
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
@@ -24,6 +25,7 @@ module Base
           before_action :preserve_email_registration_redirect_parameter, only: %i(new create edit update resend)
           before_action :authorize_email_registration!, only: %i(new create edit update)
           step_up only: %i(new create edit update), bootstrap: true
+          before_action :require_email_bootstrap_when_unconfigured!, only: %i(new create edit update)
 
           def new = super
 
@@ -117,7 +119,62 @@ module Base
 
           def new_email_registration_path(params = {}) = new_base_app_identity_emails_registration_path(params)
 
+          # A first address may be registered only inside the email bootstrap the person chose on
+          # Base; without one the browser returns to that choice.
+          def require_email_bootstrap_when_unconfigured!
+            return unless step_up_bootstrap_unconfigured?
+            return if open_email_bootstrap_transaction
+
+            redirect_to(
+              base_app_verification_setup_path(
+                scope: "settings_email", ri: params[:ri],
+                pt: encoded_relative_pt(base_app_identity_emails_path(ri: params[:ri])),
+              ), status: :see_other,
+            )
+          end
+
+          def open_email_bootstrap_transaction
+            reference = session[:base_step_up_transaction_ref]
+            return unless reference.is_a?(String) && reference.present?
+
+            ClientStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
+              transaction = ClientStepUpCeremonyTransaction.find_by(
+                transaction_id: reference, purpose: "bootstrap", status: "pending",
+                actor_ref: current_client.public_id, session_ref: current_session_token.public_id,
+              )
+              next unless transaction &&
+                transaction.allowed_methods_array == [IdentityEmailBootstrapCommitter::METHOD] &&
+                !transaction.expired?(now: ClientStepUpCeremonyTransaction.database_now)
+
+              transaction
+            end
+          end
+
+          # Consumes the bootstrap before the credential transition closes unfinished ceremonies.
+          # A refusal is logged and leaves the bootstrap to that transition; it grants nothing.
+          def complete_email_bootstrap!(user_email)
+            transaction = open_email_bootstrap_transaction
+            return unless transaction
+
+            IdentityEmailBootstrapCommitter.call!(
+              actor: current_client, token: current_session_token, transaction: transaction, credential: user_email,
+            )
+            session.delete(:base_step_up_transaction_ref)
+            log_step_up_ceremony(
+              "bootstrap_completed", transaction: transaction, outcome: "completed", method: "email_otp",
+                                     state_before: "pending", state_after: transaction.status,
+            )
+            log_step_up_return_target(
+              transaction.return_to, reason: "transaction_return_to", protected_flow: true, transaction: transaction,
+            )
+            @email_bootstrap_return_to = transaction.return_to
+          rescue IdentityStepUpCeremonyContract::Error => e
+            log_step_up_refusal(e, transaction: transaction, stage: "base_email_bootstrap")
+          end
+
           def after_email_registration_verified_path
+            return @email_bootstrap_return_to if @email_bootstrap_return_to
+
             email_registration_return_path(
               base_app_identity_emails_url(
                 ri: params[:ri], host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
@@ -133,7 +190,8 @@ module Base
 
           def verified_email_status_id = ClientEmailStatus::VERIFIED
 
-          def on_email_registration_verified!(*)
+          def on_email_registration_verified!(user_email:, **)
+            complete_email_bootstrap!(user_email)
             CredentialSecurityTransition.call(
               actor: current_client,
               current_session: current_session,

@@ -3,9 +3,44 @@
 
 require "i18n/backend/fallbacks"
 
-# Allow english requests to transparently reuse japanese strings until proper
-# translations are added.
+# Each environment states both settings in config/environments/*.rb. They are required: an unset or
+# non-boolean value raises here rather than defaulting, because a quiet default is how a missing
+# translation went unnoticed before.
+#
+# Why they exist: the fallback chain below returns the other language's string before
+# config.i18n.raise_on_missing_translations can fire, so a key present in only one language never
+# raised anywhere. Production keeps the chain so a visitor sees the other language instead of an
+# error page; development and test turn that same situation into an exception.
+locale_settings = Rails.configuration.x.locale
+fallbacks_enabled = locale_settings.fallbacks_enabled
+raise_on_fallback = locale_settings.raise_on_fallback
+
+# rubocop:disable I18n/RailsI18n/DecorateString -- raised before any translation is loaded
+unless [true, false].include?(fallbacks_enabled)
+  raise ArgumentError,
+        "config.x.locale.fallbacks_enabled must be true or false, got #{fallbacks_enabled.inspect}"
+end
+
+unless [true, false].include?(raise_on_fallback)
+  raise ArgumentError,
+        "config.x.locale.raise_on_fallback must be true or false, got #{raise_on_fallback.inspect}"
+end
+# rubocop:enable I18n/RailsI18n/DecorateString
+
+# Overrides the hook I18n::Backend::Fallbacks#translate calls after it resolves a key through a
+# locale other than the requested one (i18n 1.15.2, lib/i18n/backend/fallbacks.rb). Re-read that
+# method when upgrading i18n: if the hook is renamed or no longer called, this stops raising.
+module LocaleFallbackGuard
+  private
+
+  def on_fallback(original_locale, _fallback_locale, key, options)
+    raise I18n::MissingTranslationData.new(original_locale, key, options)
+  end
+end
+
 I18n::Backend::Simple.include I18n::Backend::Fallbacks
+# Included after Fallbacks so that its on_fallback takes precedence.
+I18n::Backend::Simple.include LocaleFallbackGuard if raise_on_fallback
 
 # The locale bundles are a closed set: one file per region and language. Translations are added to
 # these four files, never to a new file beside them.
@@ -75,5 +110,10 @@ I18n.load_path =
 
 I18n.available_locales = [:en, :ja]
 I18n.default_locale = :ja
-I18n.fallbacks = I18n::Locale::Fallbacks.new(en: [:en, :ja], ja: [:ja, :en])
+I18n.fallbacks =
+  if fallbacks_enabled
+    I18n::Locale::Fallbacks.new(en: [:en, :ja], ja: [:ja, :en])
+  else
+    I18n::Locale::Fallbacks.new(en: [:en], ja: [:ja])
+  end
 I18n.backend.reload!

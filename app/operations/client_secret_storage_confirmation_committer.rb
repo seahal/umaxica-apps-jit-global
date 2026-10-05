@@ -24,6 +24,15 @@ class ClientSecretStorageConfirmationCommitter
       end
     end
 
+    def confirm_for_sign_up!(flow:, nonce:, issuance:)
+      ClientSecretPasskeyReservationIssuer.with_sign_up_delivery!(
+        flow: flow, nonce: nonce,
+        issuance: issuance,
+      ) do |owned, context, now|
+        confirm_owned_batch!(context, owned, now)
+      end
+    end
+
     private
 
     def confirm!(context, token, issuance)
@@ -37,7 +46,11 @@ class ClientSecretStorageConfirmationCommitter
       end
 
       verify_step_up!(current, owned)
-      now = Client.database_now
+      confirm_owned_batch!(context, owned, Client.database_now)
+    end
+
+    def confirm_owned_batch!(context, owned, now)
+      actor = context.subject
       state = owned.state(at: now)
       unless %i(pending_confirmation confirmed).include?(state)
         raise Denied, "Secret confirmation requires a presented, unexpired issuance"

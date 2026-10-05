@@ -5,6 +5,7 @@
 // ticket's public id as cdata and verifies both against the token it receives back.
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import Page from "@/components/ui/Page";
 import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 import { csrfToken } from "./csrf";
@@ -38,12 +39,14 @@ export default function SocialSignUpConfirmation({
   turnstile,
 }: SocialSignUpConfirmationProps) {
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-      <p className="text-sm text-fg-muted">{unregistered}</p>
-      <p className="text-sm text-fg-muted">{createIdentity}</p>
-      <p className="text-sm text-fg-muted">{noMerge}</p>
-      <p className="text-sm text-fg-muted">{cancelIfWrong}</p>
+    <Page
+      title={title}
+      description={unregistered}
+      width="narrow"
+    >
+      <p className="text-base text-fg-muted">{createIdentity}</p>
+      <p className="text-base text-fg-muted">{noMerge}</p>
+      <p className="text-base text-fg-muted">{cancelIfWrong}</p>
 
       <form
         action={action}
@@ -104,6 +107,6 @@ export default function SocialSignUpConfirmation({
           {cancelLabel}
         </Button>
       </form>
-    </section>
+    </Page>
   );
 }

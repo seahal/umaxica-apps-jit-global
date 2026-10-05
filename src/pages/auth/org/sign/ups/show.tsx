@@ -31,11 +31,14 @@ export default function OrgSignUpEntry({
 }: OrgSignUpEntryProps) {
   if (suspendedNotice) {
     return (
-      <Page width="narrow">
+      <Page
+        title={title}
+        width="narrow"
+      >
         <div
           role="alert"
           data-test-id="sign-up-suspended"
-          className="rounded-lg border border-line bg-surface-muted px-4 py-3 text-sm text-fg"
+          className="rounded-lg border border-line bg-surface-muted px-4 py-3 text-base text-fg"
         >
           <p>{suspendedNotice}</p>
         </div>
@@ -51,15 +54,15 @@ export default function OrgSignUpEntry({
     >
       {recruit ? (
         <Card>
-          <p className="text-sm text-fg-muted">{recruit.prompt}</p>
-          <p className="text-sm font-semibold">
+          <p className="text-base text-fg-muted">{recruit.prompt}</p>
+          <p className="text-base font-semibold">
             <TextLink href={recruit.href}>{recruit.label}</TextLink>
           </p>
         </Card>
       ) : null}
 
       {signInLink ? (
-        <p className="text-sm">
+        <p className="text-base">
           <TextLink
             href={signInLink.href}
             tone="muted"
@@ -69,7 +72,7 @@ export default function OrgSignUpEntry({
         </p>
       ) : null}
       {cancelLink ? (
-        <p className="text-sm">
+        <p className="text-base">
           <TextLink
             href={cancelLink.href}
             tone="muted"

@@ -28,7 +28,18 @@ class WithdrawalPersonalDataAnonymizer
     anonymize_emails(actor.client_emails, status_column: :user_email_status_id)
     anonymize_telephones(actor.client_telephones, status_column: :user_identity_telephone_status_id)
     revoke_records(actor.client_passkeys, status_column: :status_id, revoked_status: ClientPasskeyStatus::REVOKED)
-    revoke_records(actor.client_secret_credentials, status_column: :user_secret_status_id, revoked_status: ClientSecretCredentialStatus::REVOKED)
+    actor.with_lock do
+      next unless actor.client_secret_credentials.exists? || ClientSecretIssuance.exists?(client_id: actor.id)
+
+      now = Client.database_now
+      purge_at = now + ClientSecretLifetimesValue.purge_delay
+      ClientSecretIssuance.where(client_id: actor.id).order(:id).find_each do |issuance|
+        issuance.cancel_for_withdrawal!(at: now, purge_at: purge_at)
+      end
+      actor.client_secret_credentials.order(:id).find_each do |credential|
+        credential.commit_withdrawal_revocation!(at: now, purge_at: purge_at)
+      end
+    end
     revoke_records(
       actor.client_totp_credentials, status_column: :user_identity_totp_credential_status_id,
                                      revoked_status: ClientTotpCredentialStatus::REVOKED,

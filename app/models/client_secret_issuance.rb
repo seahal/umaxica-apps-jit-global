@@ -12,6 +12,7 @@ class ClientSecretIssuance < AppZenithRecord
   validate :cancellation_has_source_audit, on: :update
   validate :confirmation_is_immutable, on: :update
   validate :presentation_is_immutable, on: :update
+  validate :signup_completion_has_source_audit, on: :update
 
   public
 
@@ -44,6 +45,29 @@ class ClientSecretIssuance < AppZenithRecord
     end
   end
 
+  def cancel_for_withdrawal!(at:, purge_at:)
+    unless (at.is_a?(Time) || at.is_a?(ActiveSupport::TimeWithZone)) &&
+        (purge_at.is_a?(Time) || purge_at.is_a?(ActiveSupport::TimeWithZone)) && purge_at > at
+      raise ArgumentError, "Secret withdrawal cancellation requires ordered timestamps"
+    end
+
+    client.with_lock do
+      raise ArgumentError, "Secret withdrawal cancellation requires a terminated Client" unless client.terminated?
+
+      with_lock do
+        return self if confirmed_at || canceled_at || planned_count.zero?
+
+        context = ActorValuesContext.empty.with(subject: client, actor_type: :client, tld: :app, surface: :base)
+        ClientSecretAuditOutbox.record!(
+          actor_context: context, client_ref: client.public_id, operation_ref: origin_operation_id,
+          occurred_at: at, event_name: "secret.issuance_canceled", reason: "withdrawal", item_count: planned_count,
+        )
+        update!(canceled_at: at, encrypted_payload: nil, discard_at: at, purge_eligible_at: purge_at)
+      end
+    end
+    self
+  end
+
   private
 
   def verify_persisted_fact_assignment!(name, value = nil)
@@ -55,6 +79,8 @@ class ClientSecretIssuance < AppZenithRecord
         presented_at_in_database
       when "confirmed_at"
         confirmed_at_in_database
+      when "signup_completed_at"
+        signup_completed_at_in_database
       when "canceled_at"
         canceled_at_in_database
       end
@@ -66,6 +92,20 @@ class ClientSecretIssuance < AppZenithRecord
   def verify_readonly_attribute(name)
     verify_persisted_fact_assignment!(name)
     super
+  end
+
+  def signup_completion_has_source_audit
+    return unless will_save_change_to_signup_completed_at?
+
+    if signup_completed_at_in_database || sign_up_flow_ref.nil? || signup_completed_at.nil?
+      errors.add(:signup_completed_at, "requires an immutable signup completion fact")
+      return
+    end
+    recorded = ClientSecretAuditOutbox.exists?(
+      client_ref: client.public_id, operation_ref: origin_operation_id,
+      event_name: "secret.signup_completed", occurred_at: signup_completed_at, item_count: planned_count,
+    )
+    errors.add(:signup_completed_at, "requires its matching source audit transaction") unless recorded
   end
 
   def confirmation_is_immutable
@@ -91,7 +131,7 @@ class ClientSecretIssuance < AppZenithRecord
 
     recorded = ClientSecretAuditOutbox.exists?(
       client_ref: client.public_id, credential_ref: nil, operation_ref: origin_operation_id,
-      event_name: "secret.issuance_canceled", reason: "flow_canceled", occurred_at: canceled_at,
+      event_name: "secret.issuance_canceled", reason: %w(flow_canceled withdrawal), occurred_at: canceled_at,
       actor_type: "Client", actor_id: client_id, actor_public_ref: client.public_id, item_count: planned_count,
     )
     return if recorded

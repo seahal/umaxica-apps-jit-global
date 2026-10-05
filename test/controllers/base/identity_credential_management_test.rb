@@ -7,7 +7,6 @@ require "test_helper"
 # plus the app MFA level page. The app's generic secret management route is retired.
 class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_email_statuses,
-           :client_secret_credential_kinds, :client_secret_credential_statuses,
            :client_token_kinds, :client_token_statuses, :client_token_binding_methods,
            :client_token_dbsc_statuses, :client_chronicle_events, :client_chronicle_levels,
            :visitors, :visitor_statuses, :visitor_email_statuses,

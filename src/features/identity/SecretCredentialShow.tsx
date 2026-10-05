@@ -17,7 +17,7 @@ export type SecretCredentialShowProps = {
   edit_link: LabelledLink;
 };
 
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
+const LINK = "text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline";
 
 export default function SecretCredentialShow({
   title,
@@ -38,7 +38,7 @@ export default function SecretCredentialShow({
     >
       <Card>
         <h2 className="text-lg font-semibold text-fg">{name}</h2>
-        <dl className="flex flex-col gap-2 text-sm">
+        <dl className="flex flex-col gap-2 text-base">
           <div className="flex items-center justify-between gap-4">
             <dt className="text-fg-muted">{createdAtLabel}</dt>
             <dd className="text-fg">{createdAt}</dd>

@@ -35,6 +35,10 @@ scope(module: :base, as: :base) do
       resource :selector, only: %i(show update)
       resource :switcher, only: %i(show update)
       resources :billings, only: :index
+      resources :secrets, only: %i(index show new create edit update destroy)
+      resources :secret_issuances, only: %i(show update destroy) do
+        resource :presentation, only: :create, controller: :secret_presentations
+      end
       resources :groups, only: %i(index show create update destroy) do
         resources :avatar_memberships, controller: :group_avatar_memberships, only: %i(create update destroy)
       end
@@ -202,6 +206,8 @@ scope(module: :base, as: :base) do
       namespace :verification do
         resource :cancellation, only: :create
         resource :completion, only: :create
+        # Choice of a first authenticator. GET shows the methods; POST starts one bootstrap.
+        resource :setup, only: %i(show create)
       end
 
       resource :identity, only: :show

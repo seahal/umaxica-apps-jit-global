@@ -1,8 +1,10 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button, { type ButtonVariant } from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink } from "@/features/base_com/identity/types";
 
 // Replaces `app/views/base/com/identity/withdrawals/edit.html.erb`, the recovery and early
@@ -27,8 +29,6 @@ export type WithdrawalEditProps = {
   privacy_erasure_link: PageLink;
   sign_out: { label: string; url: string };
 };
-
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 
 function ActionButton({
   url,
@@ -97,18 +97,16 @@ export default function WithdrawalEdit({
   sign_out: signOut,
 }: WithdrawalEditProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page title={title}>
       {terminated ? (
-        <p className="text-sm text-fg-muted">{unavailableMessage}</p>
+        <p className="text-base text-fg-muted">{unavailableMessage}</p>
       ) : (
         <div className="flex flex-col gap-4">
-          {deadlineMessage ? <p className="text-sm text-fg-muted">{deadlineMessage}</p> : null}
+          {deadlineMessage ? <p className="text-base text-fg-muted">{deadlineMessage}</p> : null}
 
           <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
             {recovery.available_message ? (
-              <p className="text-sm text-fg">{recovery.available_message}</p>
+              <p className="text-base text-fg">{recovery.available_message}</p>
             ) : null}
             {recovery.url && recovery.submit_label ? (
               <div>
@@ -122,10 +120,10 @@ export default function WithdrawalEdit({
               </div>
             ) : null}
             {recovery.pending_message ? (
-              <p className="text-sm text-fg-muted">{recovery.pending_message}</p>
+              <p className="text-base text-fg-muted">{recovery.pending_message}</p>
             ) : null}
             {recovery.unavailable_message ? (
-              <p className="text-sm text-fg-muted">{recovery.unavailable_message}</p>
+              <p className="text-base text-fg-muted">{recovery.unavailable_message}</p>
             ) : null}
           </section>
 
@@ -143,18 +141,19 @@ export default function WithdrawalEdit({
                 </div>
               ) : null}
               {termination.pending_message ? (
-                <p className="text-sm text-fg-muted">{termination.pending_message}</p>
+                <p className="text-base text-fg-muted">{termination.pending_message}</p>
               ) : null}
             </section>
           ) : null}
 
           <p>
-            <Link
+            <TextLink
               href={privacyErasureLink.href}
-              className={LINK}
+              inertia
+              tone="muted"
             >
               {privacyErasureLink.label}
-            </Link>
+            </TextLink>
           </p>
         </div>
       )}
@@ -167,6 +166,6 @@ export default function WithdrawalEdit({
           variant="secondary"
         />
       </div>
-    </section>
+    </Page>
   );
 }

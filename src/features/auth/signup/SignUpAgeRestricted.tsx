@@ -3,6 +3,7 @@
 // The message and the restart destination are both server decisions: the surface picks the copy and
 // the ticket has already been failed by the time this renders.
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 
 export type SignUpAgeRestrictedProps = {
   title: string;
@@ -18,10 +19,12 @@ export default function SignUpAgeRestricted({
   back,
 }: SignUpAgeRestrictedProps) {
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
+    <Page
+      title={title}
+      width="narrow"
+    >
       <p className="text-fg">{message}</p>
-      <p className="text-sm text-fg-muted">{retryMessage}</p>
+      <p className="text-base text-fg-muted">{retryMessage}</p>
 
       {/* The ERB rendered a GET `button_to`, which carries no CSRF token, so the control stays a
           form rather than a link and stays a GET. */}
@@ -37,6 +40,6 @@ export default function SignUpAgeRestricted({
           {back.label}
         </Button>
       </form>
-    </section>
+    </Page>
   );
 }

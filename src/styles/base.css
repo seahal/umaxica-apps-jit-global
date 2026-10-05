@@ -59,3 +59,83 @@
     text-wrap: balance;
   }
 }
+
+/* Product reading rhythm; individual dense tables retain their documented text size. */
+@layer base {
+  body {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  body:lang(ja) {
+    line-height: 1.7;
+  }
+  :is(h1, h2, h3, h4) {
+    line-height: 1.4;
+  }
+  :is(h1, h2, h3, h4, h5, h6, p, dd, li, label, button, a) {
+    overflow-wrap: anywhere;
+  }
+  :is(input, textarea, select, button) {
+    max-width: 100%;
+  }
+  [hidden] {
+    display: none !important;
+  }
+}
+
+/* The ERB document supplies translated navigation without adding Inertia props. */
+.ui-skip-link {
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: 0.5rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  padding: 0.75rem 1rem;
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+  text-decoration: underline;
+}
+.ui-skip-link:focus {
+  transform: none;
+}
+#main:focus {
+  outline: none;
+}
+
+/* Reading paragraphs, not tabular inventories or form controls. */
+.ui-prose {
+  max-inline-size: 65ch;
+  line-height: 1.5;
+}
+.ui-prose:lang(ja) {
+  max-inline-size: 40em;
+  line-height: 1.7;
+}
+.ui-prose > p {
+  line-height: inherit;
+}
+.ui-prose > :is(p, ul, ol, blockquote) + :is(p, ul, ol, blockquote) {
+  margin-block-start: 2.25em;
+  margin-block-start: 1.5lh;
+}
+
+/* Scroll-edge shadows are functional overflow cues, painted behind content without clipping focus. */
+.ui-table-scroll {
+  background-color: var(--ui-surface);
+  background-image:
+    linear-gradient(to right, var(--ui-surface) 30%, transparent),
+    linear-gradient(to left, var(--ui-surface) 30%, transparent),
+    linear-gradient(to right, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent),
+    linear-gradient(to left, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent);
+  background-position: left center, right center, left center, right center;
+  background-size: 2rem 100%, 2rem 100%, 1rem 100%, 1rem 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+  scrollbar-color: var(--ui-control-border) var(--ui-surface);
+}
+.ui-table-scroll table {
+  background: transparent;
+}
+@media (forced-colors: active) {
+  .ui-table-scroll { background-image: none; }
+}

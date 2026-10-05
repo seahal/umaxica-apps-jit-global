@@ -52,6 +52,12 @@ module Auth
             { key: "device",
               label: page_t("sign.app.authentication.new.links.device"),
               href: auth_app_sign_in_device_path(pt: pt), },
+            { key: "secret",
+              label: t("sign.app.authentication.new.links.secret"),
+              href: new_auth_app_sign_in_secret_url(
+                pt: pt, ri: current_region_identifier,
+                host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+              ), },
           ]
         end
 

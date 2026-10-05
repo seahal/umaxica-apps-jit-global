@@ -247,7 +247,7 @@ module SignUpSequenceControllerSupport
         handoff = perform_sign_up_event(
           :handoff_to_sign_in,
           payload: {
-            sign_in_handoff_status: sign_in_result.success? ? :accepted : :failed,
+            sign_in_handoff_status: sign_up_handoff_proceeds?(sign_in_result) ? :accepted : :failed,
             sign_in_handoff: sign_in_result.status,
           },
         )
@@ -259,6 +259,8 @@ module SignUpSequenceControllerSupport
 
     return render_sign_up_failure_result(finalized, json: json) unless finalized&.success?
     return render_sign_up_failure_result(handoff, json: json) unless handoff&.success?
+
+    ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: @sign_up_ticket) if @sign_up_ticket.is_a?(ClientSignUpFlow)
 
     sign_up_session_state.clear_all!
     redirect_after_sign_up_handoff!(sign_in_result, json: json)
@@ -549,6 +551,10 @@ module SignUpSequenceControllerSupport
     end
   end
 
+  def sign_up_handoff_proceeds?(result)
+    (sign_up_surface == :app) ? result.proceed? : result.success?
+  end
+
   def redirect_after_sign_up_handoff!(sign_in_result, json: false)
     if json
       return render json: {
@@ -557,7 +563,7 @@ module SignUpSequenceControllerSupport
       }, status: :created
     end
 
-    if sign_in_result.success?
+    if sign_up_handoff_proceeds?(sign_in_result)
       redirect_to_sign_in_sequence!(pt: sign_up_handoff_pt)
     elsif sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
       redirect_to(sign_in_result.redirect_to)
@@ -568,7 +574,7 @@ module SignUpSequenceControllerSupport
   end
 
   def sign_up_handoff_redirect_url(sign_in_result)
-    if sign_in_result.success?
+    if sign_up_handoff_proceeds?(sign_in_result)
       sign_in_sequence_redirect_path(pt: sign_up_handoff_pt)
     elsif sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
       sign_in_result.redirect_to

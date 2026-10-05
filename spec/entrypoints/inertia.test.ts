@@ -210,6 +210,27 @@ describe("document theme across visits", () => {
     nonceMeta.remove();
   });
 
+  // The server renders the root element under the inertia_rails default id and the page in a
+  // script element, both of which are the adapter's own defaults. Passing nothing but these keys
+  // is what keeps the two sides on one authority: an `id` or `page` here would be a second one.
+  test("boots with the upstream defaults for the root element and the initial page", async () => {
+    document.body.innerHTML = "";
+    for (const meta of document.querySelectorAll('meta[property="csp-nonce"]')) {
+      meta.remove();
+    }
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await bootSurfaceInertiaApp({}, "base/app");
+
+    const options = present(
+      vi.mocked(createInertiaApp).mock.calls.at(-1)?.[0],
+      "the options handed to createInertiaApp",
+    );
+
+    expect(Object.keys(options).toSorted()).toEqual(["defaults", "resolve", "strictMode"]);
+    errorSpy.mockRestore();
+  });
+
   test("omits the nonce when the layout published none", async () => {
     document.body.innerHTML = "";
     for (const meta of document.querySelectorAll('meta[property="csp-nonce"]')) {

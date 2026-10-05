@@ -77,12 +77,51 @@ Read-only queries against the development database and logs; no row was written.
 Whether that request came from the browser that owned the 02:13 session is not established. A
 controlled reproduction with an authenticated browser was not performed.
 
-## Removed tests
+## Status of the suites
 
-Four files tested behavior that no longer exists and were removed rather than rewritten:
-`auth/app/verification/passkeys_controller_coverage_test.rb` and
-`auth/org/verification/setups_page_props_test.rb` (controller subclasses driven through `send` and
-instance variables), `auth/com/verification/emails_resend_guard_test.rb`, and
-`integration/verification_sessions_test.rb` (Auth-side freshness skip). The resend interval and the
-Base freshness shortcut are covered by new tests in the COM email controller test and
-`base/step_up_intent_authority_test.rb`.
+```text
+targeted suites: green
+broader suites: pre-existing/unclassified failures remain
+```
+
+The broader `test/controllers/auth` and `test/controllers/base` run, the four security guard
+failures, and five failures in `test/services/identity/step_up_ceremony_contract_test.rb` (calls to
+a committer signature the worktree had already replaced) are not evidence for or against this work.
+They are recorded here as separate, unclassified problems.
+
+## Removed tests and their replacements
+
+| Removed file | Reason | Replacement |
+| --- | --- | --- |
+| `test/controllers/auth/app/verification/passkeys_controller_coverage_test.rb` | Subclassed the controller and drove private methods through `send` and instance variables; the branches it named no longer exist. | `test/controllers/auth/step_up_admission_test.rb` ("Passkey GET creates no challenge and options POST binds the admitted transaction") and `test/operations/identity_step_up_passkey_verification_committer_test.rb`. |
+| `test/controllers/auth/org/verification/setups_page_props_test.rb` | Same harness pattern; tested a redirect for "nothing left to configure" that the admission-only setup page no longer performs. | `test/controllers/auth/org/verification/setups_controller_test.rb` (admitted bootstrap page; refusal without admission). |
+| `test/controllers/auth/com/verification/emails_resend_guard_test.rb` | Entered Auth through the retired signed grant. | `test/controllers/auth/com/verification/emails_controller_test.rb` ("a second code is not issued inside the resend interval and the first code stays valid"). |
+| `test/integration/verification_sessions_test.rb` | Tested an Auth-side "skip verification while fresh" shortcut that Auth no longer owns. | `test/controllers/base/step_up_intent_authority_test.rb` ("app base verification returns to the protected page without a new ceremony while freshness is valid"). |
+| `app/consumers/identity_step_up_ceremony_result_consumer.rb` and its three tests in `test/services/identity/step_up_ceremony_acme_transaction_test.rb` | The signed-result consumer had no caller in `app/` and consumed a pending transaction directly, which the transition contract now forbids. | `test/models/step_up_ceremony_transaction_transition_test.rb` (consumption requires verified evidence) and `test/operations/identity_step_up_ceremony_freshness_committer_test.rb`. |
+
+## Phase 2C addendum (same day)
+
+After the transition contract, return-target ordering, expiry handling and bootstrap freshness
+window were implemented, the targeted run reported:
+
+```text
+769 runs, 5630 assertions, 0 failures, 0 errors, 0 skips
+```
+
+The Base method choice, the email bootstrap committer and their tests were written while another
+session held `tmp/parallel-test-databases.lock` with a full-suite run that had been silent for more
+than ten minutes. That process (pid 162930) was stopped on the user's instruction and the tests were
+then executed. Nine tests ran in `test/controllers/base/app/verification/setups_controller_test.rb`;
+seven failed and one errored on the first run because the test signed its return target with the
+token's public id instead of the stable session identifier, and because an invalid method raised
+instead of rendering the plain refusal. After those two corrections:
+
+```text
+917 runs, 6582 assertions, 0 failures, 0 errors, 0 skips   (targeted Rails suite)
+9 files, 127 tests passed                                    (Vitest, spec/features/base)
+49 files inspected, no offenses detected                     (rubocop)
+```
+
+Five existing tests changed with the behavior: an actor without an authenticator is now sent to the
+Base method choice instead of receiving a multi-method bootstrap for the Auth setup page, and email
+is a bootstrap method on surfaces that support it.

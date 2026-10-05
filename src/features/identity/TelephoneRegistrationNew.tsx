@@ -26,7 +26,7 @@ export type TelephoneRegistrationNewProps = {
   error_messages: string[];
 };
 
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
+const LINK = "text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline";
 
 export default function TelephoneRegistrationNew({
   title,

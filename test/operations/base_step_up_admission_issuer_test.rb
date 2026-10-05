@@ -279,17 +279,18 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       return_to: "/identity/birthdate",
     ).transaction
 
-    error = assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseStepUpAdmissionIssuer.call!(
-        actor: actor, token: token,
-        requirement: StepUpRequirement.new(
-          scope: "settings_telephone", allowed_methods: [:passkey], purpose: "step_up",
-          audience: "step_up:app", session_binding: token.public_id,
-          token_binding: token.public_id, require_session_binding: true,
-        ),
-        return_to: "/identity/telephones",
-      )
-    end
+    error =
+      assert_raises(BaseAuthAdmissionCoordinator::Denied) do
+        BaseStepUpAdmissionIssuer.call!(
+          actor: actor, token: token,
+          requirement: StepUpRequirement.new(
+            scope: "settings_telephone", allowed_methods: [:passkey], purpose: "step_up",
+            audience: "step_up:app", session_binding: token.public_id,
+            token_binding: token.public_id, require_session_binding: true,
+          ),
+          return_to: "/identity/telephones",
+        )
+      end
 
     assert_equal "transaction_conflict", error.code
     assert_equal "pending", first.reload.status

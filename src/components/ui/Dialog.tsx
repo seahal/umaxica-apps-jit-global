@@ -29,7 +29,7 @@ export default function Dialog({ title, children, ...props }: DialogProps) {
       {...props}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
     >
-      <AriaModal className="w-full max-w-md rounded-lg border border-line bg-surface shadow-lg">
+      <AriaModal className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-overlay bg-surface">
         <AriaDialog className="flex flex-col gap-4 p-6 outline-hidden">
           <Heading
             // `slot="title"` is what React Aria uses to name the dialog, so the heading and the

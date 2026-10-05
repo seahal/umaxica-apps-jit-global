@@ -54,6 +54,10 @@ class ClientSecretManualReservationIssuer
       end
 
       current = verify_session!(actor, token)
+      if ClientSecretAuditOutbox.exists?(operation_ref: operation_id, event_name: "secret.issuance_purged")
+        raise Denied, "Secret reservation operation has already been retired"
+      end
+
       prior = ClientSecretIssuance.where(origin_operation_id: operation_id).order(attempt_number: :desc).lock.first
       if prior
         unless prior.client_id == actor.id && prior.browser_session_ref == current.public_id &&
@@ -69,7 +73,7 @@ class ClientSecretManualReservationIssuer
       capacity = ClientSecretCapacityQuery.call(client: actor, at: now)
       raise CapacityFull, "twenty active Secrets prevent manual addition" if capacity.manual_count.zero?
 
-      deadline = (now + duration).round(6)
+      deadline = [now + duration, current.last_step_up_at + StepUpRequirement::DEFAULT_TTL].min.round(6)
       raise ArgumentError, "Secret reservation duration must advance the database timestamp" unless deadline > now
 
       issuance = ClientSecretIssuance.create!(

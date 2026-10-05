@@ -16,7 +16,7 @@ class DatabasePkTypeTest < ActiveSupport::TestCase
   test "principal schema tables use bigint primary keys" do
     assert_bigint_pk(ClientStatus)
     assert_bigint_pk(MemberStatus)
-    assert_bigint_pk(ClientSecretCredentialKind)
+    assert_bigint_pk(ClientSecretCredential)
   end
 
   test "avatar schema tables use bigint primary keys" do

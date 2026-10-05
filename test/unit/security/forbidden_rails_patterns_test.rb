@@ -15,6 +15,9 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
     "ignored rescue nil" => /rescue\s+nil\b/,
     "thread-local request state" => /\bThread\.current\b/,
     "class variable request state" => /@@[A-Za-z_]/,
+    # History encryption is on globally (config/initializers/inertia_rails.rb). A per-render or
+    # per-controller `encrypt_history:` is either redundant or an opt-out, so neither may appear.
+    "Inertia history encryption override" => /\bencrypt_history:/,
   }.freeze
 
   SHARED_SELF_SERVICE_RENDER_PATTERN = /render\s+["']acme\/shared\/self_service\/show["']/.freeze

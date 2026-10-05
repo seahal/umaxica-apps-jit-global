@@ -55,7 +55,7 @@ export default function TelephonesIndex({
         </>
       }
     >
-      <Table>
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{headings.number}</th>

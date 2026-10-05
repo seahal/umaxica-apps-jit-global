@@ -100,7 +100,7 @@ export default function SessionIndex({
       upVisit="inertia"
       width="wide"
     >
-      <p className="mb-4 text-sm text-fg-muted">{expiresAtDescription}</p>
+      <p className="mb-4 text-base text-fg-muted">{expiresAtDescription}</p>
 
       {bulkRevocations ? (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -109,7 +109,7 @@ export default function SessionIndex({
       ) : null}
 
       {sessions.length > 0 ? (
-        <Table>
+        <Table label={title}>
           <thead>
             <tr>
               <th scope="col">{columns.device}</th>
@@ -128,7 +128,7 @@ export default function SessionIndex({
                   {session.show_href ? (
                     <Link
                       href={session.show_href}
-                      className="text-fg underline underline-offset-4"
+                      className="ui-text-link text-fg underline underline-offset-4"
                     >
                       {session.device}
                     </Link>
@@ -147,7 +147,7 @@ export default function SessionIndex({
           </tbody>
         </Table>
       ) : (
-        <p className="text-sm text-fg-muted">{emptyMessage}</p>
+        <p className="text-base text-fg-muted">{emptyMessage}</p>
       )}
     </Page>
   );

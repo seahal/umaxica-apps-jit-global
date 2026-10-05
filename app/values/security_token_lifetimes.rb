@@ -29,6 +29,12 @@ module SecurityTokenLifetimes
   OPERATOR_IDLE_TTL = 30.minutes
   VISITOR_IDLE_TTL = 8.hours
 
+  # How long after a root login the session may bootstrap its first authenticator. The anchor is
+  # the token's root_login_established_at, which refresh, ceremony continuation and ordinary access
+  # never move. The window ends at the anchor plus this duration, exclusive: exactly at the end the
+  # session is no longer fresh, as with every other expiry here.
+  BOOTSTRAP_PRIMARY_AUTHENTICATION_FRESHNESS = 10.minutes
+
   CLIENT_REFRESH_TOKEN_TTL = 30.days
   OPERATOR_REFRESH_TOKEN_TTL = 8.hours
   VISITOR_REFRESH_TOKEN_TTL = 30.days

@@ -22,14 +22,14 @@ export default function PrivacyErasureStatusShow({
     <Page title={title}>
       {privacyRequest ? (
         <Card>
-          <ul className="flex flex-col gap-2 text-sm text-fg">
+          <ul className="flex flex-col gap-2 text-base text-fg">
             <li>{privacyRequest.status_label}</li>
             <li className="text-fg-muted">{privacyRequest.received_label}</li>
             <li className="text-fg-muted">{privacyRequest.response_due_label}</li>
           </ul>
         </Card>
       ) : (
-        <p className="text-sm text-fg-muted">{emptyMessage}</p>
+        <p className="text-base text-fg-muted">{emptyMessage}</p>
       )}
     </Page>
   );

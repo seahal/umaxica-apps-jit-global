@@ -20,7 +20,7 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
     end
   end
 
-  test "receipt persists only matching successful root login facts and cannot change identity" do
+  test "receipt rejects completed token and flow without a persisted Secret claim" do
     now = Client.database_now
     owner = clients(:one)
     token = client_tokens(:one)
@@ -32,15 +32,15 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
       completed_at: now, session_issued_at: now,
       authentication_method: "secret", authentication_context: "normal", authentication_event_at: now - 1.second,
     )
-    receipt = ClientSecretSignInReceipt.create!(
-      operation_id: SecureRandom.uuid, credential_ref: "fixture-secret-1",
-      client_ref: owner.public_id, sign_in_flow: flow,
-      root_token_ref: token.public_id, committed_at: now,
-    )
-
-    assert_equal flow.id, receipt.reload.sign_in_flow_id
-    assert_equal token.public_id, receipt.root_token_ref
-    assert_raises(ActiveRecord::ReadonlyAttributeError) { receipt.update!(client_ref: clients(:two).public_id) }
+    assert_no_difference "ClientSecretSignInReceipt.count" do
+      assert_raises(ClientSecretSignInReceipt::InvalidCommit) do
+        ClientSecretSignInReceipt.create!(
+          operation_id: SecureRandom.uuid, credential_ref: "fixture-secret-1",
+          client_ref: owner.public_id, sign_in_flow: flow,
+          root_token_ref: token.public_id, committed_at: now,
+        )
+      end
+    end
   end
 
   test "receipt rejects a different actor even when flow and token have completed" do

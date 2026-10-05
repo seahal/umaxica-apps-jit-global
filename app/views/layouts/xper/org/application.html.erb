@@ -9,6 +9,7 @@
   <%= javascript_importmap_tags %>
 </head>
 <body class="xper">
+  <%= render "shared/ui/skip_link" %>
   <header class="xper-header">
     <div class="xper-shell">
       <p class="xper-brand">
@@ -19,7 +20,7 @@
     </div>
   </header>
 
-  <main id="main" class="xper-main">
+  <main id="main" class="xper-main" tabindex="-1">
     <div class="xper-shell">
       <%= yield %>
     </div>

@@ -74,18 +74,18 @@ export default function RadioGroup<Value extends string = string>({
       isInvalid={Boolean(errorMessage)}
       className="flex flex-col gap-2"
     >
-      <Label className="text-sm font-medium text-fg">{label}</Label>
+      <Label className="text-base font-medium text-fg">{label}</Label>
 
       {description ? (
         <Text
           slot="description"
-          className="text-xs text-fg-muted"
+          className="text-base text-fg-muted"
         >
           {description}
         </Text>
       ) : null}
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {options.map((option) => (
           // `RadioField` owns the option's state and `RadioButton` is the clickable area; the
           // bare `Radio` that combined the two is deprecated in react-aria-components 1.20.
@@ -96,20 +96,20 @@ export default function RadioGroup<Value extends string = string>({
             isDisabled={option.isDisabled ?? false}
           >
             <RadioButton
-              className="group flex cursor-pointer items-start gap-2 text-sm text-fg
+              className="ui-choice-target group flex min-h-11 cursor-pointer items-start gap-2 py-2 text-base text-fg
                 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span
                 aria-hidden="true"
                 className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full
-                border border-line bg-surface transition-colors group-selected:border-accent"
+                border border-control bg-surface transition-colors group-selected:border-accent"
               >
                 <span className="size-2 rounded-full bg-accent opacity-0 group-selected:opacity-100" />
               </span>
               <span className="flex flex-col">
                 <span>{option.label}</span>
                 {option.description ? (
-                  <span className="text-xs text-fg-muted">{option.description}</span>
+                  <span className="text-base text-fg-muted">{option.description}</span>
                 ) : null}
               </span>
             </RadioButton>
@@ -117,7 +117,7 @@ export default function RadioGroup<Value extends string = string>({
         ))}
       </div>
 
-      <FieldError className="text-sm text-danger">{errorMessage}</FieldError>
+      <FieldError className="text-base text-error">{errorMessage}</FieldError>
     </AriaRadioGroup>
   );
 }

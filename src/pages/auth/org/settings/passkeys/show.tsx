@@ -61,7 +61,7 @@ export default function OrgPasskeySettingsShow({
           <TextLink
             href={editLink.href}
             tone="muted"
-            className="text-sm"
+            className="text-base"
           >
             {editLink.label}
           </TextLink>

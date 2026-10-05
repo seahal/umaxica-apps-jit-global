@@ -133,3 +133,14 @@ describe("Card", () => {
     expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
   });
 });
+
+describe("Page actions without a title", () => {
+  it("keeps page actions reachable when the page supplies its own heading", () => {
+    render(
+      <Page actions={<button type="button">Export</button>}>
+        <h1>Report</h1>
+      </Page>,
+    );
+    expect(screen.getByRole("button", { name: "Export" })).toBeTruthy();
+  });
+});

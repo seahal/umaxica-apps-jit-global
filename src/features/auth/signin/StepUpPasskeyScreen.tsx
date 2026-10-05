@@ -115,19 +115,19 @@ export default function StepUpPasskeyScreen({
         {error ? (
           <p
             role="alert"
-            className="text-sm text-danger"
+            className="text-base text-error"
           >
             {error}
           </p>
         ) : null}
-        {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
+        {status ? <p className="text-base text-fg-muted">{status}</p> : null}
       </form>
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* Document visit: the challenge menu has its own guards. */}
         <a
           href={backLink.href}
-          className="text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {backLink.label}
         </a>

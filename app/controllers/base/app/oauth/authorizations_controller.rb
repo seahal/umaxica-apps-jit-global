@@ -155,6 +155,15 @@ module Base
             status: :bad_request,
           ) unless finalization[:status] == :success
 
+          if transaction.secret_sign_in_flow_id
+            credential = ClientSecretCredential.find_by!(
+              client_id: resource.id, claim_sign_in_flow_ref: transaction.secret_sign_in_flow.public_id,
+            )
+            ClientSecretClaimFinalizer.call!(
+              credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,
+            )
+          end
+
           issue_authorization_code!(
             resource,
             params_hash: transaction.authorize_params,
@@ -199,8 +208,25 @@ module Base
         # here, at the Base authority, through the final issuance boundary. The
         # cooldown and the session limit are checked at this commit.
         def login_for_oidc(resource, transaction)
+          secret_options =
+            if transaction.secret_sign_in_flow_id
+              unless transaction.auth_method == "passcode"
+                raise AuthenticationBase::SignInFlowIssuanceRejected, "Secret OIDC authentication method mismatch"
+              end
+
+              flow = transaction.secret_sign_in_flow
+              flow.with_lock do
+                return { status: :login_failed } if flow.sign_in_failed? ||
+                  flow.expired?(ClientSignInFlow.database_now)
+
+                flow.prepare_secret_oidc_issuance!(authorization_transaction: transaction)
+              end
+              { sign_in_flow: flow, established_authentication_method: "secret" }
+            else
+              {}
+            end
           ActiveRecord::Base.connected_to(role: :writing) do
-            log_in(
+            result = log_in(
               resource,
               establishment: :root_login,
               record_login_audit: true,
@@ -208,7 +234,12 @@ module Base
               require_totp_check: false,
               audit_context: { oidc_client_id: transaction.client_id },
               authentication_event_at: transaction.authenticated_at,
+              **secret_options,
             )
+            if flow && %i(session_limit_hard_reject session_limit_pending).include?(result[:status])
+              flow.reload.advance_sign_in_to_session_limit! if flow.sign_in_session_issuance_pending?
+            end
+            result
           end
         end
 

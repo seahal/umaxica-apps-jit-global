@@ -24,6 +24,14 @@ module Auth
 
               def show
                 return unless load_gate_context!(gate_for_show)
+                if @sign_up_ticket.pending_passkey_registration_id
+                  return redirect_to(
+                    auth_app_sign_up_check_telephone_secret_path(
+                      ri: params[:ri],
+                      pt: signed_pt_param,
+                    ), status: :see_other,
+                  )
+                end
 
                 @sign_up_actor = sign_up_pending_actor
                 @success_redirect_url = success_redirect_url
@@ -32,6 +40,7 @@ module Auth
 
               def create
                 return unless load_gate_context!(gate_for_create)
+                return head :conflict if @sign_up_ticket.pending_passkey_registration_id
 
                 @sign_up_actor = sign_up_pending_actor
                 render_passkey_registration_options
@@ -42,17 +51,24 @@ module Auth
 
                 @sign_up_actor = sign_up_pending_actor
                 return unless validate_sign_up_checkpoint_version!(json: true)
+                if @sign_up_ticket.pending_passkey_registration_id
+                  return render json: {
+                    status: "ok",
+                    redirect_url: auth_app_sign_up_check_telephone_secret_path(
+                      ri: params[:ri],
+                      pt: signed_pt_param,
+                    ),
+                  }, status: :created
+                end
                 return unless verify_and_create_passkey_registration!
 
-                result = perform_sign_up_event(
-                  :clear_requirement,
-                  payload: { requirement: :passkey, checkpoint_version: sign_up_checkpoint_version_param },
-                )
-                return finalize_sign_up_from_checkpoint!(json: true) if
-                  result.success? && result.next_event == :finalize
-                return render_sign_up_failure_result(result, json: true) unless result.success?
-
-                render json: { status: "ok", redirect_url: success_redirect_url }, status: :created
+                render json: {
+                  status: "ok",
+                  redirect_url: auth_app_sign_up_check_telephone_secret_path(
+                    ri: params[:ri],
+                    pt: signed_pt_param,
+                  ),
+                }, status: :created
               end
 
               def destroy
@@ -98,9 +114,14 @@ module Auth
               def passkey_registration_passkeys = @sign_up_actor.client_passkeys
 
               def save_passkey_registration!(passkey)
-                passkey.save!
-                @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id) if
-                  @sign_up_ticket.has_attribute?(:pending_passkey_registration_id)
+                @sign_up_actor.with_lock do
+                  passkey.save!
+                  @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id)
+                  ClientSecretPasskeyReservationIssuer.call_for_sign_up!(
+                    flow: @sign_up_ticket, nonce: sign_up_session_state.cycle_payload.stringify_keys.fetch("nonce"),
+                    passkey: passkey, expires_after: ClientSecretLifetimesValue.issuance_ttl,
+                  )
+                end
               end
 
               def sign_up_requirement_context

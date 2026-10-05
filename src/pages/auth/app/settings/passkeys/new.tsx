@@ -35,7 +35,7 @@ export default function PasskeysNew({
     >
       <PasskeyRegistrationPanel {...panel} />
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink
           href={cancelLink.href}
           tone="muted"

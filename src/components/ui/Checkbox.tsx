@@ -18,12 +18,12 @@ export default function Checkbox({ children, ...props }: CheckboxProps) {
   return (
     <CheckboxField {...props}>
       <CheckboxButton
-        className="group flex items-center gap-2 text-sm text-fg disabled:cursor-not-allowed
+        className="ui-choice-target group flex min-h-11 items-center gap-2 py-2 text-base text-fg disabled:cursor-not-allowed
           disabled:opacity-50"
       >
         <div
           aria-hidden="true"
-          className="flex size-4 shrink-0 items-center justify-center rounded-sm border border-line
+          className="flex size-4 shrink-0 items-center justify-center rounded-sm border border-control
             bg-surface transition-colors group-selected:border-accent group-selected:bg-accent
             group-indeterminate:border-accent group-indeterminate:bg-accent"
         >

@@ -48,7 +48,7 @@ export default function SessionShow({
       up={backLink}
       upVisit="inertia"
     >
-      <p className="mb-4 text-sm text-fg-muted">{expiresAtDescription}</p>
+      <p className="mb-4 text-base text-fg-muted">{expiresAtDescription}</p>
       <Card>
         <DescriptionList items={items} />
       </Card>

@@ -108,18 +108,7 @@ module AuthenticationSequenceGate
         return redirect_local_checkpoint_result!(cycle)
       end
 
-      with_sign_in_flow_writing(cycle) do
-        changes = {
-          status_id: cycle.status_id_for("DASHBOARD_PENDING"),
-          state: "DASHBOARD_PENDING",
-          step: "dashboard",
-        }
-        changes[:token] =
-          current_session if cycle.has_attribute?(:token_id) && cycle.token_id.blank? && current_session
-        changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
-
-        cycle.reload.update!(changes)
-      end
+      record_dashboard_handoff!(cycle)
       if oidc_authorization_login_challenge.present?
         redirect_to_surface_url(after_login_path)
         return
@@ -458,7 +447,11 @@ module AuthenticationSequenceGate
 
   private
 
-  def start_sign_in_flow_for!(resource, pt:)
+  def start_sign_in_flow_for!(resource, pt:, authentication_method: nil)
+    if resource.is_a?(Client) && authentication_method == "secret" && oidc_authentication_ceremony?
+      return with_claimed_oidc_secret_flow(resource) { |flow, _ceremony| flow }
+    end
+
     if local_authentication_ceremony?
       cycle = auth_ceremony_local_sign_in_flow
       raise AuthCeremonySession::InvalidTransition, "local authentication admission is missing" unless cycle
@@ -468,7 +461,13 @@ module AuthenticationSequenceGate
 
       with_sign_in_flow_writing(cycle) do
         cycle.with_lock do
-          unless cycle.sign_in_primary_pending? && cycle.principal_id.nil?
+          claimed_secret = authentication_method == "secret" && resource.is_a?(Client) &&
+            cycle.principal_id == resource.id && ClientSecretCredential.exists?(
+              client_id: resource.id, claim_sign_in_flow_ref: cycle.public_id,
+              claim_ceremony_session_id: admitted_auth_ceremony_session.id,
+              consumed_at: nil, discard_at: Float::INFINITY,
+            )
+          unless cycle.sign_in_primary_pending? && (cycle.principal_id.nil? || claimed_secret)
             raise AuthCeremonySession::InvalidTransition, "local authentication flow is already bound"
           end
 
@@ -487,6 +486,38 @@ module AuthenticationSequenceGate
       return_to: path_from_signed_pt(signed_pt_token(pt)),
       nonce_digest: cycle_class.digest_nonce(nonce),
     )
+  end
+
+  def with_claimed_oidc_secret_flow(resource)
+    transaction = auth_ceremony_authorization_transaction
+    ceremony = admitted_auth_ceremony_session
+    raise AuthCeremonySession::InvalidTransition, "Secret OIDC admission missing" unless transaction && ceremony
+
+    resource.with_lock do
+      AppTicketRecord.connected_to(role: :writing) do
+        transaction.with_lock do
+          flow = transaction.secret_sign_in_flow
+          raise AuthCeremonySession::InvalidTransition, "Secret OIDC flow missing" unless flow
+
+          flow.lock!
+          ceremony.lock!
+          now = ClientSignInFlow.database_now
+          unless transaction.status == "pending" && !transaction.expired?(now: now) &&
+              !transaction.login_challenge_expired?(now: now) && flow.principal_id == resource.id &&
+              flow.sign_in_primary_pending? && !flow.expired?(now) &&
+              ceremony.admitted? && ceremony.active?(now: now) &&
+              ceremony.authorization_transaction_ref == transaction.transaction_id &&
+              ClientSecretCredential.where.not(claimed_at: nil).exists?(
+                client_id: resource.id, claim_sign_in_flow_ref: flow.public_id,
+                claim_ceremony_session_id: ceremony.id, consumed_at: nil, discard_at: Float::INFINITY,
+              )
+            raise AuthCeremonySession::InvalidTransition, "Secret OIDC claim binding mismatch"
+          end
+
+          yield flow, ceremony
+        end
+      end
+    end
   end
 
   def advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
@@ -648,6 +679,27 @@ module AuthenticationSequenceGate
     authorize!(cycle, to: rule)
     true
   end
+
+  def record_dashboard_handoff!(cycle)
+    with_sign_in_flow_writing(cycle) do
+      changes = {
+        status_id: cycle.status_id_for("DASHBOARD_PENDING"),
+        state: "DASHBOARD_PENDING",
+        step: "dashboard",
+      }
+      secret_oidc_evidence = cycle.is_a?(ClientSignInFlow) && cycle.authentication_method == "secret" &&
+        auth_ceremony_authorization_transaction&.secret_sign_in_flow_id == cycle.id
+      unless secret_oidc_evidence
+        changes[:token] =
+          current_session if cycle.has_attribute?(:token_id) && cycle.token_id.blank? && current_session
+        changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
+      end
+
+      cycle.reload.update!(changes)
+    end
+  end
+
+  private :record_dashboard_handoff!
 
   private :redirect_local_checkpoint_result!, :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?,
           :authorize_sign_in_sequence!, :authenticate_sign_in_sequence_actor!,

@@ -132,7 +132,7 @@ permission denials, resource-hidden 404s, restricted sessions, and dependency er
    I18n and inline props. Preserve registered Passkey versus delivery-pending versus
    confirmed/omitted/interrupted facts. Enrollment finalizes only after confirmation
    or normal omission; signed-in delivery failure does not delete its Passkey.
-5. **Sign in.** Provide canonical Auth app GET/POST `/sign/in/secret`, remove app's
+5. **Sign in.** Provide canonical Auth app GET `/sign/in/secret/new` and POST `/sign/in/secret`, remove app's
    Emergency entry, retain org's. Resolve full-value lookup digest and verify the
    whole secret; never require a remembered public_id or search only the latest row.
    Preserve input limits, CSRF, guest-only, handoff, region, online defenses, and

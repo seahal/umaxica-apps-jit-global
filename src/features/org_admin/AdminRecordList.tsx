@@ -1,7 +1,7 @@
+import Button from "@/components/ui/Button";
 // A bounded, paginated list of administration records with an optional exact-identifier search.
 // A failed load is its own state: it is never shown as an empty list.
 import ButtonLink from "@/components/ui/ButtonLink";
-import Card from "@/components/ui/Card";
 import Page from "@/components/ui/Page";
 import Table from "@/components/ui/Table";
 
@@ -43,6 +43,10 @@ export default function AdminRecordList({
   pagination,
   actions,
 }: AdminRecordListProps) {
+  const paginationLabel =
+    typeof document === "undefined"
+      ? undefined
+      : document.querySelector<HTMLMetaElement>('meta[name="ui-pagination"]')?.content;
   return (
     <Page
       title={title}
@@ -60,22 +64,17 @@ export default function AdminRecordList({
           action={search.action}
           className="flex flex-wrap items-end gap-2"
         >
-          <label className="flex flex-col gap-1 text-sm font-medium text-fg">
+          <label className="flex flex-col gap-1 text-base font-medium text-fg">
             {search.label}
             <input
               type="search"
               name={search.name}
               defaultValue={search.value}
               maxLength={search.maxlength}
-              className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg"
+              className="min-h-12 rounded-md border border-control bg-surface px-3 py-2 text-base text-fg"
             />
           </label>
-          <button
-            type="submit"
-            className="rounded-md border border-line px-3 py-2 text-sm text-fg"
-          >
-            {search.submit_label}
-          </button>
+          <Button type="submit">{search.submit_label}</Button>
         </form>
       ) : null}
 
@@ -93,11 +92,14 @@ export default function AdminRecordList({
         </div>
       ) : null}
 
-      <Card>
+      <div>
         {rows.length === 0 ? (
-          <p className="text-sm text-fg-muted">{emptyMessage}</p>
+          <p className="text-base text-fg-muted">{emptyMessage}</p>
         ) : (
-          <Table label={title}>
+          <Table
+            label={title}
+            density="dense"
+          >
             <thead>
               <tr>
                 {columns.map((column) => (
@@ -119,7 +121,7 @@ export default function AdminRecordList({
                       {index === 0 && row.href ? (
                         <a
                           href={row.href}
-                          className="underline-offset-4 hover:underline"
+                          className="ui-text-link underline underline-offset-4 hover:underline"
                         >
                           {cell}
                         </a>
@@ -133,15 +135,32 @@ export default function AdminRecordList({
             </tbody>
           </Table>
         )}
-      </Card>
+      </div>
 
-      <nav className="flex justify-between text-sm">
+      <nav
+        aria-label={paginationLabel}
+        className="flex flex-wrap justify-between gap-4 text-base"
+      >
         {pagination.previous ? (
-          <a href={pagination.previous.href}>{pagination.previous.label}</a>
+          <a
+            className="ui-text-link text-link underline underline-offset-4"
+            href={pagination.previous.href}
+          >
+            {pagination.previous.label}
+          </a>
         ) : (
           <span />
         )}
-        {pagination.next ? <a href={pagination.next.href}>{pagination.next.label}</a> : <span />}
+        {pagination.next ? (
+          <a
+            className="ui-text-link text-link underline underline-offset-4"
+            href={pagination.next.href}
+          >
+            {pagination.next.label}
+          </a>
+        ) : (
+          <span />
+        )}
       </nav>
     </Page>
   );

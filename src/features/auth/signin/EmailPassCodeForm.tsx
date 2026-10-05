@@ -94,7 +94,7 @@ export default function EmailPassCodeForm({
             className="animate-shake rounded-md border border-danger bg-surface p-3"
             role="alert"
           >
-            <ul className="flex flex-col gap-1 text-sm text-danger">
+            <ul className="flex flex-col gap-1 text-base text-error">
               {formErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -110,7 +110,7 @@ export default function EmailPassCodeForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={fieldId}
-            className="text-sm font-medium text-fg"
+            className="text-base font-medium text-fg"
           >
             {field.label}
           </label>
@@ -127,7 +127,7 @@ export default function EmailPassCodeForm({
             inputMode={field.inputmode}
             pattern={field.pattern}
             required
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
+            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-fg
               placeholder:text-fg-muted"
           />
         </div>
@@ -157,13 +157,13 @@ export default function EmailPassCodeForm({
         </Button>
       </form>
 
-      <p className="text-sm text-fg-muted">{deliveryHelp}</p>
+      <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* Document visit: restarting the ceremony issues a new code. */}
         <a
           href={backLink.href}
-          className="text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {backLink.label}
         </a>

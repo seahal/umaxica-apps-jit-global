@@ -18,6 +18,8 @@ class RecoveryPasscodeTopUpTest < ActiveSupport::TestCase
   end
 
   test "com retains ten recovery credentials and repeat top-up issues none" do
+    VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::RECOVERY)
+    VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::ACTIVE)
     actor = visitors(:reserved_visitor)
     address = "com-top-up@example.com"
     actor.visitor_emails.create!(

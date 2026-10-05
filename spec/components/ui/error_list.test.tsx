@@ -13,10 +13,10 @@ describe("ErrorList", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("announces the failure and renders one item per message", () => {
+  it("renders initial errors without an unsolicited live announcement", () => {
     render(<ErrorList errors={["メールアドレスを入力してください", "確認が未完了です"]} />);
 
-    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("確認が未完了です")).toBeTruthy();
   });
@@ -33,6 +33,29 @@ describe("ErrorList", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "The server rejected this form." })).toBeTruthy();
+    expect(screen.getByText("The server rejected this form.")).toBeTruthy();
+    expect(screen.queryByRole("heading")).toBeNull();
   });
+});
+
+// These are summary announcements, never live regions on field errors.
+it("announces an asynchronous failure only when the caller opts in", () => {
+  const { rerender } = render(
+    <ErrorList
+      errors={[]}
+      announce
+    />,
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+  rerender(
+    <ErrorList
+      errors={["Try again."]}
+      announce
+    />,
+  );
+  expect(screen.getByRole("alert").textContent).toContain("Try again.");
+});
+it("preserves repeated and empty server messages without inventing validation", () => {
+  render(<ErrorList errors={["", "Failed", "Failed"]} />);
+  expect(screen.getAllByRole("listitem")).toHaveLength(3);
 });

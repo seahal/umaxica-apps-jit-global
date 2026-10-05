@@ -46,8 +46,10 @@ module Auth
           [new_auth_app_sign_in_email_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.email")],
           [new_auth_app_sign_in_passkey_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.passkey")],
           [auth_app_sign_in_device_path(query, ri: "jp"), I18n.t("sign.app.authentication.new.links.device")],
+          [new_auth_app_sign_in_secret_url(query, ri: "jp", host: @host),
+           I18n.t("sign.app.authentication.new.links.secret"),],
         ], inertia_props.fetch("methods").map { |method| [method.fetch("href"), method.fetch("label")] }
-        assert_equal %w(email passkey device), inertia_props.fetch("methods").map { |method|
+        assert_equal %w(email passkey device secret), inertia_props.fetch("methods").map { |method|
           method.fetch("key")
         }
         assert_equal %w(google apple), inertia_props.fetch("social_providers").map { |provider| provider.fetch("key") }
@@ -89,6 +91,7 @@ module Auth
           new_auth_app_sign_in_email_path(ri: "jp"),
           new_auth_app_sign_in_passkey_path(ri: "jp"),
           auth_app_sign_in_device_path(ri: "jp"),
+          new_auth_app_sign_in_secret_url(ri: "jp", host: @host),
         ], inertia_props.fetch("methods").map { |method| method.fetch("href") }
       end
 

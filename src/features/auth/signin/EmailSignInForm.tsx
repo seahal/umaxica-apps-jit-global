@@ -68,7 +68,7 @@ export default function EmailSignInForm({
             className="animate-shake rounded-md border border-danger bg-surface p-3"
             role="alert"
           >
-            <ul className="flex flex-col gap-1 text-sm text-danger">
+            <ul className="flex flex-col gap-1 text-base text-error">
               {formErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -102,11 +102,11 @@ export default function EmailSignInForm({
         </Button>
       </form>
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* Document visit: leaving the ceremony returns to the method selection page. */}
         <a
           href={backLink.href}
-          className="text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {backLink.label}
         </a>

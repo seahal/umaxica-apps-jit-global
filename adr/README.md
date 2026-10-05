@@ -15,6 +15,12 @@ values.
 - Keep non-authoritative decision notes and implementation handoff notes in `notes/`, not under
   `adr/`.
 
+Current Inertia decision:
+
+- `adr/inertia-rails-thin-adapter.md` — Inertia Rails is used through its public API only, with no
+  fork, patch, or compatibility layer; history encryption is mandatory, each origin is its own
+  Inertia application, and leaving an origin is a `409` with `X-Inertia-Location`.
+
 Current org federated sign-in decision:
 
 - `adr/org-entra-id-sign-in-boundary.md` — accepted decision for org-surface Microsoft Entra ID SSO:

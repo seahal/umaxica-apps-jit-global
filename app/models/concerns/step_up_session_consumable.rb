@@ -8,7 +8,38 @@ module StepUpSessionConsumable
 
   public
 
+  VERIFICATION_PURPOSES = %w(step_up reauthentication).freeze
+  REGISTRATION_PURPOSES = %w(bootstrap credential_registration).freeze
+
   def issue_bound_passkey_challenge!(transaction:, challenge:, rp_id:, origin:)
+    issue_passkey_challenge_for!(
+      transaction: transaction, challenge: challenge, rp_id: rp_id, origin: origin, purposes: VERIFICATION_PURPOSES,
+    )
+  end
+
+  # A registration challenge belongs to a registration permission and can never be consumed as an
+  # assertion challenge, nor the reverse: each consumer names the purposes it accepts.
+  def issue_bound_passkey_registration_challenge!(transaction:, challenge:, rp_id:, origin:)
+    issue_passkey_challenge_for!(
+      transaction: transaction, challenge: challenge, rp_id: rp_id, origin: origin, purposes: REGISTRATION_PURPOSES,
+    )
+  end
+
+  def consume_bound_passkey_challenge!(transaction:, reference:, rp_id:, origin:)
+    consume_passkey_challenge_for!(
+      transaction: transaction, reference: reference, rp_id: rp_id, origin: origin, purposes: VERIFICATION_PURPOSES,
+    )
+  end
+
+  def consume_bound_passkey_registration_challenge!(transaction:, reference:, rp_id:, origin:)
+    consume_passkey_challenge_for!(
+      transaction: transaction, reference: reference, rp_id: rp_id, origin: origin, purposes: REGISTRATION_PURPOSES,
+    )
+  end
+
+  private
+
+  def issue_passkey_challenge_for!(transaction:, challenge:, rp_id:, origin:, purposes:)
     unless challenge.is_a?(String) && challenge.present? && challenge.exclude?("\0") &&
         rp_id.is_a?(String) && rp_id.present? &&
         origin.is_a?(String) && origin.present?
@@ -21,7 +52,7 @@ module StepUpSessionConsumable
       with_lock do
         transaction.with_lock do
           now = transaction.class.database_now
-          validate_passkey_transaction!(transaction, now: now)
+          validate_passkey_transaction!(transaction, now: now, purposes: purposes)
           deadline = [passkey_challenge_expires_at || (now + 10.minutes), transaction.expires_at].min
           raise ChallengeError, "challenge expired" if deadline <= now
 
@@ -36,14 +67,14 @@ module StepUpSessionConsumable
     end
   end
 
-  def consume_bound_passkey_challenge!(transaction:, reference:, rp_id:, origin:)
+  def consume_passkey_challenge_for!(transaction:, reference:, rp_id:, origin:, purposes:)
     challenge = nil
     failure = nil
     self.class.connection_class_for_self.connected_to(role: :writing) do
       with_lock do
         transaction.with_lock do
           now = transaction.class.database_now
-          validate_passkey_transaction!(transaction, now: now)
+          validate_passkey_transaction!(transaction, now: now, purposes: purposes)
           unless reference.is_a?(String) && reference.present? && reference == passkey_challenge_ref &&
               passkey_challenge_consumed_at.nil? && passkey_challenge.present?
             raise ChallengeError, "challenge unavailable"
@@ -65,13 +96,11 @@ module StepUpSessionConsumable
     challenge
   end
 
-  private
-
-  def validate_passkey_transaction!(transaction, now:)
+  def validate_passkey_transaction!(transaction, now:, purposes:)
     unless transaction.is_a?(passkey_transaction_model) &&
         step_up_ceremony_transaction_ref == transaction.transaction_id &&
         transaction.session_ref == passkey_session_token.public_id &&
-        %w(step_up reauthentication).include?(transaction.purpose) && transaction.status == "pending" &&
+        purposes.include?(transaction.purpose) && transaction.status == "pending" &&
         !transaction.expired?(now: now) && transaction.allowed_methods_array.include?("passkey") &&
         status == "PENDING" && discard_at > now
       raise ChallengeError, "ceremony unavailable"

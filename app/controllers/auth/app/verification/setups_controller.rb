@@ -25,7 +25,15 @@ module Auth
 
         def auth_ceremony_entry_intent = "bootstrap"
 
-        def auth_step_up_ceremony_clean_url = new_auth_app_verification_setup_path(ri: params[:ri])
+        # Base admits one registration method per bootstrap, so the browser goes straight to that
+        # method's ceremony. A bootstrap that still carries several methods shows the choice here.
+        def auth_step_up_ceremony_clean_url
+          if auth_ceremony_registration_transaction&.allowed_methods_array == ["totp"]
+            new_auth_app_settings_totp_path(ri: params[:ri])
+          else
+            new_auth_app_verification_setup_path(ri: params[:ri])
+          end
+        end
 
         def auth_ceremony_admission_action_url = auth_app_verification_setup_path(ri: params[:ri])
 

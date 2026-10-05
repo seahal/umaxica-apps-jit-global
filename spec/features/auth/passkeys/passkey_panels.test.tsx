@@ -1,3 +1,4 @@
+import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 // The three fetch-driven passkey ceremonies, driven end to end.
 //
@@ -247,7 +248,9 @@ describe("PasskeyAuthenticationPanel", () => {
     const screen = await start();
 
     expect(location.href).toBe("/challenge");
-    expect(screen.text("p.text-fg-muted")).toBe(PASSKEY_MESSAGES.totpRequired);
+    expect(within(screen.container).getByRole("status").textContent).toBe(
+      PASSKEY_MESSAGES.totpRequired,
+    );
   });
 
   it("rejects an answer it does not recognise instead of assuming success", async () => {
@@ -445,7 +448,9 @@ describe("PasskeyRegistrationPanel", () => {
     const screen = await start();
 
     expect(location.reload).toHaveBeenCalled();
-    expect(screen.text("p.text-fg-muted")).toBe(PASSKEY_MESSAGES.registrationComplete);
+    expect(within(screen.container).getByRole("status").textContent).toBe(
+      PASSKEY_MESSAGES.registrationComplete,
+    );
   });
 
   it("refuses an answer the authenticator did not shape as an attestation", async () => {
@@ -650,7 +655,9 @@ describe("StepUpPasskeyForm", () => {
     expect(requestSubmit).toHaveBeenCalled();
     expect(submitted).toEqual(expect.any(String));
     expect(JSON.parse(String(submitted))).toMatchObject({ id: "cred-id", rawId: "AQID" });
-    expect(screen.text("p.text-fg-muted")).toBe(PASSKEY_MESSAGES.verifying);
+    expect(within(screen.container).getByRole("status").textContent).toBe(
+      PASSKEY_MESSAGES.verifying,
+    );
   });
 
   it("reports a cancelled ceremony instead of submitting", async () => {

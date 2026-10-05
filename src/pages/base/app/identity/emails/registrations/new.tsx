@@ -1,5 +1,5 @@
 import { router } from "@inertiajs/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -37,6 +37,7 @@ export default function EmailRegistrationNew({
   form,
   errors,
 }: Props) {
+  const descriptionId = useId();
   const [address, setAddress] = useState(form.address);
   const [promotional, setPromotional] = useState(form.promotional.checked);
   const [notifiable, setNotifiable] = useState(form.notifiable.checked);
@@ -92,23 +93,35 @@ export default function EmailRegistrationNew({
             <div className="flex flex-col gap-1">
               <Checkbox
                 id="user_email_promotional"
+                aria-describedby={`${descriptionId}-promotional`}
                 isSelected={promotional}
                 onChange={setPromotional}
               >
                 {form.promotional.label}
               </Checkbox>
-              <p className="pl-6 text-xs text-fg-muted">{form.promotional.description}</p>
+              <p
+                id={`${descriptionId}-promotional`}
+                className="pl-6 text-base text-fg-muted"
+              >
+                {form.promotional.description}
+              </p>
             </div>
 
             <div className="flex flex-col gap-1">
               <Checkbox
                 id="user_email_notifiable"
+                aria-describedby={`${descriptionId}-notifiable`}
                 isSelected={notifiable}
                 onChange={setNotifiable}
               >
                 {form.notifiable.label}
               </Checkbox>
-              <p className="pl-6 text-xs text-fg-muted">{form.notifiable.description}</p>
+              <p
+                id={`${descriptionId}-notifiable`}
+                className="pl-6 text-base text-fg-muted"
+              >
+                {form.notifiable.description}
+              </p>
             </div>
           </div>
 
@@ -129,7 +142,7 @@ export default function EmailRegistrationNew({
         </form>
       </Card>
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink
           href={cancelLink.href}
           tone="muted"

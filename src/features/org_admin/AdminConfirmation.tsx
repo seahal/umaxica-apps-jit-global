@@ -3,7 +3,7 @@
 // fields the server listed. The operation id is issued by the server for this screen, so a
 // resubmission is recognised as the same operation and a different target never reuses it.
 import { useForm } from "@inertiajs/react";
-import { type SyntheticEvent, useState } from "react";
+import { type SyntheticEvent, useId, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -85,6 +85,13 @@ export default function AdminConfirmation({
   const { data, setData, errors, processing } = form;
   const [acknowledged, setAcknowledged] = useState(false);
   const errorMessages = Object.values(errors);
+  const disabledReasonId = useId();
+  const disabledReason =
+    typeof document === "undefined"
+      ? undefined
+      : document.querySelector<HTMLMetaElement>(
+          `meta[name="${processing ? "ui-processing" : "ui-confirmation-required"}"]`,
+        )?.content;
 
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -108,10 +115,15 @@ export default function AdminConfirmation({
 
       <Card>
         <DescriptionList items={target} />
-        <p className="mt-3 text-sm text-fg">{effect}</p>
+        <p className="mt-3 text-base text-fg">{effect}</p>
       </Card>
 
-      {errorMessages.length > 0 ? <ErrorList errors={errorMessages} /> : null}
+      {errorMessages.length > 0 ? (
+        <ErrorList
+          announce
+          errors={errorMessages}
+        />
+      ) : null}
 
       <form
         onSubmit={submit}
@@ -126,10 +138,7 @@ export default function AdminConfirmation({
                 options={field.options}
                 value={data[field.name] ?? ""}
                 onChange={(value) => {
-                  /* v8 ignore next -- React Aria reports null only when the selection is cleared */
-                  if (value !== null) {
-                    setData(field.name, String(value));
-                  }
+                  setData(field.name, value);
                 }}
               />
             );
@@ -162,9 +171,20 @@ export default function AdminConfirmation({
           <Button
             type="submit"
             isDisabled={processing || !acknowledged}
+            {...((processing || !acknowledged) && disabledReason
+              ? { "aria-describedby": disabledReasonId }
+              : {})}
           >
             {submitLabel}
           </Button>
+          {(processing || !acknowledged) && disabledReason ? (
+            <p
+              id={disabledReasonId}
+              className="mt-2 text-base text-fg-muted"
+            >
+              {disabledReason}
+            </p>
+          ) : null}
         </div>
       </form>
     </Page>

@@ -1,11 +1,11 @@
----
-description:
-  Design system, covering color roles, typography, spacing, shapes, composition, and component
-  conventions
-globs: src/**/*.css,src/**/*.tsx
-alwaysApply: false
-paths: src/**/*.css, src/**/*.tsx
----
+# Historical design notes
+
+Current presentation rules and implementation ownership are defined in [docs/design.md](docs/design.md).
+This document is retained as historical context, not implementation guidance. The historical
+shadcn token names, localStorage theme advice, and history-based up navigation below are not
+current contracts. Use the canonical guide and existing server-resolved navigation/theme data.
+
+## Archived content
 
 # Design System
 

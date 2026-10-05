@@ -23,7 +23,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_response :bad_request
     actor = Client.create!(id: 9_106_000_000_000, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -48,7 +48,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   test "setup admission refuses a cross-site POST before consuming its reference" do
     original_protection = Auth::App::Verification::SetupsController.allow_forgery_protection
     actor = Client.create!(id: 9_106_000_000_001, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -87,7 +87,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   # rubocop:disable Minitest/MultipleAssertions
   test "admitted bootstrap confirms a DB TOTP candidate without Auth root credentials or freshness" do
     actor = Client.create!(id: 9_106_000_000_002, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -105,17 +105,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil ClientAuthCeremonySession.find_by(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
     post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
-    assert_redirected_to new_auth_app_verification_setup_path(ri: "jp")
+    # Base admitted TOTP only, so Auth goes straight to its enrollment; the method choice is Base's.
+    assert_redirected_to new_auth_app_settings_totp_path(ri: "jp")
     follow_redirect!
-    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-
-    # Email is offered beside the admitted method as a link to Base's own registration page.
-    assert_equal %w(totp email), props.fetch("methods").pluck("key")
-    assert_equal(
-      "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/identity/emails/registration/new?ri=jp",
-      props.fetch("methods").last.fetch("href"),
-    )
-    get props.fetch("methods").first.fetch("href")
 
     assert_response :success
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
@@ -175,7 +167,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       case surface
       when "com"
         actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-        token = VisitorToken.create!(visitor: actor)
+        token = VisitorToken.create!(visitor: actor, root_login_established_at: Time.current)
         auth_host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         display_path = new_auth_com_verification_setup_path(ri: "jp")
         create_path = auth_com_verification_setup_path(ri: "jp")
@@ -183,7 +175,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
       when "org"
         actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
-        token = OperatorToken.create!(staff: actor)
+        token = OperatorToken.create!(staff: actor, root_login_established_at: Time.current)
         auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         display_path = new_auth_org_verification_setup_path(ri: "jp")
         create_path = auth_org_verification_setup_path(ri: "jp")
@@ -234,7 +226,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   # rubocop:disable Minitest/MultipleAssertions
   test "GET and repeated start preserve enrollment deadline and failures while cancel closes the permission" do
     actor = Client.create!(id: 9_106_000_000_003, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -362,15 +354,27 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    post props.fetch("form").fetch("action"), params: props.fetch("form").slice("scope", "pt")
+
+    # No authenticator yet: Base shows its own method choice and has issued nothing so far.
+    assert_response :see_other
+    assert_equal base_app_verification_setup_path, URI.parse(response.location).path
+    assert_equal 0, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count
+    follow_redirect!
+
+    assert_response :success
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
     JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
       RedirectsJumpGatewayUrl.stub(
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
       ) do
-        post props.fetch("form").fetch("action"), params: props.fetch("form").slice("scope", "pt")
+        post props.fetch("form").fetch("action"),
+             params: props.fetch("form").slice("scope", "pt").merge("registration_method" => "totp")
       end
     end
 
     assert_response :see_other
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), URI.parse(destination).host
     assert_equal "/verification/setup/new", URI.parse(destination).path
     assert_nil token.reload.last_step_up_at
     assert_nil auth.cookies[AuthenticationCookieName.access]

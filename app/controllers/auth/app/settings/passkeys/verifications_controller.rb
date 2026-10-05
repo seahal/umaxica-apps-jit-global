@@ -26,11 +26,25 @@ class Auth::App::Settings::Passkeys::VerificationsController < ::Auth::App::Appl
 
   def passkey_registration_log_prefix = "sign.webauthn.registration"
 
+  def finish_passkey_ceremony!(**arguments)
+    current_client.with_lock do
+      commit = super
+      @secret_issuance = ClientSecretPasskeyReservationIssuer.call!(
+        actor_context: ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :sign),
+        token: current_session_token, passkey: commit.passkey, expires_after: ClientSecretLifetimesValue.issuance_ttl,
+      )
+      commit
+    end
+  end
+
   def render_verification_success(passkey)
     render json: {
       status: "ok",
       passkey_id: passkey.id,
-      redirect_url: bootstrap_return_path(passkey_registration_redirect_url),
+      redirect_url: base_app_secret_issuance_url(
+        @secret_issuance.public_id, ri: current_region_identifier,
+                                    host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      ),
     }, status: :created
   end
 end

@@ -35,7 +35,7 @@ describe("UiGallery", () => {
   it("shows the select, the checkboxes and the radio group", () => {
     render(<UiGallery />);
 
-    expect(screen.getByRole("button", { name: /Theme/u })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Theme" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Functional cookies" })).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "Delivery" })).toBeTruthy();
   });

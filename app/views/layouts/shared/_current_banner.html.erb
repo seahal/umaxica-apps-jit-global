@@ -4,7 +4,7 @@
   domain = local_assigns.fetch(:domain)
 %>
 <% if (banner = current_banner_for(tld: tld, region: region, domain: domain)) %>
-  <section aria-label="banner">
+  <section aria-label="<%= banner.title.presence || t("ui_presentation.information") %>">
     <% if banner.title.present? %>
       <h2><%= banner.title %></h2>
     <% end %>

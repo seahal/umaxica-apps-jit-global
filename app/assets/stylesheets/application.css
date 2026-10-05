@@ -1,17 +1,448 @@
-/* Propshaft-owned baseline for Importmap surfaces. Vite owns src/styles exclusively. */
+/* Importmap/Propshaft presentation. The Vite implementation follows docs/design.md independently. */
 :root {
-  color-scheme: light dark;
-}
-html[data-theme="light"] {
   color-scheme: light;
+  --ui-tint: oklch(55.2% 0.016 285.938);
+  --ui-canvas: color-mix(in oklab, #fff 85%, var(--ui-tint));
+  --ui-surface: #fff;
+  --ui-surface-muted: oklch(98.5% 0 none);
+  --ui-fg: oklch(21% 0.006 285.885);
+  --ui-fg-muted: oklch(44.2% 0.017 285.786);
+  --ui-line: oklch(87.1% 0.006 286.286);
+  --ui-control: oklch(55.2% 0.016 285.938);
+  --ui-focus-inner: #ffd43d;
+  --ui-focus-outer: #000;
+  --ui-link-visited: oklch(43.8% 0.218 303.724);
+  --ui-link-active: oklch(47% 0.157 37.304);
+  --ui-link: oklch(48.8% 0.243 264.376);
+  --ui-accent: oklch(54.6% 0.245 262.881);
+  --ui-accent-hover: oklch(48.8% 0.243 264.376);
+  --ui-accent-fg: #fff;
+  --ui-danger: oklch(57.7% 0.245 27.325);
+  --ui-danger-fg: #fff;
+  --ui-error: oklch(50.5% 0.213 27.518);
+  --ui-ring: oklch(54.6% 0.245 262.881);
+}
+:root[data-edition="app"] {
+  --ui-tint: oklch(63.7% 0.237 25.331);
+}
+:root[data-edition="com"] {
+  --ui-tint: oklch(58.5% 0.233 277.117);
+}
+:root[data-edition="org"] {
+  --ui-tint: oklch(72.3% 0.219 149.579);
 }
 html[data-theme="dark"] {
   color-scheme: dark;
+  --ui-canvas: color-mix(in oklab, oklch(14.1% 0.005 285.823) 92%, var(--ui-tint));
+  --ui-surface: oklch(21% 0.006 285.885);
+  --ui-surface-muted: oklch(27.4% 0.006 286.033);
+  --ui-fg: oklch(96.7% 0.001 286.375);
+  --ui-fg-muted: oklch(70.5% 0.015 286.067);
+  --ui-line: oklch(37% 0.013 285.805);
+  --ui-control: oklch(70.5% 0.015 286.067);
+  --ui-link-visited: oklch(82.7% 0.119 306.383);
+  --ui-link-active: oklch(83.7% 0.128 66.29);
+  --ui-link: oklch(70.7% 0.165 254.624);
+  --ui-accent: oklch(62.3% 0.214 259.815);
+  --ui-accent-hover: oklch(70.7% 0.165 254.624);
+  --ui-accent-fg: oklch(14.1% 0.005 285.823);
+  --ui-danger: oklch(63.7% 0.237 25.331);
+  --ui-danger-fg: oklch(14.1% 0.005 285.823);
+  --ui-error: oklch(70.4% 0.191 22.216);
+  --ui-ring: oklch(70.7% 0.165 254.624);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    color-scheme: dark;
+    --ui-canvas: color-mix(in oklab, oklch(14.1% 0.005 285.823) 92%, var(--ui-tint));
+    --ui-surface: oklch(21% 0.006 285.885);
+    --ui-surface-muted: oklch(27.4% 0.006 286.033);
+    --ui-fg: oklch(96.7% 0.001 286.375);
+    --ui-fg-muted: oklch(70.5% 0.015 286.067);
+    --ui-line: oklch(37% 0.013 285.805);
+    --ui-control: oklch(70.5% 0.015 286.067);
+    --ui-link-visited: oklch(82.7% 0.119 306.383);
+    --ui-link-active: oklch(83.7% 0.128 66.29);
+    --ui-link: oklch(70.7% 0.165 254.624);
+    --ui-accent: oklch(62.3% 0.214 259.815);
+    --ui-accent-hover: oklch(70.7% 0.165 254.624);
+    --ui-accent-fg: oklch(14.1% 0.005 285.823);
+    --ui-danger: oklch(63.7% 0.237 25.331);
+    --ui-danger-fg: oklch(14.1% 0.005 285.823);
+    --ui-error: oklch(70.4% 0.191 22.216);
+    --ui-ring: oklch(70.7% 0.165 254.624);
+  }
 }
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  font-family: "Helvetica Neue", Arial, "Hiragino Sans", Meiryo, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
 }
-main {
+body:lang(ja) {
+  line-height: 1.7;
+}
+body.ui-document {
+  min-height: 100vh;
+  background: var(--ui-canvas);
+  color: var(--ui-fg);
+}
+.ui-document *,
+.ui-document *::before,
+.ui-document *::after {
+  box-sizing: border-box;
+}
+.ui-document > header,
+.ui-document > footer {
+  padding: 1rem max(1rem, calc((100% - 53rem) / 2));
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-line);
+}
+.ui-document > header p {
+  margin-block: 0.25rem;
+}
+.ui-document > footer {
+  margin-top: 2rem;
+  padding-block: 2rem;
+  border-top: 1px solid var(--ui-line);
+  border-bottom: 0;
+}
+.ui-main {
+  width: 100%;
+  max-width: 56rem;
   min-height: 50vh;
+  margin-inline: auto;
+  padding: 2.5rem 1rem;
+}
+.ui-page {
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.ui-page--narrow {
+  max-width: 28rem;
+}
+.ui-page--wide {
+  max-width: 56rem;
+}
+.ui-document :is(h1, h2, h3, p) {
+  margin-block: 0;
+}
+.ui-document h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+.ui-document h2 {
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.ui-document :is(p, li, dd, a, button, label) {
+  overflow-wrap: anywhere;
+}
+.ui-document :lang(ja) {
+  line-break: strict;
+  word-break: normal;
+}
+.ui-document a {
+  color: var(--ui-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.ui-document a:where(:not(.ui-button)):visited {
+  color: var(--ui-link-visited);
+}
+.ui-document a:where(:not(.ui-button)):active {
+  color: var(--ui-link-active);
+}
+.ui-document a:hover {
+  text-decoration-thickness: 2px;
+}
+:focus-visible,
+.ui-choice:has(:focus-visible) {
+  outline: 4px solid var(--ui-focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--ui-focus-inner);
+}
+.ui-skip-link {
+  position: absolute;
+  inset-inline-start: 1rem;
+  top: 0.5rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  padding: 0.75rem 1rem;
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+}
+.ui-skip-link:focus {
+  transform: none;
+}
+#main:focus {
+  outline: none;
+}
+[hidden],
+.ui-document .hidden {
+  display: none !important;
+}
+.ui-document :where(button, input[type="submit"], .ui-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  min-width: 2.75rem;
+  max-width: 100%;
+  padding: 0.625rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: var(--ui-accent);
+  color: var(--ui-accent-fg);
+  font: inherit;
+  font-weight: 500;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+}
+.ui-document :where(button, input[type="submit"], .ui-button):hover {
+  background: var(--ui-accent-hover);
+  color: var(--ui-accent-fg);
+}
+.ui-document :is(button, input):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.ui-document .ui-button--secondary {
+  border-color: var(--ui-control);
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+}
+.ui-document .ui-button--secondary:hover {
+  background: var(--ui-surface-muted);
+  color: var(--ui-fg);
+}
+.ui-document .ui-button--danger {
+  background: var(--ui-danger);
+  color: var(--ui-danger-fg);
+}
+.ui-document .ui-button--danger:hover {
+  background: var(--ui-error);
+  color: var(--ui-danger-fg);
+}
+.ui-document
+  :is(
+    input:not([type]),
+    input[type="text"],
+    input[type="email"],
+    input[type="url"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="date"],
+    input[type="datetime-local"],
+    textarea,
+    select
+  ) {
+  width: 100%;
+  min-height: 3rem;
+  max-width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--ui-control);
+  border-radius: 0.375rem;
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+  font: inherit;
+}
+.ui-document :is(input, textarea)::placeholder {
+  color: var(--ui-fg-muted);
+}
+.ui-document :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--ui-accent);
+}
+.ui-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.ui-actions form {
+  margin: 0;
+}
+.ui-description {
+  color: var(--ui-fg-muted);
+}
+.ui-document .ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ui-document form:has(.ui-field) {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.ui-document .ui-error {
+  color: var(--ui-error);
+}
+.ui-cookie {
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+}
+.ui-cookie__body {
+  max-width: 56rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.ui-cookie__heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.ui-document .ui-cookie__close {
+  flex-shrink: 0;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  padding: 0.5rem;
+  border-color: var(--ui-control);
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+}
+.ui-document .ui-cookie__close:hover {
+  background: var(--ui-surface-muted);
+  color: var(--ui-fg);
+}
+.ui-cookie__close svg {
+  width: 1rem;
+  height: 1rem;
+}
+.ui-document .ui-theme {
+  margin-top: 1.5rem;
+}
+.ui-document fieldset {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.ui-document legend {
+  padding: 0;
+  font-weight: 600;
+}
+.ui-choice {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+.ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.ui-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.ui-document table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--ui-surface);
+}
+.ui-document :is(th, td) {
+  padding: 0.75rem;
+  text-align: start;
+  vertical-align: top;
+  border-bottom: 1px solid var(--ui-line);
+}
+.ui-document th {
+  font-weight: 600;
+}
+.ui-document th,
+.ui-document td {
+  font-size: 1rem;
+}
+.ui-document .ui-table--dense :is(th, td) {
+  font-size: 0.875rem;
+  padding-block: 0.5rem;
+}
+.ui-document thead {
+  border-bottom: 2px solid var(--ui-control);
+}
+@media (min-width: 640px) {
+  .ui-main {
+    padding: 3.5rem 1.5rem;
+  }
+  .ui-document h1 {
+    font-size: 1.875rem;
+  }
+  .ui-cookie__body {
+    padding-inline: 1.5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media (forced-colors: active) {
+  .ui-document :is(button, input, textarea, select, .ui-button) {
+    border-color: ButtonText;
+  }
+  :focus-visible,
+  .ui-choice:has(:focus-visible) {
+    outline-color: Highlight;
+    box-shadow: none;
+  }
+}
+
+/* Reading paragraphs, not tabular inventories or form controls. */
+.ui-prose {
+  max-inline-size: 65ch;
+  line-height: 1.5;
+}
+.ui-prose:lang(ja) {
+  max-inline-size: 40em;
+  line-height: 1.7;
+}
+.ui-prose > p {
+  line-height: inherit;
+}
+.ui-prose > :is(p, ul, ol, blockquote) + :is(p, ul, ol, blockquote) {
+  margin-block-start: 2.25em;
+  margin-block-start: 1.5lh;
+}
+
+/* Scroll-edge shadows are functional overflow cues, painted behind content without clipping focus. */
+.ui-table-scroll {
+  background-color: var(--ui-surface);
+  background-image:
+    linear-gradient(to right, var(--ui-surface) 30%, transparent),
+    linear-gradient(to left, var(--ui-surface) 30%, transparent),
+    linear-gradient(to right, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent),
+    linear-gradient(to left, color-mix(in srgb, var(--ui-fg) 20%, transparent), transparent);
+  background-position: left center, right center, left center, right center;
+  background-size: 2rem 100%, 2rem 100%, 1rem 100%, 1rem 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+  scrollbar-color: var(--ui-control) var(--ui-surface);
+}
+.ui-table-scroll table {
+  background: transparent;
+}
+@media (forced-colors: active) {
+  .ui-table-scroll { background-image: none; }
 }

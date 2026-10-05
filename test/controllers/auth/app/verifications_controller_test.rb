@@ -10,7 +10,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "GET with a Base admission reference shows a continuation and consumes nothing" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -45,7 +45,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
       user: actor, address: "verification-entry-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -90,7 +90,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "an admission reference cannot be redeemed twice" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -137,7 +137,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "a bootstrap admission is not accepted by the verification entry and stays redeemable for setup" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -161,7 +161,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "an admission issued for the app surface is refused on the com host" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -181,7 +181,7 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "the entry page is refused once the Base session behind the ceremony is revoked" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(

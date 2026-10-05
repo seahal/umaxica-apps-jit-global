@@ -38,9 +38,14 @@ class ClientSecretManualIssuanceInvalidator
       actor = context.subject
       raise Denied, "Secret cancellation actor is unavailable" unless actor.login_allowed?
 
-      current = verify_session!(actor, token)
       owned = ClientSecretIssuance.lock.find_by(id: issuance.id, public_id: issuance.public_id, client_id: actor.id)
-      unless owned && owned.origin == "manual" && owned.browser_session_ref == current.public_id &&
+      raise Denied, "Secret cancellation issuance is unavailable" unless owned
+
+      current = verify_session!(
+        actor, token,
+        (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey",
+      )
+      unless owned.browser_session_ref == current.public_id &&
           owned.sign_up_flow_ref.nil?
         raise Denied, "Secret cancellation issuance belongs to another authorization context"
       end
@@ -91,13 +96,13 @@ class ClientSecretManualIssuanceInvalidator
       issuance
     end
 
-    def verify_session!(actor, token)
+    def verify_session!(actor, token, scope)
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
       raise Denied, "Secret cancellation session is unavailable" unless current
 
       now = ClientToken.database_now
       requirement = StepUpRequirement.new(
-        scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
+        scope: scope, purpose: "step_up", audience: "step_up:app",
         session_binding: current.public_id, token_binding: current.public_id, require_session_binding: true,
       )
       unless current.currently_usable?(now) && !current.restricted? &&

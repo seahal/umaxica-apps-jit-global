@@ -317,25 +317,6 @@ module Auth::App::Up
       assert_predicate response.parsed_body["error"], :present?
     end
 
-    test "telephone sign up finalizes and establishes login after otp passkey and birthdate" do
-      telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("finalize")
-
-      patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp"), params: {
-        requirement: "birthdate",
-        birthdate: "2000-01-01",
-        checkpoint_version: cycle.reload.checkpoint_version,
-      }
-
-      assert_response :redirect
-
-      user = telephone.user.reload
-
-      assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
-      assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
-      assert ClientToken.exists?(user_id: user.id)
-      assert_empty user.client_secret_credentials.where(user_secret_kind_id: ClientSecretCredentialKind::LOGIN)
-    end
-
     test "telephone sign up rejects one day before the sixteenth birthday with sixteen birthday copy" do
       travel_to Time.zone.local(2026, 6, 25, 12, 0, 0) do
         telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("under16")

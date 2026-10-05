@@ -3,6 +3,7 @@
 // The always-on notifications are described but not offered as a control, because the server sends
 // them unconditionally; only the two preferences the operator may actually change have inputs.
 import { Link } from "@inertiajs/react";
+import { useId } from "react";
 
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
@@ -43,6 +44,7 @@ export default function EmailPreferenceEdit({
   cancel_link: cancelLink,
   error_messages: errorMessages,
 }: EmailPreferenceEditProps) {
+  const descriptionId = useId();
   const { confirm, dialog } = useConfirm();
 
   // The deletion is held back until the actor accepts, then replayed with `submit()`, which sends
@@ -82,8 +84,8 @@ export default function EmailPreferenceEdit({
         <ErrorList errors={errorMessages} />
 
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-fg">{form.always_on_label}</p>
-          <p className="text-xs text-fg-muted">{form.always_on_description}</p>
+          <p className="text-base font-medium text-fg">{form.always_on_label}</p>
+          <p className="text-base text-fg-muted">{form.always_on_description}</p>
         </div>
 
         <div className="flex flex-col gap-1">
@@ -93,13 +95,19 @@ export default function EmailPreferenceEdit({
             value="0"
           />
           <Checkbox
+            aria-describedby={`${descriptionId}-promotional`}
             name={`${form.scope}[promotional]`}
             value="1"
             defaultSelected={form.promotional}
           >
             {form.promotional_label}
           </Checkbox>
-          <p className="pl-6 text-xs text-fg-muted">{form.promotional_description}</p>
+          <p
+            id={`${descriptionId}-promotional`}
+            className="pl-6 text-base text-fg-muted"
+          >
+            {form.promotional_description}
+          </p>
         </div>
 
         <div className="flex flex-col gap-1">
@@ -109,13 +117,19 @@ export default function EmailPreferenceEdit({
             value="0"
           />
           <Checkbox
+            aria-describedby={`${descriptionId}-notifiable`}
             name={`${form.scope}[notifiable]`}
             value="1"
             defaultSelected={form.notifiable}
           >
             {form.notifiable_label}
           </Checkbox>
-          <p className="pl-6 text-xs text-fg-muted">{form.notifiable_description}</p>
+          <p
+            id={`${descriptionId}-notifiable`}
+            className="pl-6 text-base text-fg-muted"
+          >
+            {form.notifiable_description}
+          </p>
         </div>
 
         <TurnstileWidget
@@ -154,7 +168,7 @@ export default function EmailPreferenceEdit({
 
       <Link
         href={cancelLink.href}
-        className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+        className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
       >
         {cancelLink.label}
       </Link>

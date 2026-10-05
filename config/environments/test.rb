@@ -93,6 +93,12 @@ Rails.application.configure do
   # Raise error for missing translations in controllers, views, and models.
   config.i18n.raise_on_missing_translations = :strict
 
+  # No en <-> ja fallback chain: a key missing from the requested language is a missing translation
+  # and raises through the setting above. raise_on_fallback stays on so a test that installs its own
+  # chain still cannot be served the other language. Read by config/initializers/locale.rb.
+  config.x.locale.fallbacks_enabled = false
+  config.x.locale.raise_on_fallback = true
+
   # Annotate rendered view with file names.
   # config.action_view.annotate_rendered_view_with_filenames = true
 

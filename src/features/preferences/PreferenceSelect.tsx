@@ -104,10 +104,7 @@ export default function PreferenceSelect({
           name={`${form.scope}[${form.field}]`}
           value={value}
           onChange={(next) => {
-            /* v8 ignore next -- React Aria reports null only when the selection is cleared */
-            if (next !== null) {
-              setValue(String(next));
-            }
+            setValue(next);
           }}
           {...(error === undefined ? {} : { errorMessage: error })}
           options={form.choices.map((choice) => ({
@@ -127,7 +124,7 @@ export default function PreferenceSelect({
           {regionLink ? (
             <Link
               href={regionLink.href}
-              className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+              className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
             >
               {regionLink.label}
             </Link>
@@ -141,7 +138,7 @@ export default function PreferenceSelect({
             <li key={linked.key}>
               <Link
                 href={linked.href}
-                className="block rounded-lg border border-line bg-surface px-4 py-3 text-sm
+                className="block rounded-lg border border-line bg-surface px-4 py-3 text-base
                   font-medium text-fg hover:bg-surface-muted"
               >
                 {linked.label}

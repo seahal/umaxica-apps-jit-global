@@ -5,8 +5,8 @@ import type { AdminContext, AdminNotice } from "./types";
 
 const NOTICE_CLASS: Record<AdminNotice["tone"], string> = {
   info: "border-line bg-surface-muted text-fg",
-  warning: "border-warning bg-surface-muted text-fg",
-  danger: "border-danger bg-surface-muted text-danger",
+  warning: "border-control bg-surface-muted text-fg",
+  danger: "border-error bg-surface-muted text-error",
 };
 
 export function AdminNotices({ notices }: { notices: AdminNotice[] }) {
@@ -15,17 +15,24 @@ export function AdminNotices({ notices }: { notices: AdminNotice[] }) {
   }
 
   return (
-    <ul className="flex flex-col gap-2">
-      {notices.map((notice) => (
-        <li
-          key={notice.message}
-          role={notice.tone === "info" ? "status" : "alert"}
-          className={`rounded-md border px-3 py-2 text-sm ${NOTICE_CLASS[notice.tone]}`}
-        >
-          {notice.message}
-        </li>
-      ))}
-    </ul>
+    <div role={notices.some((notice) => notice.tone !== "info") ? "alert" : "status"}>
+      <ul className="flex flex-col gap-2">
+        {notices.map((notice) => (
+          <li
+            key={notice.message}
+            className={`rounded-md border px-3 py-2 text-base ${NOTICE_CLASS[notice.tone]}`}
+          >
+            <span
+              aria-hidden="true"
+              className="mr-2 font-semibold"
+            >
+              {notice.tone === "info" ? "ⓘ" : notice.tone === "warning" ? "⚠" : "×"}
+            </span>
+            {notice.message}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

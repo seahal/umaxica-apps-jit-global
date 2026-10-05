@@ -10,6 +10,7 @@
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
 import { normalizeCreationOptions } from "@/controllers/webauthn_utils";
 import { PASSKEY_MESSAGES, registrationErrorMessage } from "@/features/auth/passkeys/messages";
@@ -162,9 +163,10 @@ export default function SignUpPasskeyRegistration({
   };
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page
+      title={title}
+      width="narrow"
+    >
       <TextField
         label={descriptionLabel}
         autoComplete="off"
@@ -177,16 +179,21 @@ export default function SignUpPasskeyRegistration({
       {error ? (
         <p
           role="alert"
-          className="text-sm text-danger"
+          className="text-base text-error"
         >
           {error}
         </p>
       ) : null}
-      {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
+      <output
+        aria-atomic="true"
+        className="text-base text-fg-muted"
+      >
+        {status}
+      </output>
 
       <div>
         <Button onPress={() => void register()}>{submitLabel}</Button>
       </div>
-    </section>
+    </Page>
   );
 }

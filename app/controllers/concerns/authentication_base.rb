@@ -325,6 +325,10 @@ module AuthenticationBase
              require_totp_check: true, audit_context: {}, established_authentication_method: nil,
              authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil)
     raise SignInFlowIssuanceRejected, "Auth cannot establish a browser session" if auth_credential_ceremony?
+    if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret" &&
+        !sign_in_flow.is_a?(ClientSignInFlow)
+      raise SignInFlowIssuanceRejected, "Secret root login requires its claimed sign-in flow"
+    end
     unless SESSION_ESTABLISHMENTS.include?(establishment)
       raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
     end
@@ -539,6 +543,9 @@ module AuthenticationBase
           refresh_plain = token_record.rotate_refresh_token!(discard_at: nil)
           update_device_session_refresh_state!(device_session, token_record)
           complete_sign_in_flow_issuance!(locked_flow, token_record, now: now) if locked_flow
+          if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret"
+            write_secret_sign_in_receipt!(resource, locked_flow, token_record, now)
+          end
 
           access_expires_at = access_token_expires_at_for(token_record, now: now)
           access_token = encode_login_access_token(
@@ -563,10 +570,16 @@ module AuthenticationBase
     end
   end
 
-  # The flow is re-read under a row lock inside the issuance transaction: its
-  # state, expiry, actor binding, and the absence of an earlier session are
-  # checked here even when a caller checked them before. The unique index on
-  # `token_id` backs the same rule at the database.
+  def write_secret_sign_in_receipt!(resource, flow, token, committed_at)
+    claim = ClientSecretCredential.find_by!(claim_sign_in_flow_ref: flow.public_id, client_id: resource.id)
+    ClientSecretSignInReceipt.create!(
+      operation_id: claim.claim_operation_id, credential_ref: claim.public_id, client_ref: resource.public_id,
+      sign_in_flow: flow, root_token_ref: token.public_id, committed_at: committed_at,
+    )
+  end
+
+  # Re-read the flow under the issuance lock even when an earlier caller checked it.
+  # The unique token index additionally prevents a second issuance for that flow.
   def lock_sign_in_flow_for_issuance!(sign_in_flow, resource)
     unless sign_in_flow.is_a?(sign_in_flow_class_for(resource))
       raise SignInFlowIssuanceRejected, "sign-in flow does not belong to the actor surface"
@@ -768,7 +781,7 @@ module AuthenticationBase
   # application -- they go to the OIDC authorization endpoint or the jump gateway, neither of which
   # renders an Inertia response -- so the conversion applies to every branch above.
   def convert_redirect_to_inertia_location!
-    return unless request.respond_to?(:inertia?) && request.inertia?
+    return unless request.inertia?
     return unless response.redirect?
 
     location = response.location
@@ -2581,7 +2594,7 @@ module AuthenticationBase
     # mappings only. See ESTABLISHED_AUTHENTICATION_METHOD_MAP above.
     resolved_established_authentication_method =
       established_authentication_method.presence || established_authentication_method_for(auth_method)
-    cycle = start_sign_in_flow_for!(resource, pt: pt)
+    cycle = start_sign_in_flow_for!(resource, pt: pt, authentication_method: resolved_established_authentication_method)
     login_audit_context = { auth_method: auth_method }.merge(audit_context)
     if mfa_bypassed_for_auth_method?(auth_method) || !mfa_required_for?(resource)
       result = pending_sign_in_result_after_primary!(
@@ -2741,7 +2754,14 @@ module AuthenticationBase
       raise AuthCeremonySession::InvalidTransition, "OIDC Auth ceremony session is missing"
     end
 
-    ceremony.record_authentication_evidence!(method: method)
+    if resource.is_a?(Client) && method == "secret"
+      with_claimed_oidc_secret_flow(resource) do |flow, admitted|
+        flow.record_local_authentication_evidence!(method: method)
+        admitted.record_authentication_evidence!(method: method)
+      end
+    else
+      ceremony.record_authentication_evidence!(method: method)
+    end
 
     {
       status: :authentication_evidence_recorded,
@@ -3336,6 +3356,7 @@ module AuthenticationBase
 
   private :check_totp_requirement_before_session_rotation, :resource_connection_owner,
           :preserved_oidc_rp_session_state, :restore_oidc_rp_session_state!, :store_authentication_return_target!,
-          :commit_login_session!, :lock_sign_in_flow_for_issuance!, :complete_sign_in_flow_issuance!,
+          :commit_login_session!, :write_secret_sign_in_receipt!,
+          :lock_sign_in_flow_for_issuance!, :complete_sign_in_flow_issuance!,
           :bind_committed_login!, :apply_committed_login!, :session_limit_pending_after_primary!
 end

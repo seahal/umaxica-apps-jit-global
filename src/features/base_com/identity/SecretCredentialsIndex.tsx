@@ -1,4 +1,4 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import ButtonLink from "@/components/ui/ButtonLink";
 import Page from "@/components/ui/Page";
 import Table from "@/components/ui/Table";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink, TurnstileProps } from "@/features/base_com/identity/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
@@ -32,7 +33,6 @@ export type SecretCredentialsIndexProps = {
   credentials: SecretCredentialRow[];
 };
 
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 function DestroyForm({
   url,
   confirm,
@@ -98,17 +98,20 @@ export default function SecretCredentialsIndex({
       title={title}
       up={backLink}
       upVisit="inertia"
-    >
-      <div>
+      width="wide"
+      actions={
         <ButtonLink
           href={newLink.href}
           inertia
         >
           {newLink.label}
         </ButtonLink>
-      </div>
-
-      <Table>
+      }
+    >
+      <Table label={title}>
+        <caption className="px-3 py-3 text-left text-base text-fg-muted">
+          {title}: {credentials.length}
+        </caption>
         <thead>
           <tr>
             <th scope="col">{columns.name}</th>
@@ -128,18 +131,20 @@ export default function SecretCredentialsIndex({
               <td>{credential.last_used_at}</td>
               <td>
                 <div className="flex flex-wrap items-center gap-3">
-                  <Link
+                  <TextLink
                     href={credential.show_link.href}
-                    className={LINK}
+                    inertia
+                    tone="muted"
                   >
                     {credential.show_link.label}
-                  </Link>
-                  <Link
+                  </TextLink>
+                  <TextLink
                     href={credential.edit_link.href}
-                    className={LINK}
+                    inertia
+                    tone="muted"
                   >
                     {credential.edit_link.label}
-                  </Link>
+                  </TextLink>
                   <DestroyForm
                     url={credential.destroy_url}
                     confirm={destroyConfirm}

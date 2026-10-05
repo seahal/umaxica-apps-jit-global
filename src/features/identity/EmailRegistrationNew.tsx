@@ -1,5 +1,6 @@
 // The address step of adding an email identifier.
 import { Link } from "@inertiajs/react";
+import { useId } from "react";
 
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
@@ -32,6 +33,7 @@ export default function EmailRegistrationNew({
   cancel_link: cancelLink,
   error_messages: errorMessages,
 }: EmailRegistrationNewProps) {
+  const descriptionId = useId();
   return (
     <Page
       title={title}
@@ -66,13 +68,19 @@ export default function EmailRegistrationNew({
             value="0"
           />
           <Checkbox
+            aria-describedby={`${descriptionId}-notifiable`}
             name={`${form.scope}[notifiable]`}
             value="1"
             defaultSelected={form.notifiable}
           >
             {form.notifiable_label}
           </Checkbox>
-          <p className="pl-6 text-xs text-fg-muted">{form.notifiable_description}</p>
+          <p
+            id={`${descriptionId}-notifiable`}
+            className="pl-6 text-base text-fg-muted"
+          >
+            {form.notifiable_description}
+          </p>
         </div>
 
         <TurnstileWidget
@@ -87,7 +95,7 @@ export default function EmailRegistrationNew({
 
       <Link
         href={cancelLink.href}
-        className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+        className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
       >
         {cancelLink.label}
       </Link>

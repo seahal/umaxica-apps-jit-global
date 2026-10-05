@@ -15,11 +15,11 @@ export default function InfoPage({ title, paragraphs, back_link: backLink }: Inf
       upVisit="inertia"
       width="narrow"
     >
-      <div className="flex flex-col gap-3">
+      <div className="ui-prose">
         {paragraphs.map((paragraph) => (
           <p
             key={paragraph}
-            className="text-sm text-pretty text-fg-muted"
+            className="text-base text-pretty text-fg-muted"
           >
             {paragraph}
           </p>

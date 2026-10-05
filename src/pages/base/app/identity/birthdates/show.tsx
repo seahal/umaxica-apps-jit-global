@@ -30,16 +30,16 @@ export default function BirthdateShow({
     >
       <Card>
         <dl className="flex flex-col gap-1">
-          <dt className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
+          <dt className="text-base font-semibold tracking-wide text-fg-muted uppercase">
             {birthdateLabel}
           </dt>
-          <dd className="text-sm text-fg">
+          <dd className="text-base text-fg">
             {birthdate ? <span data-birthdate>{birthdate}</span> : notSetLabel}
           </dd>
         </dl>
       </Card>
 
-      <p className="text-sm text-fg-muted">{changeUnavailable}</p>
+      <p className="text-base text-fg-muted">{changeUnavailable}</p>
     </Page>
   );
 }

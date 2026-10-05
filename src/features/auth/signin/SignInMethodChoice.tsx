@@ -43,7 +43,7 @@ export default function SignInMethodChoice({
             <a
               href={method.href}
               className="flex items-center justify-center rounded-md border border-line bg-surface
-                px-4 py-2 text-sm font-medium text-fg hover:bg-surface-muted"
+                px-4 py-2 text-base font-medium text-fg hover:bg-surface-muted"
             >
               {method.label}
             </a>
@@ -61,15 +61,15 @@ export default function SignInMethodChoice({
 
       {cancelLabel !== undefined && socialProviders.length > 0 && <hr className="border-line" />}
 
-      <p className="text-sm">
+      <p className="text-base">
         <a
           href={registrationLink.href}
-          className="text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {registrationLink.label}
         </a>
       </p>
-      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
+      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
     </Page>
   );
 }

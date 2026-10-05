@@ -1,5 +1,5 @@
 import { render as renderTree, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { SurfaceChrome } from "@/types/inertia";
 
@@ -72,8 +72,18 @@ const render = (chrome: SurfaceChrome) => {
   );
 };
 
+beforeEach(() => {
+  document.head.insertAdjacentHTML(
+    "beforeend",
+    '<meta name="ui-footer" content="Footer navigation"><meta name="ui-information" content="Information">',
+  );
+});
 afterEach(() => {
   page.props.chrome = minimalChrome;
+  document.documentElement.lang = "en";
+  document
+    .querySelectorAll('meta[name="ui-footer"], meta[name="ui-information"]')
+    .forEach((meta) => meta.remove());
 });
 
 describe("SurfaceLayout", () => {
@@ -118,14 +128,14 @@ describe("SurfaceLayout", () => {
 
     expect(screen.getByTestId("cookie-banner").textContent).toBe("cookie-controls-title");
     expect(screen.getByTestId("theme-controls").textContent).toBe("theme-controls-title");
-    expect(screen.getByRole("complementary", { name: "Preferences" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "theme-controls-title" })).toBeTruthy();
   });
 
   test("omits the banner and footer navigation when absent", () => {
     render(minimalChrome);
 
-    expect(screen.queryByRole("region", { name: "banner" })).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Footer" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Information" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Footer navigation" })).toBeNull();
     // The surface layout carries no primary/header navigation at all.
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
   });
@@ -165,7 +175,7 @@ describe("SurfaceLayout", () => {
       banner: { title: "メンテナンス", body: "停止予定があります。" },
     });
 
-    const banner = screen.getByRole("region", { name: "banner" });
+    const banner = screen.getByRole("region", { name: "メンテナンス" });
     expect(within(banner).getByRole("heading", { name: "メンテナンス" })).toBeTruthy();
     expect(within(banner).getByText("停止予定があります。")).toBeTruthy();
   });
@@ -173,7 +183,7 @@ describe("SurfaceLayout", () => {
   test("renders a banner that carries no title without an empty heading", () => {
     render({ ...minimalChrome, banner: { title: null, body: "本文のみ" } });
 
-    const banner = screen.getByRole("region", { name: "banner" });
+    const banner = screen.getByRole("region", { name: "Information" });
     expect(within(banner).getByText("本文のみ")).toBeTruthy();
     expect(within(banner).queryByRole("heading")).toBeNull();
   });
@@ -186,7 +196,7 @@ describe("SurfaceLayout", () => {
       footer_navigation: [{ label: "会社概要", href: "https://umaxica.com/about" }],
     });
 
-    const footer = screen.getByRole("navigation", { name: "Footer" });
+    const footer = screen.getByRole("navigation", { name: "Footer navigation" });
     const about = within(footer).getByRole("link", { name: "会社概要" });
     expect(about.getAttribute("href")).toBe("https://umaxica.com/about");
     // A document visit, so no Inertia interception marker.
@@ -202,7 +212,29 @@ describe("SurfaceLayout", () => {
       ],
     });
 
-    const footer = screen.getByRole("navigation", { name: "Footer" });
+    const footer = screen.getByRole("navigation", { name: "Footer navigation" });
     expect(within(footer).getAllByRole("listitem")).toHaveLength(2);
   });
+});
+
+test("uses the Rails-translated footer name without changing its document destination", () => {
+  document.documentElement.lang = "ja";
+  document.querySelector('meta[name="ui-footer"]')?.remove();
+  const meta = document.createElement("meta");
+  meta.name = "ui-footer";
+  meta.content = "フッターナビゲーション";
+  document.head.append(meta);
+  page.props.chrome = {
+    ...minimalChrome,
+    footer_navigation: [{ label: "会社概要", href: "https://umaxica.com/about" }],
+  };
+  renderTree(
+    <SurfaceLayout>
+      <p>Body</p>
+    </SurfaceLayout>,
+  );
+  const navigation = screen.getByRole("navigation", { name: "フッターナビゲーション" });
+  expect(within(navigation).getByRole("link").getAttribute("href")).toBe(
+    "https://umaxica.com/about",
+  );
 });

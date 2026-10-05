@@ -99,12 +99,12 @@ export default function SignInEmailEdit({
         </Button>
       </form>
 
-      <p className="text-sm text-fg-muted">{deliveryHelp}</p>
+      <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
-      <p className="text-sm">
+      <p className="text-base">
         <a
           href={returnLink.href}
-          className="text-fg underline-offset-4 hover:underline"
+          className="ui-text-link text-fg underline underline-offset-4 hover:underline"
         >
           <span>{returnLink.label}</span>
         </a>

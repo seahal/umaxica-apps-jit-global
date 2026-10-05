@@ -159,9 +159,10 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
 
     assert_equal "pending", issuance.transaction.status
     assert_equal updated_at, issuance.transaction.updated_at
-    refusals = @log.string.lines.filter_map { |line|
-      JSON.parse(line) if line.start_with?('{"event":"auth.step_up.refused"')
-    }
+    refusals =
+      @log.string.lines.filter_map { |line|
+        JSON.parse(line) if line.start_with?('{"event":"auth.step_up.refused"')
+      }
 
     assert_equal ["transaction_expired"] * 3, refusals.map { |event| event.fetch("data").fetch("error_code") }
     assert_equal [StepUpObservabilityDigest.ceremony_ref(issuance.transaction.transaction_id)] * 3,

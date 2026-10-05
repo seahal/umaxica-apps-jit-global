@@ -81,7 +81,7 @@ export default function TelephoneRegistrationEdit({
         </form>
       </Card>
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink
           href={cancelLink.href}
           tone="muted"

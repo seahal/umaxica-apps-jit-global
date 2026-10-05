@@ -27,7 +27,7 @@ module AuthStepUpCeremonyContext
   def load_scoped_ceremony_context!(transaction)
     unless transaction
       log_step_up_ceremony(
-        "refused", outcome: "refused", error_code: "invalid_admission", stage: "auth_ceremony_context",
+        "refused", outcome: "refused", stage: "auth_ceremony_context", **auth_ceremony_ticket_refusal,
       )
       return render_invalid_step_up_context!
     end

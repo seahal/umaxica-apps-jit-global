@@ -17,8 +17,8 @@ class LocaleInitializerTest < ActiveSupport::TestCase
     assert_equal supported_locale_paths, config_locale_load_paths
     assert_equal [:en, :ja], I18n.available_locales.sort
     assert_equal :ja, I18n.default_locale
-    assert_equal [:en, :ja], I18n.fallbacks[:en]
-    assert_equal [:ja, :en], I18n.fallbacks[:ja]
+    assert_equal [:en], I18n.fallbacks[:en]
+    assert_equal [:ja], I18n.fallbacks[:ja]
   end
 
   test "provides english labels for app settings links" do

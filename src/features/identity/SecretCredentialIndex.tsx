@@ -34,7 +34,7 @@ export type SecretCredentialIndexProps = {
   secret_credentials: SecretCredentialRow[];
 };
 
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
+const LINK = "text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline";
 
 function DestroyForm({
   href,
@@ -121,7 +121,10 @@ export default function SecretCredentialIndex({
         </ButtonLink>
       }
     >
-      <Table>
+      <Table label={title}>
+        <caption className="px-3 py-3 text-left text-base text-fg-muted">
+          {title}: {secretCredentials.length}
+        </caption>
         <thead>
           <tr>
             <th scope="col">{columns.name}</th>

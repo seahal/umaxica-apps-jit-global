@@ -32,11 +32,28 @@ module AppSignUpCheckpointPage
 
     {
       title: t("sign.app.registration.checkpoint.show.page_title"),
+      notice: sign_up_secret_distribution_notice,
       birthdate: missing.include?(:birthdate) ? sign_up_checkpoint_birthdate_props : nil,
       passkey: missing.include?(:passkey) ? sign_up_checkpoint_passkey_props : nil,
       complete_message: missing.empty? ? t("sign.app.registration.checkpoint.show.complete") : nil,
       cancellation: sign_up_checkpoint_cancellation_props(missing.first),
     }
+  end
+
+  def sign_up_secret_distribution_notice
+    return unless @sign_up_ticket.is_a?(ClientSignUpFlow) && @sign_up_ticket.requirement_cleared?(:passkey)
+
+    AppZenithRecord.connected_to(role: :writing) do
+      issuance = ClientSecretIssuance.find_by(
+        sign_up_flow_ref: @sign_up_ticket.public_id, client_id: @sign_up_ticket.principal_id,
+        origin: "passkey_registration",
+      )
+      return unless issuance
+      return t("base.app.secrets.distribution_omitted") if issuance.planned_count.zero?
+      return unless issuance.confirmed_at && issuance.planned_count == 1
+
+      t("base.app.secrets.distribution_one_confirmed")
+    end
   end
 
   def sign_up_checkpoint_birthdate_props

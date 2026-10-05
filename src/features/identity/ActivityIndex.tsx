@@ -42,7 +42,7 @@ export default function ActivityIndex({
       width="wide"
     >
       {activities.length > 0 ? (
-        <Table>
+        <Table label={title}>
           <thead>
             <tr>
               <th scope="col">{columns.occurred_at}</th>
@@ -65,7 +65,7 @@ export default function ActivityIndex({
           </tbody>
         </Table>
       ) : (
-        <p className="text-sm text-fg-muted">{emptyMessage}</p>
+        <p className="text-base text-fg-muted">{emptyMessage}</p>
       )}
     </Page>
   );

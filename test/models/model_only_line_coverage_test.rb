@@ -365,8 +365,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal "public", Client.new(public_id: "public").to_param
     assert_equal "nothing", AppPreference.new.adult_content_gate
     assert_equal "nothing", ClientPreference.new.adult_content_gate
-    assert_predicate ClientSecretCredential.new(user_secret_kind_id: ClientSecretCredentialKind::ONE_TIME),
-                     :one_time_secret_credential?
+    assert_not ClientSecretCredential.new.available_at?(at: Client.database_now)
   end
 
   test "email lookup and ceremony candidate validation cover valid and invalid shapes" do

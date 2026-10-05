@@ -26,22 +26,24 @@
   data-controller="cookie-banner"
   data-cookie-banner-endpoint-url-value="<%= local_assigns.fetch(:endpoint_url) %>"
   data-cookie-banner-settings-url-value="<%= cookie_settings_url %>"
-  role="dialog"
-  aria-live="polite"
+  role="region"
   aria-labelledby="cookie-title"
   aria-describedby="cookie-desc"
-  class="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-gray-300 shadow">
-  <div class="max-w-4xl mx-auto p-4 space-y-3 relative">
+  class="ui-cookie">
+  <div class="ui-cookie__body">
 
-    <!-- Close button -->
+    <div class="ui-cookie__heading">
+    <h2 id="cookie-title">
+      <%= t(".title") %>
+    </h2>
     <button
       type="button"
       data-action="cookie-banner#invisible"
       aria-label="<%= t(".close_button") %>"
-      class="absolute top-2 right-2 p-2 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition focus:outline-none focus:ring-2 focus:ring-blue-500">
+      class="ui-cookie__close">
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        class="w-4 h-4"
+        aria-hidden="true"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -52,38 +54,34 @@
         <line x1="6" y1="6" x2="18" y2="18" />
       </svg>
     </button>
-
-    <!-- Title -->
-    <h2 id="cookie-title" class="text-sm font-semibold pr-8">
-      <%= t(".title") %>
-    </h2>
+    </div>
 
     <!-- Description -->
-    <p id="cookie-desc" class="text-sm text-gray-700">
+    <p id="cookie-desc" class="ui-description">
       <%= t(".description_html", privacy_policy: t(".privacy_policy")) %>
     </p>
 
     <!-- Actions -->
-    <div class="flex flex-wrap gap-2">
+    <div class="ui-actions">
 
       <!-- Reject -->
       <button
         type="button"
         data-action="cookie-banner#reject"
-        class="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50">
+        class="ui-button--secondary">
         <%= t(".reject_all") %>
       </button>
 
       <!-- Settings. A real document visit: cookie preferences live on the base host, so
            scripted location.assign (and an Inertia visit) are the wrong tool. -->
       <%= link_to t(".open_settings"), cookie_settings_url,
-            class: "px-3 py-1.5 text-sm rounded bg-gray-200 hover:bg-gray-300" %>
+            class: "ui-button ui-button--secondary" %>
 
       <!-- Accept -->
       <button
         type="button"
         data-action="cookie-banner#accept"
-        class="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">
+        class="ui-button">
         <%= t(".accept_all") %>
       </button>
 

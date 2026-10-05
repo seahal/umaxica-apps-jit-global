@@ -42,7 +42,9 @@ describe("SignUpMethodChoice", () => {
       />,
     );
     const document = new DOMParser().parseFromString(markup, "text/html");
-    const cancel = document.querySelector("section")?.lastElementChild;
+    const cancel = Array.from(document.querySelectorAll("p")).find(
+      (node) => node.textContent === "Cancel",
+    );
     expect(cancel?.textContent).toBe("Cancel");
     expect(cancel?.tagName).toBe("P");
     expect(cancel?.closest("a, button, form")).toBeNull();

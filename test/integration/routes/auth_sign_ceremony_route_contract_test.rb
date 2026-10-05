@@ -923,6 +923,8 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
     [SIGN_APP_HOST, SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
       %w(/sign/in/secret /sign/in/emergency/credential).each do |path|
         %i(get post put patch delete).each do |verb|
+          next if host == SIGN_APP_HOST && path == "/sign/in/secret" && verb == :post
+
           assert_raises(ActionController::RoutingError) do
             Rails.application.routes.recognize_path("http://#{host}#{path}", method: verb)
           end
@@ -1072,15 +1074,19 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       )
     end
 
-    # Permanent secret sign-in has no route under either historical spelling.
+    # Only app exposes the canonical single-use Secret entry. Historical spellings stay absent.
     [SIGN_APP_HOST, SIGN_COM_HOST, SIGN_ORG_HOST].each do |host|
       ["/sign/in/secret/new", "/sign/in/secret_credential/new"].each do |path|
+        next if host == SIGN_APP_HOST && path == "/sign/in/secret/new"
+
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)
         end
       end
 
       ["/sign/in/secret", "/sign/in/secret_credential"].each do |path|
+        next if host == SIGN_APP_HOST && path == "/sign/in/secret"
+
         assert_raises(ActionController::RoutingError) do
           Rails.application.routes.recognize_path("http://#{host}#{path}", method: :post)
         end

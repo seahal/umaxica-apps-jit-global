@@ -34,7 +34,7 @@ export default function OrgEmergencyPasskeySignInPage({
       up={backLink}
       width="narrow"
     >
-      <p className="mb-6 rounded-md border border-line bg-surface-muted px-3 py-2 text-sm text-fg">
+      <p className="mb-6 rounded-md border border-line bg-surface-muted px-3 py-2 text-base text-fg">
         {restrictedModeNotice}
       </p>
 

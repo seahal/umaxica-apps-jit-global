@@ -121,8 +121,6 @@ describe("PreferenceSelect interaction", () => {
     );
 
     const [, , options] = present(patch.mock.calls[0], "the first router.patch call");
-    // `button` alone is ambiguous now: `Select` renders its own trigger button before the
-    // submit button, so the submit control is selected by its `type` instead.
     const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 
     act(() => {
@@ -140,9 +138,9 @@ describe("PreferenceSelect interaction", () => {
     const user = userEvent.setup();
     mount(<PreferenceSelect {...props} />);
 
-    await user.click(container.querySelector('button[aria-haspopup="listbox"]')!);
-
-    const stored = document.querySelector('[role="option"][aria-disabled="true"]');
+    const stored = container.querySelector<HTMLOptionElement>('option[value="2"]');
+    expect(stored?.disabled).toBe(true);
+    await user.selectOptions(container.querySelector("select")!, "2");
     expect(stored?.textContent).toBe("日本");
   });
 

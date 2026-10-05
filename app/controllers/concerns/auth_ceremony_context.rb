@@ -106,8 +106,17 @@ module AuthCeremonyContext
       },
       surface: auth_ceremony_surface, expected_intent: intent,
     )
-  rescue BaseAuthAdmissionCoordinator::Denied
+  rescue BaseAuthAdmissionCoordinator::Denied => e
+    # Kept for the ceremony log of this request only; the response stays generic.
+    @auth_ceremony_ticket_refusal = {
+      error_code: e.code,
+      ceremony_ref: StepUpObservabilityDigest.ceremony_ref(record.step_up_ceremony_transaction_ref),
+    }
     nil
+  end
+
+  def auth_ceremony_ticket_refusal
+    @auth_ceremony_ticket_refusal || { error_code: "invalid_admission" }
   end
 
   def complete_auth_ceremony_session!

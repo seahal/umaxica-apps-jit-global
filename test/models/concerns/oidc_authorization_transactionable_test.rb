@@ -18,6 +18,43 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     ].each do |transaction_class|
       transaction_class.where("login_challenge LIKE ?", "#{@transaction_prefix}-%").delete_all
     end
+    @secret_flow&.destroy!
+  end
+
+  test "app OIDC Secret flow reference is optional unique and restricts deletion of its durable proof" do
+    now = ClientSignInFlow.database_now
+    @secret_flow = ClientSignInFlow.create!(
+      status_id: ClientSignInFlowStatus::PRIMARY_PENDING, step: "primary", state: "PRIMARY_PENDING",
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)),
+      issued_at: now, expires_at: now + 15.minutes,
+    )
+    transactions =
+      Array.new(2) do |index|
+        ClientOidcAuthorizationTransaction.create_transaction!(
+          surface: "app", intent: "authentication", client_id: "secret-reference-test",
+          redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
+          state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+          code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-secret-#{index}",
+          login_challenge_expires_at: now + 15.minutes, expires_at: now + 15.minutes, now: now,
+        )
+      end
+
+    assert_nil transactions.first.secret_sign_in_flow
+    transactions.first.update!(secret_sign_in_flow: @secret_flow)
+
+    assert_equal @secret_flow.id, transactions.first.reload.secret_sign_in_flow.id
+    assert_raises(ActiveRecord::RecordNotUnique) { transactions.last.update!(secret_sign_in_flow: @secret_flow) }
+    assert_raises(ActiveRecord::InvalidForeignKey) { transactions.last.update!(secret_sign_in_flow_id: -1) }
+    assert_raises(ActiveRecord::InvalidForeignKey) { @secret_flow.destroy! }
+    assert ClientSignInFlow.exists?(@secret_flow.id)
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
+    due_at = ClientSignInFlow.database_now
+    @secret_flow.update!(discard_at: due_at, purge_eligible_at: due_at)
+    RetentionPurgeJob.perform_now(batch_size: 1)
+
+    assert ClientSignInFlow.exists?(@secret_flow.id)
+    assert_equal @secret_flow.id, transactions.first.reload.secret_sign_in_flow_id
   end
 
   test "OIDC admission expiry uses PostgreSQL microsecond neighbors before at and after each deadline" do

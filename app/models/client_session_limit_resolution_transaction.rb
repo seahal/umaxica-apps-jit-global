@@ -15,6 +15,7 @@ class ClientSessionLimitResolutionTransaction < AppTicketRecord
     STATUS_EXPIRED,
   ].freeze
   TTL = 15.minutes
+  class InvalidSecretResolution < StandardError; end
 
   belongs_to :oidc_authorization_transaction,
              class_name: "ClientOidcAuthorizationTransaction",
@@ -100,6 +101,38 @@ class ClientSessionLimitResolutionTransaction < AppTicketRecord
     )
   end
 
+  # Session selection and revocation share the same exclusion boundary as cancellation.
+  # The callback performs the selected-session mutation, never root issuance.
+  def with_secret_revocation_authority!(actor:, challenge:)
+    unless persisted? && actor.is_a?(Client) && actor.persisted? && challenge.is_a?(String) && challenge.present?
+      raise InvalidSecretResolution, "Secret resolution binding missing"
+    end
+
+    AppZenithRecord.connected_to(role: :writing) do
+      actor.with_lock do
+        AppTicketRecord.connected_to(role: :writing) do
+          oidc_authorization_transaction.with_lock do
+            with_lock do
+              authorization = oidc_authorization_transaction
+              flow = authorization.secret_sign_in_flow
+              raise InvalidSecretResolution, "Secret resolution flow missing" unless flow
+
+              flow.with_lock do
+                now = ClientSignInFlow.database_now
+                unless secret_resolution_open?(actor, challenge, now) &&
+                    secret_authorization_open?(authorization, actor, now) && secret_flow_open?(flow, actor, now)
+                  raise InvalidSecretResolution, "Secret resolution is no longer open"
+                end
+
+                yield
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
   def mark_resolved!(now: Time.current)
     update!(resolved_at: now, status: STATUS_RESOLVED)
   end
@@ -110,6 +143,26 @@ class ClientSessionLimitResolutionTransaction < AppTicketRecord
 
   def cancel!(now: Time.current)
     update!(cancelled_at: now, status: STATUS_CANCELLED)
+  end
+
+  private
+
+  def secret_resolution_open?(actor, challenge, now)
+    actor.login_allowed? && actor_ref == actor.public_id && actor_type == "Client" &&
+      challenge_digest == self.class.digest_challenge(challenge) &&
+      (pending? || session_selected?) && !expired?(now: now)
+  end
+
+  def secret_authorization_open?(authorization, actor, now)
+    authorization.actor_ref == actor.public_id && authorization.authenticated? &&
+      authorization.base_finalized_at.nil? && !authorization.expired?(now: now) &&
+      !authorization.login_challenge_expired?(now: now)
+  end
+
+  def secret_flow_open?(flow, actor, now)
+    flow.principal_id == actor.id && flow.authentication_method == "secret" &&
+      flow.sign_in_session_limit_pending? && !flow.expired?(now) &&
+      flow.token_id.nil? && flow.session_issued_at.nil?
   end
 
   Issuance = Data.define(:transaction, :challenge)

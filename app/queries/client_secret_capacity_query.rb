@@ -17,7 +17,7 @@ class ClientSecretCapacityQuery
       AppZenithRecord.connected_to(role: :writing) do
         active = ClientSecretCredential.available_at(at).where(client_id: client.id).count
         reserved = ClientSecretIssuance.where(client_id: client.id, confirmed_at: nil, canceled_at: nil)
-          .where("planned_count > 0 AND expires_at > ?", at).sum(:planned_count)
+          .where("planned_count > 0 AND expires_at > ? AND discard_at > ?", at, at).sum(:planned_count)
         ClientSecretIssuanceCountValue.new(active_count: active, reserved_count: reserved)
       end
     end

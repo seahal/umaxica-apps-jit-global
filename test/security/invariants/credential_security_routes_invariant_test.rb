@@ -40,9 +40,19 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
     end
   end
 
+  test "app Secret uses Client ownership and fact timestamps without a kind or status axis" do
+    credential = ClientSecretCredential.new
+
+    assert_not credential.available_at?(at: Client.database_now)
+    assert_equal "Client", ClientSecretCredential.reflect_on_association(:client).class_name
+    %w(user_secret_kind_id user_secret_status_id user_identity_secret_status_id secret_kind usage_policy
+       max_uses uses_remaining use_count).each do |column|
+      assert_not_includes ClientSecretCredential.column_names, column
+    end
+  end
+
   test "legacy permanent secret credentials expose no sign-in eligibility interface" do
     models = [
-      [ClientSecretCredential, ClientSecretCredentialKind],
       [VisitorSecretCredential, VisitorSecretCredentialKind],
       [OperatorSecretCredential, OperatorSecretCredentialKind],
     ]
@@ -59,7 +69,6 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
       assert_not kind_class.const_defined?(:ALLOWED_FOR_SECRET_SIGN_IN, false)
     end
 
-    assert_equal 1, ClientSecretCredentialKind::LOGIN
     assert_equal 1, VisitorSecretCredentialKind::LOGIN
     assert_equal 2, OperatorSecretCredentialKind::LOGIN
   end

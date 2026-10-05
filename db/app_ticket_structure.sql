@@ -124,7 +124,7 @@ CREATE TABLE public.client_auth_ceremony_sessions (
     CONSTRAINT client_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
     CONSTRAINT client_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
-    CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
+    CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])))),
     CONSTRAINT client_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
     CONSTRAINT client_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
 );
@@ -389,6 +389,7 @@ CREATE TABLE public.client_oidc_authorization_transactions (
     browser_session_ref character varying,
     base_finalized_at timestamp(6) with time zone,
     authorization_grant_redeemed_at timestamp(6) with time zone,
+    secret_sign_in_flow_id bigint,
     CONSTRAINT client_oidc_auth_transactions_result_generation_nonnegative CHECK ((result_generation >= 0))
 );
 
@@ -730,8 +731,8 @@ CREATE TABLE public.client_sign_in_flows (
     authentication_context character varying,
     CONSTRAINT chk_app_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_app_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT client_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
-    CONSTRAINT client_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT client_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY (ARRAY[('normal'::character varying)::text, ('emergency'::character varying)::text])))),
+    CONSTRAINT client_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT client_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT client_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
     CONSTRAINT client_sign_in_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
@@ -963,7 +964,7 @@ CREATE TABLE public.client_sign_up_flows (
     authentication_event_at timestamp(6) with time zone,
     CONSTRAINT chk_app_sign_up_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_app_sign_up_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT client_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
+    CONSTRAINT client_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text, ('entra'::character varying)::text])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT client_sign_up_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT client_sign_up_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
     CONSTRAINT client_sign_up_flows_result_complete CHECK (((result_generation = 0) OR ((result_digest IS NOT NULL) AND (result_expires_at IS NOT NULL) AND (authentication_event_at IS NOT NULL)))),
@@ -1072,11 +1073,11 @@ CREATE TABLE public.client_step_up_ceremony_transactions (
     canceled_at timestamp(6) with time zone,
     revoked_at timestamp(6) with time zone,
     verified_credential_ref character varying,
-    CONSTRAINT client_step_up_purpose_valid CHECK (((purpose)::text = ANY ((ARRAY['step_up'::character varying, 'reauthentication'::character varying, 'bootstrap'::character varying, 'credential_registration'::character varying, 'credential_change'::character varying])::text[]))),
+    CONSTRAINT client_step_up_purpose_valid CHECK (((purpose)::text = ANY (ARRAY[('step_up'::character varying)::text, ('reauthentication'::character varying)::text, ('bootstrap'::character varying)::text, ('credential_registration'::character varying)::text, ('credential_change'::character varying)::text]))),
     CONSTRAINT client_step_up_result_valid CHECK (((result_generation >= 0) AND (((result_digest IS NULL) AND (result_expires_at IS NULL) AND (result_generation = 0)) OR ((result_digest IS NOT NULL) AND ((result_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (result_expires_at IS NOT NULL) AND (result_generation > 0) AND (verified_at IS NOT NULL))))),
-    CONSTRAINT client_step_up_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'verified'::character varying, 'consumed'::character varying, 'canceled'::character varying, 'expired'::character varying, 'revoked'::character varying])::text[]))),
+    CONSTRAINT client_step_up_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('verified'::character varying)::text, ('consumed'::character varying)::text, ('canceled'::character varying)::text, ('expired'::character varying)::text, ('revoked'::character varying)::text]))),
     CONSTRAINT client_step_up_terminal_valid CHECK ((((canceled_at IS NULL) OR ((status)::text = 'canceled'::text)) AND ((revoked_at IS NULL) OR ((status)::text = 'revoked'::text)) AND (((status)::text <> 'revoked'::text) OR (revoked_at IS NOT NULL)) AND (((status)::text <> 'verified'::text) OR ((verified_at IS NOT NULL) AND (method IS NOT NULL) AND (aal IS NOT NULL))))),
-    CONSTRAINT client_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR (((purpose)::text = ANY ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NULL) AND ((aal)::text = 'none'::text) AND ((required_aal)::text = 'none'::text) AND (phishing_resistant IS FALSE) AND (phishing_resistant_required IS FALSE) AND ((method)::text = ANY ((ARRAY['passkey'::character varying, 'totp'::character varying])::text[]))) OR (((purpose)::text <> ALL ((ARRAY['bootstrap'::character varying, 'credential_registration'::character varying])::text[])) AND (verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
+    CONSTRAINT client_step_up_verified_credential_present CHECK ((((status)::text <> 'verified'::text) OR ((verified_credential_ref IS NOT NULL) AND (length((verified_credential_ref)::text) > 0))))
 );
 
 
@@ -1131,7 +1132,7 @@ CREATE TABLE public.client_step_up_sessions (
     email_code_consumed_at timestamp(6) with time zone,
     email_delivery_state character varying,
     CONSTRAINT client_step_up_challenge_bound CHECK (((passkey_challenge IS NULL) OR ((step_up_ceremony_transaction_ref IS NOT NULL) AND (passkey_challenge_ref IS NOT NULL) AND (passkey_rp_id IS NOT NULL) AND (passkey_origin IS NOT NULL) AND (passkey_challenge_expires_at IS NOT NULL) AND (passkey_challenge_expires_at <= discard_at)))),
-    CONSTRAINT client_step_up_email_generation_valid CHECK ((((email_code_generation = 0) AND (email_credential_ref IS NULL) AND (email_code_digest IS NULL) AND (email_code_issued_at IS NULL) AND (email_code_expires_at IS NULL) AND (email_code_consumed_at IS NULL) AND (email_delivery_state IS NULL)) OR ((email_code_generation > 0) AND (email_credential_ref IS NOT NULL) AND (length((email_credential_ref)::text) > 0) AND (email_code_digest IS NOT NULL) AND ((email_code_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (email_code_issued_at IS NOT NULL) AND (email_code_expires_at IS NOT NULL) AND (email_code_expires_at > email_code_issued_at) AND (email_code_expires_at <= (email_code_issued_at + '00:10:00'::interval)) AND (email_delivery_state IS NOT NULL) AND ((email_delivery_state)::text = ANY ((ARRAY['pending'::character varying, 'delivered'::character varying, 'failed'::character varying])::text[])) AND ((email_code_consumed_at IS NULL) OR (((email_delivery_state)::text = 'delivered'::text) AND (email_code_consumed_at >= email_code_issued_at) AND (email_code_consumed_at < email_code_expires_at))))))
+    CONSTRAINT client_step_up_email_generation_valid CHECK ((((email_code_generation = 0) AND (email_credential_ref IS NULL) AND (email_code_digest IS NULL) AND (email_code_issued_at IS NULL) AND (email_code_expires_at IS NULL) AND (email_code_consumed_at IS NULL) AND (email_delivery_state IS NULL)) OR ((email_code_generation > 0) AND (email_credential_ref IS NOT NULL) AND (length((email_credential_ref)::text) > 0) AND (email_code_digest IS NOT NULL) AND ((email_code_digest)::text ~ '^[0-9a-f]{64}$'::text) AND (email_code_issued_at IS NOT NULL) AND (email_code_expires_at IS NOT NULL) AND (email_code_expires_at > email_code_issued_at) AND (email_code_expires_at <= (email_code_issued_at + '00:10:00'::interval)) AND (email_delivery_state IS NOT NULL) AND ((email_delivery_state)::text = ANY (ARRAY[('pending'::character varying)::text, ('delivered'::character varying)::text, ('failed'::character varying)::text])) AND ((email_code_consumed_at IS NULL) OR (((email_delivery_state)::text = 'delivered'::text) AND (email_code_consumed_at >= email_code_issued_at) AND (email_code_consumed_at < email_code_expires_at))))))
 );
 
 
@@ -1357,7 +1358,7 @@ CREATE TABLE public.client_tokens (
     last_step_up_phishing_resistant boolean DEFAULT false NOT NULL,
     authentication_event_at timestamp(6) with time zone,
     root_login_established_at timestamp with time zone,
-    CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying])::text[])))),
+    CONSTRAINT chk_client_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY (ARRAY[('email'::character varying)::text, ('telephone'::character varying)::text, ('secret'::character varying)::text, ('passkey'::character varying)::text, ('totp'::character varying)::text, ('google'::character varying)::text, ('apple'::character varying)::text])))),
     CONSTRAINT chk_user_tokens_kind_id_positive CHECK ((user_token_kind_id >= 0)),
     CONSTRAINT chk_user_tokens_status_id_positive CHECK ((user_token_status_id >= 0))
 );
@@ -1460,6 +1461,51 @@ CREATE SEQUENCE public.client_verifications_id_seq
 --
 
 ALTER SEQUENCE public.client_verifications_id_seq OWNED BY public.client_verifications.id;
+
+
+--
+-- Name: identity_passkey_ceremony_candidates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.identity_passkey_ceremony_candidates (
+    id bigint NOT NULL,
+    ref character varying NOT NULL,
+    digest character varying NOT NULL,
+    surface character varying NOT NULL,
+    actor_ref character varying NOT NULL,
+    session_ref character varying NOT NULL,
+    step_up_ceremony_transaction_ref character varying NOT NULL,
+    webauthn_id character varying NOT NULL,
+    public_key text NOT NULL,
+    sign_count bigint DEFAULT 0 NOT NULL,
+    description character varying NOT NULL,
+    transports jsonb DEFAULT '[]'::jsonb NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    lock_version bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: identity_passkey_ceremony_candidates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.identity_passkey_ceremony_candidates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: identity_passkey_ceremony_candidates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.identity_passkey_ceremony_candidates_id_seq OWNED BY public.identity_passkey_ceremony_candidates.id;
 
 
 --
@@ -2000,6 +2046,13 @@ ALTER TABLE ONLY public.client_verifications ALTER COLUMN id SET DEFAULT nextval
 
 
 --
+-- Name: identity_passkey_ceremony_candidates id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_passkey_ceremony_candidates ALTER COLUMN id SET DEFAULT nextval('public.identity_passkey_ceremony_candidates_id_seq'::regclass);
+
+
+--
 -- Name: identity_secret_credential_ceremony_candidates id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2381,6 +2434,14 @@ ALTER TABLE ONLY public.client_verifications
 
 
 --
+-- Name: identity_passkey_ceremony_candidates identity_passkey_ceremony_candidates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_passkey_ceremony_candidates
+    ADD CONSTRAINT identity_passkey_ceremony_candidates_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: identity_secret_credential_ceremony_candidates identity_secret_credential_ceremony_candidates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2627,6 +2688,13 @@ CREATE UNIQUE INDEX idx_on_result_jti_b20b4e2f25 ON public.client_secret_credent
 
 
 --
+-- Name: idx_on_secret_sign_in_flow_id_5c5b1ba175; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_secret_sign_in_flow_id_5c5b1ba175 ON public.client_oidc_authorization_transactions USING btree (secret_sign_in_flow_id);
+
+
+--
 -- Name: idx_on_step_up_ceremony_transaction_ref_1dac192657; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2638,6 +2706,13 @@ CREATE INDEX idx_on_step_up_ceremony_transaction_ref_1dac192657 ON public.client
 --
 
 CREATE INDEX idx_on_step_up_ceremony_transaction_ref_5dbe753227 ON public.identity_totp_ceremony_candidates USING btree (step_up_ceremony_transaction_ref);
+
+
+--
+-- Name: idx_on_step_up_ceremony_transaction_ref_753ef10546; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_step_up_ceremony_transaction_ref_753ef10546 ON public.identity_passkey_ceremony_candidates USING btree (step_up_ceremony_transaction_ref);
 
 
 --
@@ -3509,6 +3584,20 @@ CREATE INDEX index_client_verifications_on_user_token_id ON public.client_verifi
 
 
 --
+-- Name: index_identity_passkey_ceremony_candidates_on_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_identity_passkey_ceremony_candidates_on_expires_at ON public.identity_passkey_ceremony_candidates USING btree (expires_at);
+
+
+--
+-- Name: index_identity_passkey_ceremony_candidates_on_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_identity_passkey_ceremony_candidates_on_ref ON public.identity_passkey_ceremony_candidates USING btree (ref);
+
+
+--
 -- Name: index_identity_secret_credential_ceremony_candidates_on_ref; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3631,6 +3720,14 @@ ALTER TABLE ONLY public.client_tokens
 
 
 --
+-- Name: client_oidc_authorization_transactions fk_rails_033ead371e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_oidc_authorization_transactions
+    ADD CONSTRAINT fk_rails_033ead371e FOREIGN KEY (secret_sign_in_flow_id) REFERENCES public.client_sign_in_flows(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: client_rp_sessions fk_rails_132e7e72b8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3668,6 +3765,14 @@ ALTER TABLE ONLY public.client_auth_ceremony_sessions
 
 ALTER TABLE ONLY public.client_secret_sign_in_receipts
     ADD CONSTRAINT fk_rails_33b6c86074 FOREIGN KEY (sign_in_flow_id) REFERENCES public.client_sign_in_flows(id);
+
+
+--
+-- Name: identity_passkey_ceremony_candidates fk_rails_361c3e050e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_passkey_ceremony_candidates
+    ADD CONSTRAINT fk_rails_361c3e050e FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 
 
 --
@@ -3829,7 +3934,11 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261005080938'),
+('20261005080855'),
+('20261005045901'),
 ('20261003221628'),
+('20261003220905'),
 ('20261003215633'),
 ('20261003215004'),
 ('20261003202100'),

@@ -1,5 +1,5 @@
 <div>
-  <div
+  <div class="flex flex-col gap-4"
     data-controller="passkey-registration"
     data-passkey-registration-begin-url-value="<%= begin_url %>"
     data-passkey-registration-finish-url-value="<%= finish_url %>"
@@ -8,7 +8,7 @@
       data-passkey-registration-checkpoint-version-value="<%= checkpoint_version %>"
     <% end %>>
 
-    <div>
+    <div class="ui-field flex flex-col gap-2">
       <label for="description">
         <%= t("sign.app.settings.passkeys.new.description_label") %>
       </label>
@@ -20,7 +20,7 @@
              maxlength="100">
     </div>
 
-    <p data-passkey-registration-target="error" class="hidden"></p>
+    <p data-passkey-registration-target="error" class="hidden ui-error text-error"></p>
     <p data-passkey-registration-target="status" class="hidden"></p>
 
     <div>

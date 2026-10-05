@@ -24,21 +24,46 @@ to guess. Resolve only the dependent work; unrelated lanes remain independent.
 | Destructive Secret DDL application | Exact old tables/columns/dependencies, real DB ownership, disposable connection, fresh/rebuild procedure, approved risk/recovery | Prepare reviewable app-only DDL. Execute only against confirmed disposable targets under the active task's authorization. Recovery rebuilds schema; it cannot recover discarded old secrets. |
 | Dispatcher removal and routing cutover | Rails-owned public paths, deployed delivery configuration, rollback-compatible entrance | Keep removal reviewable and separate from externally controlled cutover. Do not add a proxy fallback or prematurely disable a live entrance. External changes remain out of scope. |
 
-## Duration worksheet
+## Fixed business contracts and reused authorities
 
-Populate this worksheet from actual configuration and accepted decisions. Empty
-cells here mean unconfirmed, not zero, Infinity, or a recommended number.
+The following are decided requirements, not approval gates: unused saved Secrets
+have no new short expiry; claim is irreversible; success requires the canonical
+Ticket receipt; Passkey registration distributes 2/1/0 at A=0..18/19/20;
+ordinary remaining counts 0 and 1 trigger no intervention; old values are not
+migrated. Their implementation and acceptance tests remain independently reviewable.
 
-| Concern | Authority/clock to verify | Value and source | Acceptance boundary |
+`StepUpRequirement::DEFAULT_TTL` is the existing 15-minute scope/session-bound
+freshness contract. `SignFlow.default_ttl` is the existing 15-minute admission and
+signup/sign-in flow lifetime. Secret operations reuse these authorities and do not
+extend either deadline. Writer timestamps and persisted expiry facts govern their
+own database transitions. Chronicle uses the existing `security` retention policy;
+its absence raises an operational error instead of creating policy during a request.
+The explicit `app_secret:provision_audit_policy` task requires
+`CHRONICLE_SECURITY_RETENTION_DAYS` and refuses to overwrite an existing policy
+with different duration/permanence. Disposable execution verifies missing-policy
+creation, same-value retry and mismatch refusal. The shared operational security
+duration remains unapproved; the 365-day local verification value is a proposal,
+not evidence of an accepted deployed security policy.
+
+## New operational values awaiting approval
+
+These are proposals, not silent production defaults. `ClientSecretLifetimesValue`
+requires explicit positive integer configuration; isolated tests provide explicit
+values. Missing values stop the dependent operation, not unrelated HTTP work.
+
+| Setting / concern | Proposed value | Start and resend behavior | Expiry outcome and reason |
 | --- | --- | --- | --- |
-| Saved Secret usability | Credential fact owner; no newly imposed short expiry | Unconfirmed | Confirmed unused/unclaimed/unrevoked/undiscarded eligibility |
-| Pending issuance/reservation | Capacity owner and DB clock | Unconfirmed | Before/equal/after expiry, jobs stopped, late confirmation |
-| Encrypted delivery payload | Actual payload store and presentation transaction | Unconfirmed | Expiry/decryption loss does not activate unseen value |
-| Step-Up freshness | Current requirement and proof authority | Unconfirmed | Before/equal/after; scope/session mismatch |
-| Claim and sign-in continuation | Zenith acceptance plus Ticket flow authority | Unconfirmed | Terminal/commit exclusion and delayed callback |
-| Credential physical reclamation | Retention owner and audit-delivery state | Unconfirmed | Early deletion denied; purge atomic with surviving outbox |
-| Receipt/outbox cleanup | Each source owner and delivery/continuation horizon | Unconfirmed | No live proof or undelivered event loss |
-| Chronicle retention | Existing audit policy and hold enforcement | Unconfirmed | Policy presence, hold, deduplication and allowed cleanup |
+| `APP_SECRET_ISSUANCE_TTL_SECONDS` | 600 seconds | Starts at writer reservation time; fixed batch retries never extend it; actual deadline is no later than signup flow expiry or scoped Step-Up expiry | Reject stale presentation/confirmation, erase payload and retire unconfirmed candidates; ten minutes permits deliberate saving within existing 15-minute authority |
+| One-display encrypted payload | Same issuance deadline; no independent extension | Created by explicit authorized preparation; presentation erases it; resend cannot restore it | Missing, undecryptable or expired payload never creates replacement unseen random values; keep a single reservation/authorization horizon |
+| `APP_SECRET_PURGE_DELAY_SECONDS` | 86400 seconds | Starts at source terminal transition; retries preserve terminal facts | Physical collection also waits for terminal Chronicle delivery and durable continuation reconciliation; one day gives an operational retry window without making the credential reusable |
+| `APP_SECRET_OUTBOX_RETENTION_SECONDS` | 604800 seconds | Starts at confirmed source delivery acknowledgment; delivery replay does not extend it | Undelivered events never qualify; delivered records may be collected only after dependent proof/purge references no longer need them; seven days provides delivery investigation time |
+| Successful receipt collection: `APP_SECRET_PROOF_RETENTION_SECONDS` | Proposed 2592000 seconds (30 days), unapproved | Starts after the latest completed-flow/authorization acceptance deadline and terminal consumed/purged Chronicle facts; retries do not extend the persisted facts | Explicit positive configuration; Source credential must be absent, matching terminal Chronicle facts must exist, and holds prevent collection. Receipt operation and lifecycle connection are implemented; remaining failure/boundary coverage is incomplete |
+| Issuance and other flow/proof collection | Separate dependency review still required | Unconfirmed retired allocations now use their explicit purge deadline; confirmed/omitted batches and remaining Ticket proofs are not collected yet | Never collect unresolved claims, live callbacks or pending purge dependencies; remaining implementation and unapproved operational values remain separate |
+
+The issuance, payload and purge settings are separate from permanent credential
+eligibility and Chronicle retention. Operational approval does not authorize
+shared-database destructive application. Disposable DDL execution is authorized
+and recorded separately; shared application remains a separate approval item.
 
 ## Avoid false cross-DB atomicity
 

@@ -37,19 +37,19 @@ export default function VerificationEntry({
       {notice ? (
         <p
           data-test-id="verification-notice"
-          className="rounded-md border border-line bg-surface-muted p-3 text-sm text-fg"
+          className="rounded-md border border-line bg-surface-muted p-3 text-base text-fg"
         >
           {notice}
         </p>
       ) : null}
 
       <Card heading={sectionTitle}>
-        <p className="text-sm text-fg-muted">{description}</p>
+        <p className="text-base text-fg-muted">{description}</p>
 
         {noMethodsNotice ? (
           <p
             data-test-id="verification-no-methods"
-            className="text-sm text-fg-muted"
+            className="text-base text-fg-muted"
           >
             {noMethodsNotice}
           </p>

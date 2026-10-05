@@ -65,7 +65,7 @@ export default function SignInLimitationShow({
         )}
       />
 
-      {notice ? <p className="text-sm text-fg-muted">{notice}</p> : null}
+      {notice ? <p className="text-base text-fg-muted">{notice}</p> : null}
 
       <form
         onSubmit={submit}
@@ -80,7 +80,7 @@ export default function SignInLimitationShow({
               */}
               <label
                 className="flex cursor-pointer gap-3 rounded-lg border border-line bg-surface p-4
-                  text-sm has-checked:border-accent"
+                  text-base has-checked:border-accent"
               >
                 <input
                   type="radio"

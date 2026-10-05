@@ -27,15 +27,15 @@ export default function OrgVerificationEntry({
   return (
     <Page title={title}>
       {notice ? (
-        <output className="rounded-lg border border-line bg-surface-muted px-4 py-3 text-sm text-fg">
+        <output className="rounded-lg border border-line bg-surface-muted px-4 py-3 text-base text-fg">
           {notice}
         </output>
       ) : null}
 
       <Card heading={sectionTitle}>
-        <p className="text-sm text-fg-muted">{sectionDescription}</p>
+        <p className="text-base text-fg-muted">{sectionDescription}</p>
 
-        {noMethods ? <p className="text-sm text-fg-muted">{noMethods}</p> : null}
+        {noMethods ? <p className="text-base text-fg-muted">{noMethods}</p> : null}
 
         {methods.length > 0 ? (
           <ul className="flex flex-col gap-2">
@@ -44,7 +44,7 @@ export default function OrgVerificationEntry({
                 <a
                   href={method.href}
                   className="flex items-center justify-between gap-3 rounded-lg border border-line
-                    px-4 py-3 text-sm font-medium text-fg hover:bg-surface-muted"
+                    px-4 py-3 text-base font-medium text-fg hover:bg-surface-muted"
                 >
                   <span>{method.label}</span>
                   <span

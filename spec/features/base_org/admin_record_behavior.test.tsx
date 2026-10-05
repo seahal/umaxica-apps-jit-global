@@ -137,7 +137,7 @@ describe("AdminRecord", () => {
     expect(screen.queryByText("Target realm")).toBeNull();
   });
 
-  it("announces an info notice as status and a danger notice as an alert", () => {
+  it("announces a mixed administration result once with the highest urgency", () => {
     render(
       <AdminRecord
         title="Result"
@@ -152,8 +152,10 @@ describe("AdminRecord", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toBe("Sessions were revoked.");
-    expect(screen.getByRole("alert").textContent).toBe("The operation failed.");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert").textContent).toContain("Sessions were revoked.");
+    expect(screen.getByRole("alert").textContent).toContain("The operation failed.");
   });
 });
 
@@ -248,6 +250,38 @@ describe("AdminConfirmation", () => {
     submit_label: "Open case",
   };
 
+  it("explains the acknowledgement requirement without changing disabled or submission behavior", () => {
+    const meta = document.createElement("meta");
+    meta.name = "ui-confirmation-required";
+    meta.content = "Check the confirmation above to enable this action.";
+    document.head.append(meta);
+    try {
+      render(
+        <AdminConfirmation
+          {...confirmationProps}
+          fields={[]}
+        />,
+      );
+      const button = screen.getByRole<HTMLButtonElement>("button", { name: "Open case" });
+      expect(button.disabled).toBe(true);
+      expect(screen.getByRole("button", { name: "Open case", description: meta.content })).toBe(
+        button,
+      );
+      expect(screen.getByText(meta.content)).toBeTruthy();
+      fireEvent.click(screen.getByRole("checkbox"));
+      expect(button.disabled).toBe(false);
+      expect(screen.queryByText(meta.content)).toBeNull();
+      fireEvent.click(screen.getByRole("checkbox"));
+      expect(button.disabled).toBe(true);
+      expect(screen.getByRole("button", { name: "Open case", description: meta.content })).toBe(
+        button,
+      );
+      expect(submissions).toEqual([]);
+    } finally {
+      meta.remove();
+    }
+  });
+
   it("submits the typed text value and the hidden operation id, nested under the bracketed root", () => {
     render(
       <AdminConfirmation
@@ -321,7 +355,9 @@ describe("AdminConfirmation", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Kind/u }).textContent).toContain("Cooldown");
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Kind" }).value).toBe(
+      "cooldown",
+    );
   });
 
   it("lists the server's validation errors above the form", () => {

@@ -1,3 +1,6 @@
+import ButtonLink from "@/components/ui/ButtonLink";
+import Page from "@/components/ui/Page";
+
 // The sign-up entry screen: pick a registration method.
 //
 // Which methods exist is a server decision, so each entry arrives with a finished label and a
@@ -28,10 +31,6 @@ export type SignUpMethodChoiceProps = {
   cancel_label?: string;
 };
 
-const METHOD_LINK =
-  "flex items-center justify-center rounded-md border border-line bg-surface px-4 py-2 text-sm " +
-  "font-medium text-fg hover:bg-surface-muted";
-
 export default function SignUpMethodChoice({
   title,
   suspended_notice: suspendedNotice,
@@ -42,22 +41,26 @@ export default function SignUpMethodChoice({
 }: SignUpMethodChoiceProps) {
   if (suspendedNotice) {
     return (
-      <section className="flex flex-col gap-4">
+      <Page
+        title={title}
+        width="narrow"
+      >
         <div
           role="alert"
           data-test-id="sign-up-suspended"
-          className="rounded-lg border border-danger bg-surface p-4 text-sm text-danger"
+          className="rounded-lg border border-danger bg-surface p-4 text-base text-error"
         >
           <p>{suspendedNotice}</p>
         </div>
-      </section>
+      </Page>
     );
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page
+      title={title}
+      width="narrow"
+    >
       <ul className="flex flex-col gap-2">
         {methods.map((method) => (
           <li
@@ -65,12 +68,13 @@ export default function SignUpMethodChoice({
             data-test-id="registration-method"
           >
             {/* Document visits: each method starts a ceremony behind its own guards. */}
-            <a
+            <ButtonLink
               href={method.href}
-              className={METHOD_LINK}
+              variant="secondary"
+              className="w-full"
             >
               {method.label}
-            </a>
+            </ButtonLink>
           </li>
         ))}
       </ul>
@@ -94,17 +98,17 @@ export default function SignUpMethodChoice({
       {links.map((link) => (
         <p
           key={link.key}
-          className="text-sm"
+          className="text-base"
         >
           <a
             href={link.href}
-            className="text-fg underline-offset-4 hover:underline"
+            className="ui-text-link text-fg underline underline-offset-4 hover:underline"
           >
             {link.label}
           </a>
         </p>
       ))}
-      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
-    </section>
+      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
+    </Page>
   );
 }

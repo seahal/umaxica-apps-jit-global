@@ -93,7 +93,7 @@ export default function OrgSessionLimitPage({
                   <label
                     data-session-checkbox
                     className="flex cursor-pointer gap-3 rounded-lg border border-line
-                      bg-surface p-4 text-sm has-checked:border-accent"
+                      bg-surface p-4 text-base has-checked:border-accent"
                   >
                     <input
                       type="radio"
@@ -119,7 +119,7 @@ export default function OrgSessionLimitPage({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-fg-muted">{noSessions}</p>
+            <p className="text-base text-fg-muted">{noSessions}</p>
           )}
 
           <Button type="submit">{submitLabel}</Button>

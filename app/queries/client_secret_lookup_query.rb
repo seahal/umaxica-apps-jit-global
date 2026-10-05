@@ -14,6 +14,9 @@ class ClientSecretLookupQuery
         digest = SignSecretLookupDigest.digest(secret)
         now = ClientSecretCredential.database_now
         credential = ClientSecretCredential.available_at(now).find_by(lookup_digest: digest)
+        if credential&.issuance&.sign_up_flow_ref
+          return nil unless credential.issuance.signup_completed_at
+        end
         credential if credential&.matches_secret?(secret)
       end
     end

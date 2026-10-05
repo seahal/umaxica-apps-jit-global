@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 
 // The session-limit management page.
 //
@@ -55,11 +56,11 @@ export type SessionLimitManagerProps = {
 function SessionTimestamps({ item }: { item: SessionItem }) {
   return (
     <>
-      <p className="text-xs text-fg-muted">
+      <p className="text-sm text-fg-muted">
         {item.created_at_label}: {item.created_at}
       </p>
       {item.last_used_at_label && item.last_used_at ? (
-        <p className="text-xs text-fg-muted">
+        <p className="text-sm text-fg-muted">
           {item.last_used_at_label}: {item.last_used_at}
         </p>
       ) : null}
@@ -99,27 +100,26 @@ export default function SessionLimitManager({
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{heading}</h1>
-
+    <Page
+      title={heading}
+      description={description}
+    >
       {alert ? (
         <div
           role="alert"
-          className="rounded-md border border-line bg-surface p-4 text-sm text-danger"
+          className="rounded-md border border-line bg-surface p-4 text-base text-error"
         >
           <p>{alert}</p>
         </div>
       ) : null}
 
       {notice ? (
-        <output className="rounded-md border border-line bg-surface p-4 text-sm text-fg">
+        <output className="rounded-md border border-line bg-surface p-4 text-base text-fg">
           <p>{notice}</p>
         </output>
       ) : null}
 
-      {restrictedNotice ? <p className="text-sm text-fg-muted">{restrictedNotice}</p> : null}
-
-      <p className="text-sm text-fg-muted">{description}</p>
+      {restrictedNotice ? <p className="text-base text-fg-muted">{restrictedNotice}</p> : null}
 
       <form
         action={form.action}
@@ -131,7 +131,7 @@ export default function SessionLimitManager({
           <section className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold text-fg">
               {activeSessions.heading}{" "}
-              <span className="text-sm font-normal text-fg-muted">
+              <span className="text-base font-normal text-fg-muted">
                 {activeSessions.count_label}
               </span>
             </h2>
@@ -144,10 +144,10 @@ export default function SessionLimitManager({
                     className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4"
                   >
                     <div className="flex flex-col gap-1">
-                      <p className="text-sm font-medium text-fg">
+                      <p className="text-base font-medium text-fg">
                         {item.label}
                         {item.current_label ? (
-                          <span className="ml-2 text-xs font-medium text-accent">
+                          <span className="ml-2 text-sm font-medium text-accent">
                             {item.current_label}
                           </span>
                         ) : null}
@@ -155,7 +155,7 @@ export default function SessionLimitManager({
                       <SessionTimestamps item={item} />
                     </div>
                     {sessionRef ? (
-                      <label className="flex items-center gap-2 text-sm text-fg">
+                      <label className="flex items-center gap-2 text-base text-fg">
                         <input
                           type="radio"
                           name="ref"
@@ -183,15 +183,15 @@ export default function SessionLimitManager({
                   className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4"
                 >
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium text-fg">
+                    <p className="text-base font-medium text-fg">
                       {item.label}
                       {item.current_label ? (
-                        <span className="ml-2 text-xs font-medium text-accent">
+                        <span className="ml-2 text-sm font-medium text-accent">
                           {item.current_label}
                         </span>
                       ) : null}
                     </p>
-                    <p className="text-xs text-fg-muted">
+                    <p className="text-base text-fg-muted">
                       {item.created_at_label}: {item.created_at}
                     </p>
                   </div>
@@ -229,6 +229,6 @@ export default function SessionLimitManager({
         </Button>
       </form>
       {dialog}
-    </section>
+    </Page>
   );
 }

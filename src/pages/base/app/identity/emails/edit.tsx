@@ -1,5 +1,5 @@
 import { router } from "@inertiajs/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
@@ -41,6 +41,7 @@ export default function EmailEdit({
   cancel_link: cancelLink,
   error,
 }: Props) {
+  const descriptionId = useId();
   const [promotional, setPromotional] = useState(form.promotional.checked);
   const [notifiable, setNotifiable] = useState(form.notifiable.checked);
   const [processing, setProcessing] = useState(false);
@@ -85,33 +86,45 @@ export default function EmailEdit({
           className="flex flex-col gap-5"
         >
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-fg">{form.always_on_label}</span>
-            <p className="text-xs text-fg-muted">{form.always_on_description}</p>
+            <span className="text-base font-medium text-fg">{form.always_on_label}</span>
+            <p className="text-base text-fg-muted">{form.always_on_description}</p>
           </div>
 
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
               <Checkbox
                 id="user_email_promotional"
+                aria-describedby={`${descriptionId}-promotional`}
                 isDisabled={form.locked}
                 isSelected={promotional}
                 onChange={setPromotional}
               >
                 {form.promotional.label}
               </Checkbox>
-              <p className="pl-6 text-xs text-fg-muted">{form.promotional.description}</p>
+              <p
+                id={`${descriptionId}-promotional`}
+                className="pl-6 text-base text-fg-muted"
+              >
+                {form.promotional.description}
+              </p>
             </div>
 
             <div className="flex flex-col gap-1">
               <Checkbox
                 id="user_email_notifiable"
+                aria-describedby={`${descriptionId}-notifiable`}
                 isDisabled={form.locked}
                 isSelected={notifiable}
                 onChange={setNotifiable}
               >
                 {form.notifiable.label}
               </Checkbox>
-              <p className="pl-6 text-xs text-fg-muted">{form.notifiable.description}</p>
+              <p
+                id={`${descriptionId}-notifiable`}
+                className="pl-6 text-base text-fg-muted"
+              >
+                {form.notifiable.description}
+              </p>
             </div>
           </div>
 
@@ -134,7 +147,7 @@ export default function EmailEdit({
         </Button>
       </Card>
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink
           href={cancelLink.href}
           tone="muted"

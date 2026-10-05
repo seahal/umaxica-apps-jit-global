@@ -6,6 +6,7 @@
 // because the server answers a wrong code by re-rendering this page with 422 or 429 and a correct
 // one with a redirect into the next step.
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
 import CeremonyCancellation, {
   type CeremonyCancellationProps,
@@ -49,15 +50,17 @@ export default function OtpVerificationForm({
   cancel,
 }: OtpVerificationFormProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-      <p className="text-sm text-fg-muted">{description}</p>
-
+    <Page
+      title={title}
+      description={description}
+      width="narrow"
+    >
       <form
         action={action}
         method="post"
         data-turbo="false"
         className="flex flex-col gap-4"
+        aria-describedby={errors.length > 0 ? "otp-errors" : undefined}
       >
         <input
           type="hidden"
@@ -72,9 +75,9 @@ export default function OtpVerificationForm({
 
         {errors.length > 0 ? (
           <div
-            role="alert"
-            className="flex flex-col gap-2 rounded-md border border-danger bg-surface p-3 text-sm
-              text-danger"
+            id="otp-errors"
+            className="flex flex-col gap-2 rounded-md border border-danger bg-surface p-3 text-base
+              text-error"
           >
             {/* v8 ignore next -- a heading is only sent when the list is non-empty */}
             {errorHeading ? <h2 className="font-semibold">{errorHeading}</h2> : null}
@@ -107,9 +110,9 @@ export default function OtpVerificationForm({
         <Button type="submit">{submitLabel}</Button>
       </form>
 
-      <p className="text-sm text-fg-muted">{deliveryHelp}</p>
+      <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
       <CeremonyCancellation {...cancel} />
-    </section>
+    </Page>
   );
 }

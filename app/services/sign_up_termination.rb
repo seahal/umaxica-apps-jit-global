@@ -117,6 +117,11 @@ class SignUpTermination
   end
 
   def run_artifact_cleanup
+    if cycle.is_a?(ClientSignUpFlow) && ClientSecretIssuance.exists?(sign_up_flow_ref: cycle.public_id)
+      ClientSecretPasskeyReservationIssuer.terminate_sign_up!(
+        flow: cycle, purge_after: ClientSecretLifetimesValue.purge_delay,
+      )
+    end
     return unless cleanup_supported?
     return if cycle.cleanup_completed?
 

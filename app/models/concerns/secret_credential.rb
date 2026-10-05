@@ -54,15 +54,6 @@ module SecretCredential
     def status_id_for(status)
       status_key = status.to_s.upcase
       case identity_secret_credential_status_class.name
-      when "ClientSecretCredentialStatus"
-        {
-          "ACTIVE" => ClientSecretCredentialStatus::ACTIVE,
-          "EXPIRED" => ClientSecretCredentialStatus::EXPIRED,
-          "REVOKED" => ClientSecretCredentialStatus::REVOKED,
-          "USED" => ClientSecretCredentialStatus::USED,
-          "DELETED" => ClientSecretCredentialStatus::DELETED,
-          "NOTHING" => ClientSecretCredentialStatus::NOTHING,
-        }.fetch(status_key)
       when "OperatorSecretCredentialStatus"
         {
           "ACTIVE" => OperatorSecretCredentialStatus::ACTIVE,

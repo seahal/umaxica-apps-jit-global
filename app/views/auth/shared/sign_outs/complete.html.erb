@@ -1,11 +1,11 @@
 <% content_for :page_title, t("sign.shared.sign_out.completed_title") %>
 
-<div>
+<div class="ui-page ui-page--narrow">
   <h1><%= title t("sign.shared.sign_out.completed_title") %></h1>
 
   <% if sign_out_completed_description.present? %>
-    <p><%= sign_out_completed_description %></p>
+    <p class="ui-description"><%= sign_out_completed_description %></p>
   <% end %>
 
-  <p><%= link_to t("sign.shared.sign_out.home_link"), sign_out_home_path %></p>
+  <p class="ui-description"><%= link_to t("sign.shared.sign_out.home_link"), sign_out_home_path %></p>
 </div>

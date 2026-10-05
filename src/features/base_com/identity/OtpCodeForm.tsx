@@ -1,10 +1,11 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink, TurnstileProps } from "@/features/base_com/identity/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
@@ -62,6 +63,7 @@ export default function OtpCodeForm({
     <Page
       title={title}
       description={description}
+      width="narrow"
     >
       <form
         onSubmit={submit}
@@ -106,12 +108,13 @@ export default function OtpCodeForm({
         </Button>
       </form>
 
-      <Link
+      <TextLink
         href={cancelLink.href}
-        className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+        inertia
+        tone="muted"
       >
         {cancelLink.label}
-      </Link>
+      </TextLink>
     </Page>
   );
 }

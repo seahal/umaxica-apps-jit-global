@@ -23,6 +23,7 @@ stateDiagram-v2
     GUARDRAIL_PENDING --> CHECKPOINT_PENDING: advance_sign_in_to_checkpoint!
     CHECKPOINT_PENDING --> SELECTOR_PENDING: advance_sign_in_to_selector!
     SELECTOR_PENDING --> SESSION_ISSUANCE_PENDING: advance_sign_in_to_session_issuance!
+    DASHBOARD_PENDING --> SESSION_ISSUANCE_PENDING: prepare_secret_oidc_issuance! bound authenticated OIDC handoff
     DASHBOARD_PENDING --> RETURN_PENDING: advance_sign_in_to_return!
     SESSION_ISSUANCE_PENDING --> COMPLETED: complete_sign_in!
     SESSION_LIMIT_PENDING --> COMPLETED: complete_sign_in!
@@ -44,6 +45,10 @@ stateDiagram-v2
         Auth records proof; Base commits root login.
         Opaque result generation and browser binding are separate axes.
         No stored EXPIRED or CANCELLED state.
+        expire_sign_in! writes FAILED only for expired unissued app flows.
+        It uses the canonical Ticket lock and cannot alter COMPLETED.
         Legacy dashboard is entered by a controller direct write.
         Full guards and direct writers are in the inventory.
+        Secret bind_oidc_flow! creates a pending locator, not login evidence.
+        Secret OIDC Auth POST records evidence on that claimed flow before handoff.
     end note

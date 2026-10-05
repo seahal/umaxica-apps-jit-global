@@ -1,3 +1,5 @@
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 // One-time recovery passcode reveal page for the base/com surface.
 //
 // The passcodes are the one-time reveal the server just consumed for this owner; the page shows
@@ -23,38 +25,39 @@ export default function RecoveryPasscodesShow({
   back_link: backLink,
 }: RecoveryPasscodesShowProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page
+      title={title}
+      width="narrow"
+    >
       {passcodes.length > 0 ? (
         <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
-          <p className="text-sm text-fg-muted">{description}</p>
-          <p className="text-sm font-semibold text-fg">{oneTimeNotice}</p>
-          <p className="text-sm text-fg-muted">{inventoryNotice}</p>
+          <p className="text-base text-fg-muted">{description}</p>
+          <p className="text-base font-semibold text-fg">{oneTimeNotice}</p>
+          <p className="text-base text-fg-muted">{inventoryNotice}</p>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {passcodes.map((passcode) => (
               <li
                 key={passcode}
                 className="rounded-md border border-line bg-surface-muted px-3 py-2"
               >
-                <code className="font-mono text-sm text-fg">{passcode}</code>
+                <code className="wrap-anywhere font-mono text-base text-fg">{passcode}</code>
               </li>
             ))}
           </ul>
         </section>
       ) : (
-        <p className="text-sm text-fg-muted">{missingMessage}</p>
+        <p className="text-base text-fg-muted">{missingMessage}</p>
       )}
 
       {/* Cross-host destination, so a document visit rather than an Inertia visit. */}
       <p>
-        <a
+        <TextLink
           href={backLink.href}
-          className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          tone="muted"
         >
           {backLink.label}
-        </a>
+        </TextLink>
       </p>
-    </section>
+    </Page>
   );
 }

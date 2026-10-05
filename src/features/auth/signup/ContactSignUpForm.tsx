@@ -71,8 +71,8 @@ export default function ContactSignUpForm({
         {errorHeading ? (
           <div
             role="alert"
-            className="flex flex-col gap-2 rounded-md border border-danger bg-surface p-3 text-sm
-              text-danger"
+            className="flex flex-col gap-2 rounded-md border border-danger bg-surface p-3 text-base
+              text-error"
           >
             <h3 className="font-semibold">{errorHeading}</h3>
             <ul
@@ -114,7 +114,7 @@ export default function ContactSignUpForm({
               <span className="flex flex-col">
                 <span>{checkbox.label}</span>
                 {checkbox.description ? (
-                  <span className="text-xs text-fg-muted">{checkbox.description}</span>
+                  <span className="text-base text-fg-muted">{checkbox.description}</span>
                 ) : null}
               </span>
             </Checkbox>
@@ -129,11 +129,11 @@ export default function ContactSignUpForm({
       {links.map((link) => (
         <p
           key={link.key}
-          className="text-sm"
+          className="text-base"
         >
           <a
             href={link.href}
-            className="text-fg underline-offset-4 hover:underline"
+            className="ui-text-link text-fg underline underline-offset-4 hover:underline"
           >
             {link.label}
           </a>

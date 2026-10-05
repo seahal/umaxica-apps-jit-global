@@ -133,6 +133,7 @@ scope(module: :auth, as: :auth) do
             namespace(:telephone) do
               resource(:otp, only: %i(show create update destroy))
               resource(:passkey, only: %i(show create update destroy))
+              resource(:secret, only: %i(show create update destroy))
               resource(:birthdate, only: %i(show update destroy))
             end
           end
@@ -145,6 +146,7 @@ scope(module: :auth, as: :auth) do
           resource :email, only: %i(new create edit update)
 
           resource :passkey, only: :new
+          resource :secret, only: %i(new create)
           namespace :passkey do
             resource :options, only: :create
             resource :verification, only: :create

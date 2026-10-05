@@ -156,12 +156,12 @@ export default function PasskeySignInPanel({
       {error ? (
         <p
           role="alert"
-          className="text-sm text-danger"
+          className="text-base text-error"
         >
           {error}
         </p>
       ) : null}
-      {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
+      {status ? <p className="text-base text-fg-muted">{status}</p> : null}
 
       <div>
         <Button

@@ -35,7 +35,7 @@ export default function AuthMethodChoice({
         <div
           role="alert"
           data-test-id="sign-up-suspended"
-          className="rounded-lg border border-line bg-surface-muted p-4 text-sm text-fg"
+          className="rounded-lg border border-line bg-surface-muted p-4 text-base text-fg"
         >
           <p>{suspendedNotice}</p>
         </div>
@@ -59,7 +59,7 @@ export default function AuthMethodChoice({
             <a
               href={method.href}
               className="flex items-center justify-between gap-3 rounded-lg border border-line
-                bg-surface px-4 py-3 text-sm font-medium text-fg hover:bg-surface-muted"
+                bg-surface px-4 py-3 text-base font-medium text-fg hover:bg-surface-muted"
             >
               <span>{method.label}</span>
               <span
@@ -76,17 +76,17 @@ export default function AuthMethodChoice({
       {links.map((link) => (
         <p
           key={link.key}
-          className="text-sm text-fg-muted"
+          className="text-base text-fg-muted"
         >
           <a
             href={link.href}
-            className="underline-offset-4 hover:text-fg hover:underline"
+            className="ui-text-link underline underline-offset-4 hover:text-fg hover:underline"
           >
             {link.label}
           </a>
         </p>
       ))}
-      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
+      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
     </Page>
   );
 }

@@ -54,7 +54,7 @@ export default function EmailOtpEntry({
       up={back}
       width="narrow"
     >
-      <p className="text-sm text-fg-muted">{deliveryHelp}</p>
+      <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
       <ErrorList errors={errors} />
 

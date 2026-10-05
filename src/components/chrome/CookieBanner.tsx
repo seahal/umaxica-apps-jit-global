@@ -137,7 +137,7 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
     <section
       id="cookie-banner"
       aria-labelledby="cookie-title"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface shadow-lg"
+      className="border-t border-line bg-surface"
     >
       <div className="relative mx-auto flex max-w-4xl flex-col gap-3 p-4">
         <Button
@@ -183,7 +183,7 @@ function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
           {controls.title}
         </h2>
 
-        <p className="text-sm text-fg-muted">{controls.description_html}</p>
+        <p className="text-base text-fg-muted">{controls.description_html}</p>
 
         <div className="flex flex-wrap gap-2">
           <Button

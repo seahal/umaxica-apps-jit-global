@@ -1,11 +1,11 @@
 <% page_title @content_entry.title %>
 
-<main>
-  <article>
+<main id="main" class="ui-main" tabindex="-1">
+  <article class="ui-page">
     <h1><%= @content_entry.title %></h1>
     <% if @content_entry.summary.present? %>
       <p><%= @content_entry.summary %></p>
     <% end %>
-    <div><%= simple_format(@content_entry.body) %></div>
+    <div class="ui-prose"><%= simple_format(@content_entry.body) %></div>
   </article>
 </main>

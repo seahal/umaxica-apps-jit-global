@@ -1,14 +1,12 @@
 // The avatar create/update form. The server sends the action URL, the HTTP verb the route expects
 // and every label already translated, so the component only binds fields and reports errors.
 import { useForm } from "@inertiajs/react";
-import { useState } from "react";
-import type { SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 
 import Button from "@/components/ui/Button";
 import ErrorList from "@/components/ui/ErrorList";
-import type { PageUpLink } from "@/components/ui/Page";
+import Page, { type PageUpLink } from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
-import TextLink from "@/components/ui/TextLink";
 
 export type AvatarFormProps = {
   title: string;
@@ -85,7 +83,6 @@ function monikerValidationError(value: string, moniker: AvatarFormProps["moniker
 }
 
 export default function AvatarForm({
-  title,
   up_link: upLink = null,
   heading,
   action,
@@ -118,28 +115,23 @@ export default function AvatarForm({
   };
 
   return (
-    <section
-      aria-label={title}
-      className="flex flex-col gap-6"
+    <Page
+      title={heading}
+      up={upLink}
+      upVisit="inertia"
     >
-      {upLink ? (
-        <TextLink
-          href={upLink.href}
-          inertia
-        >
-          {upLink.label}
-        </TextLink>
-      ) : null}
-      <h1 className="text-2xl font-bold text-fg">{heading}</h1>
-
       <form
         onSubmit={submit}
         className="flex flex-col gap-4"
       >
-        <ErrorList errors={errors.avatar === undefined ? [] : [errors.avatar]} />
+        <ErrorList
+          announce
+          errors={errors.avatar === undefined ? [] : [errors.avatar]}
+        />
         <TextField
           id="avatar_moniker"
           label={moniker.label}
+          description={`${moniker.client_validation.max_graphemes} ${moniker.client_validation.max_bytes}`}
           name="avatar[moniker]"
           isRequired
           value={data.avatar.moniker}
@@ -173,6 +165,6 @@ export default function AvatarForm({
           </Button>
         </div>
       </form>
-    </section>
+    </Page>
   );
 }

@@ -30,7 +30,7 @@ export default function SignInPasskeyNew({
 
       <a
         href={backLink.href}
-        className="text-sm text-fg underline-offset-4 hover:underline"
+        className="ui-text-link text-base text-fg underline underline-offset-4 hover:underline"
       >
         {backLink.label}
       </a>

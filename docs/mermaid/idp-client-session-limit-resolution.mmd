@@ -1,5 +1,8 @@
 stateDiagram-v2
     %% CURRENT implementation; sources and guards in transition inventory.
+    %% App Secret OIDC HTTP selection wraps mutation in with_secret_revocation_authority!.
+    %% It locks Client, authorization, resolution and flow and rejects terminal or expired state.
+    %% Direct model setters below remain unrestricted for the other existing paths.
     state "pending" as pending
     state "session_selected" as session_selected
     state "resolved" as resolved

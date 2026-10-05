@@ -75,13 +75,13 @@ export default function RootLanding({
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-10 py-8 sm:py-16"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-8"
     >
       <div className="flex w-full flex-col gap-6">
         <header className="flex flex-col gap-4">
           <h1
             id={headingId}
-            className="text-4xl font-semibold tracking-tight text-balance text-fg sm:text-5xl"
+            className="min-w-0 wrap-anywhere text-3xl leading-snug font-semibold text-balance text-fg sm:text-4xl"
           >
             {heading}
           </h1>
@@ -97,7 +97,7 @@ export default function RootLanding({
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+                    className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
                   >
                     {link.label}
                   </a>

@@ -3,9 +3,11 @@
 ## Status
 
 Accepted target domain contract, recorded 2026-10-03 (UTC). Implementation is
-partial. The persistence foundations have passed disposable-DB checks; issuance,
-delivery, canonical login integration and audited physical recovery remain
-unfinished. The [persistence shape proposal](../plans/analysis/app-secret-persistence-shape-proposal.md)
+partial. Disposable-DB HTTP checks cover manual issuance, protected delivery,
+storage confirmation, canonical local Secret login and audited physical recovery.
+Signed-in and signup Passkey registration distribution are connected; signup
+completion, cancellation and expiry have HTTP evidence. Concurrency, browser
+confidentiality, proof collection and complete other-surface regression remain open. The [persistence shape proposal](../plans/analysis/app-secret-persistence-shape-proposal.md)
 identifies additional formats still requiring explicit approval.
 
 This replaces the app purpose and legacy app-only state described in

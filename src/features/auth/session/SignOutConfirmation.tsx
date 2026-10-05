@@ -1,6 +1,8 @@
 import { useForm } from "@inertiajs/react";
 
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 
 // The sign-out confirmation ceremony, shared by the auth surfaces.
 //
@@ -53,12 +55,13 @@ export default function SignOutConfirmation({
   };
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{heading}</h1>
-
+    <Page
+      title={heading}
+      width="narrow"
+    >
       {activeContext ? (
         <>
-          <p className="text-sm text-fg-muted">{confirmDescription}</p>
+          <p className="text-base text-fg-muted">{confirmDescription}</p>
           <div className="flex flex-wrap items-center gap-3">
             <form
               action={form.action}
@@ -94,18 +97,13 @@ export default function SignOutConfirmation({
           </div>
         </>
       ) : (
-        <p className="text-sm text-fg-muted">{alreadySignedOut}</p>
+        <p className="text-base text-fg-muted">{alreadySignedOut}</p>
       )}
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* A document visit: the destination is another surface entry point with its own guards. */}
-        <a
-          href={homeLink.href}
-          className="text-accent hover:underline"
-        >
-          {homeLink.label}
-        </a>
+        <TextLink href={homeLink.href}>{homeLink.label}</TextLink>
       </p>
-    </section>
+    </Page>
   );
 }

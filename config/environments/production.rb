@@ -141,9 +141,13 @@ Rails.application.configure do
     read_timeout: 10,
   }
 
-  # Locale fallbacks are configured in config/initializers/locale.rb, which is the single source of
-  # truth for the load path, available locales, and the fallback chain. Setting them here as well
-  # would be overwritten by that initializer and hide which value actually applies.
+  # config/initializers/locale.rb is the single source of truth for the load path, available
+  # locales, and the fallback chain itself; setting config.i18n.fallbacks here as well would be
+  # overwritten by that initializer and hide which value actually applies. These two settings are
+  # what it reads: production keeps the en <-> ja chain and serves the other language silently, so
+  # a visitor is never shown an error page for a missing translation.
+  config.x.locale.fallbacks_enabled = true
+  config.x.locale.raise_on_fallback = false
 
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false

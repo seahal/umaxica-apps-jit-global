@@ -23,10 +23,7 @@ class BaseStepUpAdmissionIssuer
               unless token.currently_usable?(now)
                 deny!("Base session is unavailable", "session_expired")
               end
-              if requirement.purpose == "bootstrap" && token.is_a?(ClientToken) &&
-                  token.established_authentication_method == "secret"
-                deny!("Secret session cannot bootstrap a credential", "authorization_denied")
-              end
+              ensure_bootstrap_session!(token, now) if requirement.purpose == "bootstrap"
               if token.is_a?(OperatorToken) && token.emergency_authentication_context?
                 deny!("Emergency session cannot initiate step-up", "authorization_denied")
               end
@@ -93,7 +90,8 @@ class BaseStepUpAdmissionIssuer
       # Signed-in app Secret management always requires an existing Step-Up proof.
       return false if binding.surface == "app" && requirement.scope == "settings_secret_credential"
 
-      registration_methods = binding.methods & %w(passkey totp)
+      # Email is confirmed inside Base; Passkey and TOTP are verified by an Auth ceremony.
+      registration_methods = binding.methods & %w(passkey totp email_otp)
       requirement.allowed_methods.present? &&
         (requirement.allowed_methods.map(&:to_s) - registration_methods).empty?
     end
@@ -107,6 +105,23 @@ class BaseStepUpAdmissionIssuer
       return if StepUpResolver.call(token: token, requirement: authorization, now: now).satisfied?
 
       deny!("credential registration requires Base step-up", "authorization_denied")
+    end
+
+    def ensure_bootstrap_session!(token, now)
+      ensure_bootstrap_fresh!(token, now)
+      return unless token.is_a?(ClientToken) && token.established_authentication_method == "secret"
+
+      deny!("Secret session cannot bootstrap a credential", "authorization_denied")
+    end
+
+    # A first authenticator may be registered only shortly after primary authentication, so that a
+    # stale or stolen session cannot enroll one. Refresh does not move the anchor.
+    def ensure_bootstrap_fresh!(token, now)
+      established_at = token.root_login_established_at
+      fresh_until = established_at && (established_at + SecurityTokenLifetimes::BOOTSTRAP_PRIMARY_AUTHENTICATION_FRESHNESS)
+      return if fresh_until && now < fresh_until
+
+      deny!("bootstrap requires fresh primary authentication", "bootstrap_not_fresh")
     end
 
     # Credential history distinguishes first registration from recovery after loss or revocation.
@@ -159,7 +174,14 @@ class BaseStepUpAdmissionIssuer
 
       transaction = binding.transaction_model.lock.find_by!(transaction_id: pending.step_up_ceremony_transaction_ref)
       now = binding.transaction_model.database_now
-      return unless %w(pending verified).include?(transaction.status) && !transaction.expired?(now: now)
+      return unless %w(pending verified).include?(transaction.status)
+
+      # Issuance is a write under the session and row locks, so the expiry it observes is recorded
+      # here. Read-only paths refuse an expired transaction without rewriting it.
+      if transaction.expired?(now: now)
+        transaction.commit_expiry!
+        return
+      end
 
       unless transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           transaction.required_scope == requirement.scope && transaction.required_aal ==

@@ -52,7 +52,7 @@ export default function PasskeyShow({
           <TextLink
             href={editLink.href}
             tone="muted"
-            className="text-sm"
+            className="text-base"
           >
             {editLink.label}
           </TextLink>

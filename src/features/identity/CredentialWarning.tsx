@@ -24,17 +24,17 @@ export default function CredentialWarning({ heading, body, items }: CredentialWa
     >
       <h2
         id="apple-only-credential-warning"
-        className="text-sm font-semibold text-danger"
+        className="text-base font-semibold text-error"
       >
         {heading}
       </h2>
-      <p className="text-sm text-fg">{body}</p>
+      <p className="text-base text-fg">{body}</p>
       <ul className="flex flex-col gap-1">
         {items.map((item) => (
           <li key={item.label}>
             <a
               href={item.href}
-              className="text-sm text-fg underline-offset-4 hover:underline"
+              className="ui-text-link text-base text-fg underline underline-offset-4 hover:underline"
             >
               {item.label}
             </a>

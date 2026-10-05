@@ -159,4 +159,49 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
     assert_equal discarded_at, credential.discard_at
     assert_not credential.available_at?(at: discarded_at)
   end
+
+  test "withdrawal anonymization retains Secret audit and removes credential authentication" do
+    owner = Client.create!(
+      status_id: ClientStatus::ACTIVE, withdrawn_at: Client.database_now,
+      terminated_at: Client.database_now,
+    )
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: owner, origin_operation_id: SecureRandom.uuid, origin: "manual",
+      attempt_number: 1, browser_session_ref: "withdrawal-session", planned_count: 1,
+      expires_at: now + 1.minute, encrypted_payload: "opaque-test-payload",
+    )
+    raw = SecureRandom.base58(32)
+    credential = ClientSecretCredential.create!(
+      client: owner, issuance: issuance, name: "Pending Secret", password: raw,
+      lookup_digest: SignSecretLookupDigest.digest(raw),
+    )
+    previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+
+    assert_same owner, WithdrawalPersonalDataAnonymizer.call(actor: owner)
+    assert issuance.reload.canceled_at
+    assert_nil issuance.encrypted_payload
+    assert_equal 0, issuance.reserved_count(at: Client.database_now)
+    assert credential.reload.revoked_at
+    assert_operator credential.discard_at, :<=, Client.database_now
+    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert ClientSecretAuditOutbox.exists?(credential_ref: credential.public_id, event_name: "secret.revoked")
+    assert ClientSecretAuditOutbox.exists?(credential_ref: credential.public_id, event_name: "secret.discarded")
+  ensure
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = previous_delay
+  end
+
+  test "withdrawal without Secret records preserves the existing no-issuance path" do
+    now = Client.database_now
+    owner = Client.create!(status_id: ClientStatus::ACTIVE, withdrawn_at: now, terminated_at: now)
+    previous_delay = ENV.delete("APP_SECRET_PURGE_DELAY_SECONDS")
+    assert_no_difference ["ClientSecretCredential.count", "ClientSecretIssuance.count",
+                          "ClientSecretAuditOutbox.count",] do
+      assert_same owner, WithdrawalPersonalDataAnonymizer.call(actor: owner)
+    end
+    assert_predicate owner.reload, :terminated?
+  ensure
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = previous_delay
+  end
 end

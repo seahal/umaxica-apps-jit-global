@@ -43,7 +43,7 @@ export default function EmailsIndex({
         </ButtonLink>
       }
     >
-      <Table>
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{headings.address}</th>

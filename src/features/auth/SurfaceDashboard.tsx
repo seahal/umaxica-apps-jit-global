@@ -46,12 +46,12 @@ function linkList(items: DashboardItem[]) {
       {items.map((item) => (
         <li
           key={item.label}
-          className="text-sm"
+          className="text-base"
         >
           {item.href ? (
             <a
               href={item.href}
-              className="text-fg underline-offset-4 hover:underline"
+              className="ui-text-link text-fg underline underline-offset-4 hover:underline"
             >
               {item.label}
             </a>
@@ -96,7 +96,9 @@ export default function SurfaceDashboard({
                   className="size-8 rounded-full object-cover"
                 />
               ) : null}
-              <p className="text-sm font-medium text-fg">{section.current_identity.display_name}</p>
+              <p className="text-base font-medium text-fg">
+                {section.current_identity.display_name}
+              </p>
             </div>
           ) : null}
           {section.groups?.map((group) => (
@@ -104,7 +106,7 @@ export default function SurfaceDashboard({
               key={group.heading}
               className="flex flex-col gap-1"
             >
-              <h3 className="text-sm font-medium text-fg">{group.heading}</h3>
+              <h3 className="text-base font-medium text-fg">{group.heading}</h3>
               {linkList(group.items)}
             </div>
           ))}

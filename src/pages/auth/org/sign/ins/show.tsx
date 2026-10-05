@@ -105,13 +105,13 @@ export default function OrgSignInEntry({
           <a
             href={registrationLink.href}
             className="flex w-full items-center justify-center rounded-lg border border-dashed
-              border-line px-4 py-2 text-sm text-fg-muted hover:bg-surface-muted hover:text-fg"
+              border-line px-4 py-2 text-base text-fg-muted hover:bg-surface-muted hover:text-fg"
           >
             {registrationLink.label}
           </a>
         </div>
       ) : null}
-      {cancelLabel !== undefined && <p className="text-sm text-fg-muted">{cancelLabel}</p>}
+      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
     </Page>
   );
 }

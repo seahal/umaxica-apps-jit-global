@@ -7,7 +7,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "Base creates the confirmed credential once and retries return the same active credential without freshness" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
@@ -73,7 +73,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "a consumed registration with no principal credential fails closed instead of recreating one" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
       required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
@@ -116,7 +116,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "a principal write failure retains the unconsumed proof and candidate for a safe retry" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
@@ -167,7 +167,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
 
   test "Base bootstrap retains the protected operation and only a subsequent TOTP assertion grants freshness" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     bootstrap_requirement = StepUpRequirement.new(
       step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
       audience: "step_up:app", allowed_methods: [:totp], session_binding: token.public_id,

@@ -4,11 +4,12 @@ class ClientSecretAuditOutbox < AppZenithRecord
   EVENTS = %w(
     secret.created secret.renamed secret.claimed secret.consumed secret.revoked
     secret.discarded secret.purged secret.issuance_started secret.presented
-    secret.storage_declared secret.issuance_omitted secret.issuance_canceled
+    secret.storage_declared secret.issuance_omitted secret.issuance_canceled secret.signup_completed
+    secret.issuance_purged
   ).freeze
   REASONS = %w(
-    capacity_full passkey_registration manual user_revocation flow_expired
-    flow_canceled login_committed payload_unavailable reissue
+    capacity_full passkey_registration manual user_revocation withdrawal flow_expired
+    flow_canceled flow_failed login_committed payload_unavailable reissue
   ).freeze
 
   attr_readonly :event_id, :event_name, :client_ref, :credential_ref, :actor_type,

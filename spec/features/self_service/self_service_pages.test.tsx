@@ -298,7 +298,8 @@ describe("SwitcherShow", () => {
     expect(html).toMatch(/<h1[^>]*>Switcher<\/h1>/u);
     expect(html).toContain("unit_1");
     expect(html).toContain("invalid switch");
-    expect(html).toContain('role="alert"');
+    // This rejection arrives with the initial document, rather than an asynchronous update.
+    expect(html).not.toContain('role="alert"');
   });
 
   it("reports an absent context without an error region", () => {
@@ -365,6 +366,20 @@ describe("AvatarForm", () => {
     moniker: { ...createProps.moniker, value: "First Avatar" },
     handle: null,
   };
+
+  it("describes the name limits using the existing translated validation conditions before typing", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const input = element.querySelector<HTMLInputElement>("#avatar_moniker")!;
+    const descriptions = input
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => document.querySelector(`[id="${id}"]`)?.textContent)
+      .join(" ");
+    expect(descriptions).toContain(createProps.moniker.client_validation.max_graphemes);
+    expect(descriptions).toContain(createProps.moniker.client_validation.max_bytes);
+    expect(input.maxLength).toBe(-1);
+    expect(element.querySelector<HTMLInputElement>("#avatar_handle")?.maxLength).toBe(80);
+  });
 
   it("renders the handle field only when the server sent one", () => {
     expect(renderToStaticMarkup(<AvatarForm {...createProps} />)).toContain("avatar_handle");

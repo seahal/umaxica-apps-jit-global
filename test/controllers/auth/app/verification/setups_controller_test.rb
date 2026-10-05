@@ -10,7 +10,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
   test "an admitted bootstrap shows the registration methods and cancellation, never a back link" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -61,7 +61,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
   test "a step-up admission is not accepted by the setup entry" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -85,7 +85,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   # registration becomes an admission-only ceremony.
   test "the passkey registration link currently leaves the admitted bootstrap for Base sign-in through Jump" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(

@@ -579,6 +579,9 @@ en:
               accepted: You must check this box.
   activerecord:
     attributes:
+      client_secret_credential:
+        client: Client
+        issuance: Secret issuance
       agent_assignment:
         assigned_at: Assigned at
       app_enforcement_appeal:
@@ -655,6 +658,7 @@ en:
         address: Email address
         confirm_policy: Terms of service
         raw_address: Email address
+        status: Status
         user: Client
       user_identity_email:
         address: Email address
@@ -668,6 +672,10 @@ en:
         discard_at: Lapses at
         purge_eligible_at: Purge at
         refresh_expires_at: Refresh expires at
+      user_totp_credential:
+        created_at: Created
+        last_otp_at: Last used
+        title: Name
       visitor_email:
         address: Email address
         address_digest: Email address digest
@@ -959,6 +967,7 @@ en:
       emergency_unavailable:
         This session was established through Emergency Access and cannot perform step-up
         verification. Sign out and sign in normally to continue.
+      fresh_sign_in_required: Sign out and sign in again to register your first verification method.
       invalid_request: Invalid verification request.
       method_unavailable: Selected verification method is unavailable.
       register_methods_required: No step-up methods available. Please register passkey/email/totp.
@@ -968,6 +977,19 @@ en:
     unauthorized: You are not authorized to access this page.
   base:
     app:
+      secrets:
+        add: "Add one Secret"
+        capacity_conflict: "Secret capacity is full or another issuance is in progress."
+        confirm: "I have saved the displayed Secret"
+        distribution_omitted: "You have the maximum of 20 active Secrets, so no new Secrets were distributed. Your saved Secrets remain usable."
+        distribution_one_confirmed: "You can hold at most 20 Secrets. To stay within the limit, this registration distributed one Secret instead of two."
+        distribution_one_present: "You can hold at most 20 Secrets. To stay within the limit, this registration will distribute one Secret instead of two."
+        payload_unavailable: "The Secret payload is unavailable. Start a new issuance explicitly."
+        present: "Show the Secret once"
+        rename: "Rename"
+        revoke: "Revoke"
+        single_delivery: "Save this value now. It cannot be displayed again. This value cannot sign in until you confirm saving it."
+        title: "Secrets"
       avatars:
         already_assigned: You already have an avatar, so another one cannot be created.
         moniker_validation:
@@ -1141,7 +1163,7 @@ en:
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
-        message: Thin landing endpoint.
+        message: Manage your account and preferences from here.
       sign:
         in:
           limitations:
@@ -1288,10 +1310,10 @@ en:
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
-        message: Thin landing endpoint.
+        message: Continue to your account and preference controls.
     dev:
       roots:
-        message: Thin landing endpoint.
+        message: Developer access and support entry point.
     org:
       admin:
         dashboard:
@@ -1608,7 +1630,7 @@ en:
         update_settings: Update Settings
         update_success: Preferences updated successfully
       roots:
-        message: Thin landing endpoint.
+        message: Continue to your organization account and preferences.
     shared:
       lobby:
         title: Lobby
@@ -1956,6 +1978,9 @@ en:
             totp: TOTP
           show:
             page_title: Settings
+        v1:
+          passkey:
+            new: New passkey
       preferences:
         footer:
           home: Home
@@ -2027,7 +2052,7 @@ en:
           preference: Preferences
     dev:
       roots:
-        message: Thin landing endpoint.
+        message: Support and status entry point.
     org:
       preference:
         emails:
@@ -2603,9 +2628,11 @@ en:
   messages:
     cannot_delete_last_passkey: Cannot delete the last passkey. You must have at least one passkey.
     confirm_destroy: Are you sure you want to delete this?
+    no_totp_found: No authenticator apps are registered.
     passkey_successfully_destroyed: Passkey deleted successfully
     passkey_successfully_updated: Passkey updated successfully
     region_settings_updated_successfully: Region settings updated successfully.
+    totp_status_label: Status
   models:
     user:
       recovery_identity_required:
@@ -3267,6 +3294,11 @@ en:
   sign:
     app:
       authentication:
+        secret:
+          invalid: "Unable to sign in."
+          label: "Secret"
+          submit: "Sign in"
+          title: "Secret Sign in"
         device:
           placeholder: Sign-in using another device is not implemented yet.
         email:
@@ -3288,6 +3320,7 @@ en:
           back_link: Back
           description: Select the method that fits your current session.
           links:
+            secret: Secret
             device: Sign in using another device
             apple: Continue with Apple
             email: Email
@@ -4739,3 +4772,17 @@ en:
         verifications:
           show:
             no_methods: Please register a passkey.
+
+  ui:
+    skip_to_content: Skip to content
+  ui_presentation:
+    body_json: Enter the document as JSON.
+    confirmation_required: Check the confirmation above to enable this action.
+    information: Information
+    navigation:
+      authentication: Authentication
+      footer: Footer navigation
+      pagination: Pagination
+      preferences: Display preferences
+      primary: Primary navigation
+    processing: Processing. Please wait.

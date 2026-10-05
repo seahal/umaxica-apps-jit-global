@@ -67,12 +67,12 @@ export default function AdminRecord({
             <DescriptionList items={section.fields} />
           ) : null}
           {section.links && section.links.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-sm">
+            <ul className="flex flex-col gap-1 text-base">
               {section.links.map((link) => (
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    className="underline-offset-4 hover:underline"
+                    className="ui-text-link underline underline-offset-4 hover:underline"
                   >
                     {link.label}
                   </a>
@@ -83,7 +83,7 @@ export default function AdminRecord({
           {(section.fields?.length ?? 0) === 0 &&
           (section.links?.length ?? 0) === 0 &&
           section.empty_message ? (
-            <p className="text-sm text-fg-muted">{section.empty_message}</p>
+            <p className="text-base text-fg-muted">{section.empty_message}</p>
           ) : null}
         </Card>
       ))}

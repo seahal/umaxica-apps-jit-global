@@ -23,26 +23,32 @@ class LocalAuthenticationSessionCommitter
     private
 
     def commit(controller:, flow:, actor:, nonce:, binding:, pending_resume:)
-      actor.class.connection_class_for_self.connected_to(role: :writing) do
-        actor.with_lock do
-          flow.class.connection_class_for_self.connected_to(role: :writing) do
-            flow.class.transaction do
-              flow.lock!
-              now = flow.class.database_now
-              validate_browser_binding!(
-                flow: flow, actor: actor, nonce: nonce, binding: binding,
-                pending_resume: pending_resume, now: now,
-              )
-              return { status: :already_finalized, token_id: flow.token_id } if flow.base_finalized_at
+      result =
+        actor.class.connection_class_for_self.connected_to(role: :writing) do
+          actor.with_lock do
+            flow.class.connection_class_for_self.connected_to(role: :writing) do
+              flow.class.transaction do
+                flow.lock!
+                now = flow.class.database_now
+                validate_browser_binding!(
+                  flow: flow, actor: actor, nonce: nonce, binding: binding,
+                  pending_resume: pending_resume, now: now,
+                )
+                return { status: :already_finalized, token_id: flow.token_id } if flow.base_finalized_at
 
-              commit_locked!(
-                controller: controller, flow: flow, actor: actor, binding: binding,
-                pending_resume: pending_resume, now: now,
-              )
+                commit_locked!(
+                  controller: controller, flow: flow, actor: actor, binding: binding,
+                  pending_resume: pending_resume, now: now,
+                )
+              end
             end
           end
         end
+      if flow.is_a?(ClientSignInFlow) && flow.authentication_method == "secret"
+        claim = ClientSecretCredential.find_by!(claim_sign_in_flow_ref: flow.public_id, client_id: actor.id)
+        ClientSecretClaimFinalizer.call!(credential: claim, purge_after: ClientSecretLifetimesValue.purge_delay)
       end
+      result
     end
 
     def validate_browser_binding!(flow:, actor:, nonce:, binding:, pending_resume:, now:)

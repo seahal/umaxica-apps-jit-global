@@ -39,7 +39,7 @@ export default function MfaChallengeChoice({
       {/* Document visits: each factor ceremony has its own guards. */}
       <NavList items={methods} />
 
-      {noMethodsNotice ? <p className="text-sm text-fg-muted">{noMethodsNotice}</p> : null}
+      {noMethodsNotice ? <p className="text-base text-fg-muted">{noMethodsNotice}</p> : null}
       <CeremonyCancellation {...cancel} />
     </Page>
   );

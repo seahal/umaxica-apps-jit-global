@@ -32,8 +32,8 @@ export default function SocialLinkStatus({
       width="narrow"
     >
       <Card>
-        <p className="text-sm text-fg">{status}</p>
-        <p className="text-sm">
+        <p className="text-base text-fg">{status}</p>
+        <p className="text-base">
           <TextLink
             href={editLink.href}
             tone="muted"

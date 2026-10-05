@@ -51,8 +51,14 @@ body.xper {
     radial-gradient(60rem 30rem at 50% -10rem, var(--glow), transparent 70%),
     linear-gradient(color-mix(in oklab, var(--line) 45%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in oklab, var(--line) 45%, transparent) 1px, transparent 1px);
-  background-size: auto, 3rem 3rem, 3rem 3rem;
-  background-position: top center, center, center;
+  background-size:
+    auto,
+    3rem 3rem,
+    3rem 3rem;
+  background-position:
+    top center,
+    center,
+    center;
   color: var(--fg);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
@@ -109,7 +115,7 @@ body.xper {
   border: 1px solid color-mix(in oklab, var(--tint) 45%, var(--line));
   border-radius: 999px;
   background-color: color-mix(in oklab, var(--tint) 12%, var(--surface));
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -173,8 +179,12 @@ body.xper {
   border: 1px solid var(--line);
   border-radius: 1rem;
   background-color: color-mix(in oklab, var(--surface) 85%, transparent);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px var(--glow);
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 8px 24px -12px var(--glow);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
 }
 .xper-card:hover {
   transform: translateY(-2px);

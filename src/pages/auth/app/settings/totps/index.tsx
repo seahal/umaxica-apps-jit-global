@@ -2,8 +2,10 @@
 //
 // Every cell arrives formatted from the server, including the placeholder a credential that has
 // never produced a code shows.
+import ButtonLink from "@/components/ui/ButtonLink";
 import Page from "@/components/ui/Page";
 import Table from "@/components/ui/Table";
+import TextLink from "@/components/ui/TextLink";
 import type { SettingsLink } from "@/features/auth/settings/links";
 
 type TotpRow = {
@@ -25,6 +27,7 @@ type Props = {
 };
 
 export default function TotpsIndex({
+  title,
   back_link: backLink,
   new_link: newLink,
   columns,
@@ -33,14 +36,13 @@ export default function TotpsIndex({
   totps,
 }: Props) {
   return (
-    <Page width="wide">
-      <a href={backLink.href}>{backLink.label}</a>
-
-      <div>
-        <a href={newLink.href}>{newLink.label}</a>
-      </div>
-
-      <Table>
+    <Page
+      title={title}
+      up={backLink}
+      width="wide"
+      actions={<ButtonLink href={newLink.href}>{newLink.label}</ButtonLink>}
+    >
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{columns.title}</th>
@@ -58,7 +60,7 @@ export default function TotpsIndex({
               <td>{totp.last_otp_at}</td>
               <td>{totp.status}</td>
               <td>
-                <a href={totp.edit_href}>{editLabel}</a>
+                <TextLink href={totp.edit_href}>{editLabel}</TextLink>
               </td>
             </tr>
           ))}

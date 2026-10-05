@@ -30,13 +30,13 @@ export default function BirthdateShow({
       upVisit="inertia"
     >
       <dl className="flex flex-col gap-1 rounded-lg border border-line bg-surface p-4">
-        <dt className="text-sm font-medium text-fg-muted">{birthdateLabel}</dt>
-        <dd className="text-sm text-fg">
+        <dt className="text-base font-medium text-fg-muted">{birthdateLabel}</dt>
+        <dd className="text-base text-fg">
           {birthdate ? <span data-birthdate>{birthdate}</span> : notSet}
         </dd>
       </dl>
 
-      <p className="text-sm text-fg-muted">{changeUnavailable}</p>
+      <p className="text-base text-fg-muted">{changeUnavailable}</p>
     </Page>
   );
 }

@@ -93,8 +93,8 @@ export default function TotpChallengeForm({
             role="alert"
             className="animate-shake flex flex-col gap-1 rounded-md border border-danger bg-surface p-3"
           >
-            <h2 className="text-sm font-semibold text-danger">{errorHeading}</h2>
-            <ul className="flex flex-col gap-1 text-sm text-danger">
+            <h2 className="text-base font-semibold text-error">{errorHeading}</h2>
+            <ul className="flex flex-col gap-1 text-base text-error">
               {formErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -114,7 +114,7 @@ export default function TotpChallengeForm({
         />
 
         {selector ? (
-          <label className="flex flex-col gap-1 text-sm font-medium">
+          <label className="flex flex-col gap-1 text-base font-medium">
             <span>{selector.label}</span>
             <select
               name={selector.name}
@@ -122,7 +122,7 @@ export default function TotpChallengeForm({
               onChange={(event) =>
                 setData(field.scope, { ...scopedData, [selector.field]: event.target.value })
               }
-              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg"
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-fg"
             >
               {selector.options.map((option) => (
                 <option
@@ -154,7 +154,7 @@ export default function TotpChallengeForm({
           {/* Document visit: the challenge menu has its own guards. */}
           <a
             href={backLink.href}
-            className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+            className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
           >
             {backLink.label}
           </a>

@@ -3,6 +3,36 @@
 require "test_helper"
 
 class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
+  test "physically collected manual operation cannot reserve another batch on replay" do
+    actor = clients(:one)
+    token = client_tokens(:one)
+    token.update!(
+      last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+    )
+    context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
+    operation = SecureRandom.uuid
+    issuance = ClientSecretManualReservationIssuer.call!(
+      actor_context: context, token: token, operation_id: operation, expires_after: 0.000001.seconds,
+    )
+    ClientSecretIssuanceExpiryInvalidator.call!(
+      issuance: issuance, executor_job_id: "expire-replay", purge_after: 0.000001.seconds,
+    )
+    ChronicleRetentionPolicy.find_by(code: "security") ||
+      ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
+    ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
+
+    assert_equal :purged, ClientSecretIssuancePurger.call!(issuance: issuance, executor_job_id: "purge-replay")
+    assert_no_difference("ClientSecretIssuance.count") do
+      assert_raises(ClientSecretManualReservationIssuer::Denied) do
+        ClientSecretManualReservationIssuer.call!(
+          actor_context: context, token: token, operation_id: operation, expires_after: 1.minute,
+        )
+      end
+    end
+  end
+
   test "scoped session reserves one item and retries preserve its allocation without generating a Secret" do
     actor = clients(:one)
     token = client_tokens(:one)

@@ -1,0 +1,10 @@
+<%# Minimal document ceremonies stay independent of application chrome and asset runtimes. %>
+<style nonce="<%= content_security_policy_nonce %>">
+  body { margin: 0; font-family: system-ui, sans-serif; font-size: 1rem; line-height: 1.5; color: #18181b; background: #fff; }
+  body:lang(ja) { line-height: 1.7; }
+  main { box-sizing: border-box; width: 100%; max-width: 28rem; margin-inline: auto; padding: 2.5rem 1rem; }
+  h1 { margin-block: 0 1.5rem; font-size: 1.5rem; line-height: 1.4; overflow-wrap: anywhere; }
+  input[type="submit"] { min-height: 48px; min-width: 44px; max-width: 100%; padding: 0.625rem 1rem; border: 1px solid transparent; border-radius: 0.375rem; font: inherit; white-space: normal; background: #1447e6; color: #fff; cursor: pointer; }
+  input[type="submit"]:focus-visible { outline: 4px solid #000; outline-offset: 2px; box-shadow: 0 0 0 2px #ffd43d; }
+  @media (forced-colors: active) { input[type="submit"] { border-color: ButtonText; } input[type="submit"]:focus-visible { outline-color: Highlight; box-shadow: none; } }
+</style>

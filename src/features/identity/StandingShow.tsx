@@ -38,8 +38,8 @@ export default function StandingShow({
           className="flex flex-col gap-1 rounded-lg border border-line bg-surface p-4"
         >
           <h2 className="text-lg font-semibold text-fg">{decision.kind}</h2>
-          <p className="text-sm text-fg">{decision.reason}</p>
-          {decision.ends_at ? <p className="text-sm text-fg-muted">{decision.ends_at}</p> : null}
+          <p className="text-base text-fg">{decision.reason}</p>
+          {decision.ends_at ? <p className="text-base text-fg-muted">{decision.ends_at}</p> : null}
         </section>
       ))}
     </Page>

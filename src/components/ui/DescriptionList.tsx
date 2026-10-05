@@ -13,14 +13,14 @@ export type DescriptionListItem = {
 
 export default function DescriptionList({ items }: { items: DescriptionListItem[] }) {
   return (
-    <dl className="flex flex-col gap-3 text-sm">
+    <dl className="flex flex-col gap-3 text-base">
       {items.map((item) => (
         <div
           key={item.term}
-          className="flex flex-col gap-0.5 sm:flex-row sm:gap-4"
+          className="flex flex-col gap-1 sm:flex-row sm:gap-8"
         >
           <dt className="font-medium text-fg-muted sm:w-44 sm:shrink-0">{item.term}</dt>
-          <dd className="text-fg">{item.description}</dd>
+          <dd className="min-w-0 wrap-anywhere text-fg">{item.description}</dd>
         </div>
       ))}
     </dl>

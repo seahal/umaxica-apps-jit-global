@@ -60,9 +60,47 @@ module BaseStepUpIntent
     )
   rescue BaseAuthAdmissionCoordinator::Denied => e
     log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_admission_issue")
+    # The one refusal the person can resolve: the session is too old to register a first
+    # authenticator. Every other refusal stays generic.
+    if e.code == "bootstrap_not_fresh"
+      return render plain: I18n.t("auth.step_up.fresh_sign_in_required"), status: :forbidden
+    end
+
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
     render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
+  end
+
+  # Starts one bootstrap transaction for exactly the chosen registration method. Returns nil after
+  # rendering a refusal.
+  def issue_bootstrap_admission!(actor:, token:, scope:, return_to:, method:)
+    return if reject_step_up_for_authentication_context!
+
+    requirement = StepUpRequirement.new(
+      scope: scope, purpose: "bootstrap", step_up_required: false, allowed_methods: [method.to_sym],
+      audience: step_up_audience, session_binding: token.public_id, token_binding: token.public_id,
+      require_session_binding: true, ttl: VerificationBase::STEP_UP_TTL,
+    )
+    issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: actor, token: token, requirement: requirement, return_to: return_to,
+    )
+    session[:base_step_up_transaction_ref] = issuance.transaction.transaction_id
+    log_step_up_ceremony(
+      "admission_issued", transaction: issuance.transaction, outcome: "issued", method: method,
+                          state_after: issuance.transaction.status,
+    )
+    issuance
+  rescue BaseAuthAdmissionCoordinator::Denied => e
+    log_step_up_refusal(e, session_public_id: token.public_id, stage: "base_bootstrap_issue")
+    if e.code == "bootstrap_not_fresh"
+      render plain: I18n.t("auth.step_up.fresh_sign_in_required"), status: :forbidden
+    else
+      render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    end
+    nil
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
+    nil
   end
 
   def requested_step_up_scope(allowed_scopes)

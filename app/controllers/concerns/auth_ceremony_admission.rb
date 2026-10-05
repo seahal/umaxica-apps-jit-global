@@ -38,12 +38,23 @@ module AuthCeremonyAdmission
         return yield
       end
 
+      log_ticket_ceremony_entry_refusal(expected_intent)
       return render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
     end
 
     # Auth starts only from a Base-issued admission or a verified continuation; a context-free
     # request is refused rather than bridged to Base (adr/sign-neutral-entry-and-logout-target-authorization.md).
+    log_ticket_ceremony_entry_refusal(expected_intent)
     render_invalid_admission_request!
+  end
+
+  # Sign-in admissions share this entry; only ticket ceremonies belong in the Step-Up log.
+  def log_ticket_ceremony_entry_refusal(expected_intent)
+    return unless BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+
+    log_step_up_ceremony(
+      "refused", outcome: "refused", stage: "auth_ceremony_entry", **auth_ceremony_ticket_refusal,
+    )
   end
 
   def redeem_admission_reference_and_redirect!(expected_intent:)

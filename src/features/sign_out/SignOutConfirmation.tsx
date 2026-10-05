@@ -2,9 +2,9 @@
 //
 // Whether a session is still active is a server decision: `form` is absent when there is nothing
 // left to sign out of, so the button cannot be offered by the client on its own.
-import { Link } from "@inertiajs/react";
-
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
+import Page from "@/components/ui/Page";
 import { csrfToken } from "@/lib/csrf";
 
 export type SignOutConfirmationForm = {
@@ -37,10 +37,11 @@ export default function SignOutConfirmation(props: SignOutConfirmationProps) {
   }
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-      <p className="text-sm text-fg-muted">{description}</p>
-
+    <Page
+      title={title}
+      description={description}
+      width="narrow"
+    >
       {form ? (
         // A full document POST, as the ERB form was: sign-out ends the session the Inertia app
         // runs in, so the response is a navigation rather than a page swap.
@@ -72,21 +73,20 @@ export default function SignOutConfirmation(props: SignOutConfirmationProps) {
             </Button>
           </div>
           <noscript>
-            <p className="text-sm text-fg-muted">{form.confirm_description}</p>
+            <p className="text-base text-fg-muted">{form.confirm_description}</p>
           </noscript>
         </form>
       ) : null}
 
       <p>
-        <Link
+        <ButtonLink
           href={returnLink.href}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-line
-            bg-surface px-4 py-2 text-sm font-medium text-fg transition-colors
-            hover:bg-surface-muted"
+          variant="secondary"
+          inertia
         >
           {returnLink.label}
-        </Link>
+        </ButtonLink>
       </p>
-    </section>
+    </Page>
   );
 }

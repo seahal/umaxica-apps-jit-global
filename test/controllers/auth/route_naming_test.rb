@@ -79,10 +79,25 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     assert_unrecognized(:app, "/preference/language/edit", :get)
   end
 
-  test "secret credential sign-in routes are absent from every Auth surface" do
-    SURFACES.each_key do |surface|
-      assert_unrecognized(surface, "/sign/in/secret", :get)
-      assert_unrecognized(surface, "/sign/in/secret", :post)
+  test "app Secret has a new form and create action while other surfaces have neither" do
+    host = SURFACES.fetch(:app)
+    { get: ["/sign/in/secret/new", "new"], post: ["/sign/in/secret", "create"] }.each do |verb, (path, action)|
+      route = Rails.application.routes.recognize_path("http://#{host}#{path}", method: verb)
+
+      assert_equal "auth/app/sign/in/secrets", route.fetch(:controller)
+      assert_equal action, route.fetch(:action)
+    end
+    assert_equal "/sign/in/secret/new", new_auth_app_sign_in_secret_path
+    SURFACES.each do |surface, hostname|
+      [[:get, "/sign/in/secret"], [:get, "/sign/in/secret_credential/new"],
+       [:post, "/sign/in/secret_credential"],].each do |verb, path|
+        assert_raises(ActionController::RoutingError) { Rails.application.routes.recognize_path("http://#{hostname}#{path}", method: verb) }
+      end
+      next if surface == :app
+
+      [[:get, "/sign/in/secret/new"], [:post, "/sign/in/secret"]].each do |verb, path|
+        assert_raises(ActionController::RoutingError) { Rails.application.routes.recognize_path("http://#{hostname}#{path}", method: verb) }
+      end
     end
   end
 

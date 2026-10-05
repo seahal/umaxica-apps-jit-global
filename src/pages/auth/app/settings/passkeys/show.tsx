@@ -39,7 +39,7 @@ export default function PasskeysShow({
         />
       </Card>
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink href={editLink.href}>{editLink.label}</TextLink>
       </p>
     </Page>

@@ -21,8 +21,8 @@ export type NavListItem = {
 };
 
 const ROW =
-  "flex items-center justify-between gap-3 rounded-lg border border-line bg-surface " +
-  "px-4 py-3 text-sm text-fg";
+  "flex items-center justify-between gap-3 rounded-md border border-line bg-surface " +
+  "min-h-12 px-4 py-3 text-base text-fg";
 
 export default function NavList({
   items,
@@ -42,13 +42,15 @@ export default function NavList({
       {items.map((item) => {
         const body = (
           <>
-            <span className="flex flex-col gap-0.5">
-              <span className="font-medium">{item.label}</span>
-              {item.description ? <span className="text-fg-muted">{item.description}</span> : null}
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="ui-link-label font-medium">{item.label}</span>
+              {item.description ? (
+                <span className="shrink-0 text-fg-muted">{item.description}</span>
+              ) : null}
             </span>
             <span
               aria-hidden="true"
-              className="text-fg-muted"
+              className="shrink-0 text-fg-muted"
             >
               &rarr;
             </span>
@@ -59,7 +61,7 @@ export default function NavList({
           <li key={item.label}>
             {item.href === null ? (
               <span className={`${ROW} text-fg-muted`}>
-                <span className="flex flex-col gap-0.5">
+                <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="font-medium">{item.label}</span>
                   {item.description ? <span>{item.description}</span> : null}
                 </span>
@@ -67,14 +69,14 @@ export default function NavList({
             ) : visit === "inertia" ? (
               <Link
                 href={item.href}
-                className={`${ROW} hover:bg-surface-muted`}
+                className={`ui-text-link ${ROW} hover:bg-surface-muted`}
               >
                 {body}
               </Link>
             ) : (
               <a
                 href={item.href}
-                className={`${ROW} hover:bg-surface-muted`}
+                className={`ui-text-link ${ROW} hover:bg-surface-muted`}
               >
                 {body}
               </a>

@@ -1,20 +1,20 @@
 <% page_title(title) %>
-<div class="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-  <div class="flex items-center justify-between">
+<div class="mx-auto flex w-full max-w-2xl flex-col gap-8">
+  <div class="flex flex-wrap items-start justify-between gap-4">
     <div>
-      <%= link_to "← All entries", index_href, class: "text-sm text-fg-muted underline-offset-4 hover:underline" %>
-      <h1 class="text-2xl font-bold text-fg"><%= title %></h1>
-      <p class="text-sm text-fg-muted"><%= description %></p>
+      <%= link_to "← All entries", index_href, class: "text-base text-fg-muted underline underline-offset-4 hover:underline" %>
+      <h1 class="text-2xl leading-snug font-semibold text-fg sm:text-3xl"><%= title %></h1>
+      <p class="text-base text-fg-muted"><%= description %></p>
     </div>
     <%= link_to "Edit", edit_href,
-          class: "inline-flex items-center rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+          class: "inline-flex min-h-12 items-center justify-center rounded-md bg-accent px-3 py-2 text-base font-medium text-accent-fg" %>
   </div>
 
   <% if errors["base"] %>
-    <p role="alert" class="text-sm text-danger"><%= errors["base"] %></p>
+    <p role="alert" class="text-base text-error"><%= errors["base"] %></p>
   <% end %>
 
-  <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+  <dl class="grid grid-cols-1 gap-3 text-base sm:grid-cols-2">
     <% {
          "Public ID" => entry[:public_id],
          "Surface" => entry[:surface],
@@ -37,40 +37,42 @@
   </dl>
 
   <section class="flex flex-col gap-3">
-    <h2 class="text-sm font-medium text-fg">Publication</h2>
+    <h2 class="text-xl font-semibold text-fg">Publication</h2>
 
     <% if publication %>
       <%= form_with url: publication[:end_href], method: :delete, class: "flex flex-col gap-2" do %>
-        <p class="text-sm text-fg">
+        <p class="text-base text-fg">
           Published since <%= publication[:effective_from] %> from version <%= publication[:version_public_id] %>.
         </p>
-        <label class="flex flex-col gap-1 text-sm">
-          <span>Reason for unpublishing</span>
+        <div class="flex flex-col gap-1 text-base">
+          <%= label_tag "publication_reason", "Reason for unpublishing" %>
           <%= text_field_tag "publication[reason]", nil, autocomplete: "off",
-                class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+                aria: { invalid: errors["reason"].present?, describedby: ("publication_reason-error" if errors["reason"].present?) },
+            class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 text-base text-fg" %>
           <% if errors["reason"] %>
-            <span role="alert" class="text-danger"><%= errors["reason"] %></span>
+            <span id="publication_reason-error" class="text-error"><%= errors["reason"] %></span>
           <% end %>
-        </label>
+        </div>
         <div>
-          <%= submit_tag "Unpublish", class: "rounded-md bg-danger px-3 py-2 text-sm font-medium text-surface" %>
+          <%= submit_tag "Unpublish", class: "min-h-12 rounded-md bg-danger px-3 py-2 text-base font-medium text-danger-fg" %>
         </div>
       <% end %>
     <% else %>
       <%= form_with url: publish_href, method: :post, class: "flex flex-col gap-2" do %>
-        <p class="text-sm text-fg-muted">
+        <p class="text-base text-fg-muted">
           This entry is not published. Publishing promotes the current revision to a version.
         </p>
-        <label class="flex flex-col gap-1 text-sm">
-          <span>Effective from (leave empty to publish now)</span>
+        <div class="flex flex-col gap-1 text-base">
+          <%= label_tag "publication_effective_from", "Effective from (leave empty to publish now)" %>
           <%= datetime_field_tag "publication[effective_from]", nil,
-                class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+                aria: { invalid: errors["effective_from"].present?, describedby: ("publication_effective_from-error" if errors["effective_from"].present?) },
+            class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 text-base text-fg" %>
           <% if errors["effective_from"] %>
-            <span role="alert" class="text-danger"><%= errors["effective_from"] %></span>
+            <span id="publication_effective_from-error" class="text-error"><%= errors["effective_from"] %></span>
           <% end %>
-        </label>
+        </div>
         <div>
-          <%= submit_tag "Publish", class: "rounded-md bg-fg px-3 py-2 text-sm font-medium text-surface" %>
+          <%= submit_tag "Publish", class: "min-h-12 rounded-md bg-accent px-3 py-2 text-base font-medium text-accent-fg" %>
         </div>
       <% end %>
     <% end %>
@@ -78,13 +80,13 @@
     <% if scheduled_publications.present? %>
       <ul class="flex flex-col gap-2">
         <% scheduled_publications.each do |scheduled| %>
-          <li class="text-sm text-fg">
+          <li class="text-base text-fg">
             Scheduled for <%= scheduled[:effective_from] %> from version <%= scheduled[:version_public_id] %>.
             <%= form_with url: scheduled[:end_href], method: :delete, class: "mt-1 flex gap-2" do %>
               <%= text_field_tag "publication[reason]", nil, "aria-label": "Reason for cancelling",
                     autocomplete: "off",
-                    class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
-              <%= submit_tag "Cancel", class: "rounded-md border border-line px-3 py-2 text-sm font-medium text-fg" %>
+                    class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 text-base text-fg" %>
+              <%= submit_tag "Cancel", class: "min-h-12 rounded-md border border-control bg-surface px-3 py-2 text-base font-medium text-fg" %>
             <% end %>
           </li>
         <% end %>
@@ -93,24 +95,25 @@
   </section>
 
   <section class="flex flex-col gap-2">
-    <h2 class="text-sm font-medium text-fg">Archive</h2>
+    <h2 class="text-xl font-semibold text-fg">Archive</h2>
 
     <% if entry[:archive_state] == "archived" %>
       <%= form_with url: archive_href, method: :delete do %>
-        <%= submit_tag "Restore", class: "rounded-md border border-line px-3 py-2 text-sm font-medium text-fg" %>
+        <%= submit_tag "Restore", class: "min-h-12 rounded-md border border-control bg-surface px-3 py-2 text-base font-medium text-fg" %>
       <% end %>
     <% else %>
       <%= form_with url: archive_href, method: :post, class: "flex flex-col gap-2" do %>
-        <label class="flex flex-col gap-1 text-sm">
-          <span>Reason for archiving</span>
+        <div class="flex flex-col gap-1 text-base">
+          <%= label_tag "archive_reason", "Reason for archiving" %>
           <%= text_field_tag "archive[reason]", nil, autocomplete: "off",
-                class: "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg" %>
+                aria: { invalid: errors["reason"].present?, describedby: ("archive_reason-error" if errors["reason"].present?) },
+            class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 text-base text-fg" %>
           <% if errors["reason"] %>
-            <span role="alert" class="text-danger"><%= errors["reason"] %></span>
+            <span id="archive_reason-error" class="text-error"><%= errors["reason"] %></span>
           <% end %>
-        </label>
+        </div>
         <div>
-          <%= submit_tag "Archive", class: "rounded-md bg-danger px-3 py-2 text-sm font-medium text-surface" %>
+          <%= submit_tag "Archive", class: "min-h-12 rounded-md bg-danger px-3 py-2 text-base font-medium text-danger-fg" %>
         </div>
       <% end %>
     <% end %>
@@ -118,13 +121,13 @@
 
   <% if entry[:summary].present? %>
     <section class="flex flex-col gap-1">
-      <h2 class="text-sm font-medium text-fg">Summary</h2>
-      <p class="text-sm text-fg"><%= entry[:summary] %></p>
+      <h2 class="text-xl font-semibold text-fg">Summary</h2>
+      <p class="text-base text-fg"><%= entry[:summary] %></p>
     </section>
   <% end %>
 
   <section class="flex flex-col gap-1">
-    <h2 class="text-sm font-medium text-fg">Body</h2>
-    <pre class="overflow-x-auto rounded-md border border-line bg-surface-muted p-3 text-xs text-fg"><%= JSON.pretty_generate(entry[:body] || {}) %></pre>
+    <h2 class="text-xl font-semibold text-fg">Body</h2>
+    <pre class="overflow-x-auto rounded-md border border-line bg-surface-muted p-3 text-sm text-fg"><%= JSON.pretty_generate(entry[:body] || {}) %></pre>
   </section>
 </div>

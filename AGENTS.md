@@ -62,6 +62,12 @@ the remaining entries matching the task.
   `docs/architecture/controller-lifecycle.md`
 - Sign-in, session issuance, session limits, the login cooldown, or sign-out:
   `project/session-issuance.mdc`, `adr/root-login-establishment-boundary.md`
+- State machines, flow or status columns, status reference tables, or any code that writes a state
+  or status value: `docs/mermaid/README.md` — locate the affected axis in its inventory, compare the
+  matching `docs/mermaid/idp-*.mmd` diagram and its section in
+  `docs/mermaid/idp-state-machine-transition-inventory.md` with the code, and update them in the
+  same change so the diagrams keep describing the current implementation; add an inventory row and
+  a diagram when the change introduces a new axis
 - User-facing notices, alerts, or feedback: `generic/no-flash-messages.mdc`
 - Translation keys, locale bundles under `config/locales/`, or `t`/`I18n.t` calls:
   `docs/architecture/i18n.md`, `adr/i18n-explicit-translation-keys.md`

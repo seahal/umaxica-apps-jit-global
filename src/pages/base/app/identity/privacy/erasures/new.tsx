@@ -31,7 +31,7 @@ export default function PrivacyErasureNew({ title, notices, form }: Props) {
       title={title}
       width="narrow"
     >
-      <div className="flex flex-col gap-3 text-sm text-fg-muted">
+      <div className="flex flex-col gap-3 text-base text-fg-muted">
         {notices.map((notice) => (
           <p key={notice}>{notice}</p>
         ))}

@@ -15,25 +15,33 @@
 import type { ReactNode } from "react";
 
 const TABLE =
-  "w-full border-collapse text-left text-sm " +
+  "w-full border-collapse text-left " +
   "[&_thead]:bg-surface-muted " +
-  "[&_th]:px-3 [&_th]:py-2 [&_th]:text-xs [&_th]:font-semibold [&_th]:tracking-wide " +
-  "[&_th]:text-fg-muted [&_th]:uppercase " +
-  "[&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-fg " +
+  "[&_th]:px-3 [&_th]:font-semibold  " +
+  "[&_th]:text-fg [&_thead]:border-b-2 [&_thead]:border-control  " +
+  "[&_td]:px-3 [&_td]:align-top [&_td]:text-fg " +
   "[&_tbody_tr]:border-t [&_tbody_tr]:border-line";
 
 export type TableProps = {
   /** Names the table for assistive technology when the surrounding heading does not. */
   label?: string;
+  /** Dense is reserved for administration lists where scanning many records is the task. */
+  density?: "default" | "dense";
   children: ReactNode;
 };
 
-export default function Table({ label, children }: TableProps) {
+export default function Table({ label, density = "default", children }: TableProps) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+    <div
+      // Keyboard users must be able to scroll this container without changing the table semantics.
+      // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+      tabIndex={0}
+      {...(label === undefined ? {} : { role: "region", "aria-label": label })}
+      className="ui-table-scroll max-w-full overflow-x-auto rounded-xl border border-line bg-surface"
+    >
       <table
         {...(label === undefined ? {} : { "aria-label": label })}
-        className={TABLE}
+        className={`${TABLE} ${density === "dense" ? "text-sm [&_th]:py-2 [&_td]:py-2" : "text-base [&_th]:py-3 [&_td]:py-3"}`}
       >
         {children}
       </table>

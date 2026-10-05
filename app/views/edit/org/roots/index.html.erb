@@ -8,17 +8,17 @@
       </p>
     </header>
 
-    <nav aria-label="Authentication">
+    <nav aria-label="<%= t("ui_presentation.navigation.authentication") %>">
       <ul class="flex flex-wrap items-center gap-4">
         <li>
           <%= link_to logged_in? ? "Publishing" : "Sign in", edit_org_dashboard_path(ri: params[:ri]),
-                class: "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors bg-accent text-accent-fg hover:bg-accent-hover active:opacity-90" %>
+                class: "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-base font-medium transition-colors bg-accent text-accent-fg hover:bg-accent-hover active:opacity-90" %>
         </li>
         <% unless logged_in? %>
           <li>
             <%# Registration starts at Base's CSRF-protected admission form. %>
             <%= link_to "Sign up", base_org_root_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), ri: params[:ri]),
-                  class: "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors bg-accent text-accent-fg hover:bg-accent-hover active:opacity-90" %>
+                  class: "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-base font-medium transition-colors bg-accent text-accent-fg hover:bg-accent-hover active:opacity-90" %>
           </li>
         <% end %>
       </ul>

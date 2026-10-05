@@ -85,7 +85,7 @@ export default function PasskeysIndex({
         onToken={setToken}
       />
 
-      <Table>
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{columns.description}</th>

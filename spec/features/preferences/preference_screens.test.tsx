@@ -60,7 +60,7 @@ describe("preference select screen", () => {
     expect(html).toContain('name="preference_region[option_id]"');
     expect(html).toContain("日本");
     expect(html).toContain("アメリカ合衆国 (USA)");
-    expect(html).toContain('value="2" selected');
+    expect(html).toMatch(/<option(?=[^>]*value="2")(?=[^>]*selected)[^>]*>日本<\/option>/u);
   });
 
   it("links the region screen to the screens that depend on it", () => {
@@ -101,7 +101,7 @@ describe("preference select screen", () => {
 
     // `Select`'s field error is wired through `aria-describedby` rather than `role="alert"`,
     // the same convention every other field-level error uses in this codebase.
-    expect(html).toContain('data-invalid="true"');
+    expect(html).toContain('aria-invalid="true"');
     expect(html).toContain("選択してください");
   });
 
