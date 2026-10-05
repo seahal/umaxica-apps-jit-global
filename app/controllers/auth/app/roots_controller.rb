@@ -22,7 +22,7 @@ module Auth
           description: t("landing.thin_endpoint"),
           sign_in: {
             label: "Sign in",
-            href: auth_app_sign_in_path(ri: params[:ri]),
+            href: sign_in_url_with_pt(nil),
           },
           sign_up: nil,
         }

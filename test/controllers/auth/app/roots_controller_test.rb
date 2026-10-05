@@ -32,7 +32,7 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "auth/app/roots/index", inertia_component
     assert_equal "Sign App", inertia_props.fetch("heading")
-    assert_equal auth_app_sign_in_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
+    assert_equal base_sign_entry_url(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
   end
 
   test "renders the ceremony-service root for the us region" do
@@ -40,7 +40,7 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "auth/app/roots/index", inertia_component
-    assert_equal auth_app_sign_in_path(ri: "us"), inertia_props.fetch("sign_in").fetch("href")
+    assert_equal base_sign_entry_url(ri: "us"), inertia_props.fetch("sign_in").fetch("href")
   end
 
   test "an unrecognized region falls through to the shared region normalization" do
@@ -78,6 +78,14 @@ class Auth::App::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "auth/app/roots/index", inertia_component
   end
   private
+
+  # The landing link leaves Auth for the Base neutral GET /sign entry; Auth's own /sign/in refuses a
+  # request that carries no Base-issued admission.
+  def base_sign_entry_url(ri:)
+    base_app_sign_show_url(
+      ri: ri, host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host, protocol: "https",
+    )
+  end
 
   def host_headers(host = nil)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]
