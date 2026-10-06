@@ -33,6 +33,21 @@ The discussion behind this plan is in
    tests, fail-closed store-failure tests, and equivalence-partition and boundary-value coverage.
 9. Record the final design in a new or amended ADR before implementation.
 
+## Experience item to add before the Preference port: Web Push
+
+Requested by the user on 2026-10-06. Open question; no design is accepted yet. The questions are
+listed in `adr/xper-phase-zero-bootstrap.md` under "Open item before the Preference port: Web
+Push".
+
+1. Decide how the Web Push feature should work: what the Experience item represents, who owns the
+   opt-in, the push subscription, and delivery, which origin and Service Worker register the
+   subscription, and how subscriptions behave for anonymous browsers and on sign-out, revocation,
+   and withdrawal.
+2. Record that decision in a new or amended ADR.
+3. Add the Web Push item to the Experience item set.
+4. Only then port the existing Preference items into Experience. This ordering is the requirement:
+   the Preference port does not start before the Web Push item is defined.
+
 ## Current-cycle prohibition
 
 Do not modify Auth or Xper implementation as part of the current Base/RP refactor solely to advance

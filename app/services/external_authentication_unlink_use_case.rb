@@ -20,7 +20,7 @@ class ExternalAuthenticationUnlinkUseCase
 
     AppPrincipalRecord.transaction do
       user.lock!
-      if identity.active? && !user.social_unlink_methods_remaining?(excluding_provider: provider)
+      if identity.active? && !AuthMethodGuard.can_remove_external_identity?(user, identity)
         raise SocialAuth::LastIdentityError.new("errors.social_auth.insufficient_login_methods")
       end
 

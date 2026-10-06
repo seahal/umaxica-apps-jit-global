@@ -26,7 +26,7 @@ module BaseIdentityPasskeyManagement
   end
 
   def show
-    @passkey = passkey_relation.find_by!(public_id: params.expect(:id))
+    @passkey = passkey_relation.find_by!(passkey_reference_attribute => params.expect(:id))
     authorize!(@passkey)
     render inertia: passkey_show_component, props: passkey_show_props
   end
@@ -59,7 +59,7 @@ module BaseIdentityPasskeyManagement
   end
 
   def update
-    @passkey = passkey_relation.find_by!(public_id: params.expect(:id))
+    @passkey = passkey_relation.find_by!(passkey_reference_attribute => params.expect(:id))
     authorize!(@passkey)
     description = params.expect(passkey: [:description]).fetch(:description)
     @passkey.update!(description: description.to_s.strip)
@@ -70,7 +70,7 @@ module BaseIdentityPasskeyManagement
   end
 
   def destroy
-    @passkey = passkey_relation.find_by!(public_id: params.expect(:id))
+    @passkey = passkey_relation.find_by!(passkey_reference_attribute => params.expect(:id))
     authorize!(@passkey)
     removed = IdentityCredentialRemovalCommitter.call!(
       actor: identity_actor, credential: @passkey, current_session: current_session_token, request: request,
@@ -95,12 +95,12 @@ module BaseIdentityPasskeyManagement
 
   def serialize_passkey(passkey)
     {
-      public_id: passkey.public_id,
+      public_id: passkey_reference(passkey),
       description: passkey.description,
       created_at: passkey.created_at&.iso8601,
       last_used_at: passkey.last_used_at&.iso8601,
-      show_href: passkey_path(passkey.public_id),
-      destroy_action: passkey_path(passkey.public_id),
+      show_href: passkey_path(passkey_reference(passkey)),
+      destroy_action: passkey_path(passkey_reference(passkey)),
     }
   end
 
@@ -115,13 +115,13 @@ module BaseIdentityPasskeyManagement
       back_link: { label: t("actions.back", default: "Back"), href: passkeys_path },
       passkey: serialize_passkey(@passkey),
       form: {
-        action: passkey_path(@passkey.public_id),
+        action: passkey_path(passkey_reference(@passkey)),
         description: @passkey.description,
         label: t("activerecord.attributes.user_passkey.description", default: "Description"),
         submit_label: t("actions.save"),
       },
       destroy: {
-        action: passkey_path(@passkey.public_id),
+        action: passkey_path(passkey_reference(@passkey)),
         label: t("actions.delete"),
         confirm: t("messages.confirm_destroy"),
       },
@@ -140,6 +140,10 @@ module BaseIdentityPasskeyManagement
   def passkey_path(public_id)
     public_send("base_#{registration_surface}_identity_passkey_path", public_id, ri: params[:ri])
   end
+
+  def passkey_reference_attribute = :public_id
+
+  def passkey_reference(passkey) = passkey.public_send(passkey_reference_attribute)
 
   def new_passkey_path
     public_send("new_base_#{registration_surface}_identity_passkey_path", ri: params[:ri])

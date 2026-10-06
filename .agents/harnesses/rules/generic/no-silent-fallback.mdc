@@ -36,18 +36,42 @@ expected case — never as a way to avoid handling an error.
 Do not hide invalid configuration by supplying defaults for required settings. Required
 configuration must be explicit and must fail clearly when missing.
 
-Read required Ruby environment variables with one-argument `ENV.fetch("NAME")`. Do not use
-`ENV["NAME"]` for required configuration because a missing value returns `nil` and can continue
-silently. Do not pass a default value or block to `ENV.fetch`; missing required configuration must
-raise immediately.
+## Environment variables
 
-Forbidden required-configuration patterns include:
+Decision record: `adr/env-fetch-without-default.md`.
 
-- `ENV["NAME"]`, `ENV.fetch("NAME", "default")`, `ENV.fetch("NAME") { ... }`,
-  `ENV["NAME"] || "default"`, or equivalent Ruby defaults
+Never supply a substitute value for an environment variable at the point where it is read. This
+applies to every variable, not only to ones judged "required", and to every place Ruby is
+evaluated: `app/`, `lib/`, `config/` (including ERB-templated YAML), `db/`, `bin/`, Rake tasks, and
+`test/`. Test code is not exempt.
+
+- Read a variable the code needs with one-argument `ENV.fetch("NAME")`. A missing variable raises
+  at that line.
+- Read a legitimately optional variable with `ENV["NAME"]` and handle `nil` as an explicit branch
+  (do nothing, disable the feature, raise). The branch must not produce a substitute value.
+
+Forbidden forms:
+
+- `ENV.fetch("NAME", anything)`, including `ENV.fetch("NAME", nil)`
+- `ENV.fetch("NAME") { ... }`
+- `ENV["NAME"] || "default"`, `ENV["NAME"].presence || "default"`, or equivalent Ruby defaults
+- `ENV["NAME"] ||= "default"`
+- `ENV["NAME"]` for a variable the code cannot work without, because `nil` continues silently
 - `Rails.application.credentials.dig(...) || "default"` or equivalent credential defaults
 - `process.env.NAME ?? "default"`, `process.env.NAME || "default"`,
   `import.meta.env.NAME ?? "default"`, or equivalent JavaScript or TypeScript defaults
+
+Values belong to the environment, not to code. When a test or a development path needs a variable
+that is not set, add it to the checked-in environment files; do not add a default at the call site.
+
+Existing violations are debt, not precedent. Many files, especially under `test/`, still contain
+`ENV.fetch("NAME", "default")`. Do not copy that form into new or edited lines, even when every
+neighbouring line uses it. Removing the existing ones is tracked in
+`plans/backlog/env-fetch-default-removal.md`; leave untouched lines alone unless the task is that
+migration.
+
+Do not enable RuboCop's `Style/FetchEnvVar`, and do not accept an autocorrection that produces
+`ENV.fetch("NAME", nil)`.
 
 Validate required environment variables at startup or module boundaries and raise or throw a clear
 error when they are missing.

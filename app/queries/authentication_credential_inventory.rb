@@ -13,45 +13,17 @@ class AuthenticationCredentialInventory
       :phishing_resistant_methods,
       keyword_init: true,
     ) do
-      def sign_in_method_count = sign_in_methods.count
+      # These names describe the capability that remains after a proposed mutation. They are
+      # deliberately independent of legacy assurance labels and of database row counts.
+      def usable_sign_in_capabilities = sign_in_methods
+
+      def usable_step_up_capabilities = uv_step_up_methods
+
+      def has_usable_sign_in_capability? = usable_sign_in_capabilities.any?
+
+      def has_usable_step_up_capability? = usable_step_up_capabilities.any?
 
       def contact_identifier_count = contact_identifiers.count
-
-      def login_method_count = sign_in_method_count
-
-      def step_up_method_count = step_up_methods.count
-
-      def sign_in_available? = sign_in_method_count.positive?
-
-      def contactable? = contact_identifier_count.positive?
-
-      def login_available? = sign_in_available?
-
-      def step_up_available? = step_up_method_count.positive?
-
-      def retains_sign_in? = sign_in_available?
-
-      def retains_contactability? = contactable?
-
-      def retains_login? = login_available?
-
-      def retains_step_up? = step_up_available?
-
-      def retains_uv_step_up? = uv_step_up_methods.any?
-
-      def last_sign_in_method? = sign_in_method_count.zero?
-
-      def last_contact_identifier? = contact_identifier_count.zero?
-
-      def last_login_method? = last_sign_in_method?
-
-      def last_step_up_method? = step_up_method_count.zero?
-
-      def removable_contact_identifier? = !last_contact_identifier?
-
-      def removable_login_credential? = !last_sign_in_method?
-
-      def removable_step_up_credential? = !last_step_up_method?
     end
 
   def self.call(actor, excluding: nil, reload: false)

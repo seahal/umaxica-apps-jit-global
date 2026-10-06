@@ -18,7 +18,6 @@ module Auth
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
-        declare_authentication_mode! :private, only: %i(index edit update destroy)
         layout :settings_totps_layout
 
         before_action :require_totp_registration_context!, only: %i(new create)

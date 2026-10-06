@@ -12,7 +12,7 @@ module Auth
             AUTHENTICATION_MODE = :open
 
             def show
-              gate = SignUpStepGate.for_show(
+              gate = SignUpStepGate.for_entry(
                 controller: self,
                 surface: sign_up_surface,
                 family: sign_up_family,
@@ -21,7 +21,9 @@ module Auth
               return redirect_to(sign_up_restart_path) unless gate.success?
 
               @sign_up_ticket = gate.ticket
-              redirect_to(gate.redirect_to || explicit_step_path(first_step))
+              return redirect_to(sign_up_restart_path) unless gate.current_step
+
+              redirect_to(explicit_step_path(gate.current_step))
             end
 
             private
@@ -41,7 +43,7 @@ module Auth
 
             def explicit_step_path(step)
               helper = SignUpStepGate::STEP_ROUTES.fetch(sign_up_surface).fetch(sign_up_family).fetch(step)
-              public_send(helper, ri: params[:ri], pt: signed_pt_param)
+              public_send(helper, **sign_up_flow_binding_params, ri: params[:ri], pt: signed_pt_param)
             end
           end
         end

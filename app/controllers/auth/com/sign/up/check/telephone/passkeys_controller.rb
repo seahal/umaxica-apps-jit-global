@@ -64,7 +64,10 @@ module Auth
               # The same two endpoints the Stimulus registration controller used, and the same
               # checkpoint version the server re-validates before it clears the requirement.
               def render_sign_up_passkey_page
-                path = auth_com_sign_up_check_telephone_passkey_path(ri: params[:ri], pt: signed_pt_param)
+                path = auth_com_sign_up_check_telephone_passkey_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
 
                 render inertia: "auth/com/sign/up/checkpoint/passkeys/new",
                        props: {
@@ -82,7 +85,10 @@ module Auth
               end
 
               def success_redirect_url
-                auth_com_sign_up_check_telephone_birthdate_path(ri: params[:ri], pt: signed_pt_param)
+                auth_com_sign_up_check_telephone_birthdate_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
               end
 
               def load_sign_up_actor

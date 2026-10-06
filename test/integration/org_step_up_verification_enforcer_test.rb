@@ -92,14 +92,14 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
 
-    post auth_org_settings_passkeys_options_url(ri: "jp", host: @auth_host), headers: @auth_headers
+    post auth_org_verification_passkey_options_url(ri: "jp", host: @auth_host), headers: @auth_headers
 
     assert_response :unauthorized
     assert_equal VerificationBase::STEP_UP_REQUIRED_MESSAGE, response.body
   end
 
   test "successful verification enables protected POST and records audit" do
-    return_to = Base64.urlsafe_encode64(auth_org_settings_passkeys_path(ri: "jp"))
+    return_to = Base64.urlsafe_encode64(base_org_identity_passkeys_path(ri: "jp"))
     OperatorPasskey.create!(
       staff: @staff,
       webauthn_id: "test",
@@ -128,7 +128,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to auth_org_settings_url(ri: "jp")
+    assert_redirected_to base_org_identity_passkeys_path(ri: "jp")
     set_cookie_lines = Array(response.headers["Set-Cookie"])
 
     assert_not set_cookie_lines.any? { |line| line.start_with?("#{OperatorVerification.cookie_name}=") }
@@ -142,7 +142,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       subject_id: @staff.id,
     )
 
-    post auth_org_settings_passkeys_options_url(ri: "jp", host: @auth_host), headers: @auth_headers
+    post auth_org_verification_passkey_options_url(ri: "jp", host: @auth_host), headers: @auth_headers
 
     assert_response :unauthorized
   end

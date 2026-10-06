@@ -11,6 +11,12 @@ class OidcAuthorizationTransactionPurger
     "org" => OperatorOidcAuthorizationTransaction,
   }.freeze
 
+  SESSION_LIMIT_RESOLUTION_MODELS = {
+    ClientOidcAuthorizationTransaction => [ClientSessionLimitResolutionTransaction, ClientSignInFlow],
+    VisitorOidcAuthorizationTransaction => [VisitorSessionLimitResolutionTransaction, VisitorSignInFlow],
+    OperatorOidcAuthorizationTransaction => [OperatorSessionLimitResolutionTransaction, OperatorSignInFlow],
+  }.freeze
+
   class << self
     public
 
@@ -55,16 +61,9 @@ class OidcAuthorizationTransactionPurger
         protected_flows = flows.filter_map { |id, reference| id if claimed_refs.include?(reference) } +
           ClientSecretSignInReceipt.where(sign_in_flow_id: flow_ids).pluck(:sign_in_flow_id)
         protected_ids = rows.filter_map { |row| row.id if protected_flows.include?(row.secret_sign_in_flow_id) }
-        protected_ids += ClientSessionLimitResolutionTransaction
-          .joins(:sign_in_flow)
-          .where(oidc_authorization_transaction_id: rows.map(&:id))
-          .where(
-            "client_session_limit_resolution_transactions.state_id IN (10, 20) OR " \
-            "(client_session_limit_resolution_transactions.state_id = 100 AND client_sign_in_flows.token_id IS NULL)",
-          )
-          .pluck(:oidc_authorization_transaction_id)
         rows.each do |row|
           next if protected_ids.include?(row.id)
+          next unless purge_session_limit_resolutions_for!(row, ClientOidcAuthorizationTransaction)
           next unless AuthAdmissionBindingPurger.purge_for_parent!(
             parent: row, now:, retention_period:,
           )
@@ -81,6 +80,7 @@ class OidcAuthorizationTransactionPurger
     candidates.in_batches(of: 500) do |batch|
       model.transaction do
         batch.lock.to_a.each do |row|
+          next unless purge_session_limit_resolutions_for!(row, model)
           next unless AuthAdmissionBindingPurger.purge_for_parent!(
             parent: row, now:, retention_period:,
           )
@@ -90,5 +90,28 @@ class OidcAuthorizationTransactionPurger
       end
     end
     deleted
+  end
+
+  # Session-limit resolution rows are terminal audit facts, but their parent
+  # authorization transaction has a restrictive FK. The resolution is
+  # collected at the same parent-retention boundary, after open resolutions and
+  # RESOLVED continuations that still lack a root token have been held. This
+  # keeps child-before-parent ordering explicit without treating a terminal
+  # resolution as an indefinite parent hold.
+  def purge_session_limit_resolutions_for!(parent, authorization_model)
+    resolution_model, flow_model = SESSION_LIMIT_RESOLUTION_MODELS.fetch(authorization_model)
+    resolutions = resolution_model.where(oidc_authorization_transaction_id: parent.id).lock.to_a
+    return true if resolutions.empty?
+
+    flow_ids = resolutions.map(&:sign_in_flow_id).uniq
+    flows = flow_model.where(id: flow_ids).index_by(&:id)
+    return false if resolutions.any? do |resolution|
+      flow = flows[resolution.sign_in_flow_id]
+      !flow || !resolution.state_id.in?(resolution_model::TERMINAL_STATES) ||
+        (resolution.state_id == resolution_model::RESOLVED && flow.token_id.nil?)
+    end
+
+    resolution_model.where(id: resolutions.map(&:id)).delete_all
+    true
   end
 end

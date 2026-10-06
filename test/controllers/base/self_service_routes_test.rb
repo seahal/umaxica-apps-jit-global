@@ -46,10 +46,8 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
     hrefs = warning.fetch("items").to_h { |item| [item.fetch("label"), item.fetch("href")] }
 
     assert_equal(
-      new_auth_app_settings_passkey_url(
+      new_base_app_identity_passkey_url(
         ri: "jp",
-        host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-        protocol: "https",
       ),
       hrefs.fetch(I18n.t("base.app.identity.credential_warning.passkey")),
     )

@@ -6,7 +6,8 @@
     <meta name="referrer" content="no-referrer">
   </head>
   <body>
-    <%= form_with url: action_url, method: :post, local: true, data: { turbo: false } do %>
+    <%= form_with id: "oidc-authorization-result-form", url: action_url, method: :post, local: true,
+                  data: { turbo: false } do %>
       <%= hidden_field_tag :result_ref, result_ref %>
       <%= hidden_field_tag :transaction_ref, transaction_ref if transaction_ref.present? %>
       <%= hidden_field_tag :ri, ri if ri.present? %>

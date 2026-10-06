@@ -62,6 +62,35 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
     assert_equal Float::INFINITY, credential.discard_at
   end
 
+  test "forced withdrawal revocation bypasses voluntary capability preservation" do
+    credential = client_secret_credentials(:one)
+    actor = credential.client
+    actor.client_external_identities.delete_all
+    actor.client_emails.delete_all
+    actor.client_telephones.delete_all
+    actor.client_passkeys.delete_all
+    actor.client_totp_credentials.delete_all
+    ClientSecretCredential.where(client_id: actor.id).where.not(id: credential.id).delete_all
+    telephone = ClientTelephone.create!(
+      user: actor,
+      number: "+8190#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}",
+      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      binding_finalized_at: ClientTelephone.database_now,
+    )
+    now = Client.database_now
+
+    assert_equal [:secret], AuthenticationCredentialInventory.call(actor).usable_sign_in_capabilities
+    assert_equal [:telephone], AuthenticationCredentialInventory.call(actor).contact_identifiers
+    assert_not AuthMethodGuard.can_remove_secret_credential?(actor, credential)
+
+    actor.update!(withdrawn_at: now, terminated_at: now)
+    credential.commit_withdrawal_revocation!(at: now, purge_at: now + 1.day)
+
+    assert credential.reload.revoked_at
+    assert_kind_of Time, credential.discard_at
+    assert_equal actor.id, telephone.reload.user_id
+  end
+
   test "withdrawal retention rejects non-time and unordered boundaries before writing audit" do
     credential = client_secret_credentials(:one)
     now = Client.database_now

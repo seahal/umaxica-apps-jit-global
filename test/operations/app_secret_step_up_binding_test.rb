@@ -15,7 +15,9 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
       requirement = StepUpRequirement.new(
         scope: scope, purpose: "bootstrap", step_up_required: false, allowed_methods: [method],
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
-        require_session_binding: true,
+        require_session_binding: true, phishing_resistant_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
 
       assert_no_difference("ClientStepUpCeremonyTransaction.count") do
@@ -35,8 +37,11 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor, established_authentication_method: "secret")
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
+      step_up_required: true,
       allowed_methods: %i(passkey totp), session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, phishing_resistant_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
     admission = issue_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/secrets/new?ri=jp",
@@ -59,6 +64,9 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
       step_up_required: false, scope: "settings_secret_credential", purpose: "bootstrap",
       audience: "step_up:app", allowed_methods: [:passkey],
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: StepUpRequirement::DEFAULT_TTL,
+      actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
 
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
@@ -73,8 +81,11 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor)
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
+      step_up_required: true,
       allowed_methods: [:passkey], session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, phishing_resistant_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
 
     ["/settings/secrets", "/settings/secret_credentials", "/secrets-extra", "/identity/emails",
@@ -91,8 +102,11 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     second = ClientToken.create!(user: actor)
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
+      step_up_required: true,
       allowed_methods: [:passkey], session_binding: first.public_id,
-      token_binding: first.public_id, require_session_binding: true,
+      token_binding: first.public_id, require_session_binding: true, phishing_resistant_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
 
     assert_no_difference("ClientStepUpCeremonyTransaction.count") do
@@ -109,8 +123,11 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor, established_authentication_method: "secret")
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
-      allowed_methods: [:secret], session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      step_up_required: true,
+      allowed_methods: [:secret_credential], session_binding: token.public_id,
+      token_binding: token.public_id, require_session_binding: true, phishing_resistant_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
 
     assert_no_difference("ClientStepUpCeremonyTransaction.count") do
@@ -137,8 +154,11 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
         end
       requirement = StepUpRequirement.new(
         scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:#{surface}",
+        step_up_required: true,
         allowed_methods: [:passkey], session_binding: token.public_id,
-        token_binding: token.public_id, require_session_binding: true,
+        token_binding: token.public_id, require_session_binding: true, phishing_resistant_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        ttl: StepUpRequirement::DEFAULT_TTL, actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       admission = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/secrets",

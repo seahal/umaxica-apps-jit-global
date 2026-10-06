@@ -12,11 +12,7 @@ module AuthenticationContactabilityOwner
     authentication_credential_inventory(excluding: excluding, reload: reload).contact_identifier_count
   end
 
-  def contactable?(excluding: nil, reload: false)
-    authentication_credential_inventory(excluding: excluding, reload: reload).contactable?
-  end
-
-  def retains_contactability_after?(excluding:, reload: false)
-    contactable?(excluding: excluding, reload: reload)
+  def has_contact_identifier?(excluding: nil, reload: false)
+    contact_identifiers(excluding: excluding, reload: reload).any?
   end
 end

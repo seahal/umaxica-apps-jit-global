@@ -7,6 +7,11 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
+    @client = Client.create!(status_id: ClientStatus::ACTIVE)
+    @identifier = "secret-bound-#{SecureRandom.hex(4)}@example.com"
+    @client.client_emails.create!(
+      address: @identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).finalize_binding!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
@@ -37,6 +42,12 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
         surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
       )
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+      _auth_session, raw_auth_sid = prepare_admission_binding_for_consumption!(
+        binding, base_token: nil, base_browser_nonce: "test-browser-nonce",
+      )
+      cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+      cookies[cookie_name] = raw_auth_sid
       get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       post auth_app_sign_in_path(ri: "jp"), params: {
@@ -46,7 +57,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
       assert_response :see_other
       get new_auth_app_sign_in_secret_path(ri: "jp"), headers: headers
       page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
-      payload = { "cf-turnstile-response" => "synthetic" }
+      payload = { "identifier" => @identifier, "cf-turnstile-response" => "synthetic" }
       payload[:secret] = value unless value == :missing
       before = ClientSecretCredential.order(:id).pluck(:id, :claimed_at, :consumed_at, :revoked_at, :discard_at)
       token_count = ClientToken.count

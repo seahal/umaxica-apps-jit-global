@@ -10,6 +10,8 @@
 # `docs/reference/forbidden-rails-methods.md`. Do not rewrite it as row-by-row
 # `destroy` -- the batch DELETE (FK cascades, no AR callbacks) is the intended
 # behavior.
+require "digest"
+
 class RetentionPurgeJob < ApplicationJob
   queue_as :retention
 
@@ -103,6 +105,16 @@ class RetentionPurgeJob < ApplicationJob
         next
       end
 
+      if klass == ClientToken
+        purge_client_tokens(klass, now: now, batch_size: limit)
+        next
+      end
+
+      if klass == ClientPasskey
+        purge_client_passkeys(klass, now: now, batch_size: limit)
+        next
+      end
+
       if [ClientSessionLimitResolutionTransaction, VisitorSessionLimitResolutionTransaction,
           OperatorSessionLimitResolutionTransaction,].include?(klass)
         purge_session_limit_resolutions(klass, now: now, batch_size: limit)
@@ -117,28 +129,120 @@ class RetentionPurgeJob < ApplicationJob
 
   def purge_client_authentication_flows(klass, now:, batch_size:)
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
-      klass.transaction do
-        # Flow locking also excludes admission and session issuance. Source queries
-        # acquire no source row locks, preserving the Client-before-flow lock order.
-        references = batch.lock.pluck(:public_id)
-        protected_references =
-          if klass == ClientSignInFlow
-            ClientSecretCredential.where(claim_sign_in_flow_ref: references).pluck(:claim_sign_in_flow_ref) +
-              ClientSignInFlow.where(
-                public_id: references, id: ClientSecretSignInReceipt.select(:sign_in_flow_id),
-              ).pluck(:public_id) +
-              ClientAuthCeremonySession.where(local_sign_in_flow_ref: references).pluck(:local_sign_in_flow_ref) +
-              ClientSignInFlow.where(
-                public_id: references,
-                id: ClientOidcAuthorizationTransaction.select(:secret_sign_in_flow_id),
-              )
-                .pluck(:public_id)
-          else
-            ClientSecretIssuance.where(sign_up_flow_ref: references).pluck(:sign_up_flow_ref)
+      batch.to_a.each do |flow|
+        owner = Client.find_by(id: flow.principal_id)
+        if owner
+          owner.with_lock do
+            AppTicketRecord.connected_to(role: :writing) do
+              klass.transaction do
+                current = klass.lock.find_by(id: flow.id, public_id: flow.public_id)
+                next unless current
+                next if client_sign_up_flow_protected?(current)
+
+                klass.where(id: current.id).delete_all
+              end
+            end
           end
-        batch.where(public_id: references - protected_references).delete_all
+        elsif !client_sign_up_flow_source_hold?(flow)
+          klass.where(id: flow.id).delete_all
+        end
       end
     end
+  end
+
+  def purge_client_tokens(klass, now:, batch_size:)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      batch.to_a.each do |token|
+        owner = Client.find_by(id: token.user_id)
+        if owner
+          owner.with_lock do
+            AppTicketRecord.connected_to(role: :writing) do
+              klass.transaction do
+                current = klass.lock.find_by(id: token.id, public_id: token.public_id)
+                next unless current
+                next if client_token_source_hold?(current, owner)
+
+                klass.where(id: current.id).delete_all
+              end
+            end
+          end
+        elsif !client_token_source_hold?(token)
+          klass.where(id: token.id).delete_all
+        end
+      end
+    end
+  end
+
+  def purge_client_passkeys(klass, now:, batch_size:)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      batch.to_a.each do |passkey|
+        owner = Client.find_by(id: passkey.user_id)
+        if owner
+          owner.with_lock do
+            AppTicketRecord.connected_to(role: :writing) do
+              ClientSignUpFlow.transaction do
+                next if ClientSignUpFlow.lock.exists?(pending_passkey_registration_id: passkey.id)
+
+                AppZenithRecord.connected_to(role: :writing) do
+                  klass.transaction do
+                    current = klass.lock.find_by(id: passkey.id, public_id: passkey.public_id)
+                    next unless current
+                    next if client_passkey_source_hold?(current, owner)
+
+                    klass.where(id: current.id).delete_all
+                  end
+                end
+              end
+            end
+          end
+        elsif !client_passkey_source_hold?(passkey)
+          klass.where(id: passkey.id).delete_all
+        end
+      end
+    end
+  end
+
+  def client_sign_up_flow_protected?(flow)
+    ClientSecretIssuance.exists?(
+      sign_up_flow_ref: flow.public_id,
+      client_id: flow.principal_id,
+    ) || client_sign_up_flow_source_hold?(flow)
+  end
+
+  def client_sign_up_flow_source_hold?(flow)
+    AppZenithRecord.connected_to(role: :writing) do
+      ClientSecretAuditOutbox.exists?(
+        event_name: "secret.issuance_purged", issuance_sign_up_flow_ref: flow.public_id,
+      ) || ClientSecretIssuance.exists?(sign_up_flow_ref: flow.public_id, client_id: flow.principal_id)
+    end
+  end
+
+  def client_token_source_hold?(token, owner = nil)
+    client_ref = owner&.public_id
+    AppZenithRecord.connected_to(role: :writing) do
+      live = ClientSecretIssuance.where(browser_session_ref: token.public_id)
+      live = live.where(client_id: owner.id) if owner
+      purged = ClientSecretAuditOutbox.where(
+        event_name: "secret.issuance_purged", issuance_browser_session_ref: token.public_id,
+      )
+      purged = purged.where(client_ref:) if client_ref
+      live.exists? || purged.exists?
+    end
+  end
+
+  def client_passkey_source_hold?(passkey, owner = nil)
+    operation = passkey_registration_operation(passkey)
+    AppZenithRecord.connected_to(role: :writing) do
+      issuance = ClientSecretIssuance.where(origin_operation_id: operation)
+      issuance = issuance.where(client_id: owner.id) if owner
+      issuance.exists? ||
+        ClientSecretAuditOutbox.exists?(event_name: "secret.issuance_purged", operation_ref: operation)
+    end
+  end
+
+  def passkey_registration_operation(passkey)
+    hex = Digest::SHA256.hexdigest("app_secret_passkey_registration:#{passkey.public_id}")
+    [hex[0, 8], hex[8, 4], hex[12, 4], hex[16, 4], hex[20, 12]].join("-")
   end
 
   def purge_sign_in_flows(klass, now:, batch_size:)

@@ -12,14 +12,20 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
       attributes = { address: "lock-boundary-#{SecureRandom.hex(8)}@example.com", step_up_otp_locked_until: deadline }
       email, passkey =
         if surface == :app
-          email = actor.client_emails.create!(**attributes, user_email_status_id: ClientEmailStatus::VERIFIED)
+          email = actor.client_emails.create!(
+            **attributes, user_email_status_id: ClientEmailStatus::VERIFIED,
+                          binding_finalized_at: deadline,
+          )
           [email,
            actor.client_passkeys.create!(
              webauthn_id: SecureRandom.uuid, public_key: "lock-boundary",
              uv_verified_at: deadline,
            ),]
         else
-          email = actor.visitor_emails.create!(**attributes, visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+          email = actor.visitor_emails.create!(
+            **attributes, visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+                          binding_finalized_at: deadline,
+          )
           [email,
            actor.visitor_passkeys.create!(
              webauthn_id: SecureRandom.uuid, public_key: "lock-boundary",
@@ -31,8 +37,8 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
           inventory = AuthenticationCredentialInventory.call(actor, excluding: passkey)
 
           assert_includes inventory.step_up_methods, :email_otp
-          assert_predicate inventory, :contactable?
-          assert_equal microseconds >= 0, inventory.retains_uv_step_up?
+          assert_equal [:email], inventory.contact_identifiers
+          assert_equal microseconds >= 0, inventory.has_usable_step_up_capability?
           assert_equal microseconds >= 0, AuthMethodGuard.can_remove_passkey?(actor, passkey)
         end
       end
@@ -62,12 +68,13 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
           when :email
             actor.client_emails.create!(
               **attributes, address: "inventory-app-#{SecureRandom.hex(6)}@example.com",
-                            user_email_status_id: ClientEmailStatus::VERIFIED,
+                            user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: deadline,
             )
           when :telephone
             actor.client_telephones.create!(
               **attributes, number: "+8190#{format("%08d", kind_index + 12_345_678)}",
                             user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+                            binding_finalized_at: deadline,
             )
           end
         else
@@ -85,12 +92,13 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
           when :email
             actor.visitor_emails.create!(
               **attributes, address: "inventory-com-#{SecureRandom.hex(6)}@example.com",
-                            visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+                            visitor_email_status_id: VisitorEmailStatus::VERIFIED, binding_finalized_at: deadline,
             )
           when :telephone
             actor.visitor_telephones.create!(
               **attributes, number: "+8190#{format("%08d", kind_index + 22_345_678)}",
                             visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+                            binding_finalized_at: deadline,
             )
           end
         end
@@ -99,10 +107,12 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
           inventory = model.stub(:database_now, decision_time) { AuthenticationCredentialInventory.call(actor) }
           available = microseconds < 0
 
-          assert_equal available && kind != :telephone, inventory.aal1_available?, "#{surface} #{kind} #{microseconds}"
-          assert_equal available && kind != :telephone, inventory.step_up_available?,
+          assert_equal available && kind != :telephone, inventory.has_usable_sign_in_capability?,
                        "#{surface} #{kind} #{microseconds}"
-          assert_equal available && kind != :passkey, inventory.contactable?, "#{surface} #{kind} #{microseconds}"
+          assert_equal available && kind != :telephone, inventory.has_usable_step_up_capability?,
+                       "#{surface} #{kind} #{microseconds}"
+          assert_equal available && kind != :passkey, inventory.contact_identifiers.any?,
+                       "#{surface} #{kind} #{microseconds}"
         end
       end
     end
@@ -122,6 +132,6 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
 
     inventory = AuthenticationCredentialInventory.call(client)
 
-    assert_equal [:apple], inventory.aal1_methods
+    assert_equal [:apple], inventory.sign_in_methods
   end
 end

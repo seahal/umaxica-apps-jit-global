@@ -108,7 +108,7 @@ module SignUpSocialBirthdateSupport
         id: candidate.provider, result_ref: result_reference, ri: params[:ri],
         host: base_authority_host, protocol: "https",
       ), status: :see_other,
-      allow_other_host: true,
+         allow_other_host: true,
     )
   end
 

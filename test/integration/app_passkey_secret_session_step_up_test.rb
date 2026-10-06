@@ -74,6 +74,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
 
     assert_equal 303, base.response.status, base.response.body
     registration_uri = URI.parse(base.response.location)
+
     assert_equal auth_host, registration_uri.host
     assert_equal new_auth_app_verification_registration_passkey_path,
                  registration_uri.path

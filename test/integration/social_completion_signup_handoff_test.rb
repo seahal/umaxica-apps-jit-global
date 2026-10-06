@@ -41,7 +41,7 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
       result_token = issue_login_result
 
       assert_difference -> { ClientSignUpFlow.where(principal_id: @client.id).count }, 1 do
-      complete_staged_result!(result_token: result_token, provider: "google")
+        complete_staged_result!(result_token: result_token, provider: "google")
       end
 
       assert_response :redirect
@@ -102,21 +102,27 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
     )
     host!(@base_host)
     https!
-    get base_app_social_authentication_completion_path(
-      id: provider, result_ref: reference, ri: "jp",
+    get(
+      base_app_social_authentication_completion_path(
+        id: provider, result_ref: reference, ri: "jp",
+      ),
     )
+
     assert_response :success
 
     form = response.parsed_body.at_css("form")
+
     assert form
     params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    post form["action"],
-         params: params,
-         headers: {
-           "Host" => @base_host,
-           "Origin" => "https://#{@base_host}",
-           "Sec-Fetch-Site" => "same-origin",
-         }
+    post(
+      form["action"],
+      params: params,
+      headers: {
+        "Host" => @base_host,
+        "Origin" => "https://#{@base_host}",
+        "Sec-Fetch-Site" => "same-origin",
+      },
+    )
   end
 
   def issue_link_result(provider: "google")

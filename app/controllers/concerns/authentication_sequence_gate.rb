@@ -514,6 +514,7 @@ module AuthenticationSequenceGate
 
   def advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
     return result unless cycle&.persisted?
+
     # The final session issuer may advance the same flow through session
     # issuance and completion while this request still holds the pre-issuance
     # object. A committed flow is terminal; do not replay the pre-issuance

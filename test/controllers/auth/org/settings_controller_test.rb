@@ -53,10 +53,10 @@ class Auth::Org::SettingsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "sign credential settings routes still resolve on sign" do
-    get auth_org_settings_passkeys_url(ri: "jp")
-
-    assert_not_equal 404, response.status
+  test "only the Entra settings route remains on sign" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{@host}/settings/passkeys", method: :get)
+    end
 
     get auth_org_settings_entra_url(ri: "jp")
 

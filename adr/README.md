@@ -62,6 +62,13 @@ Current browser credential recovery decision:
   failures raise, and stale preference reads never delete a newer generation. Supersedes
   `adr/preference-credential-entry-recovery.md`, which is retained for history.
 
+Current configuration decision:
+
+- `adr/env-fetch-without-default.md` — environment variables are read without a code-side default
+  in every Ruby file, tests included: one-argument `ENV.fetch` for a needed variable, `ENV[...]`
+  with an explicit `nil` branch for an optional one. Existing defaults are debt tracked in
+  `plans/backlog/env-fetch-default-removal.md`.
+
 Current backend transport decision:
 
 - `adr/backend-transport-tls-enforcement.md` — production Rails PostgreSQL requires `verify-full`

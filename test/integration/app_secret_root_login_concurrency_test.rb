@@ -30,6 +30,10 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
   %i(completion cancellation expiration).each do |outcome|
     test "Base Secret results racing #{outcome} cannot establish a second or terminal root login" do
       actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      identifier = "root-secret-#{SecureRandom.hex(4)}@example.com"
+      actor.client_emails.create!(
+        address: identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
+      ).finalize_binding!
       token = ClientToken.create!(user: actor)
       token.update!(
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
@@ -50,50 +54,47 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       base = open_session
       base.host!(base_host)
       base.https!
-      base.get("/sign", params: { ri: "jp" })
-      csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
-      base.post(
-        "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
-          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-      rt = Rack::Utils.parse_query(URI.parse(base.response.location).query).fetch("rt")
-      issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-      payload, = JWT.decode(
-        rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-      )
-      target = URI.parse(payload.fetch("url"))
-      flow = ClientSignInFlow.find_by!(public_id: Rack::Utils.parse_query(target.query).fetch("entry_ref"))
+      target = app_oidc_auth_target!(base, base_host: base_host)
+      entry_ref = Rack::Utils.parse_query(target.query).fetch("entry_ref")
+      admission = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+      transaction = admission.authorization_transaction
       auth = open_session
       auth.host!(auth_host)
       auth.https!
-      auth.get(target.request_uri)
-      csrf = Nokogiri::HTML(auth.response.body).at_css('input[name="authenticity_token"]')["value"]
-      auth.post(
-        auth_app_sign_in_path(ri: "jp"), params: {
-          entry_ref: flow.public_id, authenticity_token: csrf,
-        }, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" },
+      auth_headers = {
+        "Host" => auth_host, "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin",
+      }
+      redeem_auth_ceremony_session!(
+        auth, target.path, reference: entry_ref, params: { ri: "jp" }, headers: auth_headers,
+                           confirm_via_http: true, base_browser: base,
       )
       auth.get(new_auth_app_sign_in_secret_path(ri: "jp"))
       page = JSON.parse(Nokogiri::HTML(auth.response.body).at_css("script[data-page='app']").text)
       auth.post(
         auth_app_sign_in_secret_path(ri: "jp"), params: {
           :secret => raw,
+          :identifier => identifier,
           :authenticity_token => page.fetch("props").fetch("authenticity_token"),
           "cf-turnstile-response" => "synthetic",
-        }, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" },
+        }, headers: auth_headers,
       )
       auth.follow_redirect!
       auth.follow_redirect! if auth.response.redirect?
       csrf = Nokogiri::HTML(auth.response.body).at_css('input[name="authenticity_token"]')["value"]
       auth.post(
-        auth_app_sign_handoff_path(ri: "jp"), params: { authenticity_token: csrf }, headers: {
-          "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin",
-        },
+        auth_app_sign_oidc_handoff_path(ri: "jp"), params: { authenticity_token: csrf }, headers: auth_headers,
       )
-      result = Nokogiri::HTML(auth.response.body).at_css('input[name="result"]')["value"]
+
+      assert_equal 303, auth.response.status
+      result_uri = URI.parse(auth.response.location)
+      base.host!(result_uri.host)
+      base.https!
+      base.get(result_uri.request_uri, headers: { "Host" => result_uri.host })
+      result_form = Nokogiri::HTML(base.response.body).at_css("form#oidc-authorization-result-form")
+      result_action = result_form["action"]
+      result_ref = result_form.at_css('input[name="result_ref"]')["value"]
+      transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+      flow = transaction.reload.secret_sign_in_flow
       credential = ClientSecretCredential.find_by!(issuance_id: issuance.id)
       ceremony = ClientAuthCeremonySession.find(credential.claim_ceremony_session_id)
       duplicate = open_session
@@ -114,9 +115,8 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                 ready << connection.select_value("SELECT pg_backend_pid()")
                 release.pop
                 browser.post(
-                  base_app_sign_completion_path(ri: "jp"), params: {
-                    result: result, transaction_ref: flow.public_id,
-                  }, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site" },
+                  result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                                 headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
                 )
                 browser.response.status
               ensure
@@ -143,9 +143,8 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
                 ready << connection.select_value("SELECT pg_backend_pid()")
                 release.pop
                 base.post(
-                  base_app_sign_completion_path(ri: "jp"), params: {
-                    result: result, transaction_ref: flow.public_id,
-                  }, headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site" },
+                  result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                                 headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
                 )
                 base.response.status
               ensure
@@ -191,13 +190,12 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       statuses = Timeout.timeout(15) { futures.map(&:value!) }
       unless outcome == :completion
         duplicate.post(
-          base_app_sign_completion_path(ri: "jp"),
-          params: { result: result, transaction_ref: flow.public_id },
-          headers: { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-site" },
+          result_action, params: { result_ref: result_ref, transaction_ref: transaction_ref },
+                         headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
         )
         statuses << duplicate.response.status
       end
-      expected = (outcome == :completion) ? [303, 409] : [302, 400]
+      expected = (outcome == :completion) ? [302, 302] : [400, 400]
 
       assert_equal expected, statuses.sort
       assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
@@ -212,12 +210,9 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         assert_equal actor.public_id, receipts.first.client_ref
         assert credential.reload.consumed_at
         assert_predicate root, :currently_usable?
-        assert_equal 1, [base, duplicate].count { |browser| browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] }
+        assert_equal 2, [base, duplicate].count { |browser| browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] }
       else
-        assert_equal "/", URI.parse(duplicate.response.location).path
-        duplicate.follow_redirect!
-
-        assert_equal 200, duplicate.response.status
+        assert_equal 400, duplicate.response.status
         assert_nil flow.reload.token_id
         assert_nil credential.reload.consumed_at
         assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.day)
@@ -229,6 +224,15 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       futures&.each { |future| future.wait(15) }
       if actor
         ClientSecretSignInReceipt.where(client_ref: actor.public_id).find_each(&:destroy!)
+        if flow
+          ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
+          transaction_rows = ClientOidcAuthorizationTransaction.where(secret_sign_in_flow_id: flow.id)
+          ClientAuthAdmissionBinding.where(
+            authorization_transaction_id: transaction_rows.select(:id),
+          ).find_each(&:destroy!)
+          transaction_rows.find_each(&:destroy!)
+          ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
+        end
         ceremony&.destroy!
         flow&.destroy!
         Chronicle.where(subject_type: "Client", subject_id: actor.id).find_each(&:destroy!)
@@ -239,5 +243,42 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         actor.reload.destroy!
       end
     end
+  end
+
+  private
+
+  def app_oidc_auth_target!(base, base_host:)
+    base.get("/sign", params: { ri: "jp" })
+    csrf = Nokogiri::HTML(base.response.body).at_css('input[name="authenticity_token"]')["value"]
+    base.post(
+      "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
+        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+    gateway = URI.parse(base.response.location)
+    rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
+    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    payload, = JWT.decode(
+      rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    authorization = URI.parse(payload.fetch("url"))
+    base.host!(authorization.host)
+    base.https!
+    base.get(authorization.request_uri)
+    form = Nokogiri::HTML(base.response.body).at_css("form#base-authorization-ceremony-start-form")
+    base.post(
+      form["action"], params: form.css("input[name]").to_h { |input| [input["name"], input["value"]] },
+                      headers: { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" },
+    )
+    result_gateway = URI.parse(base.response.location)
+    result_rt = Rack::Utils.parse_query(result_gateway.query).fetch("rt")
+    result_payload, = JWT.decode(
+      result_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+      algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    URI.parse(result_payload.fetch("url"))
   end
 end

@@ -242,6 +242,8 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
       @token&.destroy!
       @actor.reload.destroy!
     end
-    @retention_policy&.destroy!
+    if @retention_policy && !Chronicle.exists?(chronicle_retention_policy_id: @retention_policy.id)
+      @retention_policy.destroy!
+    end
   end
 end

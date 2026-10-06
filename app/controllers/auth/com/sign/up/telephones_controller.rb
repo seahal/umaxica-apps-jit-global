@@ -21,6 +21,7 @@ module Auth
           include EnforcementIdentifierGate
 
           include SignUpSuspensionGuard
+          include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
@@ -34,6 +35,8 @@ module Auth
           end
 
           def create
+            supersede_active_sign_up_flow!
+
             telephone_params = params.fetch(:visitor_telephone, {}).permit(
               :raw_number, :number, :confirm_policy, :confirm_using_mfa,
             )
@@ -89,7 +92,7 @@ module Auth
             session[:visitor_telephone_registration] = result.session_payload
             bind_sign_up_flow_to_telephone!(@visitor_telephone)
             redirect_to(
-              auth_com_sign_up_check_telephone_otp_path(ri: params[:ri]),
+              auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
             )
           rescue ActiveRecord::RecordInvalid
             render_sign_up_telephone_new(status: :unprocessable_content)
@@ -162,7 +165,7 @@ module Auth
             {
               title: t("sign.app.registration.telephone.edit.page_title"),
               description: t("sign.app.registration.telephone.create.verification_code_sent"),
-              action: auth_com_sign_up_check_telephone_otp_path(ri: params[:ri]),
+              action: auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
               scope: "visitor_telephone",
               code_label: t("sign.app.registration.telephone.edit.code_label"),
               code_placeholder: t("sign.app.registration.telephone.edit.code_placeholder"),
@@ -173,7 +176,10 @@ module Auth
               # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
               # ends the sign-up through the existing DELETE cancellation.
               cancel: { label: t("actions.cancel"),
-                        action: auth_com_sign_up_check_telephone_otp_path(ri: params[:ri]),
+                        action: auth_com_sign_up_check_telephone_otp_path(
+                          **sign_up_flow_binding_params,
+                          ri: params[:ri],
+                        ),
                         method: "delete", },
             }
           end

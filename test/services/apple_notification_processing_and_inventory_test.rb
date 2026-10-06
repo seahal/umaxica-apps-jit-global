@@ -21,9 +21,9 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
     result = AuthenticationCredentialInventory.call(nil)
 
     assert_nil result.actor
-    assert_empty result.aal1_methods
-    assert_empty result.aal2_methods
-    assert_empty result.aal3_methods
+    assert_empty result.sign_in_methods
+    assert_empty result.step_up_methods
+    assert_empty result.uv_step_up_methods
     assert_empty result.contact_identifiers
     assert_empty result.phishing_resistant_methods
   end
@@ -32,7 +32,7 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
     result = AuthenticationCredentialInventory.call(clients(:one))
 
     assert_equal clients(:one), result.actor
-    assert_empty result.aal3_methods, "no surface issues a third factor yet"
+    assert_equal [], result.phishing_resistant_methods, "no surface issues a phishing-resistant method yet"
   end
 
   test "each principal kind is counted through the contact table its own surface owns" do

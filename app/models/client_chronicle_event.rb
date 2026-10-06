@@ -47,6 +47,7 @@ class ClientChronicleEvent < ChronicleRecord
   CREDENTIAL_SECURITY_TRANSITION = 33
   STEP_UP_FAILED = 34
   REFRESH_TOKEN_REUSE_DETECTED = 35
+  SIGN_FLOW_HALTED = 36
 
   # Association with client_chronicles
   has_many :client_chronicles,
@@ -90,6 +91,7 @@ class ClientChronicleEvent < ChronicleRecord
     CREDENTIAL_SECURITY_TRANSITION,
     STEP_UP_FAILED,
     REFRESH_TOKEN_REUSE_DETECTED,
+    SIGN_FLOW_HALTED,
   ].freeze
 
   public_constant :ACCOUNT_RECOVERED
@@ -127,6 +129,7 @@ class ClientChronicleEvent < ChronicleRecord
   public_constant :CREDENTIAL_SECURITY_TRANSITION
   public_constant :STEP_UP_FAILED
   public_constant :REFRESH_TOKEN_REUSE_DETECTED
+  public_constant :SIGN_FLOW_HALTED
   public_constant :DEFAULTS
 
   def self.ensure_defaults!

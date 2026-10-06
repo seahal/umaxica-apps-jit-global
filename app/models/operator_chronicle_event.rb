@@ -30,6 +30,7 @@ class OperatorChronicleEvent < ChronicleRecord
   PASSKEY_REGISTERED = 15
   STEP_UP_FAILED = 16
   REFRESH_TOKEN_REUSE_DETECTED = 17
+  SIGN_FLOW_HALTED = 18
 
   # Association with staff_chronicles
   has_many :staff_chronicles, class_name: "OperatorChronicle", foreign_key: :event_id,
@@ -41,6 +42,7 @@ class OperatorChronicleEvent < ChronicleRecord
     TOKEN_REFRESHED, NOTHING, STAFF_SECRET_CREATED, STAFF_SECRET_REMOVED,
     STAFF_SECRET_UPDATED, STEP_UP_VERIFIED, SOCIAL_UNLINKED, LOGOUT,
     CREDENTIAL_SECURITY_TRANSITION, PASSKEY_REGISTERED, STEP_UP_FAILED, REFRESH_TOKEN_REUSE_DETECTED,
+    SIGN_FLOW_HALTED,
   ].freeze
 
   def self.ensure_defaults!

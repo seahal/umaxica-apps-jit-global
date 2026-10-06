@@ -39,12 +39,10 @@ module SignUpExplicitStepControllerSupport
   end
 
   def load_gate_context!(gate)
+    return refuse_sign_up_phase_request(gate) if gate.refused?
+
     unless gate.success?
       render_step_gate_failure(gate)
-      return false
-    end
-    if gate.redirect?
-      redirect_to(gate.redirect_to)
       return false
     end
 
@@ -53,36 +51,46 @@ module SignUpExplicitStepControllerSupport
     true
   end
 
+  # A request that contradicts the authoritative flow instance or phase is refused in place: no
+  # redirect to the current step, and no side effect of the step it asked for. A safe request
+  # never changes the flow. A state-changing request that this browser's current flow can be held
+  # to (its binding matched; only the phase is wrong) ends that flow as HALTED. A request that
+  # could not be bound to the current flow is refused without touching any flow, so a page left
+  # over from an earlier flow can never halt the one that replaced it.
+  def refuse_sign_up_phase_request(gate)
+    if gate.phase_violation? && !request.get? && !request.head?
+      SignUpPhaseViolationEnforcer.call(
+        flow: gate.ticket, surface: sign_up_surface, reason_code: sign_up_phase_reason_code(gate),
+        requested_step: gate.step, request_id: request.request_id,
+      )
+      sign_up_session_state.clear_all!
+    else
+      Rails.logger.info(
+        JitLogEvent.format(
+          "sign.signup.phase_request_refused",
+          surface: sign_up_surface, refusal: gate.refusal, request_method: request.request_method,
+          request_id: request.request_id,
+        ),
+      )
+    end
+    if gate.refusal == :no_active_flow && sign_up_session_state.age_restricted?
+      render_sign_up_age_restricted
+    else
+      render_sign_flow_phase_refusal
+    end
+    false
+  end
+
+  # `phase_regression` when the request named a step the flow already left behind, and
+  # `phase_violation` for every other mismatch (a later step, or a flow that serves no step now).
+  def sign_up_phase_reason_code(gate)
+    cleared = gate.registry.requirement?(gate.step) &&
+      gate.registry.requirement_cleared?(gate.ticket.completed_requirements, gate.step)
+    cleared ? "phase_regression" : "phase_violation"
+  end
+
   def render_step_gate_failure(gate)
-    return redirect_to_sign_in_sequence_after_completed_sign_up if completed_sign_up_handoff_request?(gate)
-    return restart_sign_up_without_ticket if restartable_missing_ticket_request?(gate)
-
     render plain: gate.errors.to_sentence.presence || "invalid_sign_up_step", status: :unprocessable_content
-  end
-
-  # A reload or resubmit after the sign-up ticket is gone (expired, consumed, or its session
-  # dropped) is a normal browser action, not a client error. Send the visitor back to the
-  # sign-up entry point instead of leaving them on a dead-end body they cannot act on.
-  def restartable_missing_ticket_request?(gate)
-    gate.errors.include?("ticket is required") && !request.format.json?
-  end
-
-  def restart_sign_up_without_ticket
-    return render_sign_up_age_restricted if sign_up_session_state.age_restricted?
-
-    sign_up_session_state.clear_all!
-    redirect_to(sign_up_restart_path, status: :see_other)
-  end
-
-  def completed_sign_up_handoff_request?(gate)
-    gate.errors.include?("ticket is required") &&
-      Actor.authn.signed_in? &&
-      respond_to?(:current_db_sign_in_flow_for_sequence, true) &&
-      current_db_sign_in_flow_for_sequence.present?
-  end
-
-  def redirect_to_sign_in_sequence_after_completed_sign_up
-    redirect_to_sign_in_sequence!(pt: sign_up_handoff_pt, status: :see_other)
   end
 
   def cancel_from_explicit_step
@@ -118,6 +126,6 @@ module SignUpExplicitStepControllerSupport
     return sign_up_restart_path unless next_step
 
     helper = SignUpStepGate::STEP_ROUTES.fetch(sign_up_surface).fetch(sign_up_family).fetch(next_step)
-    public_send(helper, ri: params[:ri], pt: sign_up_handoff_pt)
+    public_send(helper, **sign_up_flow_binding_params, ri: params[:ri], pt: sign_up_handoff_pt)
   end
 end

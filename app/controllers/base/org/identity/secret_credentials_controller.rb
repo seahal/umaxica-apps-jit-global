@@ -85,9 +85,8 @@ module Base
         def update
           authorize!(@secret_credential)
 
-          if disabling_secret_credential? && AuthMethodGuard.last_method?(
-            current_operator,
-            excluding: @secret_credential,
+          if disabling_secret_credential? && !AuthMethodGuard.can_remove_secret_credential?(
+            current_operator, @secret_credential,
           )
             redirect_to(
               base_org_identity_secret_path(@secret_credential.public_id, ri: params[:ri]),

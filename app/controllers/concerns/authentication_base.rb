@@ -2736,8 +2736,10 @@ module AuthenticationBase
     if oidc_authentication_ceremony?
       return establish_oidc_authentication_evidence!(
         resource,
+        cycle: cycle,
         pt: pt,
         established_authentication_method: established_authentication_method,
+        authentication_context: authentication_context,
       )
     end
 
@@ -2802,7 +2804,8 @@ module AuthenticationBase
   # log_in, rotate the Rails session, issue a root token, or write the
   # successful-login audit here. Base writes that audit when it commits the
   # root login at authorization resume.
-  def establish_oidc_authentication_evidence!(resource, pt:, established_authentication_method:)
+  def establish_oidc_authentication_evidence!(resource, cycle:, pt:, established_authentication_method:,
+                                              authentication_context: nil)
     return { status: :access_locked } if administratively_locked_resource?(resource)
 
     # An early, non-authoritative answer so the user is not sent through the
@@ -2825,6 +2828,13 @@ module AuthenticationBase
         admitted.record_authentication_evidence!(method: method)
       end
     else
+      flow = cycle
+      raise AuthCeremonySession::InvalidTransition, "OIDC sign-in flow is missing" unless flow
+
+      flow.record_local_authentication_evidence!(
+        method: method,
+        authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+      )
       ceremony.record_authentication_evidence!(method: method)
     end
 

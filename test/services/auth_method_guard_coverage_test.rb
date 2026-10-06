@@ -27,18 +27,11 @@ class AuthMethodGuardCoverageTest < ActiveSupport::TestCase
       end
     end
 
-  Inventory =
-    Struct.new(
-      :aal1_method_count, :retains_aal1_value, :retains_aal2_value, :retains_contactability_value,
-      :retains_uv_step_up_value,
-    ) do
-      def retains_aal1? = retains_aal1_value
+    Inventory =
+      Struct.new(:has_usable_sign_in_capability_value, :has_usable_step_up_capability_value) do
+      def has_usable_sign_in_capability? = has_usable_sign_in_capability_value
 
-      def retains_aal2? = retains_aal2_value
-
-      def retains_contactability? = retains_contactability_value
-
-      def retains_uv_step_up? = retains_uv_step_up_value
+      def has_usable_step_up_capability? = has_usable_step_up_capability_value
     end
 
   test "public guards delegate to the inventory with exclusions" do
@@ -47,7 +40,7 @@ class AuthMethodGuardCoverageTest < ActiveSupport::TestCase
     email = Object.new
     telephone = Object.new
     totp = Object.new
-    inventory = Inventory.new(2, true, false, true, false)
+    inventory = Inventory.new(true, false)
     calls = []
 
     AuthenticationCredentialInventory.stub(
@@ -57,23 +50,17 @@ class AuthMethodGuardCoverageTest < ActiveSupport::TestCase
         inventory
       end,
     ) do
-      assert_equal 2, AuthMethodGuard.remaining_count(actor)
-      assert_equal 2, AuthMethodGuard.remaining_count(actor, excluding: passkey)
-      assert_not AuthMethodGuard.last_method?(actor)
-      assert_not AuthMethodGuard.can_remove_passkey?(actor, passkey)
-      assert_not AuthMethodGuard.can_remove_email?(actor, email)
+      assert AuthMethodGuard.can_remove_passkey?(actor, passkey)
+      assert AuthMethodGuard.can_remove_email?(actor, email)
       assert AuthMethodGuard.can_remove_telephone?(actor, telephone)
-      assert_not AuthMethodGuard.can_remove_totp?(actor, totp)
+      assert AuthMethodGuard.can_remove_totp?(actor, totp)
     end
 
     assert_equal [
-      [actor, nil, true],
-      [actor, passkey, true],
-      [actor, nil, true],
-      [actor, passkey, true],
-      [actor, email, true],
-      [actor, telephone, true],
-      [actor, totp, true],
+      [actor, nil, true], [actor, passkey, true],
+      [actor, nil, true], [actor, email, true],
+      [actor, nil, true], [actor, telephone, true],
+      [actor, nil, true], [actor, totp, true],
     ], calls
   end
 end

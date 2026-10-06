@@ -46,6 +46,7 @@ module ComSignUpCheckpointPage
       label: t("sign.com.registration.checkpoint.show.birthdate.label"),
       action: public_send(
         :"auth_com_sign_up_check_#{@sign_up_ticket.entry_method}_birthdate_path",
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
       ),
@@ -65,6 +66,7 @@ module ComSignUpCheckpointPage
       description: t("sign.com.registration.checkpoint.show.passkey.description"),
       label: t("sign.com.registration.checkpoint.show.passkey.action"),
       href: auth_com_sign_up_check_telephone_passkey_path(
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
         checkpoint_version: @sign_up_ticket.checkpoint_version,
@@ -83,6 +85,7 @@ module ComSignUpCheckpointPage
       label: t("actions.cancel"),
       action: public_send(
         :"auth_com_sign_up_check_#{@sign_up_ticket.entry_method}_#{step}_path",
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
       ),

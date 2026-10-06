@@ -15,6 +15,8 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -316,12 +318,16 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Client.database_now,
+    )
     token = ClientToken.create!(user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(

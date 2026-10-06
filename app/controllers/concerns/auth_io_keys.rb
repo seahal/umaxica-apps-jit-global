@@ -44,10 +44,13 @@ module AuthIoKeys
     RI = :ri
     PT = :pt
     NT = :nt
+    # Signed binding of a phase-bound request to the flow instance its page was rendered for.
+    FLOW_BINDING = :fb
 
     public_constant :RI
     public_constant :PT
     public_constant :NT
+    public_constant :FLOW_BINDING
   end
 
   module Session

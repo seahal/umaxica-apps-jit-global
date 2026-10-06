@@ -18,7 +18,10 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
     return unless load_gate_context!(gate_for_show)
 
     state = @issuance.state(at: Client.database_now)
-    path = auth_app_sign_up_check_telephone_secret_path(ri: current_region_identifier, pt: signed_pt_param)
+    path = auth_app_sign_up_check_telephone_secret_path(
+      **sign_up_flow_binding_params, ri: current_region_identifier,
+                                     pt: signed_pt_param,
+    )
     render inertia: "base/app/secret_issuances/show", props: {
       title: t("base.app.secrets.title"),
       state: state.to_s,
@@ -34,6 +37,7 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       notice: distribution_notice,
       checkpoint_version: @sign_up_ticket.checkpoint_version,
       reattempt_action: payload_failed? ? auth_app_sign_up_check_telephone_secret_reattempt_path(
+        **sign_up_flow_binding_params,
         ri: current_region_identifier, pt: signed_pt_param,
       ) : nil,
       reattempt_of: payload_failed? ? @issuance.public_id : nil,
@@ -52,13 +56,21 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       flow: @sign_up_ticket, nonce: browser_nonce,
       issuance: @issuance,
     )
-    path = auth_app_sign_up_check_telephone_secret_path(ri: current_region_identifier, pt: signed_pt_param)
+    path = auth_app_sign_up_check_telephone_secret_path(
+      **sign_up_flow_binding_params, ri: current_region_identifier,
+                                     pt: signed_pt_param,
+    )
     response.headers["Referrer-Policy"] = "no-referrer"
     render "base/app/secret_presentations/create", layout: false, locals: {
       confirmation_url: path, cancel_url: path, checkpoint_version: @sign_up_ticket.checkpoint_version,
     }
   rescue ClientSecretPresentationIssuer::AlreadyPresented
-    redirect_to(auth_app_sign_up_check_telephone_secret_path(ri: current_region_identifier), status: :see_other)
+    redirect_to(
+      auth_app_sign_up_check_telephone_secret_path(
+        **sign_up_flow_binding_params,
+        ri: current_region_identifier,
+      ), status: :see_other,
+    )
   rescue ClientSecretPresentationIssuer::PayloadUnavailable
     ClientSecretManualIssuanceInvalidator.call_for_sign_up_payload_failure!(
       flow: @sign_up_ticket, nonce: browser_nonce, issuance: @issuance,
@@ -96,7 +108,10 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       expires_after: ClientSecretLifetimesValue.issuance_ttl,
     )
     redirect_to(
-      auth_app_sign_up_check_telephone_secret_path(ri: current_region_identifier, pt: signed_pt_param),
+      auth_app_sign_up_check_telephone_secret_path(
+        **sign_up_flow_binding_params, ri: current_region_identifier,
+                                       pt: signed_pt_param,
+      ),
       status: :see_other,
     )
   end

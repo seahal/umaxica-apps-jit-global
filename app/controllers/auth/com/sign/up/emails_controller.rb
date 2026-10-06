@@ -21,6 +21,7 @@ module Auth
           include EnforcementIdentifierGate
 
           include SignUpSuspensionGuard
+          include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
@@ -67,6 +68,8 @@ module Auth
           end
 
           def create
+            supersede_active_sign_up_flow!
+
             unless cloudflare_turnstile_validation["success"]
               @user_email = VisitorEmail.new
               @user_email.errors.add(
@@ -127,7 +130,12 @@ module Auth
 
             bind_sign_up_flow_to_email!(@user_email)
             progress_email_flow!(:create)
-            redirect_to(auth_com_sign_up_check_email_otp_path(ri: params[:ri], pt: sanitized_rt_param))
+            redirect_to(
+              auth_com_sign_up_check_email_otp_path(
+                **sign_up_flow_binding_params, ri: params[:ri],
+                                               pt: sanitized_rt_param,
+              ),
+            )
           end
 
           private
@@ -201,7 +209,10 @@ module Auth
             {
               title: t("sign.app.authentication.email.edit.page_title"),
               description: t("sign.app.registration.email.create.verification_code_sent"),
-              action: auth_com_sign_up_check_email_otp_path(ri: params[:ri], pt: signed_pt_param),
+              action: auth_com_sign_up_check_email_otp_path(
+                **sign_up_flow_binding_params, ri: params[:ri],
+                                               pt: signed_pt_param,
+              ),
               scope: "visitor_email",
               code_label: t("sign.app.authentication.email.edit.code_label"),
               code_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
@@ -213,7 +224,7 @@ module Auth
               # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
               # ends the sign-up through the existing DELETE cancellation.
               cancel: { label: t("actions.cancel"),
-                        action: auth_com_sign_up_check_email_otp_path(ri: params[:ri]),
+                        action: auth_com_sign_up_check_email_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
                         method: "delete", },
             }
           end

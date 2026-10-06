@@ -103,6 +103,12 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
+    telephone = ClientTelephone.create!(
+      user: actor,
+      number: "+8190#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}",
+      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      binding_finalized_at: ClientTelephone.database_now,
+    )
     admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
       surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
     )
@@ -121,6 +127,8 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
     assert_nil ClientSecretClaimCommitter.call!(client: actor, secret: "1" * 32, flow: flow, ceremony: ceremony)
     credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
 
+    assert_equal [:telephone], AuthenticationCredentialInventory.call(actor).contact_identifiers
+    assert_not AuthMethodGuard.can_remove_secret_credential?(actor, credential)
     assert_nil credential.reload.claimed_at
     claim = ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)
 
@@ -134,6 +142,7 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::ReadonlyAttributeError) { claim.update!(claim_operation_id: SecureRandom.uuid) }
     assert_nil claim.reload.consumed_at
     assert_equal 1, ClientSecretAuditOutbox.where(credential_ref: claim.public_id, event_name: "secret.claimed").count
+    assert_equal actor.id, telephone.reload.user_id
   end
 
   private

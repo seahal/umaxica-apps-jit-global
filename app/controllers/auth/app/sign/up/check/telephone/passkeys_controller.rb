@@ -27,6 +27,7 @@ module Auth
                 if @sign_up_ticket.pending_passkey_registration_id
                   return redirect_to(
                     auth_app_sign_up_check_telephone_secret_path(
+                      **sign_up_flow_binding_params,
                       ri: params[:ri],
                       pt: signed_pt_param,
                     ), status: :see_other,
@@ -55,6 +56,7 @@ module Auth
                   return render json: {
                     status: "ok",
                     redirect_url: auth_app_sign_up_check_telephone_secret_path(
+                      **sign_up_flow_binding_params,
                       ri: params[:ri],
                       pt: signed_pt_param,
                     ),
@@ -65,6 +67,7 @@ module Auth
                 render json: {
                   status: "ok",
                   redirect_url: auth_app_sign_up_check_telephone_secret_path(
+                    **sign_up_flow_binding_params,
                     ri: params[:ri],
                     pt: signed_pt_param,
                   ),
@@ -80,7 +83,10 @@ module Auth
               # The same two endpoints the Stimulus registration controller used, and the same
               # checkpoint version the server re-validates before it clears the requirement.
               def render_sign_up_passkey_page
-                path = auth_app_sign_up_check_telephone_passkey_path(ri: params[:ri], pt: signed_pt_param)
+                path = auth_app_sign_up_check_telephone_passkey_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
 
                 render inertia: "auth/app/sign/up/checkpoint/passkeys/new",
                        props: {
@@ -98,7 +104,10 @@ module Auth
               end
 
               def success_redirect_url
-                auth_app_sign_up_check_telephone_secret_path(ri: params[:ri], pt: signed_pt_param)
+                auth_app_sign_up_check_telephone_secret_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
               end
 
               def load_sign_up_actor

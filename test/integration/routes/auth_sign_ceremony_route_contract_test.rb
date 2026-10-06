@@ -271,11 +271,17 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
 
     [
       { controller: "auth/app/settings", action: "show", path: "/settings" },
-      { controller: "auth/app/settings/passkeys", action: "index", path: "/settings/passkeys" },
     ].each do |route|
       assert_recognizes(
         { controller: route[:controller], action: route[:action] },
         { path: "http://#{SIGN_APP_HOST}#{route[:path]}", method: :get },
+      )
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{SIGN_APP_HOST}/settings/passkeys",
+        method: :get,
       )
     end
   end
@@ -381,10 +387,12 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       )
     end
 
-    assert_recognizes(
-      { controller: "auth/app/settings/totps", action: "index" },
-      { path: "http://#{SIGN_APP_HOST}/settings/totps", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{SIGN_APP_HOST}/settings/totps",
+        method: :get,
+      )
+    end
 
     assert_recognizes(
       { controller: "auth/app/settings/apples", action: "show" },
@@ -651,11 +659,17 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
 
     [
       { controller: "auth/com/settings", action: "show", path: "/settings" },
-      { controller: "auth/com/settings/passkeys", action: "index", path: "/settings/passkeys" },
     ].each do |route|
       assert_recognizes(
         { controller: route[:controller], action: route[:action] },
         { path: "http://#{SIGN_COM_HOST}#{route[:path]}", method: :get },
+      )
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{SIGN_COM_HOST}/settings/passkeys",
+        method: :get,
       )
     end
   end
@@ -856,10 +870,12 @@ class AuthSignCeremonyRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{SIGN_ORG_HOST}/settings", method: :get },
     )
 
-    assert_recognizes(
-      { controller: "auth/org/settings/passkeys", action: "index" },
-      { path: "http://#{SIGN_ORG_HOST}/settings/passkeys", method: :get },
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{SIGN_ORG_HOST}/settings/passkeys",
+        method: :get,
+      )
+    end
 
     %w(/settings/sessions /settings/activities).each do |path|
       assert_raises(ActionController::RoutingError) do

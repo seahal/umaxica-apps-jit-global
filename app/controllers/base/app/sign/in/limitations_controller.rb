@@ -92,6 +92,14 @@ module Base
             flow = @resolution.sign_in_flow
             flow.cancel_sign_in! unless flow.sign_in_completed? || flow.sign_in_expired? ||
               flow.sign_in_cancelled? || flow.sign_in_halted?
+            if @oidc_transaction&.secret_sign_in_flow_id
+              credential = ClientSecretCredential.find_by(
+                client_id: @actor.id, claim_sign_in_flow_ref: flow.public_id,
+              )
+              ClientSecretClaimFinalizer.call!(
+                credential: credential, purge_after: ClientSecretLifetimesValue.purge_delay,
+              ) if credential
+            end
             clear_current_sign_in_flow_locator!
             true
           rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
@@ -251,6 +259,14 @@ module Base
                   end
                 end
               end
+            if finalization[:status] == :session_limit_pending
+              @resolution = finalization.fetch(:resolution_transaction)
+              @resolution_challenge = finalization.fetch(:resolution_challenge)
+              @resolution_binding = finalization.fetch(:resolution_binding)
+              @form_notice = t("base.app.sign.in.limitations.capacity_still_full")
+              load_session_inventory
+              return render_limitation_page(status: :unprocessable_content)
+            end
             return render_invalid_resolution unless finalization[:status] == :success
 
             finalize_oidc_secret_claim! if @oidc_transaction.secret_sign_in_flow_id
@@ -292,7 +308,7 @@ module Base
                 ),
               )
             end
-            login_result[:status] == :success
+            login_result
           end
 
           def oidc_secret_issuance_options

@@ -5,9 +5,16 @@ require "test_helper"
 
 class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationTest
   setup do
+    https!
     @host = configured_host(:base_corporate)
     @visitor = create_verified_visitor_with_email(email_address: "com-removal-#{SecureRandom.hex(4)}@example.com")
     @secret = create_active_secret_credential(@visitor)
+    headers = as_visitor_headers(@visitor, host: @host)
+    token = VisitorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    token.update!(root_login_established_at: Time.current, established_authentication_method: "passkey")
+    BaseSelectorBootstrapAuthority.call(surface: :com, principal: @visitor)
+    BaseSelectorAuthority.prepare(surface: :com, principal: @visitor, session: token)
+    install_base_browser_rp_credentials!(surface: "com", host: @host, actor: @visitor, token: token)
   end
 
   test "removes the secret credential when another AAL1 method still remains" do
@@ -27,27 +34,27 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     create_active_secret_credential(@visitor)
 
     delete base_com_identity_secret_url(@secret.public_id, ri: "jp", host: @host),
-           headers: as_visitor_headers(@visitor, host: @host)
+           headers: as_visitor_headers(@visitor, host: @host).except("Cookie", "HTTP_COOKIE")
 
     assert_response :unauthorized
     assert_equal VisitorSecretCredentialStatus::ACTIVE, @secret.reload.visitor_secret_credential_status_id
   end
 
-  test "refuses to remove the credential that carries the only remaining AAL1 method" do
-    # A verified telephone keeps the visitor contactable (so the credential may exist at all) without
-    # contributing an AAL1 method, which leaves the secret credential as the only way to sign in.
-    lone = create_visitor_with_verified_telephone
-    lone_secret = create_active_secret_credential(lone)
+  test "removes Secret when telephone is only the non-sign-in contact and email supplies Step-Up" do
+    @visitor.visitor_telephones.create!(
+      number: "+8190#{format("%08d", SecureRandom.random_number(100_000_000))}",
+      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+    )
 
-    post base_com_identity_secret_removal_url(lone_secret.public_id, ri: "jp", host: @host),
-         headers: step_up_visitor_headers(lone, host: @host)
+    post base_com_identity_secret_removal_url(@secret.public_id, ri: "jp", host: @host),
+         headers: step_up_visitor_headers(@visitor, host: @host)
 
     assert_response :see_other
     assert_redirected_to base_com_identity_secrets_path(ri: "jp")
 
-    lone_secret.reload
+    @secret.reload
 
-    assert_equal VisitorSecretCredentialStatus::ACTIVE, lone_secret.visitor_secret_credential_status_id
+    assert_equal VisitorSecretCredentialStatus::DELETED, @secret.visitor_secret_credential_status_id
   end
 
   test "a credential owned by another visitor is not found" do
@@ -63,7 +70,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
 
   test "removal without fresh step-up is refused and keeps the credential" do
     post base_com_identity_secret_removal_url(@secret.public_id, ri: "jp", host: @host),
-         headers: as_visitor_headers(@visitor, host: @host)
+         headers: as_visitor_headers(@visitor, host: @host).except("Cookie", "HTTP_COOKIE")
 
     assert_response :unauthorized
     assert_equal VisitorSecretCredentialStatus::ACTIVE, @secret.reload.visitor_secret_credential_status_id
@@ -77,12 +84,16 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
       last_step_up_at: Time.current,
       last_step_up_scope: "settings_secret_credential",
       last_step_up_aal: "aal2",
-      last_step_up_method: "passkey",
+      last_step_up_method: "email_otp",
       last_step_up_session_public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:com",
+      last_step_up_credential_ref: actor.visitor_emails.effective_binding.first!.public_id,
+      last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false,
+      last_step_up_full_reauthentication: false,
     )
-    headers
+    headers.except("Cookie", "HTTP_COOKIE")
   end
 
   def create_active_secret_credential(visitor)
@@ -108,22 +119,11 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
       address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+      binding_finalized_at: VisitorEmail.database_now,
       otp_private_key: SecureRandom.base64(24),
       otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
-    )
-    visitor.reload
-    visitor.refresh_mfa_status! if visitor.respond_to?(:refresh_mfa_status!)
-    visitor.reload
-  end
-
-  def create_visitor_with_verified_telephone
-    ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
-    visitor.visitor_telephones.create!(
-      number: "+8190#{format("%08d", SecureRandom.random_number(100_000_000))}",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
     )
     visitor.reload
     visitor.refresh_mfa_status! if visitor.respond_to?(:refresh_mfa_status!)

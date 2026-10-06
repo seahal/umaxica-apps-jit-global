@@ -31,6 +31,15 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
     receipts = []
     credentials = [client_secret_credentials(:one), client_secret_credentials(:two)]
+    identifiers =
+      credentials.to_h do |credential|
+        email = credential.client.client_emails.create!(
+          address: "receipt-#{credential.client.public_id}-#{SecureRandom.hex(4)}@example.com",
+          user_email_status_id: ClientEmailStatus::VERIFIED,
+        )
+        email.finalize_binding!
+        [credential.client_id, email.address]
+      end
     transactions = []
     ["a" * 32, "b" * 32].each do |raw|
       reset!
@@ -51,28 +60,43 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
       reference = BaseAuthAdmissionCoordinator.issue_handoff!(
         transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
       ).reference
-      get auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference }
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference, authenticity_token: csrf }
+      redeem_auth_ceremony_session!(
+        self, auth_app_sign_in_path, reference: reference,
+                                     params: { ri: "jp" },
+                                     headers: { "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" },
+      )
 
       assert_response :see_other
       follow_redirect!
       get new_auth_app_sign_in_secret_path(ri: "jp")
       post auth_app_sign_in_secret_path(ri: "jp"), params: {
-        secret: raw, "cf-turnstile-response": "test_token",
+        identifier: identifiers.fetch(credentials[transactions.length].client_id),
+        secret: raw,
+        "cf-turnstile-response": "test_token",
       }
 
       assert_response :see_other
       follow_redirect!
       follow_redirect!
-      post auth_app_sign_oidc_handoff_path(ri: "jp"), headers: { "Host" => @host }
+      handoff_csrf = css_select("input[name=authenticity_token]").first["value"]
+      post auth_app_sign_oidc_handoff_path(ri: "jp"), params: { authenticity_token: handoff_csrf }, headers: {
+        "Host" => @host, "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
+      }
+
+      assert_response :see_other
+      result_uri = URI.parse(response.location)
+      host!(result_uri.host)
+      https!
+      get result_uri.request_uri, headers: { "Host" => result_uri.host }
 
       assert_response :success
-      result = css_select("input[name=result]").first["value"]
-      action = css_select("form#oidc-authorization-result-form").first["action"]
+      result_form = css_select("form#oidc-authorization-result-form").first
+      result_ref = result_form.at_css('input[name="result_ref"]')["value"]
+      transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+      action = result_form["action"]
       assert_difference("ClientToken.count", 1) do
-        post action, params: { transaction_ref: transaction.transaction_id, result: result },
-                     headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+        post action, params: { transaction_ref: transaction_ref, result_ref: result_ref },
+                     headers: { "Origin" => OidcIssuer.absolute_url(result_uri.host) }
 
         assert_response :redirect
       end

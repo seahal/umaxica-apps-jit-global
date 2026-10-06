@@ -29,15 +29,13 @@ class ClientSecretCredentialRebuildTest < ActiveSupport::TestCase
     assert_not credential.available_at?(at: deadline + 0.000001)
   end
 
-  test "whole secret lookup and password verification accept exact server generated value only" do
+  test "whole secret verification accepts the exact server generated value only" do
     raw = SecureRandom.base58(32)
     credential = ClientSecretCredential.new(password: raw)
 
     assert credential.matches_secret?(raw)
     assert_not credential.matches_secret?(SecureRandom.base58(32))
-    credential.lookup_digest = "0" * 64
-
-    assert_not credential.matches_secret?(raw)
+    assert_not credential.matches_secret?(raw.reverse)
   end
 
   test "secret format rejects adjacent lengths missing values types and forbidden alphabet" do
@@ -183,7 +181,7 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
     assert_equal 0, issuance.reserved_count(at: Client.database_now)
     assert credential.reload.revoked_at
     assert_operator credential.discard_at, :<=, Client.database_now
-    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: owner, secret: raw)
     assert ClientSecretAuditOutbox.exists?(credential_ref: credential.public_id, event_name: "secret.revoked")
     assert ClientSecretAuditOutbox.exists?(credential_ref: credential.public_id, event_name: "secret.discarded")
   ensure

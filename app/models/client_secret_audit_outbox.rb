@@ -9,12 +9,13 @@ class ClientSecretAuditOutbox < AppZenithRecord
   ).freeze
   REASONS = %w(
     capacity_full passkey_registration manual user_revocation withdrawal flow_expired
-    flow_canceled flow_failed flow_halted login_committed payload_unavailable reissue
+    flow_canceled flow_failed flow_halted login_committed payload_unavailable reissue reattempt
   ).freeze
 
   attr_readonly :event_id, :event_name, :client_ref, :credential_ref, :actor_type,
                 :actor_id, :actor_public_ref, :executor_job_id, :operation_ref,
-                :occurred_at, :reason, :item_count
+                :occurred_at, :reason, :item_count, :issuance_origin,
+                :issuance_browser_session_ref, :issuance_sign_up_flow_ref
 
   validates :event_id, :client_ref, :operation_ref, :occurred_at, presence: true
   validates :event_name, inclusion: { in: EVENTS }
@@ -23,6 +24,7 @@ class ClientSecretAuditOutbox < AppZenithRecord
   validates :item_count, numericality: { only_integer: true,
                                          greater_than_or_equal_to: 0,
                                          less_than_or_equal_to: 20, }, allow_nil: true
+  validate :issuance_purge_authority_snapshot
 
   class << self
     public
@@ -66,6 +68,18 @@ class ClientSecretAuditOutbox < AppZenithRecord
       end
 
       { actor_type: "Client", actor_id: actor.id, actor_public_ref: actor.public_id }
+    end
+  end
+
+  def issuance_purge_authority_snapshot
+    return unless event_name == "secret.issuance_purged"
+
+    snapshot = [issuance_origin, issuance_browser_session_ref, issuance_sign_up_flow_ref]
+    return if snapshot.all?(&:blank?) # Legacy rows remain held by the replay barrier.
+
+    unless issuance_origin.in?(%w(manual passkey_registration)) &&
+        (issuance_browser_session_ref.present? ^ issuance_sign_up_flow_ref.present?)
+      errors.add(:base, "issuance purge authority snapshot is incomplete")
     end
   end
 end

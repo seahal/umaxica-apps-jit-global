@@ -84,6 +84,11 @@ Do not:
 - call external APIs directly from tests — replace the third-party boundary (payment, email, network)
   with a local fake, fixture, or adapter stub
 - add test-aware branches to application code to make tests pass (see `no-test-only-code`)
+- give an environment variable a default in a test — `ENV.fetch("NAME", "default")`,
+  `ENV.fetch("NAME", nil)`, `ENV.fetch("NAME") { ... }`, or `ENV["NAME"] || "default"`. Read host names
+  and other configured values with one-argument `ENV.fetch("NAME")` so a missing variable fails the
+  test instead of pointing it at an unconfigured host. Existing tests that do otherwise are not a
+  pattern to copy (see `no-silent-fallback`)
 - create or call test helper methods, helper modules, helper files, shared setup helpers, custom
   assertion helpers, fixture-builder helpers, render helpers, request helpers, sign-in helpers, or
   Vitest utility helpers

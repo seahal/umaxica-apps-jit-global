@@ -49,6 +49,8 @@ class ClientSecretRevocationCommitter
       unless owned && ClientSecretCredentialPolicy.new(owned, user: actor).apply(:destroy?)
         raise Denied, "Secret revocation credential is unavailable"
       end
+      raise Denied, "Secret revocation would remove a required capability" unless
+        AuthMethodGuard.can_remove_secret_credential?(actor, owned)
 
       now = ClientSecretCredential.database_now
       return owned if owned.revoked_at && owned.lapsed?(now)

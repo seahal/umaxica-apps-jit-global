@@ -79,7 +79,14 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   end
 
   def secret_params
-    params.permit(:identifier, :secret, :authenticity_token, :"cf-turnstile-response", :ri, :pt)
+    {
+      identifier: params[:identifier],
+      secret: params[:secret],
+      authenticity_token: params[:authenticity_token],
+      "cf-turnstile-response": params["cf-turnstile-response"],
+      ri: params[:ri],
+      pt: params[:pt],
+    }.with_indifferent_access
   end
 
   def minimum_response_budget_enabled?

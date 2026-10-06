@@ -37,7 +37,12 @@ module Auth
                 registration["expires_at"] = @user_telephone.reload.otp_expires_at.to_i
                 session[:user_telephone_registration] = registration
                 session[:user_telephone_otp_last_sent_at] = Time.current.to_i
-                redirect_to(auth_app_sign_up_check_telephone_otp_path(ri: params[:ri], pt: signed_pt_param))
+                redirect_to(
+                  auth_app_sign_up_check_telephone_otp_path(
+                    **sign_up_flow_binding_params, ri: params[:ri],
+                                                   pt: signed_pt_param,
+                  ),
+                )
               end
 
               def update

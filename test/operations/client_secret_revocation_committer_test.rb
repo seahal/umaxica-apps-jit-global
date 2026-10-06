@@ -229,6 +229,17 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
   test "last available login method protection is retained even with current Step-Up" do
     actor = clients(:one)
     token = client_tokens(:one)
+    actor.client_external_identities.delete_all
+    actor.client_emails.delete_all
+    actor.client_passkeys.delete_all
+    actor.client_totp_credentials.delete_all
+    ClientTelephone.where(user: actor).delete_all
+    ClientTelephone.create!(
+      user: actor,
+      number: "+8190#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}",
+      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      binding_finalized_at: ClientTelephone.database_now,
+    )
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,

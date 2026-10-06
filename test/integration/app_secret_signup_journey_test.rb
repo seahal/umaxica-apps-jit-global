@@ -84,14 +84,17 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_response :redirect
       registration = session[:user_telephone_registration].stringify_keys
       telephone = ClientTelephone.find_by!(public_id: registration.fetch("public_id"))
+      flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+      flow_binding = SignFlowBindingCodec.encode(flow: flow, surface: :app)
       otp = telephone.get_otp
-      patch auth_app_sign_up_check_telephone_otp_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf), params: {
-        user_telephone: { pass_code: ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)) },
-      }
+      patch auth_app_sign_up_check_telephone_otp_path(ri: "jp", fb: flow_binding),
+            headers: headers.merge("X-CSRF-Token" => csrf), params: {
+              user_telephone: { pass_code: ROTP::HOTP.new(otp.fetch(:otp_private_key)).at(otp.fetch(:otp_counter)) },
+            }
 
       assert_response :redirect
-      get auth_app_sign_up_guard_telephone_path(ri: "jp")
-      flow = ClientSignUpFlow.find_by!(public_id: session[:auth_app_up_sequence_id])
+      flow.reload
+      get auth_app_sign_up_guard_telephone_path(ri: "jp", fb: flow_binding)
       actor = telephone.user
       now = Client.database_now
       active_count.times do
@@ -107,21 +110,23 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
           confirmed_at: now,
         )
       end
-      get auth_app_sign_up_check_telephone_passkey_path(ri: "jp")
+      get auth_app_sign_up_check_telephone_passkey_path(ri: "jp", fb: flow_binding)
 
       assert_response :success
       csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-      post auth_app_sign_up_check_telephone_passkey_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf),
-                                                                    as: :json
+      post auth_app_sign_up_check_telephone_passkey_path(ri: "jp", fb: flow_binding),
+           headers: headers.merge("X-CSRF-Token" => csrf),
+           as: :json
 
       assert_response :success
       options = response.parsed_body
       credential = WebAuthn::FakeClient.new("https://#{host}", encoding: :base64url).create(
         challenge: options.fetch("options").fetch("challenge"), user_verified: true,
       )
-      patch auth_app_sign_up_check_telephone_passkey_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf), params: {
-        challenge_id: options.fetch("challenge_id"), credential: credential, checkpoint_version: flow.checkpoint_version,
-      }, as: :json
+      patch auth_app_sign_up_check_telephone_passkey_path(ri: "jp", fb: flow_binding),
+            headers: headers.merge("X-CSRF-Token" => csrf), params: {
+              challenge_id: options.fetch("challenge_id"), credential: credential, checkpoint_version: flow.checkpoint_version,
+            }, as: :json
 
       assert_response :created
       assert_not flow.reload.requirement_cleared?(:passkey)
@@ -132,9 +137,10 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_nil issuance.encrypted_payload
       destination = response.parsed_body.fetch("redirect_url")
       assert_no_difference(["ClientSecretIssuance.count", "ClientPasskey.count", "ClientSecretCredential.count"]) do
-        patch auth_app_sign_up_check_telephone_passkey_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf), params: {
-          challenge_id: options.fetch("challenge_id"), credential: credential, checkpoint_version: flow.checkpoint_version,
-        }, as: :json
+        patch auth_app_sign_up_check_telephone_passkey_path(ri: "jp", fb: flow_binding),
+              headers: headers.merge("X-CSRF-Token" => csrf), params: {
+                challenge_id: options.fetch("challenge_id"), credential: credential, checkpoint_version: flow.checkpoint_version,
+              }, as: :json
       end
       assert_response :created
       assert_equal destination, response.parsed_body.fetch("redirect_url")
@@ -142,7 +148,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert_no_difference("ClientSecretCredential.count") {
-        get auth_app_sign_up_check_telephone_secret_path(ri: "jp")
+        get auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding)
       }
       csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
       page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
@@ -156,7 +162,8 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         assert_equal 0, ClientSecretCredential.where(issuance_id: issuance.id).count
         assert_equal 0, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).reserved_count
         assert_no_difference("ClientSecretCredential.count") do
-          post auth_app_sign_up_check_telephone_secret_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf)
+          post auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding),
+               headers: headers.merge("X-CSRF-Token" => csrf)
         end
         assert_response :forbidden
         assert_nil issuance.reload.encrypted_payload
@@ -170,7 +177,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         issuance.reload.update!(encrypted_payload: nil)
         passkey_ids = actor.client_passkeys.pluck(:public_id)
         assert_no_difference ["ClientSecretCredential.count", "ClientPasskey.count", "ClientToken.count"] do
-          post auth_app_sign_up_check_telephone_secret_path(ri: "jp"),
+          post auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding),
                headers: headers.merge("X-CSRF-Token" => csrf)
         end
 
@@ -185,7 +192,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
           operation_ref: issuance.origin_operation_id,
           event_name: %w(secret.issuance_canceled secret.discarded),
         ).distinct.pluck(:reason)
-        patch auth_app_sign_up_check_telephone_secret_path(ri: "jp"),
+        patch auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding),
               headers: headers.merge("X-CSRF-Token" => csrf),
               params: { checkpoint_version: flow.checkpoint_version, stored: "1" }
 
@@ -195,7 +202,8 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         next
       end
       if expected_count.positive?
-        post auth_app_sign_up_check_telephone_secret_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf)
+        post auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding),
+             headers: headers.merge("X-CSRF-Token" => csrf)
 
         assert_response :success
         values = response.parsed_body.css("[data-secret-value] code").map(&:text)
@@ -208,8 +216,9 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       end
       confirmation = { checkpoint_version: flow.checkpoint_version }
       confirmation[:stored] = "1" if expected_count.positive?
-      patch auth_app_sign_up_check_telephone_secret_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf),
-                                                                    params: confirmation
+      patch auth_app_sign_up_check_telephone_secret_path(ri: "jp", fb: flow_binding),
+            headers: headers.merge("X-CSRF-Token" => csrf),
+            params: confirmation
 
       assert_response :see_other
       assert flow.reload.requirement_cleared?(:passkey)
@@ -219,7 +228,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
                    ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
       values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
       assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
-      get auth_app_sign_up_check_telephone_birthdate_path(ri: "jp")
+      get auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: flow_binding)
 
       assert_response :success
       completed_page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
@@ -236,7 +245,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
       if outcome != :completed
         if outcome == :canceled
-          delete auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
+          delete auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: flow_binding),
                  headers: headers.merge("X-CSRF-Token" => csrf)
 
           assert_response :see_other
@@ -265,13 +274,14 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         next
       end
       assert_no_difference("ClientToken.count") do
-        patch auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf), params: {
-          requirement: "birthdate",
-          checkpoint_version: flow.reload.checkpoint_version,
-          birthdate_year: "1990",
-          birthdate_month: "01",
-          birthdate_day: "15",
-        }
+        patch auth_app_sign_up_check_telephone_birthdate_path(ri: "jp", fb: flow_binding),
+              headers: headers.merge("X-CSRF-Token" => csrf), params: {
+                requirement: "birthdate",
+                checkpoint_version: flow.reload.checkpoint_version,
+                birthdate_year: "1990",
+                birthdate_month: "01",
+                birthdate_day: "15",
+              }
       end
       assert_response :redirect
       assert_predicate flow.reload, :sign_up_completed?

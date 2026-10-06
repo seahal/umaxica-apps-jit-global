@@ -43,7 +43,7 @@ class IdentitySocialCeremonyGrant
 
   def [](key) = payload[key.to_s]
 
-  def fetch(key, *args, &block) = payload.fetch(key.to_s, *args, &block)
+  def fetch(key, *, &) = payload.fetch(key.to_s, *, &)
 
   def expires_at = Time.zone.at(payload.fetch("exp").to_i)
 

@@ -4,6 +4,8 @@
 module SignUpSequenceControllerSupport
   extend ActiveSupport::Concern
 
+  include SignUpFlowEntry
+
   AGE_RESTRICTED_I18N_KEYS = {
     "app" => "sign.app.registration.checkpoint.age_restricted",
     "com" => "sign.com.registration.checkpoint.age_restricted",
@@ -332,6 +334,13 @@ module SignUpSequenceControllerSupport
     )
   end
 
+  def sign_up_flow_binding_params
+    flow = @sign_up_ticket || current_sign_up_flow_ticket
+    return {} unless flow
+
+    { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: flow, surface: sign_up_surface) }
+  end
+
   def sign_up_flow_locator
     SignUpCycleLocator.new(session, surface: sign_up_surface, cycle_class: sign_up_ticket_class)
   end
@@ -422,9 +431,9 @@ module SignUpSequenceControllerSupport
   def sign_up_telephone_edit_path
     case sign_up_surface
     when :app
-      auth_app_sign_up_check_telephone_otp_path(ri: params[:ri])
+      auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri])
     when :com
-      auth_com_sign_up_check_telephone_otp_path(ri: params[:ri])
+      auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri])
     else
       sign_up_default_sign_in_path
     end

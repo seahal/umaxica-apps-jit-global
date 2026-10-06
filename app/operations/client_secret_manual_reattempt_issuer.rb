@@ -55,6 +55,13 @@ class ClientSecretManualReattemptIssuer
       )
       return successor if successor
 
+      latest_attempt = ClientSecretIssuance.where(
+        client_id: actor.id, origin_operation_id: predecessor.origin_operation_id, origin: "manual",
+      ).maximum(:attempt_number)
+      unless latest_attempt == predecessor.attempt_number
+        raise Denied, "Secret reattempt requires the exact latest predecessor"
+      end
+
       now = Client.database_now
       requirement = StepUpRequirement.new(
         scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),

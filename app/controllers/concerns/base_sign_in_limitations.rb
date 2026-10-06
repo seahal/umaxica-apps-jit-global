@@ -209,6 +209,14 @@ module BaseSignInLimitations
           end
         end
       end
+    if finalization[:status] == :session_limit_pending
+      @resolution = finalization.fetch(:resolution_transaction)
+      @resolution_challenge = finalization.fetch(:resolution_challenge)
+      @resolution_binding = finalization.fetch(:resolution_binding)
+      @form_notice = I18n.t("base.app.sign.in.limitations.capacity_still_full")
+      load_session_inventory
+      return render_limitation_page(status: :unprocessable_content)
+    end
     return render_invalid_resolution unless finalization[:status] == :success
 
     issue_authorization_code!

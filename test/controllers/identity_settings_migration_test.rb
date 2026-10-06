@@ -8,10 +8,16 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_token_kinds, :client_token_statuses
 
   setup do
+    https!
     @sign_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @acme_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
+    host! @acme_host
     @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @token = ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
   end
 
   test "sign settings root remains limited to retained credential settings" do
@@ -32,10 +38,8 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
     assert_unroutable_auth_settings_path("/settings/mfa/reset", :post)
   end
 
-  test "sign passkey route still exists" do
-    get sign_app_settings_passkeys_url(ri: "jp"), headers: sign_headers
-
-    assert_response :ok
+  test "sign passkey management route is retired" do
+    assert_unroutable_auth_settings_path("/settings/passkeys", :get)
   end
 
   test "acme identity routes exist and authenticate" do
@@ -56,7 +60,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
     get acme_app_identity_url(ri: "jp"), headers: acme_headers_with_session
 
     assert_response :success
-    assert_no_match(/\/settings(?!\/passkeys|\/totps|\/google|\/apple)/, response.body)
+    assert_no_match(%r{/settings(?!/google|/apple)}, response.body)
   end
 
   private
@@ -72,13 +76,8 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
   end
 
   def acme_headers
-    bearer_headers(
-      AuthenticationToken.encode(
-        @user, host: @acme_host, session_public_id: @token.public_id, resource_type: "client",
-               jwt_issuer_id: "surface:BASE_APP",
-      ),
-      host: @acme_host,
-    )
+    as_user_headers(@user, host: @acme_host, session_public_id: @token.public_id)
+      .except("Cookie", "HTTP_COOKIE")
   end
 
   def bearer_headers(token, host: nil, headers: {})
@@ -89,6 +88,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
   def acme_headers_with_session
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+    install_base_browser_rp_credentials!(surface: "app", host: @acme_host, actor: @user, token: @token)
     acme_headers
   end
 

@@ -165,6 +165,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_nil Rack::Utils.parse_nested_query(redirect_uri.query.to_s)["social_resolution"]
     assert_equal 2, ClientToken.where(user_id: existing_user.id).count
     flow = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
+
     assert_predicate flow, :sign_in_session_issuance_pending?
     assert_predicate ClientSessionLimitResolutionTransaction.find_by!(sign_in_flow_id: flow.id), :open?
 
@@ -214,6 +215,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     completion = URI.parse(response.location)
+
     assert_equal "/social/authentication/completion", completion.path
 
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -228,6 +230,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     form = response.parsed_body.at_css("form")
+
     assert form
     assert_not_includes response.body, "transport_access_token"
     assert_not_includes response.body, "transport_refresh_token"

@@ -35,7 +35,7 @@ module Base
 
         def create
           user = current_client
-          tel_params = params(user_telephone: [:raw_number, :number])
+          tel_params = params.expect(user_telephone: [:raw_number, :number])
           number = tel_params[:raw_number] || tel_params[:number]
           if initiate_telephone_verification(user, number, auto_accept_confirmations: true)
             redirect_to(edit_base_app_identity_telephones_registration_path(ri: params[:ri]), status: :see_other)

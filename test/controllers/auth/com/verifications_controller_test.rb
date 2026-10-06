@@ -16,7 +16,8 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
     VisitorEmail.create!(
       visitor_id: actor.id, address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED, otp_private_key: SecureRandom.base64(24),
-      otp_counter: "", otp_attempts_count: 0, public_id: SecureRandom.alphanumeric(21),
+      binding_finalized_at: VisitorEmail.database_now, otp_counter: "", otp_attempts_count: 0,
+      public_id: SecureRandom.alphanumeric(21),
     )
     VisitorPasskey.create!(
       visitor: actor, webauthn_id: SecureRandom.uuid, external_id: SecureRandom.uuid, public_key: "public",

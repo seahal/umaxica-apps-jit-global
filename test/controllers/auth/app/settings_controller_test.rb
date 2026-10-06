@@ -62,14 +62,14 @@ class Auth::App::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal({ "ri" => "jp" }, Rack::Utils.parse_nested_query(uri.query.to_s))
   end
 
-  test "retained sign credential settings routes still resolve on sign" do
-    get auth_app_settings_passkeys_url(ri: "jp")
+  test "retired credential management routes do not resolve on sign" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{@host}/settings/passkeys", method: :get)
+    end
 
-    assert_not_equal 404, response.status
-
-    get auth_app_settings_totps_url(ri: "jp")
-
-    assert_not_equal 404, response.status
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{@host}/settings/totps", method: :get)
+    end
   end
 
   test "migrated identity settings routes do not resolve on sign" do

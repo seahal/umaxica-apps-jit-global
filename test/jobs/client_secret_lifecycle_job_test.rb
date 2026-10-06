@@ -3,6 +3,11 @@
 require "test_helper"
 
 class ClientSecretLifecycleJobTest < ActiveJob::TestCase
+  setup do
+    ChronicleRetentionPolicy.find_by(code: "security") ||
+      ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
+  end
+
   test "lifecycle continuation validates batch cursor and phase boundaries before writes" do
     keys = %w(APP_SECRET_PURGE_DELAY_SECONDS APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS)
     previous = ENV.to_h.slice(*keys)

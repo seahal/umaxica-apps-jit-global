@@ -1726,10 +1726,12 @@ en:
           activities: Activity
           birthdate: Birthdate
           emails: Email
+          passkey: Passkey
           secrets: Secrets
           sessions: Sessions
           standing: Account standing
           telephones: Telephone
+          totp: TOTP
           withdrawal: Withdrawal
   com_document_categories:
     "%{id}": com_document_category_%{id}
@@ -2286,6 +2288,7 @@ en:
       operation_not_permitted: This operation is not permitted.
       other_than: must be other than %{count}
       password_too_long: is too long
+      phase_violation_refused: Going back is not allowed.
       preference_operation_failed: The preference operation failed.
       present: must be blank
       required: must exist

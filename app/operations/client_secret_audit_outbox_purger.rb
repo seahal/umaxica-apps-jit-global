@@ -13,10 +13,20 @@ class ClientSecretAuditOutboxPurger
       AppZenithRecord.connected_to(role: :writing) do
         owner = Client.find_by(public_id: event.client_ref)
         if owner
-          owner.with_lock { purge!(event, owner) }
+          owner.with_lock do
+            if event.event_name == "secret.issuance_purged"
+              with_ticket_replay_barrier_lock { purge!(event, owner) }
+            else
+              purge!(event, owner)
+            end
+          end
         else
           # Client deletion does not cascade its independent source audit records.
-          ClientSecretAuditOutbox.transaction { purge!(event, nil) }
+          if event.event_name == "secret.issuance_purged"
+            with_ticket_replay_barrier_lock { ClientSecretAuditOutbox.transaction { purge!(event, nil) } }
+          else
+            ClientSecretAuditOutbox.transaction { purge!(event, nil) }
+          end
         end
       end
     end
@@ -53,6 +63,12 @@ class ClientSecretAuditOutboxPurger
       end
     end
 
+    def with_ticket_replay_barrier_lock
+      AppTicketRecord.connected_to(role: :writing) do
+        AppTicketRecord.transaction(requires_new: true) { yield }
+      end
+    end
+
     def replay_barrier_retirable?(event, owner, now)
       return false unless owner
       return false unless event.issuance_origin.present? &&
@@ -60,9 +76,9 @@ class ClientSecretAuditOutboxPurger
 
       authority =
         if event.issuance_browser_session_ref.present?
-          ClientToken.find_by(public_id: event.issuance_browser_session_ref, user_id: owner.id)
+          ClientToken.lock.find_by(public_id: event.issuance_browser_session_ref, user_id: owner.id)
         else
-          ClientSignUpFlow.find_by(public_id: event.issuance_sign_up_flow_ref, principal_id: owner.id)
+          ClientSignUpFlow.lock.find_by(public_id: event.issuance_sign_up_flow_ref, principal_id: owner.id)
         end
       return false unless authority
 

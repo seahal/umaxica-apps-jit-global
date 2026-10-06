@@ -10,9 +10,10 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
            :client_totp_credential_statuses, :client_passkey_statuses
 
   setup do
-    @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
-    @base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
-    host! @host
+    https!
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @base_host = @host
+    host! @base_host
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
@@ -22,33 +23,33 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "email removal preserves contactability even when aal methods remain" do
+  test "email removal may leave a usable passkey-only identity" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     email = create_verified_email(client, "app-removal-contact-email@example.com")
     create_active_passkey(client)
 
-    assert_no_difference("ClientEmail.count") do
-      delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
-             headers: client_headers(client, scope: "settings_email", host: @base_host)
-    end
+    delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_email", host: @base_host)
 
     assert_redirected_to base_app_identity_emails_url(ri: "jp", host: @base_host)
+    assert_equal ClientEmailStatus::DELETED, email.reload.user_email_status_id
+    assert_predicate email, :binding_released?
   end
 
-  test "telephone removal preserves contactability even when aal methods remain" do
+  test "telephone removal may leave a usable passkey-only identity" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     telephone = create_verified_telephone(client, "+819011110001")
     create_active_passkey(client)
 
-    assert_no_difference("ClientTelephone.count") do
-      delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
-             headers: client_headers(client, scope: "settings_telephone", host: @base_host)
-    end
+    delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_telephone", host: @base_host)
 
     assert_redirected_to base_app_identity_telephones_url(ri: "jp", host: @base_host)
+    assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_identity_telephone_status_id
+    assert_predicate telephone, :binding_released?
   end
 
-  test "passkey removal preserves aal2 even when aal1 and contactability remain" do
+  test "passkey removal is blocked when it would remove the last usable step-up capability" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110002")
     now = Client.database_now
@@ -64,15 +65,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     )
     passkey = create_active_passkey(client)
 
-    assert_no_difference("ClientPasskey.count") do
-      delete auth_app_settings_passkey_url(passkey.public_id, ri: "jp", host: @host),
-             headers: client_headers(client, scope: "settings_passkey")
-    end
+    delete base_app_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_passkey", host: @base_host)
 
-    assert_redirected_to auth_app_settings_passkeys_url(ri: "jp", host: @host)
+    assert_response :unprocessable_content
+    assert_equal ClientPasskeyStatus::ACTIVE, passkey.reload.status_id
   end
 
-  test "totp removal preserves aal2 even when aal1 and contactability remain" do
+  test "totp removal is blocked when it would remove the last usable step-up capability" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110003")
     now = Client.database_now
@@ -88,15 +88,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     )
     totp = create_active_totp(client)
 
-    assert_no_difference("ClientTotpCredential.count") do
-      delete auth_app_settings_totp_url(totp.public_id, ri: "jp", host: @host),
-             headers: client_headers(client, scope: "settings_totp")
-    end
+    delete base_app_identity_totp_url(totp.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_totp", host: @base_host)
 
-    assert_redirected_to auth_app_settings_totps_url(ri: "jp", host: @host)
+    assert_redirected_to base_app_identity_totps_url(ri: "jp", host: @base_host)
+    assert_equal ClientTotpCredentialStatus::ACTIVE, totp.reload.user_identity_totp_credential_status_id
   end
 
-  test "totp removal is allowed when another aal2 method remains" do
+  test "totp removal is allowed when another usable step-up capability remains" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110004")
     now = Client.database_now
@@ -113,79 +112,69 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     create_active_passkey(client)
     totp = create_active_totp(client)
 
-    assert_difference("ClientTotpCredential.count", -1) do
-      delete auth_app_settings_totp_url(totp.public_id, ri: "jp", host: @host),
-             headers: client_headers(client, scope: "settings_totp")
-    end
+    delete base_app_identity_totp_url(totp.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_totp", host: @base_host)
 
-    assert_redirected_to auth_app_settings_totps_url(ri: "jp", host: @host)
+    assert_redirected_to base_app_identity_totps_url(ri: "jp", host: @base_host)
+    assert_equal ClientTotpCredentialStatus::DELETED, totp.reload.user_identity_totp_credential_status_id
   end
 
-  test "email removal is allowed when aal1 aal2 and contactability remain" do
+  test "email removal is allowed when sign-in, step-up and contact capabilities remain" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     email = create_verified_email(client, "app-removal-email-allowed@example.com")
     create_verified_telephone(client, "+819011110006")
     create_active_passkey(client)
 
-    assert_difference("ClientEmail.count", -1) do
-      delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
-             headers: client_headers(client, scope: "settings_email", host: @base_host)
-    end
+    delete base_app_identity_email_url(email.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_email", host: @base_host)
 
     assert_redirected_to base_app_identity_emails_url(ri: "jp", host: @base_host)
+    assert_equal ClientEmailStatus::DELETED, email.reload.user_email_status_id
+    assert_predicate email, :binding_released?
   end
 
-  test "telephone removal is allowed when contactability remains" do
+  test "telephone removal is allowed when another contact capability remains" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     telephone = create_verified_telephone(client, "+819011110007")
     create_verified_email(client, "app-removal-telephone-allowed@example.com")
 
-    assert_difference("ClientTelephone.count", -1) do
-      delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
-             headers: client_headers(client, scope: "settings_telephone", host: @base_host)
-    end
+    delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_telephone", host: @base_host)
 
     assert_redirected_to base_app_identity_telephones_url(ri: "jp", host: @base_host)
+    assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_identity_telephone_status_id
+    assert_predicate telephone, :binding_released?
   end
 
-  test "passkey removal is allowed when another aal2 method remains" do
+  test "passkey removal is allowed when another usable step-up capability remains" do
     client = Client.create!(status_id: ClientStatus::NOTHING)
     create_verified_email(client, "app-removal-passkey-allowed@example.com")
     passkey = create_active_passkey(client)
 
-    assert_difference("ClientPasskey.count", -1) do
-      delete auth_app_settings_passkey_url(passkey.public_id, ri: "jp", host: @host),
-             headers: client_headers(client, scope: "settings_passkey")
-    end
+    delete base_app_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
+           headers: client_headers(client, scope: "settings_passkey", host: @base_host)
 
-    assert_redirected_to auth_app_settings_passkeys_url(ri: "jp", host: @host)
+    assert_redirected_to base_app_identity_passkeys_url(ri: "jp", host: @base_host)
+    assert_equal ClientPasskeyStatus::DELETED, passkey.reload.status_id
   end
 
   private
 
-  def client_headers(client, scope:, host: @host)
+  def client_headers(client, scope:, host: @base_host)
     token = ClientToken.new(
       user: client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
+      root_login_established_at: Time.current,
+      established_authentication_method: "passkey",
     )
     token.save!
+    BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
+    BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
     satisfy_user_verification(token)
     mark_token_step_up_satisfied_for_test(token, scope: scope)
-
-    headers = browser_headers
-    csrf_token = cookies["csrf_token"]
-    headers["Cookie"] =
-      [headers["Cookie"], ("csrf_token=#{csrf_token}" if csrf_token.present?)].compact_blank.join("; ")
-    headers.merge(
-      "Host" => host,
-      "Authorization" => "Bearer #{jwt_access_token_for(
-        client, host: host, session_public_id: token.public_id,
-                resource_type: "client",
-      )}",
-      "X-TEST-CURRENT-USER" => client.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    )
+    install_base_browser_rp_credentials!(surface: "app", host: host, actor: client, token: token)
+    as_user_headers(client, host: host).except("Cookie", "HTTP_COOKIE")
   end
 
   def client_browser_headers(client, scope:, host: @host)
@@ -220,7 +209,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
       user: client,
       address: address,
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def create_verified_telephone(client, number)
@@ -228,7 +217,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
       user: client,
       number: number,
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def create_active_passkey(client)
@@ -419,14 +408,37 @@ class Auth::App::CredentialRemovalConstraintsTest
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
+    passkey = token.user.client_passkeys.active.where("discard_at > ?", at).where.not(uv_verified_at: nil).first
+    email = token.user.client_emails.effective_binding.where(user_email_status_id: ClientEmailStatus::VERIFIED).first
+    totp = token.user.client_totp_credentials.where(
+      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    ).first
+    method, credential_ref, phishing_resistant, user_verified =
+      if passkey
+        ["passkey", passkey.public_id, true, true]
+      elsif email
+        ["email_otp", email.public_id, false, false]
+      elsif totp
+        ["totp", totp.public_id, false, false]
+      else
+        ["passkey", nil, true, true]
+      end
     attrs = {
       last_step_up_at: at,
       last_step_up_scope: scope.presence || token.try(:last_step_up_scope).presence || "verification",
-      last_step_up_aal: ("aal2" if token.respond_to?(:last_step_up_aal)),
-      last_step_up_method: ("passkey" if token.respond_to?(:last_step_up_method)),
-      last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+      last_step_up_aal: ("aal2" if token.has_attribute?(:last_step_up_aal)),
+      last_step_up_method: (method if token.has_attribute?(:last_step_up_method)),
+      last_step_up_session_public_id: (token.public_id if token.has_attribute?(:last_step_up_session_public_id)),
+      last_step_up_purpose: ("step_up" if token.has_attribute?(:last_step_up_purpose)),
+      last_step_up_audience: (step_up_test_audience_for_token(token) if token.has_attribute?(:last_step_up_audience)),
+      last_step_up_credential_ref: (credential_ref if token.has_attribute?(:last_step_up_credential_ref)),
+      last_step_up_phishing_resistant: (
+        phishing_resistant if token.has_attribute?(:last_step_up_phishing_resistant)
+      ),
+      last_step_up_user_verified: (user_verified if token.has_attribute?(:last_step_up_user_verified)),
+      last_step_up_full_reauthentication: (
+        false if token.has_attribute?(:last_step_up_full_reauthentication)
+      ),
       updated_at: Time.current,
     }.compact
     token.update_columns(attrs)

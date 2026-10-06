@@ -83,7 +83,17 @@ module Auth
           return false if action_name == "create" && social_provider_linked?
           return true unless social_operation_scope == verification_scope
 
-          current_client.social_unlink_methods_remaining?(excluding_provider: social_provider)
+          social_unlink_allowed?
+        end
+
+        def social_unlink_allowed?
+          identity = current_client.client_external_identities.effective_binding.find_by(
+            provider: social_provider,
+          )
+          return true unless identity
+          return false unless identity.active?
+
+          AuthMethodGuard.can_remove_external_identity?(current_client, identity)
         end
 
         def render_unlink_blocked
@@ -120,7 +130,7 @@ module Auth
         def edit_page_props
           linked = current_client.active_social_provider?(social_provider)
           unlink_allowed =
-            linked && current_client.social_unlink_methods_remaining?(excluding_provider: social_provider)
+            linked && social_unlink_allowed?
 
           {
             title: t("controller.sign.app.setting.index.google"),

@@ -20,13 +20,13 @@ module SocialCompletionTestHelper
       "Origin" => "https://#{base_host}",
       "Sec-Fetch-Site" => "same-origin",
     }
-    get completion.request_uri, headers: request_headers
+    get(completion.request_uri, headers: request_headers)
 
     form = response.parsed_body.at_css("form")
     raise StandardError, "social completion continuation form missing" unless form
 
     params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    post form["action"], params: params, headers: request_headers
+    post(form["action"], params: params, headers: request_headers)
     true
   end
 end

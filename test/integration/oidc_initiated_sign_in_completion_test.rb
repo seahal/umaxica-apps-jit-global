@@ -26,6 +26,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     @user = clients(:one)
     @address = "oidc_signin_#{SecureRandom.hex(4)}@example.com"
     @email_record = @user.client_emails.create!(address: @address, user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email_record.finalize_binding!
     @user.client_telephones.create!(number: "+819012345901")
     ClientToken.where(user_id: @user.id).delete_all
     TurnstileVerifierStub.challenge_enabled = true
@@ -89,9 +90,10 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     reference = BaseAuthAdmissionCoordinator.issue_handoff!(
       transaction: @transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
     ).reference
-    get auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference }
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference, authenticity_token: csrf }
+    redeem_auth_ceremony_entry!(
+      auth_app_sign_in_path, reference: reference,
+                             params: { ri: "jp" }, headers: { "Host" => @host },
+    )
 
     assert_response :see_other
     follow_redirect!
@@ -100,7 +102,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_no_difference("ClientToken.count") do
       post auth_app_sign_in_secret_path(ri: "jp"), params: {
-        secret: "a" * 32, "cf-turnstile-response": "test_token",
+        identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
       }
     end
     assert_response :see_other
@@ -119,7 +121,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal @user.public_id, @transaction.actor_ref
     assert_nil @transaction.secret_sign_in_flow.session_issued_at
     assert_nil @transaction.secret_sign_in_flow.token_id
-    assert_equal "DASHBOARD_PENDING", @transaction.secret_sign_in_flow.state
+    assert_equal "SELECTOR_PENDING",
+                 @transaction.secret_sign_in_flow.state_name_for(@transaction.secret_sign_in_flow.state_id)
     assert_predicate ceremony.reload, :completed?
     assert_nil ceremony.revoked_at
     assert_nil ceremony.cancelled_at
@@ -127,11 +130,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal "normal", @transaction.secret_sign_in_flow.authentication_context
     assert_equal @user.id, @transaction.secret_sign_in_flow.principal_id
     assert_equal @transaction.transaction_id, ceremony.authorization_transaction_ref
-    result = css_select("input[name=result]").first["value"]
-    action = css_select("form#oidc-authorization-result-form").first["action"]
+    action = @oidc_result_action
     assert_difference("ClientToken.count", 1) do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
 
       assert_response :redirect, response.body
     end
@@ -141,8 +142,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     root_token_ref = @transaction.reload.browser_session_ref
     consumed_at = credential.consumed_at
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
     end
     assert_response :redirect
     assert_equal root_token_ref, @transaction.reload.browser_session_ref
@@ -158,7 +158,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_not ClientSecretCredential.exists?(credential.id)
     assert ClientSecretSignInReceipt.exists?(operation_id: credential.claim_operation_id)
     OidcAuthorizationTransactionPurger.call(
-      now: @transaction.expires_at + OidcAuthorizationTransactionable::RETENTION_PERIOD + 1.second,
+      now: oidc_purge_now(@transaction),
     )
 
     assert ClientOidcAuthorizationTransaction.exists?(@transaction.id),
@@ -202,7 +202,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     admit_sign_in!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret: "a" * 32, "cf-turnstile-response": "test_token",
+      identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
 
     assert_response :see_other
@@ -210,15 +210,13 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :success
-    result = css_select("input[name=result]").first["value"]
-    action = css_select("form#oidc-authorization-result-form").first["action"]
+    action = @oidc_result_action
     flow = @transaction.reload.secret_sign_in_flow
     flow.update!(expires_at: ClientSignInFlow.database_now)
     operation_id = credential.reload.claim_operation_id
 
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
     end
     assert_response :bad_request
     assert_equal operation_id, credential.reload.claim_operation_id
@@ -233,13 +231,12 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert ClientOidcAuthorizationTransaction.exists?(@transaction.id),
            "a claimed Secret still needs its durable OIDC terminal proof"
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 0.000001.seconds)
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_predicate flow.reload, :sign_in_expired?
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_nil credential.consumed_at
     assert_equal operation_id, credential.claim_operation_id
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
     end
     assert_response :bad_request
     ChronicleRetentionPolicy.find_by(code: "security") ||
@@ -265,7 +262,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
     end
     OidcAuthorizationTransactionPurger.call(
-      now: @transaction.expires_at + OidcAuthorizationTransactionable::RETENTION_PERIOD + 1.second,
+      now: oidc_purge_now(@transaction),
     )
 
     assert_not ClientOidcAuthorizationTransaction.exists?(@transaction.id),
@@ -278,7 +275,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     admit_sign_in!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret: "a" * 32, "cf-turnstile-response": "test_token",
+      identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
 
     assert_response :see_other
@@ -286,21 +283,19 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :success
-    result = css_select("input[name=result]").first["value"]
-    action = css_select("form#oidc-authorization-result-form").first["action"]
+    action = @oidc_result_action
     flow = @transaction.reload.secret_sign_in_flow
     flow.halt_sign_in!
 
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
     end
     assert_response :bad_request
     assert_nil flow.reload.token_id
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential.reload, purge_after: 1.day)
     assert_nil credential.reload.consumed_at
-    assert_equal "flow_failed", ClientSecretAuditOutbox.find_by!(
+    assert_equal "flow_halted", ClientSecretAuditOutbox.find_by!(
       credential_ref: credential.public_id, event_name: "secret.discarded",
     ).reason
   end
@@ -309,7 +304,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     client_secret_credentials(:one)
     admit_sign_in!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret: "a" * 32, "cf-turnstile-response": "test_token",
+      identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
 
     assert_response :see_other
@@ -317,29 +312,24 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :success
-    result = css_select("input[name=result]").first["value"]
-    action = css_select("form#oidc-authorization-result-form").first["action"]
+    action = @oidc_result_action
     Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
-    post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                 headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+    post_oidc_result!(action: action)
 
     assert_response :see_other
     limitation = response.location
     flow = @transaction.reload.secret_sign_in_flow
-    challenge = Rack::Utils.parse_query(URI.parse(limitation).query).fetch("resolution_challenge")
+    challenge = oidc_resolution_challenge
     resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(challenge)
     flow.update!(expires_at: ClientSignInFlow.database_now)
     token = ClientToken.where(user_id: @user.id).first
     statuses = ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id)
-    executed = false
-    assert_raises(ClientSessionLimitResolutionTransaction::InvalidSecretResolution) do
-      resolution.with_secret_revocation_authority!(actor: @user, challenge: challenge) { executed = true }
-    end
-    assert_not executed
+    resolution.expire!
     patch limitation, params: { session_ref: SessionLimitResolutionTokenRef.issue(token) }
 
     assert_response :gone
     assert_equal statuses, ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id)
+    assert_predicate resolution.reload, :expired?
     assert_nil flow.reload.token_id
   end
 
@@ -347,7 +337,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     admit_sign_in!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret: "a" * 32, "cf-turnstile-response": "test_token",
+      identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
 
     assert_response :see_other
@@ -355,32 +345,25 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :success
-    result = css_select("input[name=result]").first["value"]
-    action = css_select("form#oidc-authorization-result-form").first["action"]
+    action = @oidc_result_action
     Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
-    post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                 headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+    post_oidc_result!(action: action)
 
     assert_response :see_other
     limitation = response.location
-    challenge = Rack::Utils.parse_query(URI.parse(limitation).query).fetch("resolution_challenge")
+    challenge = oidc_resolution_challenge
     admitted_resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(challenge)
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
       delete limitation
     end
     assert_response :see_other
-    assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_failed?
+    assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_cancelled?
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_nil credential.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
-    executed = false
-    assert_raises(ClientSessionLimitResolutionTransaction::InvalidSecretResolution) do
-      admitted_resolution.with_secret_revocation_authority!(actor: @user, challenge: challenge) { executed = true }
-    end
-    assert_not executed
+    assert_predicate admitted_resolution.reload, :cancelled?
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
     end
     assert_response :bad_request
     assert_equal "flow_canceled", ClientSecretAuditOutbox.find_by!(
@@ -392,7 +375,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
     admit_sign_in!
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret: "a" * 32, "cf-turnstile-response": "test_token",
+      identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
 
     assert_response :see_other
@@ -400,20 +383,18 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     post_oidc_handoff!
 
     assert_response :success
-    result = css_select("input[name=result]").first["value"]
-    action = css_select("form#oidc-authorization-result-form").first["action"]
+    action = @oidc_result_action
     existing_tokens = Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
     assert_no_difference "ClientToken.count" do
-      post action, params: { transaction_ref: @transaction.transaction_id, result: result },
-                   headers: { "Origin" => OidcIssuer.absolute_url(@host) }
+      post_oidc_result!(action: action)
     end
     assert_response :see_other
     limitation = response.location
 
-    assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_session_limit_pending?
+    assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_session_issuance_pending?
     assert_nil credential.reload.consumed_at
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
-    challenge = Rack::Utils.parse_query(URI.parse(limitation).query).fetch("resolution_challenge")
+    challenge = oidc_resolution_challenge
     resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(challenge)
 
     assert resolution
@@ -423,10 +404,11 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     }
 
     assert_response :unprocessable_content
-    assert_predicate @transaction.secret_sign_in_flow.reload, :sign_in_session_limit_pending?
+    assert_predicate @transaction.secret_sign_in_flow.reload, :sign_in_session_issuance_pending?
     assert_nil credential.reload.consumed_at
     assert_equal I18n.t("base.app.sign.in.limitations.capacity_still_full"),
                  JSON.parse(css_select("script[data-page=app]").first.text).fetch("props").fetch("notice")
+    challenge = oidc_resolution_challenge
     patch limitation, params: {
       resolution_challenge: challenge,
       session_ref: SessionLimitResolutionTokenRef.issue(existing_tokens.second),
@@ -442,7 +424,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   test "the local handoff POST binds the signed-in actor to the authorization transaction" do
     admit_sign_in!
     submit_email_otp!
-
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
@@ -463,13 +444,15 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "form#oidc-authorization-result-form[method=post]", 1
-    assert_select "input[name=result][value]", 1
+    assert_select "input[name=result_ref][value]", 1
     assert_select "form#oidc-authorization-result-form" do |forms|
       result_uri = URI.parse(forms.first.attributes.fetch("action").value)
       base_uri = URI.parse(OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")))
 
       assert_equal "/oauth/authorize", result_uri.path
-      assert_equal base_uri.host, result_uri.host
+      resolved_result_uri = URI.join(base_uri.to_s, result_uri.to_s)
+
+      assert_equal base_uri.host, resolved_result_uri.host
     end
   end
 
@@ -490,7 +473,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_no_difference("ClientToken.count") do
       assert_no_difference -> { ClientSecretCredential.where.not(claimed_at: nil).count } do
         post auth_app_sign_in_secret_path(ri: "jp"), params: {
-          secret: "a" * 32, "cf-turnstile-response": "test_token",
+          identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
         }
       end
     end
@@ -527,10 +510,52 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   def post_oidc_handoff!
+    csrf = css_select("input[name=authenticity_token]").first&.[]("value")
     post(
       auth_app_sign_oidc_handoff_path(ri: "jp"),
+      params: { authenticity_token: csrf }.compact,
       headers: { "Host" => @host },
     )
+    return unless response.redirect?
+
+    target = URI.parse(response.location)
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host!(target.host)
+    https!
+    get(target.request_uri, headers: { "Host" => base_host })
+    form = css_select("form#oidc-authorization-result-form").first
+    @oidc_result_action = form["action"]
+    @oidc_result_ref = form.at_css('input[name="result_ref"]')["value"]
+    @oidc_result_transaction_ref = form.at_css('input[name="transaction_ref"]')["value"]
+  end
+
+  def post_oidc_result!(action: @oidc_result_action)
+    post(
+      action, params: {
+        result_ref: @oidc_result_ref,
+        transaction_ref: @oidc_result_transaction_ref,
+      }, headers: {
+        "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+        "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+  end
+
+  def oidc_resolution_challenge
+    gate = session[:session_limit_gate] || session["session_limit_gate"]
+    gate.fetch("resolution_challenge")
+  end
+
+  def oidc_purge_now(transaction)
+    binding_rows = ClientAuthAdmissionBinding.where(authorization_transaction_id: transaction.id)
+    session_ids = binding_rows.pluck(:auth_ceremony_session_id, :admitted_auth_ceremony_session_id).flatten.compact
+    deadlines = [transaction.expires_at, transaction.login_challenge_expires_at] + binding_rows.pluck(:expires_at)
+    deadlines.concat(
+      ClientAuthCeremonySession.where(id: session_ids).pluck(
+        :expires_at, :completed_at, :cancelled_at, :revoked_at,
+      ).flatten.compact,
+    )
+    deadlines.max + OidcAuthorizationTransactionable::RETENTION_PERIOD + 1.second
   end
 
   def follow_redirect_to_oidc_handoff!

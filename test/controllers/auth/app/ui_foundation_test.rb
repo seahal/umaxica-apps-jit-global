@@ -14,23 +14,21 @@ class Auth::App::UiFoundationTest < ActionDispatch::IntegrationTest
     @base_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost")
   end
 
-  test "retained passkey settings route exists on sign" do
-    head = as_user_headers(@user, host: @sign_host)
-    get auth_app_settings_passkeys_url(ri: "jp", host: @sign_host), headers: head
-
-    assert_not_equal 404, response.status
+  test "retired passkey settings route is absent from sign" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{@sign_host}/settings/passkeys", method: :get)
+    end
   end
 
-  test "unauthenticated retained settings entry starts an authentication handoff" do
-    get auth_app_settings_passkeys_url(ri: "jp", host: @sign_host)
-
-    assert_response :redirect
-    assert_match %r{\Ahttps?://}, response.location
+  test "unauthenticated retired passkey settings entry cannot start a handoff" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{@sign_host}/settings/passkeys", method: :get)
+    end
   end
 
   test "totp settings route exists on sign" do
     head = as_user_headers(@user, host: @sign_host)
-    get auth_app_settings_totps_url(ri: "jp", host: @sign_host), headers: head
+    get new_auth_app_settings_totp_url(ri: "jp", host: @sign_host), headers: head
 
     assert_not_equal 404, response.status
   end
@@ -52,16 +50,16 @@ class Auth::App::UiFoundationTest < ActionDispatch::IntegrationTest
     assert_equal "index", route.fetch(:action)
   end
 
-  test "retained settings route accepts theme params" do
+  test "TOTP registration route accepts theme params" do
     headers = as_user_headers(@user, host: @sign_host)
-    get auth_app_settings_passkeys_url(ri: "jp", ct: "dark", host: @sign_host), headers: headers
+    get new_auth_app_settings_totp_url(ri: "jp", ct: "dark", host: @sign_host), headers: headers
 
     assert_not_equal 404, response.status
   end
 
-  test "retained settings pages remain scoped to credential exceptions" do
+  test "TOTP registration remains scoped to credential ceremony" do
     head = as_user_headers(@user, host: @sign_host)
-    get auth_app_settings_totps_url(ri: "jp", host: @sign_host), headers: head
+    get new_auth_app_settings_totp_url(ri: "jp", host: @sign_host), headers: head
 
     assert_not_equal 404, response.status
   end

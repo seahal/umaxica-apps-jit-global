@@ -16,4 +16,6 @@ class Base::Org::Identity::PasskeysController < Base::Org::ApplicationController
   def passkey_class = OperatorPasskey
 
   def passkey_association = :staff_passkeys
+
+  def passkey_reference_attribute = :external_id
 end

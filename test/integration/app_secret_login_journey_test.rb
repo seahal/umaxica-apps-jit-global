@@ -72,10 +72,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
         )
       root_access_token = base_headers.fetch("Authorization").delete_prefix("Bearer ")
-      base.cookies.merge(
-        "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access_token)}",
-        URI.parse("https://#{base_host}/"),
-      )
+      base.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = root_access_token
       base.get(new_base_app_identity_passkey_path(ri: "jp"), headers: base_headers)
 
       assert_equal 303, base.response.status, base.response.body
@@ -776,10 +773,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       subject: OidcSubject.for(actor, resource_type: "client"),
       client_id: base_client.client_id,
     )
-    browser.cookies.merge(
-      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access_token)}",
-      URI.parse("https://#{base_host}/"),
-    )
+    browser.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
     browser.cookies.merge(
       "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_session.issue_refresh_token!)}",
       URI.parse("https://#{base_host}/"),

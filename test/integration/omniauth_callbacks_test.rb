@@ -437,8 +437,10 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
   def assert_emits_acme_completion_only!
     assert_response :see_other
     completion = URI.parse(response.location.to_s)
+
     assert_equal "/social/authentication/completion", completion.path
     query = Rack::Utils.parse_nested_query(completion.query.to_s)
+
     assert_predicate query["result_ref"], :present?
     assert follow_social_completion_redirect_if_present!
   end

@@ -162,7 +162,8 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       )
       removed_id = credential.id
 
-      assert IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token), surface
+      assert IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token),
+             surface
 
       credential.reload
       status = (surface == :totp) ? credential.user_identity_totp_credential_status_id : credential.status_id

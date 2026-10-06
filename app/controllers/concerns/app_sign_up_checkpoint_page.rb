@@ -65,6 +65,7 @@ module AppSignUpCheckpointPage
       label: page_t("#{scope}.label"),
       action: public_send(
         :"auth_app_sign_up_check_#{@sign_up_ticket.entry_method}_birthdate_path",
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
       ),
@@ -86,6 +87,7 @@ module AppSignUpCheckpointPage
       description: page_t("#{scope}.description"),
       label: page_t("#{scope}.action"),
       href: auth_app_sign_up_check_telephone_passkey_path(
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
         checkpoint_version: @sign_up_ticket.checkpoint_version,
@@ -102,6 +104,7 @@ module AppSignUpCheckpointPage
       label: t("actions.cancel"),
       action: public_send(
         :"auth_app_sign_up_check_#{@sign_up_ticket.entry_method}_#{step}_path",
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
       ),

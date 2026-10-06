@@ -58,14 +58,14 @@ module Base
             return
           end
 
-          unless AuthMethodGuard.can_remove_email?(current_operator, @staff_email)
-            redirect_to(
-              base_org_identity_emails_path(ri: params[:ri]),
-            )
-            return
+          removed = false
+          current_operator.with_lock do
+            @staff_email = OperatorEmail.lock.find_by!(id: @staff_email.id, staff_id: current_operator.id)
+            unless @staff_email.undeletable? || !AuthMethodGuard.can_remove_email?(current_operator, @staff_email)
+              @staff_email.destroy!
+              removed = true
+            end
           end
-
-          @staff_email.destroy!
           redirect_to(
             base_org_identity_emails_path(ri: params[:ri]),
             status: :see_other,

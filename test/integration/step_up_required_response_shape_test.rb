@@ -21,14 +21,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
+    token.update!(root_login_established_at: ClientToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    install_base_browser_rp_credentials!(surface: "app", host: host, actor: client, token: token)
     access_token = AuthenticationToken.encode(
       client, host: host, session_public_id: token.public_id,
               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
     )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     patch base_app_identity_withdrawal_url(ri: "jp", host: host),
           params: { ack_schedule_purge: "1" },
           headers: {
@@ -51,14 +51,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
+    token.update!(root_login_established_at: ClientToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    install_base_browser_rp_credentials!(surface: "app", host: host, actor: client, token: token)
     access_token = AuthenticationToken.encode(
       client, host: host, session_public_id: token.public_id,
               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
     )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     patch base_app_identity_withdrawal_url(ri: "jp", host: host),
           params: { ack_schedule_purge: "1" }, as: :json,
           headers: {
@@ -82,14 +82,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
+    token.update!(root_login_established_at: OperatorToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    install_base_browser_rp_credentials!(surface: "org", host: host, actor: operator, token: token)
     access_token = AuthenticationToken.encode(
       operator, host: host, session_public_id: token.public_id,
                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     post base_org_identity_emails_registration_url(ri: "jp", host: host),
          params: { staff_email: { raw_address: "org_step_up_required@example.com" } },
          headers: {
@@ -112,14 +112,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
+    token.update!(root_login_established_at: OperatorToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    install_base_browser_rp_credentials!(surface: "org", host: host, actor: operator, token: token)
     access_token = AuthenticationToken.encode(
       operator, host: host, session_public_id: token.public_id,
                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     post base_org_identity_emails_registration_url(ri: "jp", host: host),
          params: { staff_email: { raw_address: "org_step_up_required_json@example.com" } }, as: :json,
          headers: {
@@ -142,14 +142,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
     )
+    token.update!(root_login_established_at: OperatorToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    install_base_browser_rp_credentials!(surface: "org", host: host, actor: operator, token: token)
     access_token = AuthenticationToken.encode(
       operator, host: host, session_public_id: token.public_id,
                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     assert_no_difference("OperatorEmail.count") do
       post base_org_identity_emails_registration_url(ri: "jp", host: host),
            params: { staff_email: { raw_address: "org_step_up_emergency_json@example.com" } }, as: :json,
@@ -174,14 +174,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
+    token.update!(root_login_established_at: ClientToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    install_base_browser_rp_credentials!(surface: "app", host: host, actor: client, token: token)
     access_token = AuthenticationToken.encode(
       client, host: host, session_public_id: token.public_id,
               resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
     )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     patch base_app_identity_withdrawal_url(ri: "jp", host: host),
           params: { ack_schedule_purge: "1" }, as: :json,
           headers: {

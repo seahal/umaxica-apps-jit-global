@@ -12,39 +12,39 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
            :client_token_dbsc_statuses
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
     @user = clients(:one)
+    @passkey = @user.client_passkeys.create!(
+      webauthn_id: "app-telephone-controller-#{SecureRandom.hex(8)}",
+      public_key: "public-key-#{SecureRandom.hex(8)}",
+      description: "Telephone controller test passkey",
+      uv_verified_at: Time.current,
+    )
     @token = ClientToken.create!(
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
+      root_login_established_at: Time.current,
+      established_authentication_method: "passkey",
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
     _verification, raw_verification = ClientVerification.issue_for_token!(token: @token)
     cookies[ClientVerification.cookie_name] = raw_verification
     @token.update!(
-      last_step_up_at: Time.current,
-      last_step_up_scope: "settings_telephone",
-      last_step_up_aal: "aal2",
-      last_step_up_method: "passkey",
-      last_step_up_session_public_id: @token.public_id,
-      last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app",
+      last_step_up_at: Time.current, last_step_up_scope: "settings_telephone",
+      last_step_up_aal: "aal2", last_step_up_method: "passkey",
+      last_step_up_session_public_id: @token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app", last_step_up_credential_ref: @passkey.public_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
-    access_token = AuthenticationToken.encode(
-      @user, host: @host, session_public_id: @token.public_id,
-             resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
-    )
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    @headers = {
-      "Authorization" => "Bearer #{access_token}",
-      "Client-Agent" => "Mozilla/5.0",
-      "Host" => @host,
-      "X-TEST-SESSION-PUBLIC-ID" => @token.public_id,
-    }.freeze
+    install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @user, token: @token)
+    @headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+      .except("Cookie", "HTTP_COOKIE")
   end
 
   test "index lists the telephones owned by the signed-in client" do
@@ -138,24 +138,26 @@ class Base::App::Identity::TelephonesControllerTest < ActionDispatch::Integratio
       user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
     )
 
-    assert_difference("ClientTelephone.count", -1) do
-      delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
-    end
+    telephone.finalize_binding!
+    delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
 
     assert_redirected_to base_app_identity_telephones_path(ri: "jp")
+    assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_identity_telephone_status_id
+    assert_predicate telephone, :binding_released?
   end
 
-  test "destroy refuses to remove the client's only remaining contact method" do
+  test "destroy may remove the last contact method when a passkey remains" do
     @user.client_emails.destroy_all
     telephone = @user.client_telephones.create!(
       raw_number: "+15558675406", confirm_policy: true, confirm_using_mfa: true,
       user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
     )
 
-    assert_no_difference("ClientTelephone.count") do
-      delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
-    end
+    telephone.finalize_binding!
+    delete base_app_identity_telephone_url(telephone.public_id, ri: "jp", host: @host), headers: @headers
 
     assert_redirected_to base_app_identity_telephones_path(ri: "jp")
+    assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_identity_telephone_status_id
+    assert_predicate telephone, :binding_released?
   end
 end

@@ -6,9 +6,10 @@ require "test_helper"
 
 class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PRIVATE_AUTH_STAFF_URL")
-    @base_host = ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost")
-    host! @host
+    https!
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    @base_host = @host
+    host! @base_host
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
@@ -18,59 +19,56 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "email removal preserves contactability even when aal methods remain" do
+  test "email removal may leave a usable passkey-only identity" do
     operator = create_operator
     email = create_verified_email(operator, "org-removal-contact-email@example.com")
     create_active_passkey(operator)
     create_active_secret_credential(operator)
 
-    assert_no_difference("OperatorEmail.count") do
-      delete base_org_identity_email_url(email.public_id, ri: "jp", host: @base_host),
-             headers: operator_headers(operator, scope: "settings_email", host: @base_host)
-    end
+    delete base_org_identity_email_url(email.public_id, ri: "jp", host: @base_host),
+           headers: operator_headers(operator, scope: "settings_email", host: @base_host)
 
     assert_redirected_to base_org_identity_emails_url(ri: "jp", host: @base_host)
+    assert_raises(ActiveRecord::RecordNotFound) { email.reload }
   end
 
-  test "telephone removal preserves contactability even when aal methods remain" do
+  test "telephone removal may leave a usable passkey-only identity" do
     operator = create_operator
     telephone = create_verified_telephone(operator, "+819033330001")
     create_active_passkey(operator)
     create_active_secret_credential(operator)
 
-    assert_no_difference("OperatorTelephone.count") do
-      delete base_org_identity_telephone_url(telephone.id, ri: "jp", host: @base_host),
-             headers: operator_headers(operator, scope: "settings_telephone", host: @base_host)
-    end
+    delete base_org_identity_telephone_url(telephone.id, ri: "jp", host: @base_host),
+           headers: operator_headers(operator, scope: "settings_telephone", host: @base_host)
 
     assert_redirected_to base_org_identity_telephones_url(ri: "jp", host: @base_host)
+    assert_raises(ActiveRecord::RecordNotFound) { telephone.reload }
   end
 
-  test "passkey removal preserves aal2" do
+  test "passkey removal is blocked when it would remove the last usable step-up capability" do
     operator = create_operator
     create_verified_telephone(operator, "+819033330002")
     create_active_secret_credential(operator)
     passkey = create_active_passkey(operator)
 
-    assert_no_difference("OperatorPasskey.count") do
-      delete auth_org_settings_passkey_url(passkey, ri: "jp", host: @host),
-             headers: operator_headers(operator, scope: "settings_passkey", host: @host)
-    end
+    delete base_org_identity_passkey_url(passkey.external_id, ri: "jp", host: @base_host),
+           headers: operator_headers(operator, scope: "settings_passkey", host: @base_host)
 
-    assert_redirected_to auth_org_settings_passkeys_url(ri: "jp", host: @host)
+    assert_response :unprocessable_content
+    assert_equal OperatorPasskeyStatus::ACTIVE, passkey.reload.status_id
   end
 
-  test "secret_credential removal preserves aal1" do
+  test "secret removal requires an independent step-up method" do
     operator = create_operator
     create_verified_telephone(operator, "+819033330003")
     secret_credential = create_active_secret_credential(operator)
 
-    assert_no_difference("OperatorSecretCredential.count") do
-      delete base_org_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
-             headers: operator_headers(operator, scope: "settings_secret_credential", host: @base_host)
-    end
+    delete base_org_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
+           headers: operator_headers(operator, scope: "settings_secret_credential", host: @base_host)
 
-    assert_redirected_to base_org_identity_secrets_url(ri: "jp", host: @base_host)
+    assert_response :redirect
+    assert_includes response.location, "/verification/setup"
+    assert_equal OperatorSecretCredential.status_id_for(:active), secret_credential.reload.staff_secret_status_id
   end
 
   test "email telephone passkey and secret_credential removals are allowed when dimensions remain" do
@@ -93,10 +91,10 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
              headers: operator_headers(operator, scope: "settings_telephone", host: @base_host)
     end
 
-    assert_difference("OperatorPasskey.count", -1) do
-      delete auth_org_settings_passkey_url(passkey, ri: "jp", host: @host),
-             headers: operator_headers(operator, scope: "settings_passkey", host: @host)
-    end
+    delete base_org_identity_passkey_url(passkey.external_id, ri: "jp", host: @base_host),
+           headers: operator_headers(operator, scope: "settings_passkey", host: @base_host)
+
+    assert_equal OperatorPasskeyStatus::REVOKED, passkey.reload.status_id
 
     assert_no_difference("OperatorSecretCredential.count") do
       delete base_org_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
@@ -117,22 +115,18 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
 
   def operator_headers(operator, scope:, host: @host)
     token = OperatorToken.where(staff: operator).first ||
-      OperatorToken.create!(staff: operator, staff_token_status_id: OperatorTokenStatus::ACTIVE)
+      OperatorToken.create!(
+        staff: operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
+        staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
+        root_login_established_at: Time.current, established_authentication_method: "passkey",
+      )
+    token.update!(root_login_established_at: Time.current, established_authentication_method: "passkey")
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
     satisfy_staff_verification(token)
     mark_token_step_up_satisfied_for_test(token, scope: scope)
-    headers = browser_headers
-    csrf_token = cookies["csrf_token"]
-    headers["Cookie"] =
-      [headers["Cookie"], ("csrf_token=#{csrf_token}" if csrf_token.present?)].compact_blank.join("; ")
-    headers.merge(
-      "Host" => host,
-      "Authorization" => "Bearer #{jwt_access_token_for(
-        operator, host: host, session_public_id: token.public_id,
-                  resource_type: "operator",
-      )}",
-      "X-TEST-CURRENT-STAFF" => operator.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    )
+    install_base_browser_rp_credentials!(surface: "org", host: host, actor: operator, token: token)
+    as_staff_headers(operator, host: host).except("Cookie", "HTTP_COOKIE")
   end
 
   def create_verified_email(operator, address)
@@ -336,14 +330,34 @@ class SignOrgCredentialRemovalConstraintsTest
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
+    passkey = token.staff.staff_passkeys.active.where.not(uv_verified_at: nil).first
+    email = token.staff.staff_emails.where(
+      staff_identity_email_status_id: [OperatorEmailStatus::ACTIVE, OperatorEmailStatus::VERIFIED],
+    ).first
+    method, credential_ref, phishing_resistant, user_verified =
+      if passkey
+        ["passkey", passkey.external_id, true, true]
+      elsif email
+        ["email_otp", email.public_id, false, false]
+      else
+        ["passkey", nil, true, true]
+      end
     attrs = {
       last_step_up_at: at,
       last_step_up_scope: scope.presence || token.try(:last_step_up_scope).presence || "verification",
-      last_step_up_aal: ("aal2" if token.respond_to?(:last_step_up_aal)),
-      last_step_up_method: ("passkey" if token.respond_to?(:last_step_up_method)),
-      last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+      last_step_up_aal: ("aal2" if token.has_attribute?(:last_step_up_aal)),
+      last_step_up_method: (method if token.has_attribute?(:last_step_up_method)),
+      last_step_up_session_public_id: (token.public_id if token.has_attribute?(:last_step_up_session_public_id)),
+      last_step_up_purpose: ("step_up" if token.has_attribute?(:last_step_up_purpose)),
+      last_step_up_audience: (step_up_test_audience_for_token(token) if token.has_attribute?(:last_step_up_audience)),
+      last_step_up_credential_ref: (credential_ref if token.has_attribute?(:last_step_up_credential_ref)),
+      last_step_up_phishing_resistant: (
+        phishing_resistant if token.has_attribute?(:last_step_up_phishing_resistant)
+      ),
+      last_step_up_user_verified: (user_verified if token.has_attribute?(:last_step_up_user_verified)),
+      last_step_up_full_reauthentication: (
+        false if token.has_attribute?(:last_step_up_full_reauthentication)
+      ),
       updated_at: Time.current,
     }.compact
     token.update_columns(attrs)

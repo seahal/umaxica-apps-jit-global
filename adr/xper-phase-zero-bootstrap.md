@@ -126,3 +126,33 @@ Related decisions: [public/private URLs](public-private-url-boundaries.md),
 [frontend stacks](20260907-frontend-stack-importmap-vite-bun.md),
 [Preference separation](preference-scope-and-browser-persistent-state-separation.md), and
 [internal health isolation](internal-health-endpoint-edge-isolation.md).
+
+## Open item before the Preference port: Web Push (2026-10-06)
+
+Status of this section: **open question, not a decision**. Requested by the user on 2026-10-06.
+
+Experience needs a new Web Push item, and that item is to be defined **before** the existing
+Preference items are ported into Experience, so the ported shape is designed with it rather than
+retrofitted afterwards. How the Web Push feature itself should work is undecided. Nothing in this
+section changes the Phase 0 scope above: Service Worker, manifest, Experience DB, cookies, and API
+remain excluded until a decision is recorded here or in a new ADR.
+
+Questions to settle:
+
+- What the item represents: a per-browser opt-in, a per-actor setting, per-category delivery
+  choices, or a combination, and how it relates to the browser's own notification permission.
+- Ownership: whether the opt-in belongs to Experience while push subscriptions (endpoint and keys)
+  and delivery state belong to the `signal` database
+  ([database naming](surface-database-connection-naming.md)), and how delivery joins the notifier
+  and `Outbound` transport boundary
+  ([notification orchestration](notification-orchestration-via-noticed.md)).
+- Origin and Service Worker: a push subscription is bound to the origin and Service Worker that
+  created it. Decide which origin registers it across app, com, and org, and reconcile that with
+  the current worker, which ships with the Web Push blocks removed
+  ([PWA offline exception](pwa-offline-route-exception.md)).
+- Anonymous versus signed-in browsers, and what happens to a subscription on sign-out, session
+  revocation, and withdrawal.
+- Credential handling for the VAPID key pair and treatment of subscription endpoints as sensitive
+  data.
+
+The work is tracked in `plans/backlog/auth-xper-transient-workflow-redesign.md`.

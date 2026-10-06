@@ -37,7 +37,6 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/in/guards_controller.rb
     app/controllers/auth/app/sign/in/passkeys_controller.rb
     app/controllers/auth/app/sign/in/sessions_controller.rb
-    app/controllers/auth/app/settings/passkeys_controller.rb
     app/controllers/auth/app/sign/up/check/apple/birthdates_controller.rb
     app/controllers/auth/app/sign/up/check/apple/confirmations_controller.rb
     app/controllers/auth/app/sign/up/check/email/birthdates_controller.rb
@@ -53,12 +52,12 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/app/sign/up/guard/telephones_controller.rb
     app/controllers/auth/app/sign/up/telephones_controller.rb
     app/controllers/auth/app/verification/emails_controller.rb
+    app/controllers/auth/app/verification/redeliveries_controller.rb
     app/controllers/auth/com/sign/in/challenges_controller.rb
     app/controllers/auth/com/sign/in/emails_controller.rb
     app/controllers/auth/com/sign/in/guards_controller.rb
     app/controllers/auth/com/sign/in/passkeys_controller.rb
     app/controllers/auth/com/sign/in/sessions_controller.rb
-    app/controllers/auth/com/settings/passkeys_controller.rb
     app/controllers/auth/com/sign/up/check/email/birthdates_controller.rb
     app/controllers/auth/com/sign/up/check/email/otps_controller.rb
     app/controllers/auth/com/sign/up/check/telephone/birthdates_controller.rb
@@ -69,10 +68,10 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     app/controllers/auth/com/sign/up/guard/telephones_controller.rb
     app/controllers/auth/com/sign/up/telephones_controller.rb
     app/controllers/auth/com/verification/emails_controller.rb
+    app/controllers/auth/com/verification/redeliveries_controller.rb
     app/controllers/auth/org/sign/in/guards_controller.rb
     app/controllers/auth/org/sign/in/passkeys_controller.rb
     app/controllers/auth/org/sign/in/sessions_controller.rb
-    app/controllers/auth/org/settings/passkeys_controller.rb
     app/controllers/auth/org/sign/up/invitations_controller.rb
     app/controllers/base/app/jwks_controller.rb
     app/controllers/base/com/jwks_controller.rb
@@ -113,6 +112,7 @@ class ControllerInheritanceInvariantTest < ActiveSupport::TestCase
     | PreAccessController
     | FullAccessController
     | PreferencesBaseController
+    | AuthorityController
     | ::Base\b
     | BaseController\b
   /x

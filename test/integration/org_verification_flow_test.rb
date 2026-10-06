@@ -52,7 +52,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "org can verify with passkey" do
-    return_to = Base64.urlsafe_encode64(sign_org_settings_passkeys_path(ri: "jp"))
+    return_to = Base64.urlsafe_encode64(base_org_identity_passkeys_path(ri: "jp"))
 
     StepUpAvailableMethods.stub(:call, [:passkey]) do
       WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "test")) do
@@ -62,12 +62,12 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
               headers: @headers
           get new_auth_org_verification_passkey_url(ri: "jp"), headers: @headers
 
-          post sign_org_verification_passkey_url(ri: "jp"),
+          post auth_org_verification_passkey_url(ri: "jp"),
                params: { verification: { challenge_id: "test", credential_json: '{"id":"webauthn_id_1"}' } },
                headers: @headers
 
           assert_response :redirect
-          assert_redirected_to sign_org_settings_url(ri: "jp")
+          assert_redirected_to base_org_identity_passkeys_path(ri: "jp")
         end
       end
     end

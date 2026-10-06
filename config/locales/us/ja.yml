@@ -1496,10 +1496,12 @@ ja:
           activities: アクティビティ
           birthdate: 生年月日
           emails: メール
+          passkey: パスキー
           secrets: シークレット
           sessions: セッション
           standing: アカウント状態
           telephones: 電話番号
+          totp: TOTP
           withdrawal: 退会
   billings:
     signed_in_required: サインインが必要です。
@@ -2107,6 +2109,7 @@ ja:
       operation_not_permitted: この操作は許可されていません。
       other_than: は%{count}以外の値にしてください
       password_too_long: が長すぎます
+      phase_violation_refused: 戻るはだめです
       preference_operation_failed: 設定の操作に失敗しました。
       present: は入力しないでください
       required: を入力してください

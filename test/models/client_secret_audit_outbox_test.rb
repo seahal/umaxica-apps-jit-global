@@ -60,6 +60,29 @@ class ClientSecretAuditOutboxTest < ActiveSupport::TestCase
     assert_equal 0, ClientSecretIssuance.where(origin_operation_id: operation).count
   end
 
+  test "issuance purge snapshots require one authority reference and remain immutable" do
+    actor = clients(:one)
+    token = ClientToken.create!(user: actor)
+    event = ClientSecretAuditOutbox.record!(
+      actor_context: ActorValuesContext.empty, client_ref: actor.public_id,
+      operation_ref: SecureRandom.uuid, occurred_at: Client.database_now,
+      event_name: "secret.issuance_purged", item_count: 1,
+      issuance_origin: "manual", issuance_browser_session_ref: token.public_id,
+    )
+
+    assert_raises(ActiveRecord::ReadonlyAttributeError) do
+      event.update!(issuance_origin: "passkey_registration")
+    end
+    assert_raises(ActiveRecord::RecordInvalid) do
+      ClientSecretAuditOutbox.record!(
+        actor_context: ActorValuesContext.empty, client_ref: actor.public_id,
+        operation_ref: SecureRandom.uuid, occurred_at: Client.database_now,
+        event_name: "secret.issuance_purged", item_count: 1,
+        issuance_origin: "manual",
+      )
+    end
+  end
+
   test "audit count accepts zero and twenty and rejects adjacent values and wrong types" do
     [0, 20].each do |count|
       event = ClientSecretAuditOutbox.record!(

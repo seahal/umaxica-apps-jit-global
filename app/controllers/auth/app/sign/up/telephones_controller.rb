@@ -20,6 +20,7 @@ module Auth
 
           include SignUpSuspensionGuard
           include AppSignUpEntryPage
+          include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
@@ -43,6 +44,8 @@ module Auth
           end
 
           def create
+            supersede_active_sign_up_flow!
+
             log_sign_signup_event(
               "sign.signup.telephone.create.received",
               sign_signup_request_flags.merge(step: "telephone_otp"),
@@ -119,7 +122,7 @@ module Auth
               session[:user_telephone_registration] = result.session_payload
               bind_sign_up_flow_to_telephone!(@user_telephone)
               redirect_to(
-                auth_app_sign_up_check_telephone_otp_path,
+                auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params),
               )
             rescue ActiveRecord::RecordInvalid => e
               @user_telephone = e.record
@@ -202,7 +205,7 @@ module Auth
             {
               title: t("sign.app.registration.telephone.edit.page_title"),
               description: t("sign.app.registration.telephone.create.verification_code_sent"),
-              action: auth_app_sign_up_check_telephone_otp_path(ri: params[:ri]),
+              action: auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
               scope: "client_telephone",
               code_label: t("sign.app.registration.telephone.edit.code_label"),
               code_placeholder: t("sign.app.registration.telephone.edit.code_placeholder"),
@@ -213,7 +216,10 @@ module Auth
               # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
               # ends the sign-up through the existing DELETE cancellation.
               cancel: { label: t("actions.cancel"),
-                        action: auth_app_sign_up_check_telephone_otp_path(ri: params[:ri]),
+                        action: auth_app_sign_up_check_telephone_otp_path(
+                          **sign_up_flow_binding_params,
+                          ri: params[:ri],
+                        ),
                         method: "delete", },
             }
           end

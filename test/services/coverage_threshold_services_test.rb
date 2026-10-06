@@ -67,7 +67,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
       verify_contact: ["STARTED", :enter_guardrail],
       enter_guardrail: ["STARTED", :enter_checkpoint],
       enter_checkpoint: ["GUARDRAIL_PENDING", :clear_requirement],
-      fail: ["STARTED", nil],
+      halt: ["STARTED", nil],
       expire: ["STARTED", nil],
       cancel: ["STARTED", nil],
       complete: ["STARTED", nil],
@@ -82,7 +82,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
 
   test "sign-up state machine refuses expired, lapsed, terminal, and uncancelable tickets" do
     expired = MachineTicket.new
-    expired.define_singleton_method(:expired?) { true }
+    expired.define_singleton_method(:expired?) { |_now = nil| true }
 
     assert_equal :expired, SignUpStateMachine.call(ticket: expired, event: :start, actor_context: nil).status
 
@@ -105,18 +105,17 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
 
   test "credential inventory result exposes availability and removal predicates" do
     result = AuthenticationCredentialInventory::Result.new(
-      actor: nil, excluding: nil, aal1_methods: [:email],
-      aal2_methods: [:totp], aal3_methods: [], step_up_methods: [:passkey],
+      actor: nil, excluding: nil, sign_in_methods: [:email],
+      step_up_methods: [:passkey],
       uv_step_up_methods: [:passkey], contact_identifiers: [:email],
       phishing_resistant_methods: [:passkey],
     )
 
-    assert_equal [:email], result.login_methods
-    assert_predicate result, :login_available?
-    assert_predicate result, :step_up_available?
-    assert_predicate result, :retains_uv_step_up?
-    assert_not_predicate result, :last_login_method?
-    assert_predicate result, :removable_login_credential?
-    assert_equal 1, result.aal1_method_count
+    assert_equal [:email], result.sign_in_methods
+    assert_predicate result, :has_usable_sign_in_capability?
+    assert_predicate result, :has_usable_step_up_capability?
+    assert_equal [:email], result.usable_sign_in_capabilities
+    assert_equal [:passkey], result.usable_step_up_capabilities
+    assert_equal 1, result.usable_sign_in_capabilities.length
   end
 end

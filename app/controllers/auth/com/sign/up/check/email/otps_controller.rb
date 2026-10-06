@@ -32,7 +32,12 @@ module Auth
                 result = issue_otp_ceremony!
                 return render_otp_ceremony_result(result) unless result.success?
 
-                redirect_to(auth_com_sign_up_check_email_otp_path(ri: params[:ri], pt: signed_pt_param))
+                redirect_to(
+                  auth_com_sign_up_check_email_otp_path(
+                    **sign_up_flow_binding_params, ri: params[:ri],
+                                                   pt: signed_pt_param,
+                  ),
+                )
               end
 
               def update
@@ -128,7 +133,12 @@ module Auth
               end
 
               def complete_update_and_redirect
-                redirect_to(auth_com_sign_up_check_email_birthdate_path(ri: params[:ri], pt: signed_pt_param))
+                redirect_to(
+                  auth_com_sign_up_check_email_birthdate_path(
+                    **sign_up_flow_binding_params, ri: params[:ri],
+                                                   pt: signed_pt_param,
+                  ),
+                )
               end
 
               def render_otp_ceremony_result(result)

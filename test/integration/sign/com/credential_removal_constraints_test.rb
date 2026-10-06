@@ -6,9 +6,10 @@ require "test_helper"
 
 class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost")
-    @base_host = ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost")
-    host! @host
+    https!
+    @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    @base_host = @host
+    host! @base_host
     Prosopite.pause do
       VisitorStatus.find_or_create_by!(id: VisitorStatus::ACTIVE)
       VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -31,77 +32,75 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "email removal preserves aal methods when contactability remains" do
+  test "email removal is blocked when it would remove the last usable step-up capability" do
     visitor = create_visitor
     email = create_verified_email(visitor, "com-removal-contact-email@example.com")
     create_verified_telephone(visitor, "+819022220000")
 
-    assert_no_difference("VisitorEmail.count") do
-      delete base_com_identity_email_url(email.public_id, ri: "jp", host: @base_host),
-             headers: visitor_headers(visitor, scope: "settings_email", host: @base_host)
-    end
+    delete base_com_identity_email_url(email.public_id, ri: "jp", host: @base_host),
+           headers: visitor_headers(visitor, scope: "settings_email", host: @base_host)
 
     assert_redirected_to base_com_identity_emails_url(ri: "jp", host: @base_host)
+    assert_equal VisitorEmailStatus::VERIFIED, email.reload.visitor_email_status_id
+    assert_not email.binding_released?
   end
 
-  test "telephone removal preserves contactability even when aal methods remain" do
+  test "telephone removal may leave a usable passkey-only identity" do
     visitor = create_visitor
     telephone = create_verified_telephone(visitor, "+819022220001")
     create_active_passkey(visitor)
 
-    assert_no_difference("VisitorTelephone.count") do
-      delete base_com_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
-             headers: visitor_headers(visitor, scope: "settings_telephone", host: @base_host)
-    end
+    delete base_com_identity_telephone_url(telephone.public_id, ri: "jp", host: @base_host),
+           headers: visitor_headers(visitor, scope: "settings_telephone", host: @base_host)
 
     assert_redirected_to base_com_identity_telephones_url(ri: "jp", host: @base_host)
+    assert_equal VisitorTelephoneStatus::DELETED, telephone.reload.visitor_telephone_status_id
+    assert_predicate telephone, :binding_released?
   end
 
-  test "passkey removal preserves aal2 when only secret_credential remains for aal1" do
+  test "passkey removal is blocked when it would remove the last usable step-up capability" do
     visitor = create_visitor
     create_verified_telephone(visitor, "+819022220002")
     create_active_secret_credential(visitor)
     passkey = create_active_passkey(visitor)
 
-    assert_no_difference("VisitorPasskey.count") do
-      delete auth_com_settings_passkey_url(passkey.public_id, ri: "jp", host: @host),
-             headers: visitor_headers(visitor, scope: "settings_passkey", host: @host)
-    end
+    delete base_com_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
+           headers: visitor_headers(visitor, scope: "settings_passkey", host: @base_host)
 
-    assert_redirected_to auth_com_settings_passkeys_url(ri: "jp", host: @host)
+    assert_response :unprocessable_content
+    assert_equal VisitorPasskeyStatus::ACTIVE, passkey.reload.status_id
   end
 
-  test "secret_credential removal preserves aal1 when passkey does not remain" do
+  test "secret removal requires an independent step-up method" do
     visitor = create_visitor
     create_verified_telephone(visitor, "+819022220003")
     secret_credential = create_active_secret_credential(visitor)
 
-    assert_no_difference(
-      "VisitorSecretCredential.where(visitor_secret_credential_status_id: VisitorSecretCredentialStatus::ACTIVE).count",
-    ) do
-      delete base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
-             headers: visitor_headers(visitor, scope: "settings_secret_credential", host: @base_host)
-    end
+    delete base_com_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
+           headers: visitor_headers(visitor, scope: "settings_secret_credential", host: @base_host)
 
-    assert_redirected_to base_com_identity_secrets_url(ri: "jp", host: @base_host)
+    assert_response :redirect
+    assert_includes response.location, "/verification/setup"
+    assert_equal VisitorSecretCredentialStatus::ACTIVE, secret_credential.reload.visitor_secret_credential_status_id
   end
 
-  test "email and passkey removals are allowed when all dimensions remain" do
+  test "email and passkey removals are allowed when capabilities remain" do
     visitor = create_visitor
     email = create_verified_email(visitor, "com-removal-email-allowed@example.com")
     create_verified_telephone(visitor, "+819022220004")
     passkey = create_active_passkey(visitor)
     create_active_passkey(visitor)
 
-    assert_difference("VisitorEmail.count", -1) do
-      delete base_com_identity_email_url(email.public_id, ri: "jp", host: @base_host),
-             headers: visitor_headers(visitor, scope: "settings_email", host: @base_host)
-    end
+    delete base_com_identity_email_url(email.public_id, ri: "jp", host: @base_host),
+           headers: visitor_headers(visitor, scope: "settings_email", host: @base_host)
 
-    assert_difference("VisitorPasskey.count", -1) do
-      delete auth_com_settings_passkey_url(passkey.public_id, ri: "jp", host: @host),
-             headers: visitor_headers(visitor, scope: "settings_passkey", host: @host)
-    end
+    assert_equal VisitorEmailStatus::DELETED, email.reload.visitor_email_status_id
+    assert_predicate email, :binding_released?
+
+    delete base_com_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
+           headers: visitor_headers(visitor, scope: "settings_passkey", host: @base_host)
+
+    assert_equal VisitorPasskeyStatus::DELETED, passkey.reload.status_id
   end
 
   test "visitor can browse and rename an active secret credential" do
@@ -140,23 +139,16 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   end
 
   def visitor_headers(visitor, scope:, host: @host)
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(
+      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      root_login_established_at: Time.current, established_authentication_method: "passkey",
+    )
+    BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
+    BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
     satisfy_visitor_verification(token)
     mark_token_step_up_satisfied_for_test(token, scope: scope)
-
-    headers = browser_headers
-    csrf_token = cookies["csrf_token"]
-    headers["Cookie"] =
-      [headers["Cookie"], ("csrf_token=#{csrf_token}" if csrf_token.present?)].compact_blank.join("; ")
-    headers.merge(
-      "Host" => host,
-      "Authorization" => "Bearer #{jwt_access_token_for(
-        visitor, host: host, session_public_id: token.public_id,
-                 resource_type: "visitor",
-      )}",
-      "X-TEST-CURRENT-RESOURCE" => visitor.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    )
+    install_base_browser_rp_credentials!(surface: "com", host: host, actor: visitor, token: token)
+    as_visitor_headers(visitor, host: host).except("Cookie", "HTTP_COOKIE")
   end
 
   def create_verified_email(visitor, address)
@@ -165,7 +157,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
       address: address,
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       confirm_policy: true,
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def create_verified_telephone(visitor, number)
@@ -173,7 +165,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
       visitor: visitor,
       number: number,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def create_active_passkey(visitor)
@@ -361,14 +353,34 @@ class SignComCredentialRemovalConstraintsTest
   def mark_token_step_up_satisfied_for_test(token, scope: nil, at: Time.current)
     return unless token.respond_to?(:update_columns)
 
+    passkey = token.visitor.visitor_passkeys.active.where("discard_at > ?", at).where.not(uv_verified_at: nil).first
+    email = token.visitor.visitor_emails.effective_binding.where(
+      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    ).first
+    method, credential_ref, phishing_resistant, user_verified =
+      if passkey
+        ["passkey", passkey.public_id, true, true]
+      elsif email
+        ["email_otp", email.public_id, false, false]
+      else
+        ["passkey", nil, true, true]
+      end
     attrs = {
       last_step_up_at: at,
       last_step_up_scope: scope.presence || token.try(:last_step_up_scope).presence || "verification",
-      last_step_up_aal: ("aal2" if token.respond_to?(:last_step_up_aal)),
-      last_step_up_method: ("passkey" if token.respond_to?(:last_step_up_method)),
-      last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+      last_step_up_aal: ("aal2" if token.has_attribute?(:last_step_up_aal)),
+      last_step_up_method: (method if token.has_attribute?(:last_step_up_method)),
+      last_step_up_session_public_id: (token.public_id if token.has_attribute?(:last_step_up_session_public_id)),
+      last_step_up_purpose: ("step_up" if token.has_attribute?(:last_step_up_purpose)),
+      last_step_up_audience: (step_up_test_audience_for_token(token) if token.has_attribute?(:last_step_up_audience)),
+      last_step_up_credential_ref: (credential_ref if token.has_attribute?(:last_step_up_credential_ref)),
+      last_step_up_phishing_resistant: (
+        phishing_resistant if token.has_attribute?(:last_step_up_phishing_resistant)
+      ),
+      last_step_up_user_verified: (user_verified if token.has_attribute?(:last_step_up_user_verified)),
+      last_step_up_full_reauthentication: (
+        false if token.has_attribute?(:last_step_up_full_reauthentication)
+      ),
       updated_at: Time.current,
     }.compact
     token.update_columns(attrs)

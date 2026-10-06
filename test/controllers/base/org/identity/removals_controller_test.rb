@@ -5,9 +5,22 @@ require "test_helper"
 
 class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationTest
   setup do
+    https!
     @host = configured_host(:base_staff)
     ensure_operator_reference_records!
     @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @step_up_passkey = @operator.operator_passkeys.create!(
+      webauthn_id: "org-removal-step-up-#{SecureRandom.hex(8)}",
+      external_id: SecureRandom.uuid, public_key: "public_key_#{SecureRandom.hex(8)}",
+      description: "Removal test step-up passkey", status_id: OperatorPasskeyStatus::ACTIVE,
+      uv_verified_at: Time.current,
+    )
+    headers = as_staff_headers(@operator, host: @host)
+    token = OperatorToken.find_by!(public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    token.update!(root_login_established_at: Time.current, established_authentication_method: "passkey")
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: token)
+    install_base_browser_rp_credentials!(surface: "org", host: @host, actor: @operator, token: token)
   end
 
   test "removes the secret credential when another sign-in method still remains" do
@@ -23,7 +36,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     )
 
     assert_equal [:passkey],
-                 AuthenticationCredentialInventory.call(@operator, excluding: target).aal1_methods
+                 AuthenticationCredentialInventory.call(@operator, excluding: target).sign_in_methods
 
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
          headers: step_up_staff_headers(@operator, host: @host)
@@ -38,13 +51,13 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     create_active_secret_credential(@operator)
 
     delete base_org_identity_secret_url(target.public_id, ri: "jp", host: @host),
-           headers: as_staff_headers(@operator, host: @host)
+           headers: as_staff_headers(@operator, host: @host).except("Cookie", "HTTP_COOKIE")
 
     assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
   end
 
-  test "refuses to remove the credential that carries the only remaining sign-in method" do
+  test "removes a Secret when the registered Passkey remains as the sign-in method" do
     only = create_active_secret_credential(@operator)
 
     post base_org_identity_secret_removal_url(only.public_id, ri: "jp", host: @host),
@@ -52,7 +65,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
 
     assert_response :see_other
     assert_redirected_to base_org_identity_secrets_path(ri: "jp")
-    assert_equal OperatorSecretCredentialStatus::ACTIVE, only.reload.staff_secret_status_id
+    assert_not_equal OperatorSecretCredentialStatus::ACTIVE, only.reload.staff_secret_status_id
   end
 
   test "a credential owned by another operator is not found" do
@@ -72,7 +85,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     create_active_secret_credential(@operator)
 
     post base_org_identity_secret_removal_url(target.public_id, ri: "jp", host: @host),
-         headers: as_staff_headers(@operator, host: @host)
+         headers: as_staff_headers(@operator, host: @host).except("Cookie", "HTTP_COOKIE")
 
     assert_not response.location.to_s.end_with?(base_org_identity_secrets_path(ri: "jp"))
     assert_equal OperatorSecretCredentialStatus::ACTIVE, target.reload.staff_secret_status_id
@@ -107,8 +120,12 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
       last_step_up_session_public_id: headers.fetch("X-TEST-SESSION-PUBLIC-ID"),
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
+      last_step_up_credential_ref: @step_up_passkey.external_id,
+      last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
-    headers
+    headers.except("Cookie", "HTTP_COOKIE")
   end
 
   def create_active_secret_credential(operator)

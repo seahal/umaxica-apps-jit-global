@@ -11,15 +11,23 @@ class SignUpStepGate
       :ticket,
       :registry,
       :next_step,
-      :redirect_to,
+      :current_step,
+      :refusal,
       :errors,
     ) do
       def success?
-        status == :ok || status == :redirect
+        status == :ok
       end
 
-      def redirect?
-        status == :redirect
+      # The request contradicts the authoritative flow instance or phase. `refusal` says how:
+      # `:no_active_flow`, `:flow_binding`, or `:phase`. Only `:phase` is attributable to the
+      # browser's current flow, so only it may end that flow.
+      def refused?
+        status == :refused
+      end
+
+      def phase_violation?
+        refusal == :phase
       end
     end
 
@@ -74,6 +82,23 @@ class SignUpStepGate
     def for_destroy(controller:, surface:, family:, step:)
       new(controller: controller, surface: surface, family: family, step: step, mode: :destroy).call
     end
+
+    # The neutral re-entry of an active flow (the guard route, reached from provider callbacks and
+    # contact verification). It names no phase and carries no flow binding; it only resolves the
+    # authoritative step so the caller can send the browser there.
+    def for_entry(controller:, surface:, family:, step:)
+      new(controller: controller, surface: surface, family: family, step: step, mode: :entry).call
+    end
+
+    # The one step a flow accepts now, or nil when it accepts none. Contact entry flows serve the
+    # OTP step before the checkpoint exists; every other step is a checkpoint requirement.
+    def current_step_for(ticket, registry)
+      if ticket.sign_up_checkpoint_pending?
+        registry.next_requirement(ticket.completed_requirements)
+      elsif ticket.step.in?(%w(contact contact_verified)) && registry.requirement?(:otp)
+        :otp
+      end
+    end
   end
 
   def initialize(controller:, surface:, family:, step:, mode:)
@@ -88,37 +113,23 @@ class SignUpStepGate
     return failure("unsupported sign-up route") unless route_known?
 
     ticket = current_ticket
-    return failure("ticket is required") unless ticket
+    return refusal(:no_active_flow) unless ticket
+    return refusal(:flow_binding) unless mode == :entry || bound_to?(ticket)
 
     registry = SignUpRequirementRegistry.for_ticket(ticket, surface: surface)
     return failure("family does not match ticket") unless registry.entry_method == family
-    return destroy_context(ticket, registry) if mode == :destroy
-    return failure("ticket is not usable") if unsafe_ticket?(ticket)
+    return context(ticket, registry, current_step: nil) if mode == :destroy
+    return failure("ticket is not usable") if unusable_ticket?(ticket)
+
+    current_step = self.class.current_step_for(ticket, registry)
+    return context(ticket, registry, current_step: current_step) if mode == :entry
     return failure("step does not belong to ticket") unless registry.requirement?(step)
+    return refusal(:phase, ticket: ticket, registry: registry, current_step: current_step) unless current_step == step
     if mode == :create && CREATE_STEPS.exclude?(step)
       return failure("challenge issuance is not allowed for this step")
     end
-    return failure("prior requirement is not clear") unless registry.prior_requirements_cleared?(
-      ticket.completed_requirements,
-      step,
-    )
 
-    next_step = registry.next_requirement(ticket.completed_requirements)
-    if mode == :show && next_step && next_step != step
-      return redirect_context(ticket, registry, next_step)
-    end
-
-    Context.new(
-      status: :ok,
-      surface: surface,
-      family: family,
-      step: step,
-      ticket: ticket,
-      registry: registry,
-      next_step: next_step,
-      redirect_to: nil,
-      errors: [],
-    )
+    context(ticket, registry, current_step: current_step)
   rescue ArgumentError => e
     failure(e.message)
   end
@@ -162,15 +173,24 @@ class SignUpStepGate
     end
   end
 
-  def unsafe_ticket?(ticket)
-    return true if ticket.expired? || (ticket.respond_to?(:lapsed?) && ticket.lapsed?)
-    return true if ticket.respond_to?(:sign_up_terminal?) && ticket.sign_up_terminal?
-    return false if step == :otp && ticket.step.in?(%w(contact contact_verified checkpoint))
+  # The request must name the flow instance the session locator resolves. A page rendered for an
+  # earlier flow, a request with no binding, and a binding minted for another surface all fail
+  # here, before any phase comparison, so they can never be attributed to the current flow.
+  def bound_to?(ticket)
+    binding = SignFlowBindingCodec.decode(controller.params[AuthIoKeys::Params::FLOW_BINDING])
+    return false unless binding
 
-    !ticket.respond_to?(:sign_up_checkpoint_pending?) || !ticket.sign_up_checkpoint_pending?
+    binding.kind == "sign_up" && binding.surface == surface.to_s &&
+      ActiveSupport::SecurityUtils.secure_compare(binding.flow_public_id, ticket.public_id.to_s)
   end
 
-  def destroy_context(ticket, registry)
+  def unusable_ticket?(ticket)
+    return true if ticket.expired? || (ticket.respond_to?(:lapsed?) && ticket.lapsed?)
+
+    ticket.respond_to?(:sign_up_terminal?) && ticket.sign_up_terminal?
+  end
+
+  def context(ticket, registry, current_step:)
     Context.new(
       status: :ok,
       surface: surface,
@@ -178,23 +198,25 @@ class SignUpStepGate
       step: step,
       ticket: ticket,
       registry: registry,
-      next_step: nil,
-      redirect_to: nil,
+      next_step: current_step,
+      current_step: current_step,
+      refusal: nil,
       errors: [],
     )
   end
 
-  def redirect_context(ticket, registry, next_step)
+  def refusal(kind, ticket: nil, registry: nil, current_step: nil)
     Context.new(
-      status: :redirect,
+      status: :refused,
       surface: surface,
       family: family,
       step: step,
       ticket: ticket,
       registry: registry,
-      next_step: next_step,
-      redirect_to: path_for(next_step),
-      errors: [],
+      next_step: current_step,
+      current_step: current_step,
+      refusal: kind,
+      errors: ["request contradicts the authoritative sign-up flow"],
     )
   end
 
@@ -207,19 +229,9 @@ class SignUpStepGate
       ticket: nil,
       registry: nil,
       next_step: nil,
-      redirect_to: nil,
+      current_step: nil,
+      refusal: nil,
       errors: [message],
     )
-  end
-
-  def path_for(target_step)
-    helper = STEP_ROUTES.fetch(surface).fetch(family).fetch(target_step)
-    controller.public_send(helper, ri: controller.params[:ri], pt: signed_pt)
-  end
-
-  def signed_pt
-    return controller.send(:signed_pt_param) if controller.respond_to?(:signed_pt_param, true)
-
-    controller.params[:pt]
   end
 end

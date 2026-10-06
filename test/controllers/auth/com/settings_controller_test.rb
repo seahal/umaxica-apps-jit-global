@@ -57,10 +57,10 @@ class Auth::Com::SettingsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "retained sign credential settings routes still resolve on sign" do
-    get auth_com_settings_passkeys_url(ri: "jp")
-
-    assert_not_equal 404, response.status
+  test "retired credential management routes do not resolve on sign" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{@host}/settings/passkeys", method: :get)
+    end
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("https://#{@host}/settings/totps", method: :get)

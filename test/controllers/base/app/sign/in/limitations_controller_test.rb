@@ -48,6 +48,7 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
 
   test "revoking one session commits the waiting flow exactly once" do
     ref = SessionLimitResolutionTokenRef.issue(@existing.first)
+    set_browser_headers!
 
     assert_difference(-> { ClientToken.where(user_id: @actor.id).count }, 1) do
       patch :update, params: { ri: "jp", session_ref: ref },
@@ -63,6 +64,7 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
   end
 
   test "cancelling ends only the waiting flow" do
+    set_browser_headers!
     delete :destroy, params: { ri: "jp" }, session: { SessionLimitGate::GATE_SESSION_KEY => @gate }
 
     assert_redirected_to base_app_sign_show_path(ri: "jp")
@@ -110,6 +112,7 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
 
     assert_response :gone
     assert_no_difference(-> { ClientToken.where(user_id: @actor.id).count }) do
+      set_browser_headers!
       patch :update, params: { ri: "jp", resolution_challenge: issuance.challenge, session_ref: ref }, session: {
         SessionLimitGate::GATE_SESSION_KEY => oidc_gate,
       }
@@ -160,6 +163,7 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     @gate = gate_for(@issuance.challenge, @binding, @flow)
     @local_locator = { "public_id" => @flow.public_id, "nonce" => local_nonce }
     ref = SessionLimitResolutionTokenRef.issue(@existing.first)
+    set_browser_headers!
 
     assert_difference(-> { ClientToken.where(user_id: @actor.id).count }, 1) do
       patch :update, params: { ri: "jp", session_ref: ref },
@@ -199,5 +203,13 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
       "resolution_binding" => binding,
       "actor_type" => "Client",
     }
+  end
+
+  def set_browser_headers!
+    browser_headers.each { |name, value| @request.headers[name] = value }
+  end
+
+  def browser_headers
+    { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
   end
 end

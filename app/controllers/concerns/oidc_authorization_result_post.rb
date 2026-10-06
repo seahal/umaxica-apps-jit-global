@@ -63,7 +63,8 @@ module OidcAuthorizationResultPost
 
     raise ArgumentError, "authorization start is required"
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
-         OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri, ArgumentError
+         OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri,
+         FlowInvalidTransition, ArgumentError
     render json: { error: "invalid_request", error_description: "invalid authorization request" },
            status: :bad_request
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError => e

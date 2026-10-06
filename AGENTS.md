@@ -39,6 +39,8 @@ the remaining entries matching the task.
   `docs/architecture/controller-lifecycle.md`
 - JSON API endpoints, error responses, or API versioning: `docs/reference/api-design-standards.md`
 - Minitest or behavior changes: `generic/testing.mdc`, `generic/no-test-only-code.mdc`
+- Any line that reads or assigns `ENV`, in application, configuration, Rake, or test code:
+  `generic/no-silent-fallback.mdc`, `adr/env-fetch-without-default.md`
 - Environment, dependency, tooling, or mounted-engine setup: `project/no-environment-tests.mdc`,
   `adr/no-test-suite-for-environment-construction.md` — setup is never covered by Minitest or
   Vitest; run it and record the result in `evidence/`
@@ -145,6 +147,10 @@ conflicts through the governing principles above.
 
   - **MUST:** make missing required configuration, invalid state, failed prerequisites, unsupported
     workflows, and migration assumptions explicit and observable.
+  - **MUST:** read environment variables without a code-side default, in every Ruby file including
+    tests: one-argument `ENV.fetch("NAME")` for a variable the code needs, `ENV["NAME"]` with an
+    explicit `nil` branch for an optional one. `ENV.fetch("NAME", default)`, a block default, and
+    `ENV["NAME"] || default` are defects even where existing code uses them.
   - **MUST:** keep production behavior independent of requirements that exist only for tests.
   - **MUST:** preserve externally visible behavioral contracts when the task leaves those contracts
     unchanged.

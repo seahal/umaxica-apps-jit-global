@@ -1511,10 +1511,12 @@ en:
           activities: Activity
           birthdate: Birthdate
           emails: Email
+          passkey: Passkey
           secrets: Secrets
           sessions: Sessions
           standing: Account standing
           telephones: Telephone
+          totp: TOTP
           withdrawal: Withdrawal
       preference_emails:
         token_invalid: That link is no longer valid. Request a new one to continue.
@@ -2312,6 +2314,7 @@ en:
       operation_not_permitted: This operation is not permitted.
       other_than: must be other than %{count}
       password_too_long: is too long
+      phase_violation_refused: Going back is not allowed.
       preference_operation_failed: The preference operation failed.
       present: must be blank
       required: must exist

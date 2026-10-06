@@ -15,11 +15,16 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses, :operator_tokens
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    https!
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost")
     host! @host
     @staff = operators(:one)
     @staff.update!(status_id: OperatorStatus::ACTIVE)
     @token = operator_tokens(:one)
+    @token.update!(root_login_established_at: Time.current, established_authentication_method: "passkey")
+    BaseSelectorBootstrapAuthority.call(surface: :org, principal: @staff)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @staff, session: @token)
+    install_base_browser_rp_credentials!(surface: "org", host: @host, actor: @staff, token: @token)
   end
 
   def headers_for(context)
@@ -29,14 +34,14 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   end
 
   test "a normal session renders no restricted mode indicator" do
-    get auth_org_settings_passkeys_url(ri: "jp"), headers: headers_for(nil)
+    get base_org_identity_url(ri: "jp"), headers: headers_for(nil)
 
     assert_response :success
     assert_nil inertia_props.fetch("chrome").fetch("restricted_mode")
   end
 
   test "an emergency session renders the restricted mode indicator in the shared chrome" do
-    get auth_org_settings_passkeys_url(ri: "jp"), headers: headers_for("emergency")
+    get base_org_identity_url(ri: "jp"), headers: headers_for("emergency")
 
     assert_response :success
     restricted = inertia_props.fetch("chrome").fetch("restricted_mode")
@@ -49,7 +54,7 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   # no "leave restricted mode" operation, because there is no in-session
   # transition for such a control to perform.
   test "the indicator offers sign-out and nothing that claims to switch mode in place" do
-    get auth_org_settings_passkeys_url(ri: "jp"), headers: headers_for("emergency")
+    get base_org_identity_url(ri: "jp"), headers: headers_for("emergency")
 
     restricted = inertia_props.fetch("chrome").fetch("restricted_mode")
 

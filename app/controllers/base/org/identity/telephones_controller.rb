@@ -54,14 +54,10 @@ module Base
           telephone = current_operator.staff_telephones.find(params.expect(:id))
           authorize!(telephone)
 
-          unless AuthMethodGuard.can_remove_telephone?(current_operator, telephone)
-            redirect_to(
-              base_org_identity_telephones_path(ri: params[:ri]),
-            )
-            return
+          current_operator.with_lock do
+            telephone = OperatorTelephone.lock.find_by!(id: telephone.id, staff_id: current_operator.id)
+            telephone.destroy! if AuthMethodGuard.can_remove_telephone?(current_operator, telephone)
           end
-
-          telephone.destroy!
           redirect_to(
             base_org_identity_telephones_path(ri: params[:ri]),
             status: :see_other,

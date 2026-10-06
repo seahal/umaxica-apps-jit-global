@@ -303,7 +303,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                  labelled.fetch(I18n.t("base.shared.identity.links.activities", locale: :ja))
     assert_equal base_app_identity_standing_path(ri: "jp"),
                  labelled.fetch(I18n.t("base.shared.identity.links.standing", locale: :ja))
-    assert_equal auth_app_settings_passkeys_url(ri: "jp", host: @sign_host, protocol: "https"),
+    assert_equal base_app_identity_passkeys_url(ri: "jp"),
                  labelled.fetch(I18n.t("controller.sign.app.setting.index.passkey", locale: :ja))
     assert_equal auth_app_settings_totps_url(ri: "jp", host: @sign_host, protocol: "https"),
                  labelled.fetch(I18n.t("controller.sign.app.setting.index.totp", locale: :ja))
