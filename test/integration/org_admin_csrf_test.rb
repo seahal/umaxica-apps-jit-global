@@ -92,7 +92,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
         scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
         session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
       )
-      transaction = BaseStepUpAdmissionIssuer.call!(
+      transaction = issue_base_step_up_admission!(
         actor: @operator, token: @token, requirement: requirement, return_to: return_to,
       ).transaction
       transaction.record_verification!(
@@ -164,7 +164,7 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
       scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:org",
       session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: @operator, token: @token, requirement: requirement,
       return_to: "/support/clients/#{@client.public_id}/revocations/new",
     ).transaction

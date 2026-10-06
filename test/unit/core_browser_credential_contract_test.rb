@@ -27,7 +27,7 @@ class CoreBrowserCredentialContractTest < ActiveSupport::TestCase
 
   test "native and retained external RP audiences are classified as non core browser" do
     assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["palm-api"])
-    assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["side-service"])
+    assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["warp-service"])
     assert_not CoreBrowserCredentialContract.native_or_warp_audience?(
       "aud" => [CoreBrowserCredentialContract::ACCESS_AUDIENCE],
     )

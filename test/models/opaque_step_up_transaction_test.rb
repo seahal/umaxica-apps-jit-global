@@ -11,12 +11,16 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
       test "#{model.name} #{purpose} evidence cannot become ordinary step-up evidence" do
         transaction = model.create_transaction!(
           actor_ref: "actor", session_ref: "session", required_scope: "settings_passkey",
-          required_aal: "none", allowed_methods: ["passkey"], purpose: purpose,
+          required_aal: "none", step_up_required: false, user_verification_required: false,
+          full_reauthentication_required: false, phishing_resistant_required: false,
+          audience: "step_up:#{model.ceremony_surface}", token_binding: "session",
+          require_session_binding: true, allowed_methods: ["passkey"], purpose: purpose,
         )
         # Synthetic evidence exercises the purpose boundary, not WebAuthn cryptography.
         assert_raises(IdentityStepUpCeremonyContract::Error) do
           transaction.record_verification!(
             method: "passkey", aal: "aal1", phishing_resistant: true,
+            user_verified: true,
             verified_at: model.database_now, verified_credential_ref: "existing-credential",
           )
         end
@@ -45,10 +49,14 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
   test "verified evidence is immutable and replacement result generations reject the previous delivery" do
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
-      required_aal: "none", allowed_methods: ["passkey"],
+      required_aal: "none", step_up_required: true, user_verification_required: false,
+      full_reauthentication_required: false, phishing_resistant_required: false,
+      audience: "step_up:app", token_binding: "session", require_session_binding: true,
+      allowed_methods: ["passkey"],
     )
     transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true, verified_credential_ref: "key",
+      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
+      verified_credential_ref: "key",
       verified_at: ClientStepUpCeremonyTransaction.database_now,
     )
     verified_at = transaction.verified_at
@@ -58,6 +66,7 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true, verified_credential_ref: "key",
+        user_verified: true,
         verified_at: ClientStepUpCeremonyTransaction.database_now,
       )
     end
@@ -77,14 +86,17 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
   test "ORG rejects methods outside Passkey even if a transaction contains a forbidden method" do
     transaction = OperatorStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_passkey",
-      required_aal: "none", allowed_methods: %w(passkey totp email_otp),
+      required_aal: "none", step_up_required: true, user_verification_required: false,
+      full_reauthentication_required: false, phishing_resistant_required: false,
+      audience: "step_up:org", token_binding: "session", require_session_binding: true,
+      allowed_methods: %w(passkey totp email_otp),
     )
 
     %w(totp email_otp).each do |method|
       assert_raises(IdentityStepUpCeremonyContract::Error) do
         transaction.record_verification!(
           method: method, aal: (method == "totp") ? "aal1" : "none",
-          phishing_resistant: false, verified_credential_ref: "key",
+          phishing_resistant: false, user_verified: false, verified_credential_ref: "key",
           verified_at: OperatorStepUpCeremonyTransaction.database_now,
         )
       end
@@ -95,19 +107,24 @@ class OpaqueStepUpTransactionTest < ActiveSupport::TestCase
   test "Email OTP cannot assert phishing resistance or AAL1" do
     transaction = VisitorStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
-      required_aal: "none", allowed_methods: ["email_otp"],
+      required_aal: "none", step_up_required: true, user_verification_required: false,
+      full_reauthentication_required: false, phishing_resistant_required: false,
+      audience: "step_up:com", token_binding: "session", require_session_binding: true,
+      allowed_methods: ["email_otp"],
     )
 
     [["none", true], ["aal1", false]].each do |aal, resistant|
       assert_raises(IdentityStepUpCeremonyContract::Error) do
         transaction.record_verification!(
-          method: "email_otp", aal: aal, phishing_resistant: resistant, verified_credential_ref: "key",
+          method: "email_otp", aal: aal, phishing_resistant: resistant, user_verified: false,
+          verified_credential_ref: "key",
           verified_at: VisitorStepUpCeremonyTransaction.database_now,
         )
       end
     end
     transaction.record_verification!(
-      method: "email_otp", aal: "none", phishing_resistant: false, verified_credential_ref: "key",
+      method: "email_otp", aal: "none", phishing_resistant: false, user_verified: false,
+      verified_credential_ref: "key",
       verified_at: VisitorStepUpCeremonyTransaction.database_now,
     )
 

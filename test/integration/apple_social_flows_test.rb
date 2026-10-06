@@ -65,8 +65,8 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :ok
-    assert_includes response.body, "social-completion-form"
+    assert_response :redirect
+    assert_equal "/social/authentication/completion", URI.parse(response.location).path
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientAppleIdentity.count", 1) do
@@ -467,6 +467,8 @@ class AppleSocialFlowsTest
   end
 
   def submit_social_completion_if_present!
+    return if follow_social_completion_redirect_if_present!
+
     return unless response.media_type == "text/html"
     return unless response.body.include?("social-completion-form")
 

@@ -16,6 +16,7 @@ module RefreshTokenable
     before_validation :ensure_refresh_token_family_id, on: :create
     before_validation :ensure_refresh_token_generation, on: :create
     before_validation :ensure_device_session_record, on: :create
+    after_create :set_initial_device_session_current_token
     validates :refresh_token_digest, uniqueness: true, allow_nil: true
   end
 
@@ -26,15 +27,25 @@ module RefreshTokenable
       operation =
         lambda do
           transaction do
-            current_token = lock_refresh_token_record_by_digest(
-              presented_refresh_digest,
-              digest_column: :refresh_token_digest,
-            )
-
-            return { status: :invalid, token: nil } unless current_token
-            return { status: :replay, token: current_token } if current_token.rotated_at.present?
-
             decision_time = now || database_now
+            candidate = where(refresh_token_digest: presented_refresh_digest).select(:id, :device_session_id).first
+            return { status: :invalid, token: nil } unless candidate
+
+            device_session = device_session_class.lock.find_by(id: candidate.device_session_id)
+            return { status: :invalid, token: nil } unless device_session&.usable?
+
+            current_token_id = device_session.current_refresh_token_id
+            return { status: :invalid, token: nil } unless current_token_id
+
+            unless current_token_id == candidate.id
+              replay_token = find_by(id: candidate.id)
+              return { status: :replay, token: replay_token } if replay_token&.rotated_at.present?
+
+              return { status: :invalid, token: replay_token }
+            end
+
+            current_token = lock.find(current_token_id)
+            return { status: :replay, token: current_token } if current_token.rotated_at.present?
             return { status: :invalid, token: current_token } unless current_token.currently_usable?(decision_time)
 
             current_token.assign_attributes(
@@ -59,7 +70,70 @@ module RefreshTokenable
       defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     end
 
+    # Full reauthentication replaces the root token row while retaining the same Device Session.
+    # The caller owns the surrounding ceremony transaction and decides when the predecessor's
+    # step-up authority is retired. This primitive only performs the ordered root replacement and
+    # returns the new row; it never exposes the raw predecessor verifier.
+    def replace_current_for_reauthentication!(token:, authentication_event_at:, established_authentication_method:,
+                                              now: nil)
+      raise ArgumentError, "token class mismatch" unless token.is_a?(self)
+      raise ArgumentError, "authentication event time is required" unless authentication_event_at.respond_to?(:to_time)
+
+      transaction do
+        decision_time = now || database_now
+        device_session = device_session_class.lock.find_by(id: token.device_session_id)
+        raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session&.usable?
+
+        current_token = lock.find_by(id: device_session.current_refresh_token_id)
+        unless current_token&.id == token.id && current_token.currently_usable?(decision_time)
+          raise RpSession::IssuanceRejected, "Browser Session current root token changed"
+        end
+
+        current_token.assign_attributes(
+          rotated_at: decision_time, last_used_at: decision_time,
+          updated_at: decision_time,
+        )
+        current_token.save!(touch: false)
+
+        attrs = rotated_token_attributes(current_token)
+        copy_attribute_if_present(attrs, current_token, :root_login_established_at)
+        copy_attribute_if_present(attrs, current_token, :authentication_context)
+        if column_names.include?("authentication_event_at")
+          attrs[:authentication_event_at] = authentication_event_at
+        end
+        if column_names.include?("established_authentication_method")
+          attrs[:established_authentication_method] = established_authentication_method
+        end
+
+        release_unique_dbsc_session_id!(current_token)
+        replacement = new(attrs)
+        replacement.skip_session_limit_check = true if replacement.respond_to?(:skip_session_limit_check=)
+        replacement.save!
+
+        raw_refresh_token, verifier = generate_refresh_token(public_id: replacement.public_id)
+        replacement.update!(refresh_token_digest: digest_refresh_token(verifier))
+        update_device_session_after_rotation!(current_token, replacement, now: decision_time)
+
+        {
+          previous_token: current_token,
+          token: replacement,
+          refresh_token: raw_refresh_token,
+          now: decision_time,
+        }
+      end
+    end
+
     private
+
+    def device_session_class
+      case name
+      when "ClientToken" then ClientDeviceSession
+      when "VisitorToken" then VisitorDeviceSession
+      when "OperatorToken" then OperatorDeviceSession
+      else
+        raise FlowConfigurationError, "#{name} does not define a device-session owner"
+      end
+    end
 
     def create_rotated_token_record!(previous_token, now: nil)
       attrs = rotated_token_attributes(previous_token)
@@ -251,6 +325,17 @@ module RefreshTokenable
 
   private
 
+  def set_initial_device_session_current_token
+    return unless device_session
+    return if device_session.current_refresh_token_id.present?
+
+    device_session.update!(
+      current_refresh_token_id: id,
+      refresh_token_family_id: refresh_token_family_id,
+      last_seen_at: self.class.database_now,
+    )
+  end
+
   def default_lapses_at(now: nil)
     (now || self.class.database_now) + REFRESH_TTL
   end
@@ -275,10 +360,11 @@ module RefreshTokenable
 
     klass = device_session_class
     actor_key = device_session_actor_key
-    return unless klass && actor_key && public_send(actor_key).present?
+    actor_id = self[actor_key]
+    raise ActiveRecord::RecordInvalid.new(self), "device-session actor is missing" if actor_id.blank?
 
     attrs = {
-      actor_key => public_send(actor_key),
+      actor_key => actor_id,
       :dpop_jkt => has_attribute?(:dpop_jkt) ? dpop_jkt.presence : nil,
       :refresh_token_family_id => refresh_token_family_id,
       :last_seen_at => self.class.database_now,
@@ -297,13 +383,16 @@ module RefreshTokenable
     when "ClientToken" then ClientDeviceSession
     when "OperatorToken" then OperatorDeviceSession
     when "VisitorToken" then VisitorDeviceSession
+    else
+      raise FlowConfigurationError, "#{self.class.name} does not define a device-session owner"
     end
   end
 
   def device_session_actor_key
     return :user_id if has_attribute?(:user_id)
     return :staff_id if has_attribute?(:staff_id)
+    return :visitor_id if has_attribute?(:visitor_id)
 
-    :visitor_id if has_attribute?(:visitor_id)
+    raise FlowConfigurationError, "#{self.class.name} does not define a device-session actor"
   end
 end

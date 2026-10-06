@@ -8,17 +8,20 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
     client_secret_credentials client_secret_issuances
   )
 
-  test "any confirmed Secret resolves its owner without contact information or public ID input" do
-    assert_equal client_secret_credentials(:one).id, ClientSecretLookupQuery.call(secret: "a" * 32).id
-    assert_equal client_secret_credentials(:two).id, ClientSecretLookupQuery.call(secret: "b" * 32).id
-    assert_equal client_secret_credentials(:sample_login).id, ClientSecretLookupQuery.call(secret: "c" * 32).id
+  test "a confirmed Secret resolves only inside its explicitly supplied Client" do
+    assert_equal client_secret_credentials(:one).id,
+                 ClientSecretLookupQuery.call(client: clients(:one), secret: "a" * 32).id
+    assert_equal client_secret_credentials(:two).id,
+                 ClientSecretLookupQuery.call(client: clients(:two), secret: "b" * 32).id
+    assert_equal client_secret_credentials(:sample_login).id,
+                 ClientSecretLookupQuery.call(client: clients(:sample_user), secret: "c" * 32).id
   end
 
   test "invalid format unknown value and exact case mismatch return no credential without mutation" do
     before_count = ClientSecretCredential.count
 
     [nil, "", 0, [], {}, "a" * 31, "a" * 33, "0" * 32, ("a" * 31) + "\0", "A" * 32, "z" * 32].each do |input|
-      assert_nil ClientSecretLookupQuery.call(secret: input)
+      assert_nil ClientSecretLookupQuery.call(client: clients(:one), secret: input)
     end
 
     assert_equal before_count, ClientSecretCredential.count
@@ -28,7 +31,7 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
 
   test "invalid UTF-8 and non ASCII compatible strings are rejected without raising or claiming" do
     ["\xFF".b.force_encoding("UTF-8") * 32, ("a" * 32).encode("UTF-16LE")].each do |input|
-      assert_nil ClientSecretLookupQuery.call(secret: input)
+      assert_nil ClientSecretLookupQuery.call(client: clients(:one), secret: input)
     end
     assert_nil client_secret_credentials(:one).reload.claimed_at
   end
@@ -46,29 +49,33 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
       )
       ClientSecretCredential.create!(
         client: owner, issuance: issuance, name: "Fixture Secret", password: raw,
-        lookup_digest: SignSecretLookupDigest.digest(raw),
         confirmed_at: (state == :pending) ? nil : now,
         revoked_at: (state == :revoked) ? now : nil,
         discard_at: (state == :discarded) ? now : Float::INFINITY,
       )
       if state == :claimed
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        )
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+        _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
         payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: admission.reference, surface: "app", expected_intent: "sign_in",
+          binding:, raw_auth_sid: raw_sid,
         )
         flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
         ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
           admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
         )
 
-        assert ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+        assert ClientSecretClaimCommitter.call!(client: owner, secret: raw, flow: flow, ceremony: ceremony)
       end
 
-      assert_nil ClientSecretLookupQuery.call(secret: raw)
+      assert_nil ClientSecretLookupQuery.call(client: owner, secret: raw)
     end
   end
 
-  test "lookup digest match alone does not replace whole value password verification" do
+  test "whole value password verification does not depend on a lookup digest" do
     owner = clients(:placeholder)
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -76,12 +83,12 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
       attempt_number: 1, browser_session_ref: "server-issued-session", planned_count: 1,
       expires_at: now + 1.hour, presented_at: now, confirmed_at: now,
     )
-    ClientSecretCredential.create!(
+    credential = ClientSecretCredential.create!(
       client: owner, issuance: issuance, name: "Fixture Secret", password: "d" * 32,
-      lookup_digest: SignSecretLookupDigest.digest("e" * 32), confirmed_at: now,
+      confirmed_at: now,
     )
 
-    assert_nil ClientSecretLookupQuery.call(secret: "e" * 32)
-    assert_nil ClientSecretLookupQuery.call(secret: "d" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: owner, secret: "e" * 32)
+    assert_equal credential.id, ClientSecretLookupQuery.call(client: owner, secret: "d" * 32).id
   end
 end

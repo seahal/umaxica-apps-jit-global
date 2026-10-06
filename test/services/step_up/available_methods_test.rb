@@ -13,28 +13,31 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
   end
 
   test "includes email_otp for verified user email status" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "verified-stepup@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
 
     assert_includes StepUpAvailableMethods.call(@user), :email_otp
   end
 
   test "matches configured methods without cooldown or lockout" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-baseline@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
 
     assert_equal StepUpConfiguredMethodsQuery.call(@user), StepUpAvailableMethods.call(@user)
   end
 
   test "verified email and an active Passkey are both available" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-cooldown@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     passkey = @user.client_passkeys.new(
       webauthn_id: "available_cooldown_passkey_#{SecureRandom.hex(4)}",
       external_id: SecureRandom.uuid,
@@ -56,20 +59,22 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
   end
 
   test "ticket lockout returns no methods" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-lockout@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     ticket = Struct.new(:attempt_count).new(5)
 
     assert_equal [], StepUpAvailableMethods.call(@user, ticket: ticket)
   end
 
   test "ticket attempt count four still returns configured methods" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-attempt-four@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     ticket = Struct.new(:attempt_count).new(4)
 
     assert_includes StepUpAvailableMethods.call(@user, ticket: ticket), :email_otp
@@ -153,10 +158,11 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::BOTH,
     )
-    @visitor.visitor_emails.create!(
+    email = @visitor.visitor_emails.create!(
       address: "available-visitor@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
 
     assert_includes StepUpAvailableMethods.call(@visitor), :email_otp
   end

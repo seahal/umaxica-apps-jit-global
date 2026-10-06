@@ -24,6 +24,7 @@ class VisitorSignUpFlowStatus < ComTicketRecord
   FAILED = 900
   EXPIRED = 910
   CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     STARTED,
     CONTACT_PENDING,
@@ -38,6 +39,7 @@ class VisitorSignUpFlowStatus < ComTicketRecord
     FAILED,
     EXPIRED,
     CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :visitor_sign_up_flows,

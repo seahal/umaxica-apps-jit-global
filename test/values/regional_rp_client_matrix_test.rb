@@ -50,7 +50,7 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
                  contract.find { |entry| entry.fetch(:client_id) == "core-app-us" }
                    .fetch(:canonical_host_source)
     assert_equal "PUBLIC_WARP_APP_US_URL",
-                 contract.find { |entry| entry.fetch(:client_id) == "side-app-us" }
+                 contract.find { |entry| entry.fetch(:client_id) == "warp-app-us" }
                    .fetch(:canonical_host_source)
     assert_equal :public_edit_staff_url,
                  contract.find { |entry| entry.fetch(:client_id) == "edit-org" }
@@ -83,16 +83,16 @@ class RegionalRpClientMatrixTest < ActiveSupport::TestCase
   test "does not invent a Warp regional host when the repository has no canonical source" do
     error =
       assert_raises(RegionalRpClientMatrix::MissingCanonicalHost) do
-        RegionalRpClientMatrix.uri_binding_for("side-app-us")
+        RegionalRpClientMatrix.uri_binding_for("warp-app-us")
       end
 
-    assert_match(/side-app-us/, error.message)
+    assert_match(/warp-app-us/, error.message)
   end
 
   test "derives the Warp JP binding from the existing canonical host family" do
-    binding = RegionalRpClientMatrix.uri_binding_for("side-app-jp")
+    binding = RegionalRpClientMatrix.uri_binding_for("warp-app-jp")
 
-    assert_equal "side-app-jp", binding.fetch(:client_id)
+    assert_equal "warp-app-jp", binding.fetch(:client_id)
     assert_equal "https://www-jp.umaxica.app/oidc/callback", binding.fetch(:redirect_uri)
     assert_equal "https://www-jp.umaxica.app/sign/out", binding.fetch(:post_logout_redirect_uri)
     assert_equal "https://www-jp.umaxica.app/oidc/backchannel/logout", binding.fetch(:backchannel_logout_uri)

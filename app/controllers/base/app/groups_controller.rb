@@ -12,7 +12,6 @@ module Base
 
       rescue_from AvatarOwnerMembershipLockService::AuthorizationDenied, with: :forbid_owner_mutation
 
-      before_action :authenticate_client!
       before_action :set_group, only: %i(show update destroy)
       # Collection visibility comes from AvatarGroupPolicy's relation scope; fail if index stops using it.
       verify_authorized_scoped only: :index

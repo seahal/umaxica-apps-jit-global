@@ -14,13 +14,6 @@ module Auth
               AUTHENTICATION_MODE = :guest
 
               def show
-                if dummy_existing_telephone_flow?
-                  @visitor_telephone = VisitorTelephone.new
-                  return render_sign_up_telephone_edit if valid_telephone_session?
-
-                  return render_telephone_session_expired
-                end
-
                 return unless load_gate_context!(gate_for_show)
 
                 @visitor_telephone = current_registration_telephone
@@ -30,14 +23,6 @@ module Auth
               end
 
               def create
-                if dummy_existing_telephone_flow?
-                  return render_otp_resend_too_soon if otp_resend_rate_limited?
-
-                  perform_dummy_otp_generation
-                  session[:visitor_telephone_otp_last_sent_at] = Time.current.to_i
-                  return redirect_to(auth_com_sign_up_check_telephone_otp_path(ri: params[:ri], pt: signed_pt_param))
-                end
-
                 return unless load_gate_context!(gate_for_create)
 
                 @visitor_telephone = current_registration_telephone
@@ -56,14 +41,6 @@ module Auth
               end
 
               def update
-                if dummy_existing_telephone_flow?
-                  @visitor_telephone = VisitorTelephone.new
-                  submitted_code = submitted_pass_code
-                  return render_code_required if submitted_code.blank?
-
-                  return render_otp_ceremony_result(verify_otp_ceremony!(submitted_code))
-                end
-
                 return unless load_gate_context!(gate_for_update)
 
                 @visitor_telephone = current_registration_telephone
@@ -114,8 +91,6 @@ module Auth
               end
 
               def verify_otp_ceremony!(submitted_code)
-                return verify_dummy_otp_ceremony!(submitted_code) if dummy_existing_telephone_flow?
-
                 SignOtpCeremony.verify!(
                   purpose: :sign_up,
                   surface: :com,
@@ -125,19 +100,6 @@ module Auth
                   code: submitted_code,
                   session_nonce: @sign_up_ticket.public_id,
                   request_context: request,
-                )
-              end
-
-              # The decoy flow must be indistinguishable from a wrong code, so it
-              # burns the submitted value and always reports an invalid code.
-              def verify_dummy_otp_ceremony!(submitted_code)
-                verify_dummy_otp(submitted_code)
-                SignOtpCeremony::Result.new(
-                  success?: false,
-                  status: :invalid_code,
-                  record: nil,
-                  code: nil,
-                  error: :invalid_code,
                 )
               end
 

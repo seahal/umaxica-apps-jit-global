@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class Base::App::Edge::V0::Token::RefreshesController < Base::App::ApplicationController
+class Base::App::Edge::V0::Token::RefreshesController < Base::App::AuthorityController
   include SignEdgeV0JsonApi
   include ::PreferenceWebCookieEndpoint
 

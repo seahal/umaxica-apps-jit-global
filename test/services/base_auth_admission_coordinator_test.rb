@@ -4,15 +4,23 @@
 require "test_helper"
 
 class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
+  fixtures :clients, :client_tokens
+
   test "registration and bootstrap admissions retain their distinct authoritative purpose" do
+    base_token = client_tokens(:one)
     %w(bootstrap credential_registration credential_change).each do |purpose|
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: "actor", session_ref: "session", required_scope: "settings_totp",
         required_aal: "none", allowed_methods: ["totp"], purpose: purpose,
       )
-      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction)
+      issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: base_token,
+      )
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+      _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: base_token)
       payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
         reference: issuance.reference, surface: "app", expected_intent: purpose,
+        binding: binding, raw_auth_sid: raw_sid,
       )
       resolved = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
         payload: payload, surface: "app", expected_intent: purpose,
@@ -40,9 +48,14 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
       required_aal: "none", allowed_methods: ["passkey"],
     )
-    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction)
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: client_tokens(:one),
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: client_tokens(:one))
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: issuance.reference, surface: "app", expected_intent: "step_up",
+      binding: binding, raw_auth_sid: raw_sid,
     )
     resolved = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
       payload: payload, surface: "app", expected_intent: "step_up",
@@ -79,7 +92,8 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       required_aal: "none", allowed_methods: ["passkey"],
     )
     transaction.record_verification!(
-      method: "passkey", aal: "aal1", phishing_resistant: true, verified_credential_ref: "key",
+      method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: true,
+      verified_credential_ref: "key",
       verified_at: ClientStepUpCeremonyTransaction.database_now,
     )
     issuance = BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction)
@@ -105,24 +119,50 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_no_difference("ClientToken.count") do
       issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
         surface: "app", intent: "sign_in", nonce_digest: nonce_digest,
+        base_browser_nonce: "test-browser-nonce", base_token: nil,
       )
     end
     assert_instance_of ClientSignInFlow, issuance.transaction
-    assert_equal issuance.reference, issuance.transaction.public_id
+    assert_match(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN, issuance.reference)
     assert_equal nonce_digest, issuance.transaction.nonce_digest
     assert_nil issuance.transaction.principal_id
     assert_nil issuance.transaction.token_id
     assert_predicate issuance.transaction, :sign_in_primary_pending?
   end
 
+  test "an explicit local restart retires the old binding and preserves the pending flow" do
+    first = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", nonce_digest: ClientSignInFlow.digest_nonce("entry-nonce"),
+      base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+
+    second = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", restart_of: first.reference,
+      nonce_digest: first.transaction.nonce_digest,
+      base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+
+    assert_not_equal first.reference, second.reference
+    assert_equal first.transaction.id, second.transaction.id
+    assert_predicate BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: "app", reference: first.reference,
+    ), :retired?
+    assert_predicate BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: "app", reference: second.reference,
+    ), :live?
+  end
+
   test "handoff consume is one-shot and bound to surface" do
     transaction = issue_transaction!
 
-    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction)
-    payload = BaseAuthAdmissionCoordinator.consume_handoff!(
-      raw_code: issuance.code,
-      surface: "app",
-      expected_intent: "sign_in",
+    issuance = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "sign_in",
+      binding:, raw_auth_sid: raw_sid,
     )
 
     assert_equal transaction.transaction_id, payload.fetch("subject_ref")
@@ -130,74 +170,84 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_equal "client", payload.fetch("actor_type")
 
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseAuthAdmissionCoordinator.consume_handoff!(
-        raw_code: issuance.code,
-        surface: "app",
-        expected_intent: "sign_in",
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "app", expected_intent: "sign_in",
+        binding:, raw_auth_sid: raw_sid,
       )
     end
   end
 
   test "local entry consume returns the payload once for the issuing surface" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_in")
-
-    payload = BaseAuthAdmissionCoordinator.consume_local_entry!(
-      raw_code: issuance.code,
-      surface: "com",
-      expected_intent: "sign_in",
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
     )
 
-    assert_equal issuance.reference, payload.fetch("subject_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "com", expected_intent: "sign_in",
+      binding:, raw_auth_sid: raw_sid,
+    )
+
+    assert_equal issuance.transaction.public_id, payload.fetch("subject_ref")
     assert_equal "visitor", payload.fetch("actor_type")
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseAuthAdmissionCoordinator.consume_local_entry!(
-        raw_code: issuance.code,
-        surface: "com",
-        expected_intent: "sign_in",
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "com", expected_intent: "sign_in",
+        binding:, raw_auth_sid: raw_sid,
       )
     end
   end
 
   test "local entry consume denies a code issued for another surface" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_in")
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
 
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseAuthAdmissionCoordinator.consume_local_entry!(
-        raw_code: issuance.code,
-        surface: "app",
-        expected_intent: "sign_in",
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "app", expected_intent: "sign_in",
+        binding:, raw_auth_sid: raw_sid,
       )
     end
   end
 
   test "local entry consume denies a code issued for another intent" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_up")
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
 
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseAuthAdmissionCoordinator.consume_local_entry!(
-        raw_code: issuance.code,
-        surface: "com",
-        expected_intent: "sign_in",
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "com", expected_intent: "sign_in",
+        binding:, raw_auth_sid: raw_sid,
       )
     end
   end
 
   test "local entry consume denies an unknown code" do
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-      BaseAuthAdmissionCoordinator.consume_local_entry!(
-        raw_code: "never-issued",
-        surface: "com",
-        expected_intent: "sign_in",
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: SecureRandom.uuid, surface: "com", expected_intent: "sign_in",
+        binding: ClientAuthAdmissionBinding.new, raw_auth_sid: "missing",
       )
     end
   end
 
   test "local entry consume rejects an unsupported intent" do
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
     assert_raises(ArgumentError) do
-      BaseAuthAdmissionCoordinator.consume_local_entry!(
-        raw_code: "never-issued",
-        surface: "com",
-        expected_intent: "withdrawal",
+      BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        reference: issuance.reference, surface: "com", expected_intent: "withdrawal",
+        binding:, raw_auth_sid: raw_sid,
       )
     end
   end

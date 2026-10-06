@@ -10,6 +10,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -18,7 +20,6 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Stored value", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     # Prepare completed presentation facts; this test does not deliver plaintext.
     ClientSecretIssuance.transaction do
@@ -37,7 +38,7 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
 
     assert_equal :confirmed, issuance.reload.state(at: Client.database_now)
     assert_equal issuance.confirmed_at, candidate.reload.confirmed_at
-    assert_equal candidate.id, ClientSecretLookupQuery.call(secret: raw).id
+    assert_equal candidate.id, ClientSecretLookupQuery.call(client: actor, secret: raw).id
     counts = ClientSecretCapacityQuery.call(client: actor, at: Client.database_now)
 
     assert_equal 1, counts.active_count
@@ -66,6 +67,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     at = Client.database_now
@@ -79,7 +82,6 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
         raw = SecureRandom.base58(32)
         ClientSecretCredential.create!(
           client: actor, issuance: issuance, name: "Batch item #{index}", password: raw,
-          lookup_digest: SignSecretLookupDigest.digest(raw),
         )
       end
     ClientSecretAuditOutbox.transaction do
@@ -123,6 +125,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       issuance = ClientSecretManualReservationIssuer.call!(
@@ -131,7 +135,6 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       raw = SecureRandom.base58(32)
       candidate = ClientSecretCredential.create!(
         client: actor, issuance: issuance, name: "Pending value", password: raw,
-        lookup_digest: SignSecretLookupDigest.digest(raw),
       )
       ClientSecretIssuance.transaction do
         at = Client.database_now
@@ -158,7 +161,6 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
         extra = SecureRandom.base58(32)
         ClientSecretCredential.create!(
           client: actor, issuance: issuance, name: "Unpresented addition", password: extra,
-          lookup_digest: SignSecretLookupDigest.digest(extra),
         )
       end
       failure =
@@ -172,7 +174,7 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       end
       assert_nil issuance.reload.confirmed_at
       assert_nil candidate.reload.confirmed_at
-      assert_nil ClientSecretLookupQuery.call(secret: raw)
+      assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     end
   end
 
@@ -184,6 +186,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       issuance = ClientSecretManualReservationIssuer.call!(
@@ -192,7 +196,6 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       raw = SecureRandom.base58(32)
       candidate = ClientSecretCredential.create!(
         client: actor, issuance: issuance, name: "Boundary value", password: raw,
-        lookup_digest: SignSecretLookupDigest.digest(raw),
       )
       ClientSecretAuditOutbox.transaction do
         at = Client.database_now

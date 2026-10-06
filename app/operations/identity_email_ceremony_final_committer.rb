@@ -17,6 +17,7 @@ class IdentityEmailCeremonyFinalCommitter
       audit_event_class: ClientChronicleEvent,
       audit_level_class: ClientChronicleLevel,
       audit_subject: :actor,
+      binding: true,
     },
     "com" => {
       record_class: VisitorEmail,
@@ -24,6 +25,7 @@ class IdentityEmailCeremonyFinalCommitter
       status_key: :visitor_email_status_id,
       unverified_status: VisitorEmailStatus::UNVERIFIED,
       verified_status: VisitorEmailStatus::VERIFIED,
+      binding: true,
     },
     "org" => {
       record_class: OperatorEmail,
@@ -95,7 +97,9 @@ class IdentityEmailCeremonyFinalCommitter
             "email candidate is already verified" unless locked.public_send(config.fetch(:status_key)) ==
               config.fetch(:unverified_status)
 
-      locked.update!(config.fetch(:status_key) => final_verified_status)
+      attributes = { config.fetch(:status_key) => final_verified_status }
+      attributes[:binding_finalized_at] = now if config.fetch(:binding, false)
+      locked.update!(attributes)
       update_signup_account_status! if signup_account_status_transition?
       @email = locked
     end

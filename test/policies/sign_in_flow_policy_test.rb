@@ -42,13 +42,10 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
 
   test "allows each participant only in matching state" do
     expectations = {
-      "SESSION_LIMIT_PENDING" => :manage_session_limit?,
       "GUARDRAIL_PENDING" => :run_guardrail?,
       "SESSION_ISSUANCE_PENDING" => :issue_session?,
       "CHECKPOINT_PENDING" => :show_checkpoint?,
       "SELECTOR_PENDING" => :show_selector?,
-      "DASHBOARD_PENDING" => :show_dashboard?,
-      "RETURN_PENDING" => :consume_return?,
     }
 
     expectations.each do |status_name, allowed_method|
@@ -78,35 +75,23 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
     assert_predicate ClientSignInFlowPolicy.new(selector, user: nil), :show_selector?
   end
 
-  test "token-bound post-completion participants require matching Actor authentication token" do
+  test "historical dashboard state has no post-completion participant action" do
     cycle = create_cycle("DASHBOARD_PENDING", principal_id: @client.id, token: @token)
     policy = ClientSignInFlowPolicy.new(cycle, user: @client)
 
-    Actor.install_context!(authn: Actor::Authentication::NULL)
-
-    assert_not_predicate policy, :show_dashboard?
-
-    Actor.install_context!(authn: Actor::Authentication.new(login_public_id: "wrong-token"))
-
-    assert_not_predicate policy, :show_dashboard?
-
-    Actor.install_context!(authn: Actor::Authentication.new(login_public_id: @token.public_id))
-
-    assert_predicate policy, :show_dashboard?
+    assert_not_respond_to policy, :show_dashboard?
   end
 
-  test "token-bound post-issuance participants accept matching device session id" do
+  test "historical dashboard state has no device-session participant action" do
     cycle = create_cycle("DASHBOARD_PENDING", principal_id: @client.id, token: @token)
 
-    Actor.install_context!(authn: Actor::Authentication.new(login_public_id: @token.device_session.public_id))
-
-    assert_predicate ClientSignInFlowPolicy.new(cycle, user: @client), :show_dashboard?
+    assert_not_respond_to ClientSignInFlowPolicy.new(cycle, user: @client), :show_dashboard?
   end
 
-  test "session limit is allowed by pending cycle state before token issuance" do
+  test "historical session-limit state has no main-graph participant action" do
     cycle = create_cycle("SESSION_LIMIT_PENDING", principal_id: @client.id)
 
-    assert_predicate ClientSignInFlowPolicy.new(cycle, user: nil), :manage_session_limit?
+    assert_not_respond_to ClientSignInFlowPolicy.new(cycle, user: nil), :manage_session_limit?
   end
 
   test "guardrail requires matching actor" do
@@ -122,14 +107,13 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
       "COMPLETED",
       principal_id: @client.id,
       token: @token,
-      step: "completed",
       completed_at: Time.current,
     )
-    failed = create_cycle("FAILED", principal_id: @client.id, step: "failed")
+    failed = create_cycle("FAILED", principal_id: @client.id)
 
     Actor.install_context!(authn: Actor::Authentication.new(login_public_id: @token.public_id))
 
-    assert_not_predicate ClientSignInFlowPolicy.new(completed, user: @client), :show_dashboard?
+    assert_not_respond_to ClientSignInFlowPolicy.new(completed, user: @client), :show_dashboard?
     assert_not_predicate ClientSignInFlowPolicy.new(completed, user: @client), :fail?
     assert_not_predicate ClientSignInFlowPolicy.new(failed, user: @client), :fail?
   end
@@ -170,29 +154,12 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
     ClientSignInFlow.create!(
       {
         principal_id: nil,
-        status_id: ClientSignInFlow.status_id_for(status_name),
-        step: step_for_status(status_name),
+        state_id: ClientSignInFlow.state_id_for(status_name),
         return_to: "/dashboard",
         nonce_digest: ClientSignInFlow.digest_nonce(nonce),
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
       }.merge(overrides),
     )
-  end
-
-  def step_for_status(status_name)
-    {
-      "PRIMARY_PENDING" => "primary",
-      "MFA_PENDING" => "mfa",
-      "SESSION_LIMIT_PENDING" => "session_limit",
-      "GUARDRAIL_PENDING" => "guardrail",
-      "SESSION_ISSUANCE_PENDING" => "session_issuance",
-      "CHECKPOINT_PENDING" => "checkpoint",
-      "SELECTOR_PENDING" => "selector",
-      "DASHBOARD_PENDING" => "dashboard",
-      "RETURN_PENDING" => "return_to",
-      "COMPLETED" => "completed",
-      "FAILED" => "failed",
-    }.fetch(status_name)
   end
 end

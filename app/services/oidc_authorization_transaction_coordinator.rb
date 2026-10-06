@@ -3,6 +3,7 @@
 
 class OidcAuthorizationTransactionCoordinator < ApplicationService
   Issuance = Data.define(:transaction)
+  AdmissionIssuance = Data.define(:transaction, :handoff)
 
   class << self
     public
@@ -41,6 +42,25 @@ class OidcAuthorizationTransactionCoordinator < ApplicationService
           now: decision_time,
         )
       Issuance.new(transaction: transaction)
+    end
+
+    # Parent creation and its Base admission binding are one Ticket transaction. A Valkey
+    # delivery left behind by a rollback is unusable because no durable binding survives it.
+    def issue_with_handoff!(surface:, intent:, params:, base_browser_nonce:, base_token:,
+                            login_challenge: SecureRandom.urlsafe_base64(32),
+                            now: nil, login_challenge_ttl: 10.minutes, ttl: 15.minutes)
+      model = model_for(surface)
+      model.connection_owner.connected_to(role: :writing) do
+        model.transaction do
+          transaction = issue!(
+            surface:, intent:, params:, login_challenge:, now:, login_challenge_ttl:, ttl:,
+          ).transaction
+          handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+            transaction:, base_browser_nonce:, base_token:,
+          )
+          AdmissionIssuance.new(transaction:, handoff:)
+        end
+      end
     end
 
     def find_by_login_challenge!(surface:, login_challenge:)

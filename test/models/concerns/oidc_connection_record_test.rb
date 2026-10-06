@@ -10,7 +10,7 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "status helpers classify active and revoked connections" do
-    active = ClientOidcConnection.create!(user: @user, client_id: "core-next-rp")
+    active = ClientOidcConnection.create!(user: @user, client_id: "core-app")
     revoked = ClientOidcConnection.create!(user: @user, client_id: "core-app", revoked_at: Time.current)
 
     assert_predicate active, :active?
@@ -29,7 +29,7 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "rp metadata uses registered client and falls back for unknown client" do
-    registered = ClientOidcConnection.new(client_id: "core-next-rp")
+    registered = ClientOidcConnection.new(client_id: "core-app")
     unknown = ClientOidcConnection.new(client_id: "unknown-client")
 
     assert_equal "Core Next RP", registered.rp_name
@@ -50,7 +50,7 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "active scope excludes revoked connections" do
-    active = ClientOidcConnection.create!(user: @user, client_id: "core-next-rp")
+    active = ClientOidcConnection.create!(user: @user, client_id: "core-app")
     revoked = ClientOidcConnection.create!(user: @user, client_id: "core-app", revoked_at: Time.current)
 
     active_connections = ClientOidcConnection.active.to_a
@@ -60,11 +60,11 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "active_tokens delegates to the surface token inventory" do
-    client_connection = ClientOidcConnection.create!(user: @user, client_id: "core-next-rp")
+    client_connection = ClientOidcConnection.create!(user: @user, client_id: "core-app")
     operator = Operator.create!
-    operator_connection = OperatorOidcConnection.create!(staff: operator, client_id: "core-next-rp")
+    operator_connection = OperatorOidcConnection.create!(staff: operator, client_id: "core-org")
     visitor = Visitor.create!
-    visitor_connection = VisitorOidcConnection.create!(visitor: visitor, client_id: "core-next-rp")
+    visitor_connection = VisitorOidcConnection.create!(visitor: visitor, client_id: "core-com")
 
     assert_equal client_connection.user_tokens.session_inventory, client_connection.active_tokens
     assert_equal operator_connection.staff_tokens.session_inventory, operator_connection.active_tokens

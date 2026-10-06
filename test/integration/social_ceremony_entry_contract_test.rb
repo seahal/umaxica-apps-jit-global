@@ -78,7 +78,9 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
       )
       redeem_auth_ceremony_entry!(
         auth_app_sign_in_path,
-        reference: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference,
+        reference: BaseAuthAdmissionCoordinator.issue_handoff!(
+          transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+        ).reference,
         params: { ri: "jp" },
         headers: { "Host" => @host },
       )

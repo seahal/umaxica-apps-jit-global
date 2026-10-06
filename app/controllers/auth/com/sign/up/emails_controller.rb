@@ -25,9 +25,6 @@ module Auth
           AUTHENTICATION_MODE = :guest
 
           SESSION_KEY = :auth_com_up_email_flow_state
-          EXISTING_EMAIL_SESSION_KEY = :auth_com_up_existing_visitor_email_id
-          EXISTING_EMAIL_SKIP_OTP_SESSION_KEY = :auth_com_up_existing_visitor_email_skip_otp
-          DUMMY_EXISTING_EMAIL_SESSION_KEY = :auth_com_up_dummy_existing_visitor_email
           before_action :reject_suspended_sign_up!
 
           before_action :enforce_email_flow!
@@ -128,7 +125,7 @@ module Auth
               return
             end
 
-            bind_sign_up_flow_to_email!(@user_email) unless existing_signup_email_flow? || dummy_existing_email_flow?
+            bind_sign_up_flow_to_email!(@user_email)
             progress_email_flow!(:create)
             redirect_to(auth_com_sign_up_check_email_otp_path(ri: params[:ri], pt: sanitized_rt_param))
           end
@@ -273,9 +270,6 @@ module Auth
 
           def reset_email_flow!
             session[SESSION_KEY] = "init"
-            session.delete(EXISTING_EMAIL_SESSION_KEY)
-            session.delete(EXISTING_EMAIL_SKIP_OTP_SESSION_KEY)
-            session.delete(DUMMY_EXISTING_EMAIL_SESSION_KEY)
             sign_up_flow_locator.clear!
           end
 
@@ -285,50 +279,10 @@ module Auth
           end
 
           def valid_email_session?
-            return dummy_existing_email_session_valid? if dummy_existing_email_flow?
             return false if @user_email.blank?
+            return false if @user_email.otp_expired?
 
-            if existing_signup_email_flow?
-              return false unless Integer(session_existing_email_id.to_s, 10) == @user_email.id
-
-              existing_signup_skip_otp? || !@user_email.otp_expired?
-            else
-              return false if @user_email.otp_expired?
-
-              @user_email.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
-            end
-          end
-
-          def existing_signup_email_flow?
-            session_existing_email_id.present?
-          end
-
-          def dummy_existing_email_flow?
-            session[DUMMY_EXISTING_EMAIL_SESSION_KEY].present?
-          end
-
-          def dummy_existing_email_session_valid?
-            payload = session[DUMMY_EXISTING_EMAIL_SESSION_KEY]
-            return false unless payload.is_a?(Hash) && payload["dummy"] == true
-
-            payload["expires_at"].to_i > Time.current.to_i
-          end
-
-          def mark_dummy_existing_email_flow!
-            session[DUMMY_EXISTING_EMAIL_SESSION_KEY] = {
-              "existing" => true,
-              "dummy" => true,
-              "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
-            }
-            @user_email.errors.clear
-          end
-
-          def session_existing_email_id
-            session[EXISTING_EMAIL_SESSION_KEY]
-          end
-
-          def existing_signup_skip_otp?
-            session[EXISTING_EMAIL_SKIP_OTP_SESSION_KEY] == true
+            @user_email.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
           end
 
           def initiate_visitor_email_verification!(email_address, confirm_policy: "1", email_preferences: {})
@@ -338,39 +292,15 @@ module Auth
             @user_email.visitor_email_status_id = VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP
             @user_email.validate
 
-            # Without a deterministic lock keyed on the address digest, two
-            # sessions submitting the same address can both pass the existence
-            # check below and race the unique index on `save!`, leaving the
-            # loser with a generic uniqueness validation error. The advisory
-            # lock serializes the existence-check-then-create sequence per
-            # email digest.
             return false if @user_email.address_digest.blank?
 
             SignUpEmailPendingGuard.with_lock(
               address_digest: @user_email.address_digest,
               model_class: VisitorEmail,
             ) do
-              existing_email = VisitorEmail.find_by(address_digest: @user_email.address_digest)
-              uniqueness_only = visitor_email_uniqueness_only_error?(@user_email)
-
-              if existing_email &&
-                  existing_email.visitor_email_status_id != VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP &&
-                  (uniqueness_only || @user_email.errors.empty?)
-                cleanup_pending_visitor_signup!
-                mark_dummy_existing_email_flow!
-                next true
-              end
-
-              if existing_email&.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP &&
-                  existing_email.reregistration_window_active?
-                mark_dummy_existing_email_flow!
-                next true
-              end
-
-              next false if @user_email.errors.details.except(:visitor, :visitor_id).any? && !uniqueness_only
-
               cleanup_pending_visitor_signup!
-              remove_existing_unverified_visitor_emails!
+              next false if @user_email.errors.details.except(:visitor, :visitor_id).any?
+
               pending_visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
               @user_email.visitor = pending_visitor
               otp_number = generate_otp_attributes(@user_email)
@@ -397,27 +327,6 @@ module Auth
             return unless cycle&.principal_id
 
             Visitor.find_by(id: cycle.principal_id)&.destroy!
-          end
-
-          def remove_existing_unverified_visitor_emails!
-            return if @user_email.address_digest.blank?
-
-            existing_emails = VisitorEmail.where(address_digest: @user_email.address_digest, visitor_email_status_id: [VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP]).to_a
-            pending_visitor_ids = existing_emails.filter_map(&:visitor_id)
-            Visitor.where(id: pending_visitor_ids).find_each(&:destroy!) if pending_visitor_ids.any?
-            existing_emails.each { |email| email.destroy! if email.visitor_id.blank? }
-          end
-
-          def visitor_email_uniqueness_only_error?(visitor_email)
-            errors_to_check = visitor_email.errors.details.except(:visitor, :visitor_id)
-            return false if errors_to_check.empty?
-
-            uniqueness_fields = %i(address raw_address address_digest)
-            errors_to_check.each do |field, errors|
-              return false unless uniqueness_fields.include?(field)
-              return false unless errors.all? { |error| error[:error] == :taken }
-            end
-            visitor_email.errors.details.any?
           end
 
           def sanitized_rt_param
@@ -449,12 +358,6 @@ module Auth
           end
 
           def current_registration_email
-            return VisitorEmail.new if dummy_existing_email_flow?
-
-            if existing_signup_email_flow?
-              return VisitorEmail.find_by(id: session_existing_email_id)
-            end
-
             cycle = sign_up_flow_locator.current
             return unless cycle&.pending_contact_type == "email"
 
@@ -462,10 +365,6 @@ module Auth
           end
 
           def issue_sign_up_flow!
-            ComTicketRecord.connected_to(role: :writing) do
-              VisitorSignUpFlowStatus.ensure_defaults!
-            end
-
             sign_up_flow_locator.issue!(
               VisitorSignUpFlow.create!(
                 principal_id: nil,

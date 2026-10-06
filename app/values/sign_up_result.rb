@@ -10,20 +10,15 @@ STATUSES = %i(
   expired
   failed
   completed
-  sign_in_handoff_accepted
-  sign_in_handoff_stopped
-  sign_in_handoff_failed
 ).freeze
 
-SUCCESS_STATUSES = %i(ok advanced completed sign_in_handoff_accepted).freeze
+SUCCESS_STATUSES = %i(ok advanced completed).freeze
 FAILURE_STATUSES = %i(
   blocked
   invalid_transition
   unauthorized
   expired
   failed
-  sign_in_handoff_stopped
-  sign_in_handoff_failed
 ).freeze
 
 SignUpResult =
@@ -34,7 +29,6 @@ SignUpResult =
     :response,
     :errors,
     :next_event,
-    :sign_in_handoff,
     :cleanup_required,
     :audit_events,
   ) do
@@ -45,7 +39,6 @@ SignUpResult =
       response: nil,
       errors: [],
       next_event: nil,
-      sign_in_handoff: nil,
       cleanup_required: false,
       audit_events: []
     )
@@ -60,7 +53,6 @@ SignUpResult =
         response: response,
         errors: Array(errors),
         next_event: next_event,
-        sign_in_handoff: sign_in_handoff,
         cleanup_required: !!cleanup_required,
         audit_events: Array(audit_events),
       )

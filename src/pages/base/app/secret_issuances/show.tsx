@@ -16,6 +16,9 @@ type Props = {
   continue_label: string;
   completion_action?: string;
   checkpoint_version?: number;
+  reattempt_action?: string | null;
+  reattempt_of?: string | null;
+  reattempt_label?: string;
 };
 
 export default function Issuance({
@@ -32,6 +35,9 @@ export default function Issuance({
   continue_label,
   completion_action,
   checkpoint_version,
+  reattempt_action,
+  reattempt_of,
+  reattempt_label,
 }: Props) {
   return (
     <Page
@@ -39,6 +45,20 @@ export default function Issuance({
       width="narrow"
     >
       {notice && <output className="block">{notice}</output>}
+      {reattempt_action && reattempt_of && (
+        <form method="post" action={reattempt_action} className="flex flex-col items-start gap-4">
+          <input type="hidden" name="authenticity_token" value={csrf} />
+          <input type="hidden" name="reattempt_of" value={reattempt_of} />
+          {checkpoint_version !== undefined && (
+            <input
+              type="hidden"
+              name="checkpoint_version"
+              value={checkpoint_version}
+            />
+          )}
+          <Button type="submit">{reattempt_label}</Button>
+        </form>
+      )}
       {(state === "omitted" || state === "confirmed") && !completion_action && (
         <TextLink href={continue_href}>{continue_label}</TextLink>
       )}

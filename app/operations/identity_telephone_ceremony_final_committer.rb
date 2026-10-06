@@ -14,6 +14,7 @@ class IdentityTelephoneCeremonyFinalCommitter
       audit_event_class: ClientChronicleEvent,
       audit_level_class: ClientChronicleLevel,
       audit_subject: :actor,
+      binding: true,
     },
     "com" => {
       record_class: VisitorTelephone,
@@ -21,6 +22,7 @@ class IdentityTelephoneCeremonyFinalCommitter
       status_key: :visitor_telephone_status_id,
       unverified_status: VisitorTelephoneStatus::UNVERIFIED,
       verified_status: VisitorTelephoneStatus::VERIFIED,
+      binding: true,
     },
     "org" => {
       record_class: OperatorTelephone,
@@ -92,7 +94,9 @@ class IdentityTelephoneCeremonyFinalCommitter
             "telephone candidate is already verified" unless locked.public_send(config.fetch(:status_key)) ==
               config.fetch(:unverified_status)
 
-      locked.update!(config.fetch(:status_key) => config.fetch(:verified_status))
+      attributes = { config.fetch(:status_key) => config.fetch(:verified_status) }
+      attributes[:binding_finalized_at] = now if config.fetch(:binding, false)
+      locked.update!(attributes)
       @telephone = locked
     end
   end

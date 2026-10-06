@@ -7,7 +7,7 @@ class OidcConnectionRecorderTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults!
     @user = Client.create!(public_id: "recorder_#{SecureRandom.hex(5)}", status_id: ClientStatus::ACTIVE)
-    @client = Data.define(:client_id).new("core-next-rp")
+    @client = Data.define(:client_id).new("core-app")
   end
 
   test "records first use at the surface writer database time by default" do

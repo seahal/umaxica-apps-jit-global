@@ -10,7 +10,9 @@ module Core
       include ::Session
       include ::PreferenceGlobal
       include ::PreferenceAdoption
-      include ::AuthenticationVisitor
+      include ::BrowserRpAuthentication
+      include ::BrowserRpSafeRequestRefresh
+      include ::BrowserRpUnsafeRequestRefresh
       include ::SignErrorResponses
       include ::SessionLimitGate
       include ::AuthorizationAudit
@@ -24,11 +26,7 @@ module Core
 
       allow_browser versions: :modern
 
-      protect_from_forgery using: :header_or_legacy_token,
-                           trusted_origins: JitHostOriginEnv.trusted_origins(
-                             ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
-                           ),
-                           with: :exception
+      protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       AUTHENTICATION_MODE = :deny_all
 
@@ -47,7 +45,7 @@ module Core
       # for this extraction and review the risk in a follow-up lifecycle PR.
       before_action :verify_jump_return_rt!, if: :jump_return_rt_request?
       # Surface-wide default web request limit (defense-in-depth baseline).
-      # RateLimit stays a side-effect-free helper; the limit and its numeric
+      # RateLimit stays an effect-free helper; the limit and its numeric
       # value are declared here on the inheriting controller.
       rate_limit(
         to: 300,
@@ -63,7 +61,6 @@ module Core
       before_action :set_preferences_cookie
       before_action :resolve_param_context
       before_action :set_region
-      before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
       before_action :apply_localization_preferences
       before_action :set_locale
@@ -78,6 +75,14 @@ module Core
 
       def oidc_client_id
         "core-com"
+      end
+
+      def browser_rp_client_id
+        "core-com"
+      end
+
+      def browser_rp_resource_type
+        "visitor"
       end
 
       def oidc_sign_host

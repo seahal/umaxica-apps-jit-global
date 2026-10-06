@@ -77,21 +77,17 @@ class SignOutFlowTest < ActiveSupport::TestCase
       cycle.mark_access_discarded!
 
       assert_predicate cycle, :sign_out_access_discarded?
-      assert_equal now, cycle.access_discarded_at
+      assert_in_delta ClientSignOutFlow.database_now.to_f, cycle.access_discarded_at.to_f, 2.0
 
       cycle.mark_logically_revoked!
 
       assert_predicate cycle, :sign_out_logically_revoked?
-      assert_equal now, cycle.logically_revoked_at
-
-      cycle.await_sign_out_expiry!
-
-      assert_predicate cycle, :sign_out_awaiting_expiry?
+      assert_in_delta ClientSignOutFlow.database_now.to_f, cycle.logically_revoked_at.to_f, 2.0
 
       cycle.complete_sign_out!
 
       assert_predicate cycle, :sign_out_completed?
-      assert_equal now, cycle.completed_at
+      assert_in_delta ClientSignOutFlow.database_now.to_f, cycle.completed_at.to_f, 2.0
     end
   end
 
@@ -104,22 +100,14 @@ class SignOutFlowTest < ActiveSupport::TestCase
     end
 
     assert_predicate cycle, :sign_out_requested?
-    assert_equal now, cycle.requested_at
+    assert_in_delta ClientSignOutFlow.database_now.to_f, cycle.requested_at.to_f, 2.0
   end
 
-  test "sign-out cycle methods reject reverse transitions through FlowBase" do
+  test "sign-out cycle cannot use the private transition writer" do
     cycle = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow))
     cycle.mark_access_discarded!
 
-    error =
-      assert_raises(FlowInvalidTransition) do
-        cycle.transition_cycle_to!(
-          ClientSignOutFlowStatus::REQUESTED,
-          allowed_from: [ClientSignOutFlowStatus::REQUESTED],
-        )
-      end
-
-    assert_match(/invalid transition/, error.message)
+    assert_not_respond_to cycle, :transition_cycle_to!
     assert_equal ClientSignOutFlowStatus::ACCESS_DISCARDED, cycle.reload.status_id
   end
 
@@ -132,16 +120,16 @@ class SignOutFlowTest < ActiveSupport::TestCase
     assert_predicate cycle, :sign_out_requested?
   end
 
-  test "sign-out cycles can fail before completion" do
+  test "sign-out cycles can halt before completion" do
     now = Time.zone.local(2026, 5, 19, 11, 0, 0)
     cycle = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow))
 
     travel_to now do
-      cycle.fail_sign_out!
+      cycle.halt_sign_out!
     end
 
-    assert_predicate cycle, :sign_out_failed?
-    assert_equal now, cycle.failed_at
+    assert_predicate cycle, :sign_out_halted?
+    assert_in_delta ClientSignOutFlow.database_now.to_f, cycle.failed_at.to_f, 2.0
   end
 
   test "status_name_for returns the name for a given status id" do
@@ -180,14 +168,13 @@ class SignOutFlowTest < ActiveSupport::TestCase
     assert_not cycle.can_transition_to?("COMPLETED")
   end
 
-  test "transition_to! raises ArgumentError for an invalid transition" do
+  test "arbitrary sign-out transitions are not public" do
     cycle = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow))
 
-    error = assert_raises(ArgumentError) { cycle.transition_to!("COMPLETED") }
-    assert_match(/invalid transition/, error.message)
+    assert_not_respond_to cycle, :transition_to!
   end
 
-  test "transition_to! accepts an integer status id" do
+  test "can_transition_to? accepts an integer status id" do
     cycle = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow))
     requested_id = ClientSignOutFlow.status_id_for("REQUESTED")
 
@@ -204,28 +191,25 @@ class SignOutFlowTest < ActiveSupport::TestCase
     assert_includes cycle.errors[:completed_at], "must be present for completed cycles"
   end
 
-  test "awaiting_expiry scope returns cycles with the awaiting expiry status" do
+  test "awaiting expiry remains an absorbing tombstone status" do
     awaiting_id = ClientSignOutFlow.status_id_for("AWAITING_EXPIRY")
-    requested = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow))
     awaiting = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow).merge(status_id: awaiting_id))
 
-    results = ClientSignOutFlow.awaiting_expiry
-
-    assert_not_includes results, requested
-    assert_includes results, awaiting
+    assert_not_respond_to awaiting, :sign_out_awaiting_expiry?
+    assert_not awaiting.can_transition_to?("COMPLETED")
   end
 
-  test "transition_to_completed sets completed_at when reaching the completed status" do
+  test "complete_sign_out! sets completed_at when reaching the completed status" do
     now = Time.zone.local(2026, 5, 19, 12, 0, 0)
-    awaiting_id = ClientSignOutFlow.status_id_for("AWAITING_EXPIRY")
-    cycle = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow).merge(status_id: awaiting_id))
+    logically_revoked_id = ClientSignOutFlow.status_id_for("LOGICALLY_REVOKED")
+    cycle = ClientSignOutFlow.create!(cycle_attrs(ClientSignOutFlow).merge(status_id: logically_revoked_id))
 
     travel_to now do
-      cycle.transition_to!("COMPLETED")
+      cycle.complete_sign_out!
     end
 
     assert_predicate cycle, :sign_out_completed?
-    assert_equal now, cycle.completed_at
+    assert_in_delta ClientSignOutFlow.database_now.to_f, cycle.completed_at.to_f, 2.0
   end
 
   private

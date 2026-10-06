@@ -8,7 +8,7 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
     flow = ClientSignInFlow.create!(
       principal: clients(:one), nonce_digest: "a" * 64,
       issued_at: now, expires_at: now + 1.minute,
-      status_id: ClientSignInFlowStatus::PRIMARY_PENDING, state: "PRIMARY_PENDING", step: "primary",
+      state_id: ClientSignInFlowState::PRIMARY_PENDING,
     )
 
     assert_raises(ClientSecretSignInReceipt::InvalidCommit) do
@@ -28,7 +28,7 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
     flow = ClientSignInFlow.create!(
       principal: owner, token: token, nonce_digest: "a" * 64,
       issued_at: now - 1.second, expires_at: now + 1.minute,
-      status_id: ClientSignInFlowStatus::COMPLETED, state: "COMPLETED", step: "completed",
+      state_id: ClientSignInFlowState::COMPLETED,
       completed_at: now, session_issued_at: now,
       authentication_method: "secret", authentication_context: "normal", authentication_event_at: now - 1.second,
     )
@@ -50,7 +50,7 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
     flow = ClientSignInFlow.create!(
       principal: clients(:one), token: token, nonce_digest: "a" * 64,
       issued_at: now - 1.second, expires_at: now + 1.minute,
-      status_id: ClientSignInFlowStatus::COMPLETED, state: "COMPLETED", step: "completed",
+      state_id: ClientSignInFlowState::COMPLETED,
       completed_at: now, session_issued_at: now,
       authentication_method: "secret", authentication_context: "normal", authentication_event_at: now - 1.second,
     )
@@ -72,7 +72,7 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
     flow = ClientSignInFlow.create!(
       principal: owner, token: token, nonce_digest: "a" * 64,
       issued_at: now - 1.second, expires_at: now + 1.minute,
-      status_id: ClientSignInFlowStatus::COMPLETED, state: "COMPLETED", step: "completed",
+      state_id: ClientSignInFlowState::COMPLETED,
       completed_at: now, session_issued_at: now,
       authentication_method: "secret", authentication_context: "normal", authentication_event_at: now - 1.second,
     )

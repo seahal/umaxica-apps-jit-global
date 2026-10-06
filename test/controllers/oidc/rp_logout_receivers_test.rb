@@ -194,6 +194,10 @@ class OidcRpLogoutReceiversTest < ActionDispatch::IntegrationTest
         visitor_token_status_id: VisitorTokenStatus::ACTIVE,
         oidc_client_id: surface.fetch(:client_id),
         oidc_sid: sid,
+        # Back-channel delivery is independent of the visitor session-capacity policy. The
+        # cross-database transactional fixture can reuse the reserved visitor's id while its
+        # committed Ticket rows remain, so setup must not depend on unrelated session-limit state.
+        skip_session_limit_check: true,
       )
       token.rotate_refresh_token!
       token

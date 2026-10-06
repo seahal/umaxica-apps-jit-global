@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>Verification already in progress</title>
+  </head>
+  <body>
+    <main>
+      <h1>Verification already in progress</h1>
+      <p>Choose whether to continue the verification already started in this session or start it again.</p>
+      <form method="post" action="<%= request.path %>" data-turbo="false">
+        <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+        <%= hidden_field_tag :conflict_action, "continue" %>
+        <button type="submit">Continue existing verification</button>
+      </form>
+      <form method="post" action="<%= request.path %>" data-turbo="false">
+        <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+        <%= hidden_field_tag :conflict_action, "cancel_and_start" %>
+        <button type="submit">Cancel and start new verification</button>
+      </form>
+    </main>
+  </body>
+</html>

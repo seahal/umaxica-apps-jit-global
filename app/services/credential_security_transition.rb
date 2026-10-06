@@ -86,10 +86,10 @@ class CredentialSecurityTransition
         references = ceremony_model.where(admission_purpose: %w(local_sign_in local_sign_up))
           .where.not(local_sign_in_flow_ref: nil).select(:local_sign_in_flow_ref)
         flows = flow_model.where(principal_id: actor.id, public_id: references, base_finalized_at: nil)
-          .where.not(status_id: flow_model.status_ids_for("COMPLETED", "FAILED"))
+          .where.not(state_id: flow_model.state_ids_for("COMPLETED", "FAILED", "HALTED"))
         flows.lock.find_each do |flow|
           now = flow_model.database_now
-          flow.fail_sign_in!(now: now) unless flow.expired?(now)
+          flow.halt_sign_in! unless flow.expired?(now)
           if flow.result_digest
             flow.update!(result_expires_at: [flow.result_expires_at, now].min)
           end
@@ -115,9 +115,9 @@ class CredentialSecurityTransition
         end
         transaction.update!(attributes)
         if transaction.is_a?(ClientOidcAuthorizationTransaction)
-          ClientSessionLimitResolutionTransaction.open_status
+          ClientSessionLimitResolutionTransaction.open
             .where(oidc_authorization_transaction_id: transaction.id).lock.find_each do |resolution|
-              resolution.cancel!(now: now)
+              resolution.expire!
             end
         end
         ceremony_model.where(authorization_transaction_ref: transaction.transaction_id).lock.find_each do |ceremony|

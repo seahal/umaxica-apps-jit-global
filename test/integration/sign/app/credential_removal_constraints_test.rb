@@ -60,7 +60,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     raw = SecureRandom.base58(32)
     ClientSecretCredential.create!(
       client: client, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     passkey = create_active_passkey(client)
 
@@ -84,7 +84,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     raw = SecureRandom.base58(32)
     ClientSecretCredential.create!(
       client: client, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     totp = create_active_totp(client)
 
@@ -108,7 +108,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
     raw = SecureRandom.base58(32)
     ClientSecretCredential.create!(
       client: client, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     create_active_passkey(client)
     totp = create_active_totp(client)

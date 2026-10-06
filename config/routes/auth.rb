@@ -41,6 +41,7 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
+      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -133,7 +134,9 @@ scope(module: :auth, as: :auth) do
             namespace(:telephone) do
               resource(:otp, only: %i(show create update destroy))
               resource(:passkey, only: %i(show create update destroy))
-              resource(:secret, only: %i(show create update destroy))
+              resource(:secret, only: %i(show create update destroy)) do
+                post :reattempt
+              end
               resource(:birthdate, only: %i(show update destroy))
             end
           end
@@ -219,6 +222,12 @@ scope(module: :auth, as: :auth) do
         resource :passkey, only: %i(new create)
         resource :totp, only: %i(new create)
 
+        namespace :registration do
+          post "passkey/options", to: "passkeys#options", as: :passkey_options
+          resource :passkey, only: %i(new create)
+          resource :handoff, only: %i(show create)
+        end
+
         resources :emails, only: %i(new create edit update) do
           resource :redelivery, only: :create
         end
@@ -234,16 +243,7 @@ scope(module: :auth, as: :auth) do
           resource :enrollment, only: %i(create destroy)
           resource :handoff, only: %i(show create)
         end
-        resources :totps, only: %i(index new create edit update destroy)
-
-        resources :passkeys do
-          resource :removal, only: :create
-        end
-
-        namespace :passkeys do
-          resource :options, only: :create
-          resource :verification, only: :create
-        end
+        resources :totps, only: %i(new create)
 
         resource :apple, only: %i(show edit create destroy)
         resource :google, only: %i(show edit create destroy)
@@ -286,6 +286,7 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
+      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -402,6 +403,12 @@ scope(module: :auth, as: :auth) do
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
 
+        namespace :registration do
+          post "passkey/options", to: "passkeys#options", as: :passkey_options
+          resource :passkey, only: %i(new create)
+          resource :handoff, only: %i(show create)
+        end
+
         resources :emails, only: %i(new create edit update) do
           resource :redelivery, only: :create
         end
@@ -410,14 +417,6 @@ scope(module: :auth, as: :auth) do
       # Settings and credential management.
       resource :settings, only: :show
       namespace :settings do
-        resources :passkeys do
-          resource :removal, only: :create
-        end
-
-        namespace :passkeys do
-          resource :options, only: :create
-          resource :verification, only: :create
-        end
       end
     end
   end
@@ -457,6 +456,7 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
+      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -586,21 +586,17 @@ scope(module: :auth, as: :auth) do
         resource :handoff, only: %i(show create)
         post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
+
+        namespace :registration do
+          post "passkey/options", to: "passkeys#options", as: :passkey_options
+          resource :passkey, only: %i(new create)
+          resource :handoff, only: %i(show create)
+        end
       end
 
       # Settings and credential management.
       resource :settings, only: :show
       namespace :settings do
-        resources :passkeys do
-          resource :removal, only: :create
-        end
-
-        namespace :passkeys do
-          resource :options, only: :create
-          # Passkey (WebAuthn) assertion verification for settings-level re-auth.
-          resource :verification, only: :create
-        end
-
         resource :entra, only: %i(show edit create destroy)
       end
     end

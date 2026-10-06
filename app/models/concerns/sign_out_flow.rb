@@ -12,7 +12,6 @@ module SignOutFlow
 
     attribute :requested_at, :datetime, default: -> { Time.current }
 
-    before_validation :ensure_sign_out_flow_reference_defaults
     before_validation :assign_default_status_id
     before_validation :assign_default_kind_id
 
@@ -24,7 +23,6 @@ module SignOutFlow
 
     scope :recent_first, -> { order(created_at: :desc) }
     scope :incomplete, -> { where.not(status_id: completed_status_id) }
-    scope :awaiting_expiry, -> { where(status_id: status_id_for("AWAITING_EXPIRY")) }
   end
 
   class_methods do
@@ -83,28 +81,12 @@ module SignOutFlow
     self.class::TRANSITIONS.fetch(status_id, []).include?(next_status_id)
   end
 
-  def transition_to!(next_status, changes: {}, now: Time.current)
-    next_status_id = normalize_status_id(next_status)
-    unless can_transition_to?(next_status_id)
-      raise ArgumentError, "invalid transition from #{status_id.inspect} to #{next_status_id.inspect}"
-    end
-
-    attrs = changes.merge(status_id: next_status_id)
-    attrs[:completed_at] = now if next_status_id == self.class.completed_status_id
-    update!(attrs)
-  end
-
   private
 
   def normalize_status_id(status)
     return status if status.is_a?(Integer)
 
     self.class.status_id_for(status)
-  end
-
-  def ensure_sign_out_flow_reference_defaults
-    self.class::STATUS_MODEL.ensure_defaults!
-    self.class::KIND_MODEL.ensure_defaults!
   end
 
   def assign_default_status_id

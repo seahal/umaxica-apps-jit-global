@@ -5,7 +5,7 @@ module Edit
   module Org
     module Sign
       class OutsController < Edit::Org::BareController
-        include ::AuthenticationClient
+        include ::BrowserRpAuthentication
         include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
@@ -18,7 +18,8 @@ module Edit
         AUTHENTICATION_MODE = :open
         layout "edit/org/application"
 
-        before_action :authenticate_oidc_rp_session!, only: :create
+        before_action :authenticate_oidc_rp_session!, only: :create,
+                                                      unless: -> { params[:logout_challenge].present? }
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
@@ -27,6 +28,8 @@ module Edit
         public
 
         def show
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
           complete_oidc_rp_logout!
         end
 
@@ -39,6 +42,8 @@ module Edit
         end
 
         def create
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
           launch_oidc_rp_logout!(
             client_id: "edit-org",
             issuer_resource_type: "operator",
@@ -48,6 +53,18 @@ module Edit
         end
 
         private
+
+        def oidc_client_id
+          "edit-org"
+        end
+
+        def browser_rp_client_id
+          "edit-org"
+        end
+
+        def browser_rp_resource_type
+          "operator"
+        end
 
         def sign_out_confirmation_form_path
           sign_out_post_path

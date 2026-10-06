@@ -4,6 +4,7 @@
 # actor-specific sign-in flow. An OIDC authorization transaction is never synthesized for Base.
 class LocalAuthenticationResultCoordinator
   RESULT_PURPOSE = "local_sign_in_result"
+  Issuance = Data.define(:code, :reference)
 
   class << self
     public
@@ -15,22 +16,23 @@ class LocalAuthenticationResultCoordinator
       generation = flow.prepare_local_result_delivery!(
         digest: digest, ttl: Valkey::AuthState::OpaqueAdmissionStore::CODE_TTL,
       )
+      reference = SecureRandom.uuid
       store.issue!(
         purpose: RESULT_PURPOSE, actor_type: BaseAuthAdmissionCoordinator::SURFACE_ACTOR.fetch(surface),
         surface: surface, subject_ref: flow.public_id, ceremony_session_ref: ceremony_session_ref,
-        result_generation: generation, raw_code: code,
+        result_generation: generation, raw_code: code, reference: reference,
       )
-      code
+      Issuance.new(code:, reference:)
     end
 
-    def read!(flow:, surface:, raw_code:, store: Valkey::AuthState::OpaqueAdmissionStore.new)
+    def read_reference!(flow:, surface:, reference:, store: Valkey::AuthState::OpaqueAdmissionStore.new)
       unless surface_for(flow) == surface.to_s
         raise BaseAuthAdmissionCoordinator::Denied, "local result surface mismatch"
       end
-      raise BaseAuthAdmissionCoordinator::Denied,
-            "local result missing" unless raw_code.is_a?(String) && raw_code.present?
+      raise BaseAuthAdmissionCoordinator::Denied, "local result missing" unless
+        reference.is_a?(String) && reference.present?
 
-      payload = store.read(raw_code, purpose: RESULT_PURPOSE)
+      payload = store.read_reference!(reference:, purposes: [RESULT_PURPOSE])
       raise BaseAuthAdmissionCoordinator::Denied, "local result missing" unless payload
       unless payload.fetch("surface") == surface.to_s && payload.fetch("subject_ref") == flow.public_id &&
           payload.fetch("actor_type") == BaseAuthAdmissionCoordinator::SURFACE_ACTOR.fetch(surface.to_s)
@@ -38,8 +40,11 @@ class LocalAuthenticationResultCoordinator
       end
 
       generation = Integer(payload.fetch("result_generation").to_s, 10)
-      digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(purpose: RESULT_PURPOSE, raw_code: raw_code)
-      { digest: digest, generation: generation, ceremony_session_ref: payload.fetch("ceremony_session_ref") }
+      unless flow.local_result_delivery_matches?(digest: flow.result_digest, generation: generation)
+        raise BaseAuthAdmissionCoordinator::Denied, "local result generation mismatch"
+      end
+
+      { digest: flow.result_digest, generation:, ceremony_session_ref: payload.fetch("ceremony_session_ref") }
     rescue KeyError, ArgumentError
       raise BaseAuthAdmissionCoordinator::Denied, "local result rejected"
     end

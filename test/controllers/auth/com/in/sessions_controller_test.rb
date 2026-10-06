@@ -8,6 +8,7 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   setup do
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    @base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.umaxica.com")
     @email_address = "sessions-#{SecureRandom.hex(4)}@example.com"
     @visitor = create_verified_visitor_with_email(email_address: @email_address)
     @visitor.visitor_telephones.create!(
@@ -42,21 +43,20 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     Rails.application.reload_routes!
   end
 
-  # The page opens only for a verified sign-in flow waiting on the session limit, reached here
-  # through the real email sign-in (adr/root-login-establishment-boundary.md).
+  # Auth performs the email ceremony; Base owns the durable session-limit resolution page.
 
   test "show for a pending sign-in lists the active session" do
     enter_pending_session_limit!
 
-    get auth_com_sign_in_session_url(ri: "jp")
+    get base_com_sign_in_limitation_url(ri: "jp")
 
     assert_response :success
-    assert_equal "auth/com/sign/in/sessions/show", inertia_component
+    assert_equal "base/com/sign/in/limitations/show", inertia_component
     props = inertia_props
 
-    assert_equal auth_com_sign_in_session_path(ri: "jp"), props.fetch("form").fetch("action")
-    assert_predicate props.fetch("active_sessions").fetch("items").filter_map { |item| item["ref"] }, :present?
-    assert_equal I18n.t("sign.app.in.session.cancel_logout"), props.fetch("cancel").fetch("label")
+    assert_equal base_com_sign_in_limitation_path(ri: "jp"), props.fetch("action")
+    assert_predicate props.fetch("sessions").filter_map { |item| item["session_ref"] }, :present?
+    assert_equal I18n.t("session_limit.edit.cancel_logout"), props.fetch("cancel_label")
   end
 
   test "a legacy restricted session does not open the page" do
@@ -71,17 +71,18 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   test "update without selections keeps the flow pending" do
     enter_pending_session_limit!
 
-    patch auth_com_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }
+    patch base_com_sign_in_limitation_url(ri: "jp"), params: { revoke_refs: [] }
 
     assert_response :unprocessable_content
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "update with ref param revokes that session and commits the waiting sign-in" do
     existing = enter_pending_session_limit!
 
     assert_difference(-> { VisitorToken.where(visitor_id: @visitor.id).count }, 1) do
-      patch auth_com_sign_in_session_url(ri: "jp"), params: { ref: existing.first.signed_ref }
+      patch base_com_sign_in_limitation_url(ri: "jp"),
+            params: { session_ref: resolution_ref(existing.first) }
     end
 
     assert_response :redirect
@@ -95,22 +96,23 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     enter_pending_session_limit!
 
     assert_no_difference(-> { VisitorToken.where(visitor_id: @visitor.id).count }) do
-      patch auth_com_sign_in_session_url(ri: "jp"), params: { revoke_refs: [other_token.signed_ref] }
+      patch base_com_sign_in_limitation_url(ri: "jp"), params: { session_ref: resolution_ref(other_token) }
     end
 
     assert_predicate other_token.reload, :currently_usable?
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "destroy without ref cancels only the waiting flow and redirects to login" do
     existing = enter_pending_session_limit!
     flow = latest_flow
 
-    delete auth_com_sign_in_session_url(ri: "jp")
+    delete base_com_sign_in_limitation_url(ri: "jp")
 
     assert_response :see_other
-    assert_match %r{/sign/in\?ri=jp}, response.location
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_match %r{/sign\?ri=jp}, response.location
+    assert_predicate flow.reload, :sign_in_cancelled?
+    assert_predicate latest_resolution.reload, :cancelled?
     assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
@@ -119,19 +121,25 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     other_token = create_active_session(other_visitor)
     enter_pending_session_limit!
 
-    delete auth_com_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }
+    patch base_com_sign_in_limitation_url(ri: "jp"), params: { session_ref: resolution_ref(other_token) }
 
-    assert_response :success
+    assert_response :unprocessable_content
     assert_predicate other_token.reload, :currently_usable?
   end
 
   private
 
   # Fills the one-session limit, then signs in through the real email ceremony so this browser holds
-  # a verified flow in SESSION_LIMIT_PENDING. Returns the session that fills the limit.
+  # a verified flow with an open resolution child. Returns the session that fills the limit.
   def enter_pending_session_limit!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+    ensure_local_sign_in_admission!(
+      surface: "com",
+      path: auth_com_sign_in_path,
+      params: { ri: "jp" },
+      headers: { "Host" => @host },
+    )
     existing = Array.new(VisitorToken::MAX_SESSIONS_PER_VISITOR) { create_active_session(@visitor) }
     email = VisitorEmail.find_by!(
       visitor_id: @visitor.id,
@@ -148,8 +156,24 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       params: { "visitor_email" => { "pass_code" => ROTP::HOTP.new(key).at(7).to_s },
                 "cf-turnstile-response" => "t", },
     )
+    follow_redirect! if response.redirect?
+    follow_redirect! if response.redirect?
+    post(auth_com_sign_handoff_path(ri: "jp"), params: { ri: "jp" })
+    result_form = response.parsed_body.at_css("form")
+    result = result_form.at_css('input[name="result"]')["value"]
+    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+    host!(@base_host)
+    post(
+      base_com_sign_completion_path,
+      params: { result: result, transaction_ref: transaction_ref, ri: "jp" },
+      headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}",
+                 "Sec-Fetch-Site" => "same-site", },
+    )
+    follow_redirect! if response.redirect?
 
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_response :success
+    assert_equal "base/com/sign/in/limitations/show", inertia_component
+    assert_predicate latest_resolution, :open?
     existing
   ensure
     TurnstileVerifierStub.challenge_enabled = false
@@ -160,11 +184,20 @@ class Auth::Com::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     VisitorSignInFlow.where(principal_id: @visitor.id).recent_first.first
   end
 
+  def latest_resolution
+    VisitorSessionLimitResolutionTransaction.where(sign_in_flow_id: latest_flow.id).order(created_at: :desc).first
+  end
+
+  def resolution_ref(token)
+    SessionLimitResolutionTokenRef.issue(token)
+  end
+
   def create_restricted_session(visitor)
     token = VisitorToken.create!(
       visitor: visitor,
       visitor_token_status_id: VisitorTokenStatus::RESTRICTED,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      skip_session_limit_check: true,
     )
     token.rotate_refresh_token!
     token

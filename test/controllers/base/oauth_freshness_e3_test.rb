@@ -16,23 +16,22 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
 
     assert_oidc_error_redirect(
       error: "login_required",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
     )
   end
 
-  test "prompt=login with an existing session is refused as a new Sign" do
+  test "prompt=login with an existing session starts a fresh ceremony" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
 
     get base_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "login")),
         headers: as_user_headers(user, host: host)
 
-    assert_response :forbidden
-    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
-    assert_nil response.location
+    assert_response :redirect
+    assert_predicate response.location, :present?
   end
 
-  test "stale max_age with an existing session is refused as a new Sign" do
+  test "stale max_age with an existing session starts a fresh ceremony" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
     user = clients(:one)
     token = ClientToken.create!(user: user, authentication_event_at: 1.hour.ago)
@@ -40,9 +39,8 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
     get base_app_oauth_authorization_url(host: host, **authorize_params.merge(max_age: "60")),
         headers: as_user_headers(user, host: host, session_public_id: token.public_id)
 
-    assert_response :forbidden
-    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
-    assert_nil response.location
+    assert_response :redirect
+    assert_predicate response.location, :present?
   end
 
   test "com anonymous prompt=none returns login_required" do
@@ -104,11 +102,11 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   private
 
   def authorize_params
-    client = OidcClientRegistry.find!("core-next-rp")
+    client = OidcClientRegistry.find!("core-app")
     @client_callback_host = URI.parse(client.redirect_uris.first).host
     {
       response_type: "code",
-      client_id: "core-next-rp",
+      client_id: "core-app",
       redirect_uri: client.redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",

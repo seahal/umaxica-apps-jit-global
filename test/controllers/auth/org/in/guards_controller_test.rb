@@ -10,7 +10,6 @@ class Auth::Org::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     @operator = operators(:one)
-    OperatorSignInFlowStatus.ensure_defaults!
   end
 
   test "route resolves to guard controller" do
@@ -105,9 +104,7 @@ class Auth::Org::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
   def create_cycle(status:, issued_at: Time.current, expires_at: 15.minutes.from_now, return_to: nil)
     OperatorSignInFlow.create!(
       principal_id: @operator.id,
-      status_id: OperatorSignInFlow.status_id_for(status),
-      state: status,
-      step: step_for(status),
+      state_id: OperatorSignInFlow.state_id_for(status),
       nonce_digest: OperatorSignInFlow.digest_nonce("pending-test-nonce"),
       issued_at: issued_at,
       expires_at: expires_at,
@@ -138,12 +135,8 @@ class Auth::Org::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller
   end
 
-  def step_for(status)
-    OperatorSignInFlow::STEP_BY_STATUS_ID.fetch(OperatorSignInFlow.status_id_for(status))
-  end
-
   def guarded_cycle_attrs(cycle)
-    cycle.attributes.slice("status_id", "state", "step", "token_id", "completed_at", "session_issued_at")
+    cycle.attributes.slice("state_id", "token_id", "completed_at", "session_issued_at")
   end
 
   def assert_no_sign_in_guard_durable_changes(&)

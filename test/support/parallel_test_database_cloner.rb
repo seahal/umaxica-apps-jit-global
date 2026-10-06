@@ -33,7 +33,14 @@ module ParallelTestDatabaseCloner
     return if @test_process_lock
 
     FileUtils.mkdir_p(Rails.root.join("tmp"))
-    @test_process_lock = Rails.root.join("tmp/parallel-test-databases.lock").open(File::RDWR | File::CREAT, 0o644)
+    run_id = ENV["POSTGRESQL_ISOLATED_TEST_RUN_ID"].to_s
+    lock_name =
+      if run_id.match?(/\A[0-9]{8}[a-z0-9]{0,12}\z/)
+        "parallel-test-databases-#{run_id}.lock"
+      else
+        "parallel-test-databases.lock"
+      end
+    @test_process_lock = Rails.root.join("tmp", lock_name).open(File::RDWR | File::CREAT, 0o644)
     @test_process_lock.flock(File::LOCK_EX)
 
     at_exit do

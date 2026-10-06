@@ -5,7 +5,7 @@
 # that the raw `SignUpStateMachine` does not own:
 #
 # 1. Acquire row lock on the cycle (in a transaction -- see FlowBase).
-# 2. Drive the state machine to the terminal status (CANCELLED/EXPIRED/FAILED).
+# 2. Drive the state machine to the terminal status (CANCELLED/EXPIRED/HALTED).
 # 3. Schedule retention (discard now, purge after PHYSICAL_PURGE_DELAY) on the
 #    cycle row via Retainable#discard_now!.
 # 4. Mark `cleanup_status_id = PENDING` so the worker -- or the synchronous
@@ -17,7 +17,7 @@
 # Replays on already-terminal cycles are idempotent: cleanup is re-enqueued if
 # it never completed; otherwise the call is a no-op and the cycle is reloaded.
 #
-# Direct `SignUpStateMachine.call(event: :cancel | :expire | :fail, ...)`
+# Direct `SignUpStateMachine.call(event: :cancel | :expire | :halt, ...)`
 # WITHOUT going through this service will skip retention scheduling and
 # cleanup -- pending dependent rows will not be tidied and the cycle will
 # never be physically purged. Production callers must use SignUpTermination (or one
@@ -25,7 +25,7 @@
 class SignUpTermination
   PHYSICAL_PURGE_DELAY = 30.minutes
 
-  TERMINAL_EVENTS = %i(cancel expire fail).freeze
+  TERMINAL_EVENTS = %i(cancel expire halt).freeze
 
   def self.call(...)
     new(...).call
@@ -71,7 +71,7 @@ class SignUpTermination
     case event
     when :cancel then cycle.respond_to?(:sign_up_cancelled?) && cycle.sign_up_cancelled?
     when :expire then cycle_status_name == "EXPIRED"
-    when :fail   then cycle_status_name == "FAILED"
+    when :halt   then cycle_status_name == "HALTED"
     end
   end
 
@@ -79,7 +79,7 @@ class SignUpTermination
     case event
     when :cancel then cycle.respond_to?(:sign_up_cancelled?) && cycle.sign_up_cancelled?
     when :expire then cycle_status_name == "EXPIRED"
-    when :fail   then cycle_status_name == "FAILED"
+    when :halt   then cycle_status_name == "HALTED"
     end
   end
 

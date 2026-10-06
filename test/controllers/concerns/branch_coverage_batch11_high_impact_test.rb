@@ -60,7 +60,6 @@ class BranchCoverageBatch11HighImpactTest < ActiveSupport::TestCase
   end
 
   test "sign up state machine invalid arms" do
-    ClientSignUpFlowStatus.ensure_defaults!
     email_ticket = ClientSignUpFlow.new(
       step: "start",
       entry_method: "email",
@@ -87,7 +86,7 @@ class BranchCoverageBatch11HighImpactTest < ActiveSupport::TestCase
 
     assert_equal :invalid_transition, result.status
 
-    result = SignUpStateMachine.call(ticket: checkpoint, event: :handoff_to_sign_in, actor_context: nil)
+    result = SignUpStateMachine.call(ticket: checkpoint, event: :teleport, actor_context: nil)
 
     assert_equal :invalid_transition, result.status
 

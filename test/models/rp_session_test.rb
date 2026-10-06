@@ -47,7 +47,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -56,7 +56,7 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_equal 21, session.public_id.length
       assert_predicate session.public_id, :ascii_only?
       assert_equal root.id, session.public_send(rp_session_case[:parent_key])
-      assert_equal "core-next-rp", session.oidc_client_id
+      assert_equal "core-app", session.oidc_client_id
       assert_predicate session, :active?
     end
 
@@ -64,7 +64,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       first = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -72,7 +72,7 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_raises(ActiveRecord::RecordNotUnique) do
         rp_session_case[:model].create!(
           rp_session_case[:parent_label] => root,
-          :oidc_client_id => "core-next-rp",
+          :oidc_client_id => "core-app",
           :oidc_scope => "openid profile",
           :refresh_token_expires_at => 1.hour.from_now,
         )
@@ -82,7 +82,7 @@ class RpSessionTest < ActiveSupport::TestCase
 
       replacement = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid email",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -92,27 +92,52 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_equal "openid email", replacement.oidc_scope
     end
 
-    test "#{rp_session_case[:name]} rp session is deleted when the parent root is physically deleted" do
+    test "#{rp_session_case[:name]} rp session remains when the rotating root row is physically deleted" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
 
-      assert_difference -> { rp_session_case[:model].count }, -1 do
+      assert_no_difference -> { rp_session_case[:model].count } do
         rp_session_case[:root_model].delete(root.id)
       end
 
-      assert_not rp_session_case[:model].exists?(session.id)
+      assert rp_session_case[:model].exists?(session.id)
+      assert_not session.reload.active?
+    end
+
+    test "#{rp_session_case[:name]} rp session stays usable when the root token rotates to a new row" do
+      root = rp_session_case[:root_builder].call
+      root.refresh_token = "rp-root-rotation-verifier"
+      root.save!
+      session = rp_session_case[:model].create!(
+        rp_session_case[:parent_label] => root,
+        :oidc_client_id => "core-app",
+        :oidc_scope => "openid profile",
+        :refresh_token_expires_at => 1.hour.from_now,
+      )
+      digest = rp_session_case[:root_model].digest_refresh_token("rp-root-rotation-verifier")
+
+      result = rp_session_case[:root_model].rotate_refresh!(presented_refresh_digest: digest)
+
+      assert_equal :rotated, result.fetch(:status)
+      replacement = result.fetch(:token)
+
+      assert_not_equal root.id, replacement.id
+      assert_equal replacement.id, replacement.device_session.reload.current_refresh_token_id
+      assert_predicate session.reload, :active?
+      assert_equal replacement.device_session_id, session.device_session_id
+      assert_equal replacement.id, session.parent_token.id
     end
 
     test "#{rp_session_case[:name]} rp session rotates refresh tokens without exposing raw secrets" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -132,7 +157,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root.update!(discard_at: absolute_expiry)
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => absolute_expiry + 1.day,
       )
@@ -152,7 +177,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -174,7 +199,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -190,7 +215,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -206,7 +231,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-next-rp",
+        :oidc_client_id => "core-app",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 2.days.from_now,
       )

@@ -16,7 +16,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
       Digest::SHA256.digest(@code_verifier),
       padding: false,
     )
-    @client = OidcClientRegistry.find("core-next-rp")
+    @client = OidcClientRegistry.find("core-app")
     @redirect_uri = @client.redirect_uris.first
   end
 
@@ -263,7 +263,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
     assert_equal OidcSubject.for(@user, resource_type: "client"), payload.fetch("subject")
-    assert_equal "core-next-rp", payload.fetch("client_id")
+    assert_equal "core-app", payload.fetch("client_id")
     assert_equal @redirect_uri, payload.fetch("redirect_uri")
     assert_equal @code_challenge, payload.fetch("code_challenge")
     assert_equal "S256", payload.fetch("code_challenge_method")
@@ -286,13 +286,13 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "issues authorization code for operator with org client" do
     staff = operators(:one)
-    org_client = OidcClientRegistry.find("core-next-rp")
+    org_client = OidcClientRegistry.find("core-org")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-org",
         redirect_uri: org_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -314,13 +314,13 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "operator authorization code is stored with staff_id backing column" do
     staff = operators(:one)
-    org_client = OidcClientRegistry.find("core-next-rp")
+    org_client = OidcClientRegistry.find("core-org")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-org",
         redirect_uri: org_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -335,18 +335,18 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
     assert_equal OidcSubject.for(staff, resource_type: "operator"), payload.fetch("subject")
-    assert_equal "core-next-rp", payload.fetch("client_id")
+    assert_equal "core-org", payload.fetch("client_id")
   end
 
   test "issues authorization code for visitor with com client" do
     visitor = create_visitor!
-    com_client = OidcClientRegistry.find("core-next-rp")
+    com_client = OidcClientRegistry.find("core-com")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-com",
         redirect_uri: com_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -367,13 +367,13 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "visitor authorization code is stored with visitor_id" do
     visitor = create_visitor!
-    com_client = OidcClientRegistry.find("core-next-rp")
+    com_client = OidcClientRegistry.find("core-com")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-com",
         redirect_uri: com_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -388,13 +388,13 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
     assert_equal OidcSubject.for(visitor, resource_type: "visitor"), payload.fetch("subject")
-    assert_equal "core-next-rp", payload.fetch("client_id")
+    assert_equal "core-com", payload.fetch("client_id")
   end
 
   # --- realm/redirect_uri binding (issuer/realm must match the registered redirect_uri's realm) ---
 
-  test "BASE_APP authorize rejects an org core-next-rp redirect_uri before code issuance" do
-    org_redirect_uri = OidcClientRegistry.find("core-next-rp").redirect_uris_by_realm.fetch("operator").first
+  test "BASE_APP authorize rejects an org core-org redirect_uri before code issuance" do
+    org_redirect_uri = OidcClientRegistry.find("core-org").redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: valid_params.merge(redirect_uri: org_redirect_uri),
@@ -405,14 +405,14 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_ORG authorize rejects an app core-next-rp redirect_uri before code issuance" do
+  test "BASE_ORG authorize rejects an app core-app redirect_uri before code issuance" do
     staff = operators(:one)
-    app_redirect_uri = OidcClientRegistry.find("core-next-rp").redirect_uris_by_realm.fetch("client").first
+    app_redirect_uri = OidcClientRegistry.find("core-app").redirect_uris_by_realm.fetch("client").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-org",
         redirect_uri: app_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -427,14 +427,14 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_COM authorize rejects an org core-next-rp redirect_uri before code issuance" do
+  test "BASE_COM authorize rejects an org core-org redirect_uri before code issuance" do
     visitor = create_visitor!
-    org_redirect_uri = OidcClientRegistry.find("core-next-rp").redirect_uris_by_realm.fetch("operator").first
+    org_redirect_uri = OidcClientRegistry.find("core-org").redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-com",
         redirect_uri: org_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -473,15 +473,15 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_ORG authorize rejects a side-app client before code issuance" do
+  test "BASE_ORG authorize rejects a warp-app client before code issuance" do
     staff = operators(:one)
-    app_client = OidcClientRegistry.find!("side-app")
+    app_client = OidcClientRegistry.find!("warp-app")
     app_redirect_uri = app_client.redirect_uris.first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "side-app",
+        client_id: "warp-app",
         redirect_uri: app_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -496,15 +496,15 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "BASE_ORG authorize rejects a side-com client before code issuance" do
+  test "BASE_ORG authorize rejects a warp-com client before code issuance" do
     staff = operators(:one)
-    com_client = OidcClientRegistry.find!("side-com")
+    com_client = OidcClientRegistry.find!("warp-com")
     com_redirect_uri = com_client.redirect_uris.first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "side-com",
+        client_id: "warp-com",
         redirect_uri: com_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -524,7 +524,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   def valid_params(overrides = {})
     {
       response_type: "code",
-      client_id: "core-next-rp",
+      client_id: "core-app",
       redirect_uri: @redirect_uri,
       code_challenge: @code_challenge,
       code_challenge_method: "S256",

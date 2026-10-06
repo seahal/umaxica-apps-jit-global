@@ -40,6 +40,7 @@ class VisitorTelephone < ComPrincipalRecord
   include Retainable
   include Telephone
   include PublicId
+  include ContactBinding
 
   self.filter_attributes += %w(number)
 
@@ -56,13 +57,7 @@ class VisitorTelephone < ComPrincipalRecord
   validates :otp_counter, presence: true
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_telephone_status_id, numericality: { only_integer: true }
-  validates :number_digest,
-            blind_index_uniqueness: {
-              error_attribute: :number,
-              status_column: :visitor_telephone_status_id,
-              deleted_status_id: VisitorTelephoneStatus::DELETED,
-            },
-            allow_blank: true
+  validates :number_digest, presence: true, if: :binding_effective?
   validates_with AssociatedRecordLimitValidator,
                  on: :create,
                  owner: :visitor,
@@ -74,5 +69,9 @@ class VisitorTelephone < ComPrincipalRecord
 
   def to_param
     public_id
+  end
+
+  def contact_binding_digest
+    number_digest
   end
 end

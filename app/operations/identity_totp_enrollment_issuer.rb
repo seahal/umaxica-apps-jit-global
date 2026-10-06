@@ -56,7 +56,8 @@ class IdentityTotpEnrollmentIssuer
           transaction.session_ref == token.public_id &&
           %w(bootstrap credential_registration).include?(transaction.purpose) &&
           enrollment_scope_permitted?(transaction) &&
-          transaction.required_aal == "none" && !transaction.phishing_resistant_required &&
+          !transaction.step_up_required && !transaction.phishing_resistant_required &&
+          !transaction.user_verification_required && !transaction.full_reauthentication_required &&
           transaction.allowed_methods_array.include?("totp") && transaction.status == "pending" &&
           !transaction.expired?(now: now) && record.status == "PENDING" && record.discard_at > now
         raise IdentityTotpCeremonyContract::Error, "TOTP enrollment permission unavailable"

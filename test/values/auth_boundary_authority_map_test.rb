@@ -4,17 +4,17 @@
 require "test_helper"
 
 class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
-  test "seven first-party RP client ids are unique and named" do
+  test "first-party RP client ids are unique and named" do
     ids = AuthBoundaryAuthorityMap.first_party_rp_client_ids
 
-    assert_equal 7, ids.size
+    assert_equal 10, ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_includes ids, "core-app"
     assert_includes ids, "edit-org"
-    assert_includes ids, "side-com"
+    assert_includes ids, "warp-com"
   end
 
-  test "deprecated shared browser client ids do not overlap the seven RPs" do
+  test "deprecated shared browser client ids do not overlap the first-party RPs" do
     deprecated = AuthBoundaryAuthorityMap.deprecated_shared_browser_client_ids
 
     assert_includes deprecated, "sign-rp"
@@ -45,16 +45,17 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_equal "jp", metadata.fetch("core-app-jp").fetch(:region)
     assert_equal "us", metadata.fetch("core-app-us").fetch(:region)
     assert_equal "core", metadata.fetch("core-app-jp").fetch(:surface)
-    assert_equal "warp", metadata.fetch("side-app-us").fetch(:surface)
+    assert_equal "warp", metadata.fetch("warp-app-us").fetch(:surface)
     assert_equal "operator", metadata.fetch("edit-org").fetch(:actor)
   end
 
   test "every RP face maps to surface face and actor" do
     AuthBoundaryAuthorityMap.rp_faces.each do |client_id, meta|
-      expected_surface = client_id.start_with?("side-") ? "warp" : client_id.split("-").first
+      expected_surface = client_id.start_with?("warp-") ? "warp" : client_id.split("-").first
+      expected_face = client_id.start_with?("base-") ? client_id.split("-").second : client_id.split("-").last
 
       assert_equal expected_surface, meta.fetch(:surface)
-      assert_equal client_id.split("-").last, meta.fetch(:face)
+      assert_equal expected_face, meta.fetch(:face)
       assert_includes %w(client visitor operator), meta.fetch(:actor)
       assert_equal "/oidc/callback", AuthBoundaryAuthorityMap.callback_path_for(client_id)
       assert_equal "/sign/out", AuthBoundaryAuthorityMap.sign_out_path_for(client_id)

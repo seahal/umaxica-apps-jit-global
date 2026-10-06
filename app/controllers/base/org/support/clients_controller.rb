@@ -15,7 +15,6 @@ module Base
         REALM = "app"
         declare_authentication_mode! :private
 
-        before_action :authenticate_operator!
         before_action :no_store
 
         public

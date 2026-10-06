@@ -103,14 +103,15 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
   # signature rather than a stub -- `AuthCeremonyAdmission#admit_or_render_sign_ceremony!` verifies
   # it for real.
   def admission_reference_for(surface, path)
-    client = OidcClientRegistry.find!("core-next-rp")
+    client_id = { "app" => "core-app", "com" => "core-com", "org" => "core-org" }.fetch(surface)
+    client = OidcClientRegistry.find!(client_id)
     transaction =
       OidcAuthorizationTransactionCoordinator.issue!(
         surface: surface,
         intent: INTENT_BY_PATH.fetch(path),
         params: {
           response_type: "code",
-          client_id: "core-next-rp",
+          client_id: client_id,
           redirect_uri: client.redirect_uris_by_realm.fetch(REALM_BY_SURFACE.fetch(surface)).first,
           code_challenge: SecureRandom.urlsafe_base64(32),
           code_challenge_method: "S256",
@@ -119,6 +120,8 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
   end
 end

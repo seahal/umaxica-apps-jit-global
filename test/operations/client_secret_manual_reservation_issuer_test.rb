@@ -10,6 +10,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     operation = SecureRandom.uuid
@@ -40,6 +42,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     operation_id = SecureRandom.uuid
@@ -93,6 +97,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     ClientSecretManualReservationIssuer.call!(
@@ -133,6 +139,10 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
             last_step_up_session_public_id: token.public_id,
             last_step_up_purpose: "step_up",
             last_step_up_audience: "step_up:app",
+            last_step_up_phishing_resistant: true,
+            last_step_up_user_verified: true,
+            last_step_up_credential_ref: "test-step-up",
+            last_step_up_full_reauthentication: false,
           }.merge(mismatch),
         )
         assert_no_difference("ClientSecretIssuance.count") do
@@ -156,6 +166,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     [
@@ -186,6 +198,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
 
@@ -212,6 +226,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     operation_id = SecureRandom.uuid
@@ -247,6 +263,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
 
@@ -282,6 +300,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     operation_id = SecureRandom.uuid
@@ -306,6 +326,8 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     [0, 1, 18, 19, 20].each do |count|
@@ -321,7 +343,7 @@ class ClientSecretManualReservationIssuerTest < ActiveSupport::TestCase
           raw = SecureRandom.base58(32)
           ClientSecretCredential.create!(
             client: actor, issuance: completed, name: "Capacity fixture", password: raw,
-            lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+            confirmed_at: now,
           )
         end
         if count == 20

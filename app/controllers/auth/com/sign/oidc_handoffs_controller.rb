@@ -20,7 +20,7 @@ module Auth
         def sign_in_sequence_surface = :com
 
         def authorize_oidc_result_handoff!
-          return reject_oidc_result_handoff! unless current_db_sign_in_flow_for_sequence&.sign_in_dashboard_pending?
+          return reject_oidc_result_handoff! unless current_db_sign_in_flow_for_sequence&.sign_in_completed?
 
           authorize!(current_visitor, to: :show?)
         end

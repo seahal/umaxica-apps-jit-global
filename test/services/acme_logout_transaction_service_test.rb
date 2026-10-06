@@ -12,7 +12,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "core-next-rp",
+        initiating_client_id: "core-app",
         completion_url: completion_url,
         actor_ref: "actor_xxx",
         session_ref: "session_xxx",
@@ -30,7 +30,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "core-next-rp",
+        initiating_client_id: "core-app",
         completion_url: completion_url,
         ri: "jp",
       )
@@ -46,7 +46,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "core-next-rp",
+        initiating_client_id: "core-app",
         completion_url: completion_url,
         ri: "us",
       )

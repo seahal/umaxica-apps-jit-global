@@ -15,8 +15,6 @@ module Base
         declare_authentication_mode! :private
         REGISTRATION_METHODS = %w(passkey totp email_otp).freeze
 
-        before_action :authenticate_client!
-
         public
 
         def show

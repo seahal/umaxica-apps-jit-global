@@ -17,12 +17,11 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
       now = ClientSignInFlow.database_now
       flow = ClientSignInFlow.create!(
         principal_id: actor.id, authentication_method: "secret", authentication_event_at: now,
-        authentication_context: "normal", state: "SESSION_LIMIT_PENDING",
-        status_id: ClientSignInFlowStatus::SESSION_LIMIT_PENDING, step: "session_limit",
+        authentication_context: "normal", state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
         nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)), expires_at: now + 1.minute,
       )
       authorization = ClientOidcAuthorizationTransaction.create_transaction!(
-        surface: "app", intent: "sign_in", client_id: "core-next-rp", redirect_uri: "https://example.com/callback",
+        surface: "app", intent: "sign_in", client_id: "core-app", redirect_uri: "https://example.com/callback",
         response_type: "code", scope: "openid", state: "state", nonce: "nonce", code_challenge: "challenge",
         code_challenge_method: "S256", login_challenge: SecureRandom.base58(32),
         login_challenge_expires_at: now + 1.minute, expires_at: now + 1.minute,
@@ -32,7 +31,12 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
         actor_ref: actor.public_id, session_ref: nil, auth_method: "passcode", acr: "aal1",
         authentication_event_at: now,
       )
-      issued = ClientSessionLimitResolutionTransaction.issue_for_oidc!(actor: actor, oidc_transaction: authorization)
+      raw_binding = SecureRandom.urlsafe_base64(32)
+      binding_digest = ClientSessionLimitResolutionTransaction.digest_challenge(raw_binding)
+      issued = ClientSessionLimitResolutionTransaction.issue!(
+        actor: actor, sign_in_flow: flow, browser_binding_digest: binding_digest,
+        oidc_authorization_transaction: authorization,
+      )
       resolution = issued.transaction
       ready = Queue.new
       mutated = Queue.new
@@ -46,15 +50,16 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
               connection.execute("SET lock_timeout = '10000'")
               ready << connection.select_value("SELECT pg_backend_pid()")
               begin
-                resolution.with_secret_revocation_authority!(
+                resolution.select_session!(
                   actor: Client.find(actor.id),
                   challenge: issued.challenge,
-                ) do
-                  mutated << true
-                  token.revoke!
-                end
+                  session_ref: token.public_id,
+                  browser_binding_digest: binding_digest,
+                )
+                mutated << true
+                token.revoke!
                 :accepted
-              rescue ClientSessionLimitResolutionTransaction::InvalidSecretResolution
+              rescue FlowInvalidTransition
                 :refused
               ensure
                 connection.execute("RESET lock_timeout")
@@ -85,10 +90,13 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
           resolution.lock!
           flow.lock!
           if terminal == :cancellation
-            flow.fail_sign_in!(now: ClientSignInFlow.database_now)
-            resolution.cancel!(now: ClientSignInFlow.database_now)
+            flow.halt_sign_in!
+            resolution.cancel!(
+              actor: actor, challenge: issued.challenge, browser_binding_digest: binding_digest,
+            )
           else
             flow.update!(expires_at: ClientSignInFlow.database_now)
+            resolution.expire!
           end
         end
       end
@@ -99,9 +107,9 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
       assert_equal ClientTokenStatus::ACTIVE, token.reload.user_token_status_id
       if terminal == :cancellation
         assert_predicate resolution.reload, :cancelled?
-        assert_predicate flow.reload, :sign_in_failed?
+        assert_predicate flow.reload, :sign_in_halted?
       else
-        assert_predicate resolution.reload, :pending?
+        assert_predicate resolution.reload, :expired?
         assert flow.reload.expired?(ClientSignInFlow.database_now)
       end
 
@@ -118,12 +126,11 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id, authentication_method: "secret", authentication_event_at: now,
-      authentication_context: "normal", state: "SESSION_LIMIT_PENDING",
-      status_id: ClientSignInFlowStatus::SESSION_LIMIT_PENDING, step: "session_limit",
+      authentication_context: "normal", state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
       nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)), expires_at: now + 1.minute,
     )
     authorization = ClientOidcAuthorizationTransaction.create_transaction!(
-      surface: "app", intent: "sign_in", client_id: "core-next-rp", redirect_uri: "https://example.com/callback",
+      surface: "app", intent: "sign_in", client_id: "core-app", redirect_uri: "https://example.com/callback",
       response_type: "code", scope: "openid", state: "state", nonce: "nonce", code_challenge: "challenge",
       code_challenge_method: "S256", login_challenge: SecureRandom.base58(32),
       login_challenge_expires_at: now + 1.minute, expires_at: now + 1.minute,
@@ -133,67 +140,83 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
       actor_ref: actor.public_id, session_ref: nil, auth_method: "passcode", acr: "aal1",
       authentication_event_at: now,
     )
-    issued = ClientSessionLimitResolutionTransaction.issue_for_oidc!(actor: actor, oidc_transaction: authorization)
+    raw_binding = SecureRandom.urlsafe_base64(32)
+    binding_digest = ClientSessionLimitResolutionTransaction.digest_challenge(raw_binding)
+    issued = ClientSessionLimitResolutionTransaction.issue!(
+      actor: actor, sign_in_flow: flow, browser_binding_digest: binding_digest,
+      oidc_authorization_transaction: authorization,
+    )
     resolution = issued.transaction
     ready = Queue.new
     future = nil
     source_pids = []
-    resolution.with_secret_revocation_authority!(actor: actor, challenge: issued.challenge) do
-      source_pids << Client.lease_connection.select_value("SELECT pg_backend_pid()")
-      future =
-        Concurrent::Future.execute do
-          AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
-            connection.execute("SET lock_timeout = '10000'")
-            ready << connection.select_value("SELECT pg_backend_pid()")
-            begin
-              Client.find(actor.id).with_lock do
-                AppTicketRecord.transaction do
-                  current_authorization = ClientOidcAuthorizationTransaction.find(authorization.id)
-                  current_authorization.lock!
-                  current_resolution = ClientSessionLimitResolutionTransaction.find(resolution.id)
-                  current_resolution.lock!
-                  current_flow = ClientSignInFlow.find(flow.id)
-                  current_flow.lock!
-                  current_flow.fail_sign_in!(now: ClientSignInFlow.database_now)
-                  current_resolution.cancel!(now: ClientSignInFlow.database_now)
+    actor.with_lock do
+      AppTicketRecord.transaction do
+        authorization.lock!
+        resolution.lock!
+        flow.lock!
+        source_pids << Client.lease_connection.select_value("SELECT pg_backend_pid()")
+        future =
+          Concurrent::Future.execute do
+            AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+              connection.execute("SET lock_timeout = '10000'")
+              ready << connection.select_value("SELECT pg_backend_pid()")
+              begin
+                Client.find(actor.id).with_lock do
+                  AppTicketRecord.transaction do
+                    current_authorization = ClientOidcAuthorizationTransaction.find(authorization.id)
+                    current_authorization.lock!
+                    current_resolution = ClientSessionLimitResolutionTransaction.find(resolution.id)
+                    current_resolution.lock!
+                    current_flow = ClientSignInFlow.find(flow.id)
+                    current_flow.lock!
+                    current_flow.halt_sign_in!
+                    current_resolution.cancel!(
+                      actor: Client.find(actor.id), challenge: issued.challenge,
+                      browser_binding_digest: binding_digest,
+                    )
+                  end
                 end
+                :canceled
+              ensure
+                connection.execute("RESET lock_timeout")
               end
-              :canceled
-            ensure
-              connection.execute("RESET lock_timeout")
             end
           end
-        end
-      worker_pid = Timeout.timeout(10) { ready.pop }
-      source_pids << worker_pid
-      Timeout.timeout(10) do
-        loop do
-          if future.complete?
-            raise RuntimeError, "cancellation escaped selection locks: #{future.value!.inspect}"
-          end
-
-          blocked =
-            Client.uncached do
-              Client.lease_connection.select_value(
-                "SELECT cardinality(pg_blocking_pids(#{Integer(worker_pid)})) > 0",
-              )
+        worker_pid = Timeout.timeout(10) { ready.pop }
+        source_pids << worker_pid
+        Timeout.timeout(10) do
+          loop do
+            if future.complete?
+              raise RuntimeError, "cancellation escaped selection locks: #{future.value!.inspect}"
             end
-          break if blocked
 
-          Thread.pass
+            blocked =
+              Client.uncached do
+                Client.lease_connection.select_value(
+                  "SELECT cardinality(pg_blocking_pids(#{Integer(worker_pid)})) > 0",
+                )
+              end
+            break if blocked
+
+            Thread.pass
+          end
         end
+
+        assert_predicate resolution.reload, :pending?
+        resolution.select_session!(
+          actor: actor, challenge: issued.challenge, session_ref: token.public_id,
+          browser_binding_digest: binding_digest,
+        )
+        token.revoke!
       end
-
-      assert_predicate resolution.reload, :pending?
-      resolution.mark_session_selected!(session_ref: SessionLimitResolutionTokenRef.issue(token))
-      token.revoke!
     end
 
     assert_equal :canceled, Timeout.timeout(10) { future.value! }
     assert_equal 2, source_pids.uniq.size
     assert_equal ClientTokenStatus::REVOKED, token.reload.user_token_status_id
     assert_predicate resolution.reload, :cancelled?
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_predicate flow.reload, :sign_in_halted?
     assert_nil flow.token_id
     assert_nil flow.session_issued_at
     assert_equal 1, ClientToken.where(user_id: actor.id).count

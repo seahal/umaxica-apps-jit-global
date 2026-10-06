@@ -23,7 +23,6 @@ module Base
           STEP_UP_SCOPE = "enforcement_case_release"
 
           declare_authentication_mode! :private
-          before_action :authenticate_operator!
           before_action :no_store
           before_action :set_enforcement_case
           before_action :authorize_release!, only: :new

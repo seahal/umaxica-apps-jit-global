@@ -81,15 +81,15 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
     assert_not_empty extra.errors[:base]
   end
 
-  test "rejects duplicate number digest" do
+  test "effective telephone numbers are unique at finalization" do
     existing = VisitorTelephone.create!(
       visitor: @visitor,
       number: "090-4444-0000",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
       otp_counter: "0",
       otp_private_key: "secret_credential",
-    )
-    duplicate = VisitorTelephone.new(
+    ).finalize_binding!
+    duplicate = VisitorTelephone.create!(
       visitor: @visitor,
       number: "+819044440000",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
@@ -97,9 +97,9 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       otp_private_key: "secret_credential",
     )
 
-    assert_equal existing.number_digest, duplicate.tap(&:valid?).number_digest
-    assert_not duplicate.valid?
-    assert_not_empty duplicate.errors[:number]
+    assert_equal existing.number_digest, duplicate.number_digest
+    assert_predicate duplicate, :valid?
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.finalize_binding! }
   end
 
   test "deleted sign-up telephone does not reserve number forever" do

@@ -2,9 +2,9 @@
 # frozen_string_literal: true
 
 # Session-limit resolution for a sign-in that is waiting on the concurrent
-# session limit (2 active). The waiting sign-in has issued nothing: its verified
-# sign-in flow in SESSION_LIMIT_PENDING, located through this browser's
-# session, is the only authority this page acts on
+# session limit (2 active). The waiting sign-in has issued nothing: its
+# browser-bound durable resolution transaction is the only authority this page
+# acts on
 # (adr/root-login-establishment-boundary.md).
 #
 #   - show: list the account's active sessions
@@ -99,8 +99,7 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
     else
       # Cancelling ends only this pending flow; it issued nothing, and no
       # other session of the account is touched.
-      flow = current_db_sign_in_flow_for_sequence
-      with_sign_in_flow_writing(flow) { flow.fail_sign_in! } if flow&.sign_in_session_limit_pending?
+      cancel_pending_session_limit_resolution!
       consume_session_limit_gate!
       clear_current_sign_in_flow_locator!
 
@@ -115,8 +114,7 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
   # Only a verified sign-in flow waiting on the session limit opens this page.
   # A signed-in browser has nothing pending here.
   def require_authentication_or_gate
-    flow = current_db_sign_in_flow_for_sequence
-    if flow&.sign_in_session_limit_pending? && flow.authentication_event_at
+    if session_limit_resolution&.oidc_authorization_transaction_id.present?
       redirect_to_surface_url(
         base_app_sign_in_limitation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https", ri: params[:ri]),
         status: :see_other,
@@ -135,7 +133,7 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
   end
 
   def pending_session_limit_cycle?
-    current_db_sign_in_flow_for_sequence&.sign_in_session_limit_pending?
+    session_limit_resolution.present?
   end
 
   def pending_oidc_session_limit_cycle?
@@ -152,11 +150,10 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
   # The actor is the pending flow's principal, read from the flow this
   # browser's locator names; never a principal id kept in the session.
   def resolve_current_client
-    flow = current_db_sign_in_flow_for_sequence
-    return unless flow&.sign_in_session_limit_pending?
+    resolution = session_limit_resolution
+    return unless resolution
 
-    principal = with_sign_in_flow_writing(flow) { flow.principal }
-    principal if principal.is_a?(Client)
+    Client.find_by(public_id: resolution.actor_ref)
   end
 
   def load_session_data
@@ -244,6 +241,8 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
       return
     end
 
+    return resolve_child_session!(user, token) if session_limit_resolution
+
     AuthenticationSelectedSessionRevoker.call(
       owner: user,
       token: token,
@@ -256,6 +255,13 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
   end
 
   def revoke_sessions_by_refs(user, refs)
+    if session_limit_resolution
+      token = ClientToken.find_from_signed_ref(refs.first)
+      return 0 unless token
+
+      return resolve_child_session!(user, token) ? 1 : 0
+    end
+
     revoked_count = 0
 
     AppTicketRecord.connected_to(role: :writing) do
@@ -277,5 +283,50 @@ class Auth::App::Sign::In::SessionsController < ::Auth::App::ApplicationControll
     end
 
     revoked_count
+  end
+
+  def resolve_child_session!(actor, token)
+    resolution = session_limit_resolution
+    return false unless resolution && session_limit_resolution_binding
+
+    challenge = session[GATE_SESSION_KEY]["resolution_challenge"]
+    begin
+      resolution.select_session!(
+        actor: actor,
+        challenge: challenge,
+        session_ref: token.public_id,
+        browser_binding_digest: resolution.class.digest_challenge(session_limit_resolution_binding),
+      )
+      resolution.resolve!(
+        actor: actor,
+        challenge: challenge,
+        browser_binding_digest: resolution.class.digest_challenge(session_limit_resolution_binding),
+      )
+      @session_notice = I18n.t("sign.app.in.session.session_revoked")
+      true
+    rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
+      @session_alert = I18n.t("sign.app.in.session.invalid_session")
+      false
+    end
+  end
+
+  def cancel_pending_session_limit_resolution!
+    resolution = session_limit_resolution
+    if resolution
+      actor = Client.find_by(public_id: resolution.actor_ref)
+      binding = session_limit_resolution_binding
+      challenge = session[GATE_SESSION_KEY]["resolution_challenge"]
+      resolution.cancel!(
+        actor: actor,
+        challenge: challenge,
+        browser_binding_digest: resolution.class.digest_challenge(binding),
+      ) if actor && binding
+    end
+
+    flow = current_db_sign_in_flow_for_sequence
+    if flow && !flow.sign_in_completed? && !flow.sign_in_expired? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
+      with_sign_in_flow_writing(flow) { flow.cancel_sign_in! }
+    end
+    clear_current_sign_in_flow_locator!
   end
 end

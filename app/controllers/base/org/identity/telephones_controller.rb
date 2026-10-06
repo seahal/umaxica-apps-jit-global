@@ -14,7 +14,6 @@ module Base
 
         AUTHENTICATION_MODE = :private
 
-        before_action :authenticate_operator!
         # Object-level authorization (ActionPolicy): new/create gate the actor type; edit
         # authorize the owned record (find is owner-scoped, so a non-owner gets 404 first).
         # Verification guards remain in place.
@@ -38,7 +37,9 @@ module Base
         end
 
         def create
-          tel_params = params(staff_telephone: [:raw_number, :number])
+          tel_params = params.slice(:staff_telephone).permit(staff_telephone: [:raw_number, :number]).fetch(
+            :staff_telephone, {},
+          )
           number = tel_params[:raw_number] || tel_params[:number]
 
           unless initiate_staff_telephone_verification(current_operator, number)

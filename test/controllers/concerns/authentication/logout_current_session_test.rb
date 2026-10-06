@@ -148,7 +148,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   # call: rescue StandardError -> fail_sign_out_flow(cycle); raise
   # Targets lines 34, 35 and the "continue" branch of fail_sign_out_flow's
-  # guard (else@257), plus its normal reload+fail_sign_out! path (259, 260).
+  # guard (else@257), plus its normal reload-and-terminal-refusal path (259, 260).
   # ------------------------------------------------------------------
   test "marks the sign-out cycle failed and re-raises when a step in the flow raises" do
     user = clients(:one)

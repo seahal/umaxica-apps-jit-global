@@ -34,11 +34,7 @@ module Auth
           before_action :set_color_theme
           append_after_action :finish_request
 
-          protect_from_forgery using: :header_or_legacy_token,
-                               trusted_origins: JitHostOriginEnv.trusted_origins(
-                                 ENV.fetch("PRIVATE_AUTH_STAFF_URL"),
-                               ),
-                               with: :exception
+          protect_from_forgery using: :header_or_legacy_token, with: :exception
 
           private
 

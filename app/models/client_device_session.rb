@@ -44,4 +44,7 @@ class ClientDeviceSession < AppTicketRecord
   has_many :client_tokens, foreign_key: :device_session_id,
                            dependent: :restrict_with_exception,
                            inverse_of: :device_session
+  has_many :client_rp_sessions, foreign_key: :device_session_id,
+                                dependent: :restrict_with_exception,
+                                inverse_of: :client_device_session
 end

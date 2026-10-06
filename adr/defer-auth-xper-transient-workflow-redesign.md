@@ -53,3 +53,19 @@ design or destabilizing Auth's public origin and callback contracts.
 
 The cost is a known future redesign item for both Auth and Xper. That work is retained in
 `plans/backlog/auth-xper-transient-workflow-redesign.md` rather than silently abandoned.
+
+## Current-cycle amendment (2026-10-06)
+
+This ADR is amended by the Unified Implementation Plan in `two.md`. The plan makes one narrow
+exception to the Auth workflow freeze: D-82 may add the Base/Auth admission binding required to
+prove the initiating browser before a ceremony is admitted. That exception includes the three
+realm binding records, the Base browser nonce digest, Auth sid attachment, confirmation and
+redemption transitions, explicit restart and cancellation handoff, and their retention holds.
+
+The exception does not authorize a generic Auth login session, a shared-domain cookie, an Xper
+abstraction, a new Auth workflow framework, or any unrelated Auth or Xper cookie, token, route, or
+transport redesign. Auth remains ceremony-only and Jump remains an entry transport where the plan
+explicitly retains it.
+
+Status disposition: **amended** for D-82 only; the Xper freeze and all unrelated Auth workflow
+constraints are **retained**.

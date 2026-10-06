@@ -140,10 +140,10 @@ class Base::Org::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   test "POST with a cross-origin challenge hands off to the sign surface for this realm" do
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
-        origin_surface: "side",
-        initiating_client_id: "side-org",
+        origin_surface: "warp",
+        initiating_client_id: "warp-org",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: "side", ri: "jp",
+          origin_surface: "warp", ri: "jp",
           surface: "org",
         ),
         surface: "org",

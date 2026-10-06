@@ -84,8 +84,8 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
-        redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+        client_id: "core-com",
+        redirect_uri: OidcClientRegistry.find!("core-com").redirect_uris.first,
         code_challenge: SecureRandom.urlsafe_base64(32),
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),
@@ -93,7 +93,9 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
         scope: "openid profile",
       },
     ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
   end
 
   def with_env(values)

@@ -11,9 +11,10 @@ module Edit
       include ::Session
       include ::PreferenceGlobal
       include ::PreferenceAdoption
-      include ::AuthenticationOperator
+      include ::BrowserRpAuthentication
+      include ::BrowserRpSafeRequestRefresh
+      include ::BrowserRpUnsafeRequestRefresh
       include ::SignErrorResponses
-      include ::TrustedOriginForgeryProtection
       include ::SessionLimitGate
       include ::AuthorizationAudit
       include ::AuthorizationOperator
@@ -57,7 +58,6 @@ module Edit
       before_action :set_preferences_cookie
       before_action :resolve_param_context
       before_action :set_region
-      before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
       before_action :apply_localization_preferences
       before_action :set_locale
@@ -69,11 +69,7 @@ module Edit
       before_action :set_current_observability
       prepend_around_action :with_actor_lifecycle
 
-      protect_from_forgery using: :header_or_legacy_token,
-                           trusted_origins: JitHostOriginEnv.trusted_origins(
-                             ENV.fetch("PUBLIC_EDIT_STAFF_URL"),
-                           ),
-                           with: :exception
+      protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       private
 
@@ -83,6 +79,14 @@ module Edit
 
       def oidc_client_id
         "edit-org"
+      end
+
+      def browser_rp_client_id
+        "edit-org"
+      end
+
+      def browser_rp_resource_type
+        "operator"
       end
 
       def oidc_sign_host

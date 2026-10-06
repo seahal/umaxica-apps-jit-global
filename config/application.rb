@@ -168,6 +168,7 @@ module Jit
     # the single source of truth. config/environments/development.rb turns it back on,
     # where the raw reason is the useful signal and no real user data is present.
     config.action_controller.log_warning_on_csrf_failure = false
+    config.action_controller.forgery_protection_origin_check = true
 
     # Rails encrypted/signed cookies derive keys from secret_key_base.
     # Pin modern primitives explicitly and do not keep SHA1 compatibility rotations.

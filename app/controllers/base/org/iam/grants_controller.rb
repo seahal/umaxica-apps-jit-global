@@ -19,7 +19,6 @@ module Base
         TICKET_ID_FORMAT = OperatorCapabilityGrant::TICKET_ID_FORMAT
         declare_authentication_mode! :private
 
-        before_action :authenticate_operator!
         before_action :no_store
         before_action :authorize_index!, only: %i(index show)
         before_action :authorize_grant_screen!, only: :new

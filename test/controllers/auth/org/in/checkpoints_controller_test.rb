@@ -11,7 +11,6 @@ class Auth::Org::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     @staff = operators(:one)
-    OperatorSignInFlowStatus.ensure_defaults!
   end
 
   test "show without login hands off to the Base admission entry" do
@@ -114,9 +113,7 @@ class Auth::Org::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
     )
     cycle = OperatorSignInFlow.new(
       principal_id: @staff.id,
-      status_id: OperatorSignInFlow.status_id_for("CHECKPOINT_PENDING"),
-      state: "CHECKPOINT_PENDING",
-      step: "checkpoint",
+      state_id: OperatorSignInFlow.state_id_for("CHECKPOINT_PENDING"),
       nonce_digest: OperatorSignInFlow.digest_nonce("pending-test-nonce"),
       issued_at: Time.current,
       expires_at: 15.minutes.from_now,

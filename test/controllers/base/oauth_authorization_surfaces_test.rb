@@ -615,10 +615,17 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   def authorize_params(realm:)
+    client_id =
+      {
+        "client" => "core-app",
+        "visitor" => "core-com",
+        "operator" => "core-org",
+      }.fetch(realm)
+
     {
       response_type: "code",
-      client_id: "core-next-rp",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris_by_realm.fetch(realm).first,
+      client_id: client_id,
+      redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",

@@ -61,7 +61,9 @@ class AuthenticationPurposeContractTest < ActiveSupport::TestCase
     ).transaction
 
     if kind == :handoff
-      BaseAuthAdmissionCoordinator.issue_handoff!(transaction:, store:)
+      BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction:, base_browser_nonce: "test-browser-nonce", base_token: nil, store:,
+      )
     else
       BaseAuthAdmissionCoordinator.issue_result!(transaction:, store:)
     end

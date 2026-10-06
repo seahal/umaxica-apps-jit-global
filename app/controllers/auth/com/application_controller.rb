@@ -39,11 +39,7 @@ module Auth
 
       allow_browser versions: :modern
 
-      protect_from_forgery using: :header_or_legacy_token,
-                           trusted_origins: JitHostOriginEnv.trusted_origins(
-                             ENV.fetch("PRIVATE_AUTH_CORPORATE_URL"),
-                           ),
-                           with: :exception
+      protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       authorize :user, through: :current_policy_user
       authorize :actor, through: :current_actor
@@ -59,7 +55,7 @@ module Auth
 
       helper ::Auth::Com::ApplicationHelper
       # Surface-wide default web request limit (defense-in-depth baseline).
-      # RateLimit stays a side-effect-free helper; the limit and its numeric
+      # RateLimit stays an effect-free helper; the limit and its numeric
       # value are declared here on the inheriting controller.
       rate_limit(
         to: 300,
@@ -152,8 +148,11 @@ module Auth
         auth_com_verification_path(attrs)
       end
 
-      def verification_setup_redirect_path(pt: nil)
-        new_auth_com_verification_setup_path(ri: params[:ri], pt: pt || encoded_step_up_pt)
+      def verification_setup_redirect_path(pt: nil, scope: nil)
+        base_com_verification_setup_url(
+          ri: params[:ri], pt: pt || encoded_step_up_pt, scope: scope,
+          host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https",
+        )
       end
 
       def after_login_path

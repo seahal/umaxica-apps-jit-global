@@ -19,7 +19,10 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
       description: "Org step-up passkey", status_id: OperatorPasskeyStatus::ACTIVE,
     )
     @requirement = StepUpRequirement.new(
-      scope: "settings_passkey", required_aal: "aal1", allowed_methods: [:passkey],
+      scope: "settings_passkey", required_aal: nil, step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @staff.public_id,
+      resource_ref: nil, tenant_ref: nil,
       session_binding: @token.public_id, token_binding: @token.public_id,
       purpose: "step_up", audience: "step_up:org", require_session_binding: true,
     )
@@ -42,7 +45,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     passkey = @staff.staff_passkeys.create!(
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
     )
     record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: issuance.transaction.transaction_id)
@@ -97,7 +100,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
 
     assert_no_difference ["OperatorStepUpCeremonyTransaction.count", "OperatorStepUpSession.count"] do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
-        BaseStepUpAdmissionIssuer.call!(
+        issue_confirmed_base_step_up_admission!(
           actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
         )
       end
@@ -146,7 +149,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "Base refuses verified evidence when the session becomes emergency before finalization" do
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
     )
     transaction = issuance.transaction
@@ -175,7 +178,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "normal Base admission reaches Auth passkey selection without Auth root credentials" do
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
     )
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)
@@ -202,7 +205,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "admitted Auth continuity refuses a session changed to emergency before passkey selection" do
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: @staff, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
     )
     get auth_org_verification_path(ri: "jp", entry_ref: issuance.reference)

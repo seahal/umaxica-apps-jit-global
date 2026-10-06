@@ -4,7 +4,6 @@
 class Base::Com::Identity::Revocations::OthersController < ::Base::Com::ApplicationController
   AUTHENTICATION_MODE = :private
 
-  before_action :authenticate_visitor!
   step_up only: %i(create destroy), scope: "session_revoke_all"
 
   def create

@@ -120,7 +120,11 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
         when "PUBLIC_CORE_SERVICE_URL"
           ClientRpSession.create!(client_token: client_tokens(:one), oidc_client_id: "core-app", **attributes)
         when "PUBLIC_CORE_CORPORATE_URL"
-          visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+          visitor = Visitor.create!(
+            id: 9_117_000_000_000 + SecureRandom.random_number(1_000_000),
+            status_id: VisitorStatus::ACTIVE,
+            birthdate: "2000-01-01",
+          )
           token = VisitorToken.create!(visitor: visitor, discard_at: expiry)
           VisitorRpSession.create!(visitor_token: token, oidc_client_id: "core-com", **attributes)
         when "PUBLIC_CORE_STAFF_URL"

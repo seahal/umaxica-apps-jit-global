@@ -95,10 +95,14 @@ class ClientSecretStorageConfirmationCommitter
     end
 
     def verify_step_up!(token, issuance)
+      actor = issuance.client
       scope = (issuance.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
       requirement = StepUpRequirement.new(
-        scope: scope, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
-        token_binding: token.public_id, require_session_binding: true,
+        scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app", session_binding: token.public_id,
+        token_binding: token.public_id, require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       now = ClientToken.database_now
       unless token.currently_usable?(now) && !token.restricted? &&

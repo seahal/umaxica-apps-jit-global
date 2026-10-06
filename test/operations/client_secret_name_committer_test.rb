@@ -10,6 +10,8 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -41,12 +43,17 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     now = Client.database_now
     states = [
-      { claimed_at: now, claim_operation_id: SecureRandom.uuid },
+      { claimed_at: now,
+        claim_operation_id: SecureRandom.uuid,
+        claim_sign_in_flow_ref: "claimed-test-flow",
+        claim_ceremony_session_id: 1, },
       { revoked_at: now },
       { discard_at: now },
       { confirmed_at: nil },
@@ -82,6 +89,8 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -109,6 +118,8 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_at: Client.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
@@ -154,6 +165,10 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
           last_step_up_session_public_id: token.public_id,
           last_step_up_purpose: "step_up",
           last_step_up_audience: "step_up:app",
+          last_step_up_phishing_resistant: true,
+          last_step_up_user_verified: true,
+          last_step_up_credential_ref: "test-step-up",
+          last_step_up_full_reauthentication: false,
         }.merge(mismatch),
       )
       assert_no_difference("ClientSecretAuditOutbox.count") do
@@ -175,6 +190,8 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_at: now, last_step_up_scope: "settings_secret_credential", last_step_up_method: "passkey",
       last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     credential = client_secret_credentials(:one)
     original_digest = credential.password_digest
@@ -218,6 +235,8 @@ class ClientSecretNameCommitterTest < ActiveSupport::TestCase
       last_step_up_at: Client.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:two)

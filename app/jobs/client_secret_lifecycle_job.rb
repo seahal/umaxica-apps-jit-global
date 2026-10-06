@@ -87,7 +87,7 @@ class ClientSecretLifecycleJob < ApplicationJob
   end
 
   def reconcile_signup_batches!(batch_size, delay, after_id, through_id)
-    terminal_signup_states = %w(CANCELLED EXPIRED FAILED).freeze
+    terminal_signup_states = %w(CANCELLED EXPIRED FAILED HALTED FINALIZED SIGN_IN_HANDOFF_PENDING).freeze
     scope = ClientSecretIssuance.where.not(sign_up_flow_ref: nil).where(signup_completed_at: nil)
       .where(discard_at: Float::INFINITY)
     through_id = scope.maximum(:id) if through_id.nil?

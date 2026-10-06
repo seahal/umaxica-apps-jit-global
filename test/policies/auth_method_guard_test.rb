@@ -42,14 +42,10 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     assert_equal 1, AuthMethodGuard.remaining_count(user)
   end
 
-  test "remaining_count includes verified emails" do
+  test "remaining_count includes finalized verified emails" do
     user = @user
 
-    ClientEmail.create!(
-      user: user,
-      address: "test#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    create_verified_email(user)
 
     assert_equal 1, AuthMethodGuard.remaining_count(user)
   end
@@ -66,7 +62,7 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     assert_equal 0, AuthMethodGuard.remaining_count(user)
   end
 
-  test "confirmed app Secret counts as normal login without contact or Step-Up capability" do
+  test "confirmed app Secret without a bound contact is not a sign-in capability" do
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
       client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
@@ -76,24 +72,21 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     credential = ClientSecretCredential.create!(
       client: @user, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     inventory = AuthenticationCredentialInventory.call(@user)
 
-    assert_equal [:secret], inventory.login_methods
+    assert_empty inventory.sign_in_methods
     assert_empty inventory.step_up_methods
     assert_empty inventory.contact_identifiers
+    assert_equal 0, AuthMethodGuard.remaining_count(@user)
     assert AuthMethodGuard.last_method?(@user, excluding: credential)
   end
 
-  test "remaining_count excludes verified telephones because telephone is not aal1" do
+  test "remaining_count excludes verified telephones because telephone OTP is not sign-in" do
     user = @user
 
-    ClientTelephone.create!(
-      user: user,
-      number: "+819012345678",
-      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    create_verified_telephone(user, "+819012345678")
 
     assert_equal 0, AuthMethodGuard.remaining_count(user)
     assert_equal 1, AuthenticationCredentialInventory.call(user).contact_identifier_count
@@ -133,28 +126,18 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
 
     create_active_external_identity(client: user, provider: "google")
 
-    ClientEmail.create!(
-      user: user,
-      address: "test#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    create_verified_email(user)
 
     assert_not AuthMethodGuard.last_method?(user)
   end
 
-  test "remaining_count counts multiple methods correctly" do
+  test "remaining_count counts social and email sign-in capabilities correctly" do
     user = @user
 
     create_active_external_identity(client: user, provider: "google")
-    create_active_external_identity(client: user, provider: "apple")
+    create_verified_email(user)
 
-    ClientEmail.create!(
-      user: user,
-      address: "test#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
-
-    assert_equal 3, AuthMethodGuard.remaining_count(user)
+    assert_equal 2, AuthMethodGuard.remaining_count(user)
   end
 
   test "remaining_count excludes inactive Google identity" do
@@ -166,29 +149,17 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
   end
 
   test "can_remove_telephone preserves at least one contact identifier" do
-    telephone = ClientTelephone.create!(
-      user: @user,
-      number: "+819012300001",
-      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    telephone = create_verified_telephone(@user, "+819012300001")
 
     assert_not AuthMethodGuard.can_remove_telephone?(@user, telephone)
 
-    ClientEmail.create!(
-      user: @user,
-      address: "telephone-removal#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    create_verified_email(@user, "telephone-removal#{SecureRandom.hex(4)}@example.com")
 
     assert AuthMethodGuard.can_remove_telephone?(@user, telephone)
   end
 
-  test "can_remove_email preserves contact aal1 and aal2 dimensions" do
-    email = ClientEmail.create!(
-      user: @user,
-      address: "email-removal#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+  test "can_remove_email preserves sign-in and UV step-up capabilities" do
+    email = create_verified_email(@user, "email-removal#{SecureRandom.hex(4)}@example.com")
     passkey = @user.client_passkeys.new(
       webauthn_id: "auth_guard_passkey_#{SecureRandom.hex(4)}",
       external_id: SecureRandom.uuid,
@@ -199,14 +170,6 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
       uv_verified_at: Time.current,
     )
     passkey.save!(validate: false)
-
-    assert_not AuthMethodGuard.can_remove_email?(@user, email)
-
-    ClientTelephone.create!(
-      user: @user,
-      number: "+819012300002",
-      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
 
     assert AuthMethodGuard.can_remove_email?(@user, email)
   end
@@ -233,5 +196,25 @@ class AuthMethodGuardTest < ActiveSupport::TestCase
     passkey.save!(validate: false)
 
     assert AuthMethodGuard.can_remove_totp?(@user, totp)
+  end
+
+  private
+
+  def create_verified_email(user, address = "test#{SecureRandom.hex(4)}@example.com")
+    ClientEmail.create!(
+      user: user,
+      address: address,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+      binding_finalized_at: ClientEmail.database_now,
+    )
+  end
+
+  def create_verified_telephone(user, number)
+    ClientTelephone.create!(
+      user: user,
+      number: number,
+      user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+      binding_finalized_at: ClientTelephone.database_now,
+    )
   end
 end

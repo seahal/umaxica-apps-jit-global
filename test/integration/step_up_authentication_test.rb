@@ -23,19 +23,9 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     )
     @token.update!(created_at: 1.hour.ago)
 
-    # The former X-TEST-CURRENT-* header shim was removed from app/, so the
-    # session must be authenticated with a real JWT presented as a Bearer token.
-    # The token is bound to @token.public_id so the resolver finds this exact
-    # session record (step-up freshness is tracked per session).
-    @headers = bearer_headers(
-      jwt_access_token_for(
-        @user,
-        host: @base_host,
-        session_public_id: @token.public_id,
-        resource_type: "client",
-      ),
-      host: @base_host,
-    ).merge("X-TEST-SESSION-PUBLIC-ID" => @token.public_id).freeze
+    # Base authenticates only the Browser RP access cookie and follows its sid to the RP Session
+    # and that session's root token, so each request presents a real self-RP chain for @token.
+    @headers = base_browser_headers(@token).freeze
 
     ClientEmail.create!(
       user: @user,
@@ -71,6 +61,16 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
          headers: @headers
 
     assert_response :unauthorized
+  end
+
+  # The bearer header only skips the browser-request check; no Browser RP credential is presented.
+  test "PATCH withdrawal without a session is refused by authentication instead of raising" do
+    patch base_app_identity_withdrawal_url(ri: "jp", host: @base_host),
+          params: { ack_schedule_purge: "1" },
+          headers: host_headers(@base_host).merge("Authorization" => "Bearer x.y.z")
+
+    assert_response :redirect
+    assert_not ClientWithdrawalFlow.exists?(client_id: @user.id)
   end
 
   test "scope mismatch redirects to verification" do
@@ -110,7 +110,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       discard_at: 1.day.from_now,
     )
     other_token.update!(created_at: 1.hour.ago)
-    other_headers = @headers.merge("X-TEST-SESSION-PUBLIC-ID" => other_token.public_id)
+    other_headers = other_session_headers(other_token)
 
     get base_app_identity_emails_url(ri: "jp", host: @base_host), headers: other_headers
 
@@ -288,15 +288,37 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
   private
 
   def other_session_headers(token)
-    bearer_headers(
-      jwt_access_token_for(
-        @user,
-        host: @base_host,
-        session_public_id: token.public_id,
-        resource_type: "client",
-      ),
-      host: @base_host,
-    ).merge("X-TEST-SESSION-PUBLIC-ID" => token.public_id)
+    base_browser_headers(token)
+  end
+
+  def base_browser_headers(token)
+    oidc_client = OidcClientRegistry.find!("base-app-ww")
+    rp_session = ClientRpSession.create!(
+      client_token: token,
+      oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    access_token = AuthenticationTokenService.encode(
+      @user,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(oidc_client),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(@user, resource_type: "client"),
+      client_id: oidc_client.client_id,
+    )
+    cookie = "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{access_token}"
+    host_headers(@base_host).merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
   end
 
   def mark_step_up_satisfied!(token, at:, scope:, method: "passkey", aal: "aal2")
@@ -308,6 +330,10 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
       last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+      last_step_up_credential_ref: "test-step-up",
+      last_step_up_phishing_resistant: method == "passkey",
+      last_step_up_user_verified: method == "passkey",
+      last_step_up_full_reauthentication: false,
     )
   end
 end

@@ -9,7 +9,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_operator!
       before_action :continue_welcome_sequence_without_content!
 
       def show

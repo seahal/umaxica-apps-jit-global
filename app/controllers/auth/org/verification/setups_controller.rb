@@ -25,9 +25,17 @@ module Auth
 
         def auth_ceremony_entry_intent = "bootstrap"
 
-        def auth_step_up_ceremony_clean_url = new_auth_org_verification_setup_path(ri: params[:ri])
+        def auth_step_up_ceremony_clean_url
+          if auth_ceremony_registration_transaction&.allowed_methods_array == ["passkey"]
+            new_auth_org_verification_registration_passkey_path(ri: params[:ri])
+          else
+            new_auth_org_verification_setup_path(ri: params[:ri])
+          end
+        end
 
-        def auth_ceremony_admission_action_url = auth_org_verification_setup_path(ri: params[:ri])
+        def auth_ceremony_admission_action_url = auth_org_ceremony_bindings_path
+
+        def auth_ceremony_admitted_action_url = auth_org_verification_setup_path(ri: params[:ri])
 
         def ceremony_actor_model = Operator
 
@@ -58,7 +66,7 @@ module Auth
                        [{
                          key: "passkey",
                          label: t("sign.org.verification.setup.methods.passkey"),
-                         href: new_auth_org_settings_passkey_path(ri: params[:ri]),
+                         href: new_auth_org_verification_registration_passkey_path(ri: params[:ri]),
                        }]
                      else
                        []

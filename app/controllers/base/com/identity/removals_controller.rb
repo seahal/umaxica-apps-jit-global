@@ -6,7 +6,6 @@ module Base
     module Identity
       class RemovalsController < ::Base::Com::ApplicationController
         AUTHENTICATION_MODE = :private
-        before_action :authenticate_visitor!
         step_up only: :create, scope: "settings_secret_credential"
 
         def create

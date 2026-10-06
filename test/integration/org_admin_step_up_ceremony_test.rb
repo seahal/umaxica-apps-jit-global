@@ -201,7 +201,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       audience: "step_up:org", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: @operator, token: @token, requirement: requirement, return_to: "/identity/sessions",
     ).transaction
     # Synthetic evidence isolates the scope consumer; the success case verifies actual signatures.
@@ -291,7 +291,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
           audience: "step_up:org", session_binding: foreign_token.public_id, token_binding: foreign_token.public_id,
           require_session_binding: true,
         )
-        foreign = BaseStepUpAdmissionIssuer.call!(
+        foreign = issue_base_step_up_admission!(
           actor: foreign_actor, token: foreign_token, requirement: foreign_requirement, return_to: screen,
         ).transaction
         foreign_ceremony, = OperatorAuthCeremonySession.rotate_and_admit!(
@@ -306,7 +306,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
           audience: "step_up:app", session_binding: foreign_token.public_id, token_binding: foreign_token.public_id,
           require_session_binding: true,
         )
-        foreign = BaseStepUpAdmissionIssuer.call!(
+        foreign = issue_base_step_up_admission!(
           actor: foreign_actor, token: foreign_token, requirement: foreign_requirement, return_to: "/identity/sessions",
         ).transaction
         foreign_ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
@@ -382,7 +382,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         require_session_binding: true,
       )
       screen = new_base_org_support_client_revocation_path(@client.public_id, ri: "jp")
-      transaction = BaseStepUpAdmissionIssuer.call!(
+      transaction = issue_base_step_up_admission!(
         actor: @operator, token: @token, requirement: requirement, return_to: screen,
       ).transaction
       # Synthetic evidence isolates freshness consumption; the success case verifies signatures.

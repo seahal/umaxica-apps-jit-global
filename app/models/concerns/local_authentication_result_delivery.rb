@@ -11,8 +11,8 @@ module LocalAuthenticationResultDelivery
       with_lock do
         now = self.class.database_now
         raise AuthCeremonySession::InvalidTransition, "local flow is expired" if expired?(now)
-        unless (state == "PRIMARY_PENDING" && sign_in_primary_pending?) ||
-            (state == "MFA_PENDING" && sign_in_mfa_pending?)
+        unless (state_name_for(state_id) == "PRIMARY_PENDING" && sign_in_primary_pending?) ||
+            (state_name_for(state_id) == "MFA_PENDING" && sign_in_mfa_pending?)
           raise AuthCeremonySession::InvalidTransition, "local flow cannot accept authentication evidence"
         end
         raise AuthCeremonySession::InvalidTransition, "local flow has no principal" if principal_id.nil?
@@ -39,7 +39,7 @@ module LocalAuthenticationResultDelivery
     self.class.connection_class_for_self.connected_to(role: :writing) do
       with_lock do
         now = self.class.database_now
-        unless %w(SESSION_ISSUANCE_PENDING SESSION_LIMIT_PENDING SIGN_IN_HANDOFF_PENDING).include?(state)
+        unless state_name_for(state_id) == "SESSION_ISSUANCE_PENDING"
           raise AuthCeremonySession::InvalidTransition, "local flow is not ready for result delivery"
         end
         raise AuthCeremonySession::InvalidTransition, "local flow is expired" if expired?(now)

@@ -10,6 +10,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -18,7 +20,6 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Pending fixture", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     # Opaque fixture exercises removal only; no encryption format is asserted.
     issuance.update!(encrypted_payload: "opaque-test-ciphertext")
@@ -42,7 +43,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     assert_equal issuance.purge_eligible_at, candidate.purge_eligible_at
     assert_nil candidate.confirmed_at
     assert_not candidate.available_at?(at: Client.database_now)
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     capacity = ClientSecretCapacityQuery.call(client: actor, at: Client.database_now)
 
     assert_equal 1, capacity.active_count
@@ -65,7 +66,7 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
 
     rejected = ClientSecretCredential.new(
       client: actor, issuance: issuance, name: "Forbidden confirmed candidate", password: SecureRandom.base58(32),
-      lookup_digest: "a" * 64, confirmed_at: Client.database_now,
+      confirmed_at: Client.database_now,
     )
 
     assert_not rejected.valid?
@@ -79,6 +80,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -106,6 +109,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -114,7 +119,6 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Pending fixture", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     issuance.update!(encrypted_payload: "opaque-test-ciphertext")
     before_issuance = issuance.attributes
@@ -141,6 +145,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     operation_id = SecureRandom.uuid
@@ -176,6 +182,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -221,6 +229,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     [
@@ -249,6 +259,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     now = Client.database_now
@@ -293,6 +305,8 @@ class ClientSecretManualIssuanceInvalidatorTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(

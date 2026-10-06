@@ -8,7 +8,7 @@
 # surface from `request.host`. That keeps the six endpoints from leaking into one another even
 # though they share one tool implementation, and it keeps request state out of globals.
 class McpSurfaceIdentity
-  REALMS = %w(base side).freeze
+  REALMS = %w(base warp).freeze
   SURFACES = %w(app com org).freeze
 
   attr_reader :realm, :surface

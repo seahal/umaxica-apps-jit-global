@@ -57,7 +57,7 @@ class SignInSequenceCarrierTest < ActiveSupport::TestCase
       participant: :checkpoint,
       pt: nil,
     )
-    sequence = carrier.fail!
+    sequence = carrier.halt!
 
     assert_predicate sequence, :terminal?
     assert_not sequence.valid_for?(surface: :app, actor: actor, participant: :checkpoint)

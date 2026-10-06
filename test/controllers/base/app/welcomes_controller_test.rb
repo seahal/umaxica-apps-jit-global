@@ -69,8 +69,7 @@ class Base::App::WelcomeAuthorizationControllerTest < ActionController::TestCase
     @cycle = ClientSignInFlow.create!(
       principal_id: @user.id,
       token: @token,
-      status_id: ClientSignInFlow.status_id_for("DASHBOARD_PENDING"),
-      step: "dashboard",
+      state_id: ClientSignInFlow.state_id_for("DASHBOARD_PENDING"),
       return_to: "/after",
       nonce_digest: ClientSignInFlow.digest_nonce(nonce),
       issued_at: Time.current,

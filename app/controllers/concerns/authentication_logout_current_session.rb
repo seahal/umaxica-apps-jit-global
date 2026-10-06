@@ -28,7 +28,6 @@ class AuthenticationLogoutCurrentSession
         revoke_device_session!(token_record)
         revoke_token!(token_record) unless device_session_cascade_handles_token?(token_record)
         cycle&.mark_logically_revoked!
-        cycle&.await_sign_out_expiry!
         cycle&.complete_sign_out!
       rescue StandardError
         fail_sign_out_flow(cycle)
@@ -257,7 +256,7 @@ class AuthenticationLogoutCurrentSession
     return if cycle.blank? || cycle.sign_out_completed? || cycle.sign_out_failed?
 
     cycle.class.connection_class_for_self.connected_to(role: :writing) do
-      cycle.reload.fail_sign_out!
+      cycle.reload.halt_sign_out!
     end
   rescue ActiveRecord::ActiveRecordError, FlowInvalidTransition
     nil

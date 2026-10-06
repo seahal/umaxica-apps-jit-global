@@ -25,6 +25,7 @@ class ClientSignUpFlowStatus < AppTicketRecord
   FAILED = 900
   EXPIRED = 910
   CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     STARTED,
     CONTACT_PENDING,
@@ -40,6 +41,7 @@ class ClientSignUpFlowStatus < AppTicketRecord
     FAILED,
     EXPIRED,
     CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :client_sign_up_flows,

@@ -22,7 +22,7 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
              scope: "auth_app_sign_in", name: "secret_ip_sustained", store: rate_limit_store,
              only: :create, with: -> { render_rate_limited(retry_after: 900) }
   before_action :resolve_secret_client, only: :create
-  rate_limit to: 5, within: 1.minute, by: -> { @resolved_credential&.client_id || "unknown:#{request.remote_ip}" },
+  rate_limit to: 5, within: 1.minute, by: -> { @resolved_client&.id || "unknown:#{request.remote_ip}" },
              scope: "auth_app_sign_in", name: "secret_client_burst", store: rate_limit_store,
              only: :create, with: -> { render_rate_limited(retry_after: 60) }
 
@@ -36,15 +36,21 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
     flow = auth_ceremony_local_sign_in_flow
     transaction = auth_ceremony_authorization_transaction
     ceremony = admitted_auth_ceremony_session
-    unless @resolved_credential && (flow || transaction) && ceremony
+    unless @resolved_client && (flow || transaction) && ceremony
       return render_form(status: :unprocessable_content, error: t("sign.app.authentication.secret.invalid"))
     end
 
     claim =
       if transaction
-        ClientSecretClaimCommitter.call_for_oidc!(secret: params[:secret], transaction: transaction, ceremony: ceremony)
+        ClientSecretClaimCommitter.call_for_oidc!(
+          client: @resolved_client, secret: secret_params[:secret],
+          transaction: transaction, ceremony: ceremony,
+        )
       else
-        ClientSecretClaimCommitter.call!(secret: params[:secret], flow: flow, ceremony: ceremony)
+        ClientSecretClaimCommitter.call!(
+          client: @resolved_client, secret: secret_params[:secret], flow: flow,
+          ceremony: ceremony,
+        )
       end
     return render_form(status: :unprocessable_content, error: t("sign.app.authentication.secret.invalid")) unless claim
 
@@ -66,9 +72,14 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   private
 
   def resolve_secret_client
-    return unless cloudflare_turnstile_validation["success"] == true
+    @resolved_client =
+      if cloudflare_turnstile_validation["success"] == true
+        ClientSecretIdentityResolverQuery.call(identifier: secret_params[:identifier])
+      end
+  end
 
-    @resolved_credential = ClientSecretLookupQuery.call(secret: params[:secret])
+  def secret_params
+    params.permit(:identifier, :secret, :authenticity_token, :"cf-turnstile-response", :ri, :pt)
   end
 
   def minimum_response_budget_enabled?
@@ -79,6 +90,7 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
     render inertia: "auth/app/sign/in/secrets/new", status: status, props: {
       title: t("sign.app.authentication.secret.title"),
       label: t("sign.app.authentication.secret.label"),
+      identifier_label: t("sign.app.authentication.secret.identifier_label"),
       submit: t("sign.app.authentication.secret.submit"),
       error: error,
       action: auth_app_sign_in_secret_path(ri: current_region_identifier, pt: signed_pt_param),

@@ -30,7 +30,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal auth_refresh_generation, token.refresh_token_generation
   end
 
-  test "post sign out redirects to base oidc logout with completion state" do
+  test "post sign out redirects to the registered base authority" do
     operator = operators(:one)
     token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     auth_refresh_token = token.rotate_refresh_token!
@@ -41,24 +41,18 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post warp_org_sign_out_url(ri: "jp")
 
-    assert_response :success
-    assert_select "form#sign-out-handoff-form[method=?]", "post", count: 1
-    transaction = AcmeLogoutTransaction.find_by!(
-      public_id: css_select(
-        'form#sign-out-handoff-form input[name="logout_challenge"]',
-      ).first["value"],
-    )
-
-    assert_equal "side", transaction.origin_surface
-    location = URI.parse(css_select("form#sign-out-handoff-form").first["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
+    transaction = AcmeLogoutTransaction.find_by!(public_id: query.fetch("logout_challenge"))
+
+    assert_equal "warp", transaction.origin_surface
 
     assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_predicate query["id_token_hint"], :present?
-    assert_equal warp_org_sign_out_url(ri: "jp", protocol: "https"), query["post_logout_redirect_uri"]
     assert_predicate query["logout_challenge"], :present?
-    assert_predicate @rp_session.reload, :revoked?
+    assert_equal "jp", query["ri"]
+    assert_predicate @rp_session.reload, :active?
     assert_predicate token.reload, :currently_usable?
     assert_equal auth_refresh_digest, token.refresh_token_digest
     assert_equal auth_refresh_generation, token.refresh_token_generation
@@ -73,12 +67,13 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def authenticate_rp!(operator, token)
-    oidc_client = OidcClientRegistry.find!("side-org")
+    oidc_client = OidcClientRegistry.find!("warp-org")
     @rp_session = OperatorRpSession.create!(
       operator_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
@@ -87,6 +82,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       host: @host,
       resource_type: "operator",
       session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
       oidc_sid: @rp_session.public_id,
       oidc_jti: @rp_session.oidc_jti,
       expires_at: 10.minutes.from_now,

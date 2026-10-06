@@ -20,6 +20,7 @@ module Valkey
         bootstrap_handoff bootstrap_result
         credential_registration_handoff credential_registration_result
         credential_change_handoff credential_change_result
+        cancellation_handoff
         local_sign_in local_sign_up
         local_sign_in_result
       ).freeze
@@ -123,6 +124,67 @@ module Valkey
 
       public
 
+      REISSUE_REFERENCE_SCRIPT = <<~LUA.freeze
+        local pointer = redis.call("GET", KEYS[1])
+        if not pointer then
+          return "missing"
+        end
+        local pointer_ok, pointer_payload = pcall(cjson.decode, pointer)
+        if not pointer_ok or type(pointer_payload) ~= "table" then
+          return "corrupt"
+        end
+        if pointer_payload["purpose"] ~= ARGV[2] then
+          return "binding_mismatch"
+        end
+        local current = redis.call("GET", pointer_payload["primary_key"])
+        if not current then
+          return "missing"
+        end
+        local current_ok, current_payload = pcall(cjson.decode, current)
+        if not current_ok or type(current_payload) ~= "table" then
+          return "corrupt"
+        end
+        if current_payload["state"] ~= "issued" and
+            not (current_payload["state"] == "consumed" and ARGV[4] == "1") then
+          return "replay"
+        end
+        if redis.call("EXISTS", KEYS[2]) == 1 then
+          return "collision"
+        end
+        redis.call("SET", KEYS[2], ARGV[1], "EX", ARGV[3])
+        pointer_payload["primary_key"] = KEYS[2]
+        redis.call("SET", KEYS[1], cjson.encode(pointer_payload), "XX", "KEEPTTL")
+        return "OK"
+      LUA
+
+      RESTORE_REFERENCE_SCRIPT = <<~LUA.freeze
+        local pointer = redis.call("GET", KEYS[1])
+        if not pointer then
+          return "missing_pointer"
+        end
+        local pointer_ok, pointer_payload = pcall(cjson.decode, pointer)
+        if not pointer_ok or type(pointer_payload) ~= "table" then
+          return "corrupt"
+        end
+        if pointer_payload["purpose"] ~= ARGV[2] then
+          return "binding_mismatch"
+        end
+        local current = redis.call("GET", pointer_payload["primary_key"])
+        if current then
+          local current_ok, current_payload = pcall(cjson.decode, current)
+          if not current_ok or type(current_payload) ~= "table" then
+            return "corrupt"
+          end
+          if current_payload["purpose"] ~= ARGV[2] then
+            return "binding_mismatch"
+          end
+        end
+        redis.call("SET", KEYS[2], ARGV[1], "EX", ARGV[3])
+        pointer_payload["primary_key"] = KEYS[2]
+        redis.call("SET", KEYS[1], cjson.encode(pointer_payload), "XX", "KEEPTTL")
+        return "OK"
+      LUA
+
       def initialize(connection: default_connection)
         @connection = connection
       end
@@ -171,6 +233,98 @@ module Valkey
         raise Umaxica::Valkey::Unavailable, "Valkey admission issue unavailable", cause: e
       end
 
+      # Replaces the short-lived primary code behind an existing reference while
+      # retaining the reference TTL. This supports an exact same-intent retry
+      # without changing the durable browser binding or sliding its deadline.
+      def reissue_reference!(reference:, purpose:, actor_type:, surface:, subject_ref: nil,
+                             base_session_ref: nil, ceremony_session_ref: nil, result_generation: nil,
+                             ttl: CODE_TTL, now: Time.current, allow_consumed: false)
+        purpose = purpose.to_s
+        raise ArgumentError, "unsupported admission purpose" unless PURPOSES.include?(purpose)
+
+        raw = SecureRandom.urlsafe_base64(CODE_BYTES, padding: false)
+        payload = {
+          "version" => VERSION,
+          "purpose" => purpose,
+          "state" => "issued",
+          "actor_type" => actor_type.to_s,
+          "surface" => surface.to_s,
+          "subject_ref" => subject_ref.to_s.presence,
+          "base_session_ref" => base_session_ref.to_s.presence,
+          "ceremony_session_ref" => ceremony_session_ref.to_s.presence,
+          "reference" => reference.to_s,
+          "result_generation" => result_generation,
+          "issued_at" => now.iso8601,
+          "expires_at" => (now + ttl).iso8601,
+        }.compact
+        new_key = @connection.key("admission:#{purpose}:#{self.class.digest_for(purpose:, raw_code: raw)}")
+        result = @connection.call(
+          "EVAL",
+          REISSUE_REFERENCE_SCRIPT,
+          2,
+          reference_storage_key(reference),
+          new_key,
+          JSON.generate(payload),
+          purpose,
+          ttl.to_i,
+          allow_consumed ? "1" : "0",
+        )
+        case result.to_s
+        when "OK" then raw
+        when "missing" then raise Umaxica::Valkey::OperationError, "admission reference is unavailable"
+        when "replay" then raise Umaxica::Valkey::OperationError, "admission reference was consumed"
+        when "binding_mismatch" then raise Umaxica::Valkey::OperationError, "admission reference purpose mismatch"
+        when "collision" then raise Umaxica::Valkey::OperationError, "admission code key collision"
+        else raise Umaxica::Valkey::SerializationError, "admission reference is corrupt"
+        end
+      rescue Redis::BaseError, IOError, SystemCallError => e
+        raise Umaxica::Valkey::Unavailable, "Valkey admission reissue unavailable", cause: e
+      end
+
+      # Rebinds a durable cancellation handoff's original raw code to its lookup reference. The
+      # durable transaction owns the handoff identity; this only restores its bounded Valkey
+      # transport after the normal 60-second pointer/tombstone lifetime.
+      def restore_reference!(reference:, purpose:, actor_type:, surface:, subject_ref: nil,
+                             base_session_ref: nil, ceremony_session_ref: nil, result_generation: nil,
+                             raw_code:, ttl: CODE_TTL, now: Time.current)
+        purpose = purpose.to_s
+        raise ArgumentError, "unsupported admission purpose" unless PURPOSES.include?(purpose)
+        raise ArgumentError, "admission code is blank" if raw_code.to_s.blank?
+
+        payload = {
+          "version" => VERSION,
+          "purpose" => purpose,
+          "state" => "issued",
+          "actor_type" => actor_type.to_s,
+          "surface" => surface.to_s,
+          "subject_ref" => subject_ref.to_s.presence,
+          "base_session_ref" => base_session_ref.to_s.presence,
+          "ceremony_session_ref" => ceremony_session_ref.to_s.presence,
+          "reference" => reference.to_s,
+          "result_generation" => result_generation,
+          "issued_at" => now.iso8601,
+          "expires_at" => (now + ttl).iso8601,
+        }.compact
+        new_key = @connection.key("admission:#{purpose}:#{self.class.digest_for(purpose:, raw_code: raw_code)}")
+        result = @connection.call(
+          "EVAL", RESTORE_REFERENCE_SCRIPT, 2, reference_storage_key(reference), new_key,
+          JSON.generate(payload), purpose, ttl.to_i,
+        )
+        return raw_code if result.to_s == "OK"
+        return issue!(
+          purpose:, actor_type:, surface:, subject_ref:, base_session_ref:,
+          ceremony_session_ref:, reference:, result_generation:, raw_code:, ttl:, now:,
+        ) if
+          result.to_s == "missing_pointer"
+
+        case result.to_s
+        when "binding_mismatch" then raise Umaxica::Valkey::OperationError, "admission reference purpose mismatch"
+        else raise Umaxica::Valkey::SerializationError, "admission reference is corrupt"
+        end
+      rescue Redis::BaseError, IOError, SystemCallError => e
+        raise Umaxica::Valkey::Unavailable, "Valkey admission restore unavailable", cause: e
+      end
+
       def read(raw_code, purpose: "authentication_result")
         encoded = @connection.call("GET", storage_key(purpose, raw_code))
         return nil if encoded.blank?
@@ -180,6 +334,27 @@ module Valkey
         raise Umaxica::Valkey::Unavailable, "Valkey admission read unavailable", cause: e
       rescue JSON::ParserError => e
         raise Umaxica::Valkey::SerializationError, "admission payload is corrupt", cause: e
+      end
+
+      # Reads a server-side result by its non-authorizing lookup reference. The
+      # reference never contains the raw code; the receiver obtains the same
+      # short-lived payload without requiring a cross-origin form submission.
+      def read_reference!(reference:, purposes: PURPOSES)
+        reference_payload = read_json(reference_storage_key(reference))
+        return nil unless reference_payload
+
+        purpose = reference_payload.fetch("purpose").to_s
+        allowed_purposes = Array(purposes).map(&:to_s)
+        raise ArgumentError, "unsupported admission purpose" unless allowed_purposes.include?(purpose)
+
+        payload = read_json(reference_payload.fetch("primary_key"))
+        return nil unless payload
+        raise Umaxica::Valkey::SerializationError, "admission reference binding mismatch" unless
+          payload.fetch("reference") == reference.to_s && payload.fetch("purpose") == purpose
+
+        payload
+      rescue KeyError
+        raise Umaxica::Valkey::SerializationError, "admission reference is corrupt"
       end
 
       def digest_for(purpose:, raw_code:)
@@ -277,6 +452,17 @@ module Valkey
 
         digest = Digest::SHA256.hexdigest("reference:#{reference}")
         @connection.key("admission-reference:#{digest}")
+      end
+
+      def read_json(key)
+        encoded = @connection.call("GET", key)
+        return nil if encoded.blank?
+
+        JSON.parse(encoded)
+      rescue Redis::BaseError, IOError, SystemCallError => e
+        raise Umaxica::Valkey::Unavailable, "Valkey admission read unavailable", cause: e
+      rescue JSON::ParserError => e
+        raise Umaxica::Valkey::SerializationError, "admission payload is corrupt", cause: e
       end
 
       def normalize_expected(expected)

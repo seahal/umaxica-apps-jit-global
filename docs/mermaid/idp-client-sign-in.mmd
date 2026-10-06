@@ -1,54 +1,48 @@
 stateDiagram-v2
-    %% CURRENT implementation; sources and guards in transition inventory.
+    %% Current sign-in graph; routing and session-limit resolution are separate axes.
     state "PRIMARY_PENDING id=10" as PRIMARY_PENDING
     state "MFA_PENDING id=20" as MFA_PENDING
-    state "SESSION_LIMIT_PENDING id=30" as SESSION_LIMIT_PENDING
     state "GUARDRAIL_PENDING id=40" as GUARDRAIL_PENDING
     state "SESSION_ISSUANCE_PENDING id=50" as SESSION_ISSUANCE_PENDING
     state "CHECKPOINT_PENDING id=60" as CHECKPOINT_PENDING
     state "SELECTOR_PENDING id=65" as SELECTOR_PENDING
-    state "DASHBOARD_PENDING id=70" as DASHBOARD_PENDING
-    state "RETURN_PENDING id=80" as RETURN_PENDING
     state "COMPLETED id=100" as COMPLETED
-    state "FAILED id=900" as FAILED
-    MFA_PENDING --> FAILED: cancel_pending_mfa
+    state "EXPIRED id=910" as EXPIRED
+    state "CANCELLED id=920" as CANCELLED
+    state "HALTED id=930" as HALTED
+
     [*] --> PRIMARY_PENDING
     PRIMARY_PENDING --> MFA_PENDING: advance_sign_in_to_mfa!
-    PRIMARY_PENDING --> SESSION_LIMIT_PENDING: advance_sign_in_to_session_limit!
-    MFA_PENDING --> SESSION_LIMIT_PENDING: advance_sign_in_to_session_limit!
-    SESSION_ISSUANCE_PENDING --> SESSION_LIMIT_PENDING: advance_sign_in_to_session_limit!
     PRIMARY_PENDING --> GUARDRAIL_PENDING: advance_sign_in_to_guardrail!
     MFA_PENDING --> GUARDRAIL_PENDING: advance_sign_in_to_guardrail!
-    SESSION_LIMIT_PENDING --> GUARDRAIL_PENDING: advance_sign_in_to_guardrail!
     GUARDRAIL_PENDING --> CHECKPOINT_PENDING: advance_sign_in_to_checkpoint!
     CHECKPOINT_PENDING --> SELECTOR_PENDING: advance_sign_in_to_selector!
     SELECTOR_PENDING --> SESSION_ISSUANCE_PENDING: advance_sign_in_to_session_issuance!
-    DASHBOARD_PENDING --> SESSION_ISSUANCE_PENDING: prepare_secret_oidc_issuance! bound authenticated OIDC handoff
-    DASHBOARD_PENDING --> RETURN_PENDING: advance_sign_in_to_return!
     SESSION_ISSUANCE_PENDING --> COMPLETED: complete_sign_in!
-    SESSION_LIMIT_PENDING --> COMPLETED: complete_sign_in!
-    DASHBOARD_PENDING --> COMPLETED: complete_sign_in!
-    RETURN_PENDING --> COMPLETED: complete_sign_in!
-    PRIMARY_PENDING --> FAILED: fail_sign_in!
-    MFA_PENDING --> FAILED: fail_sign_in!
-    SESSION_LIMIT_PENDING --> FAILED: fail_sign_in!
-    GUARDRAIL_PENDING --> FAILED: fail_sign_in!
-    SESSION_ISSUANCE_PENDING --> FAILED: fail_sign_in!
-    CHECKPOINT_PENDING --> FAILED: fail_sign_in!
-    SELECTOR_PENDING --> FAILED: fail_sign_in!
-    DASHBOARD_PENDING --> FAILED: fail_sign_in!
-    RETURN_PENDING --> FAILED: fail_sign_in!
-    SELECTOR_PENDING --> DASHBOARD_PENDING: AuthenticationSequenceGate direct update legacy path
-    COMPLETED --> [*]
-    FAILED --> [*]
-    note right of PRIMARY_PENDING
-        Auth records proof; Base commits root login.
-        Opaque result generation and browser binding are separate axes.
-        No stored EXPIRED or CANCELLED state.
-        expire_sign_in! writes FAILED only for expired unissued app flows.
-        It uses the canonical Ticket lock and cannot alter COMPLETED.
-        Legacy dashboard is entered by a controller direct write.
-        Full guards and direct writers are in the inventory.
-        Secret bind_oidc_flow! creates a pending locator, not login evidence.
-        Secret OIDC Auth POST records evidence on that claimed flow before handoff.
+
+    PRIMARY_PENDING --> EXPIRED: expire_sign_in!
+    PRIMARY_PENDING --> CANCELLED: cancel_sign_in!
+    PRIMARY_PENDING --> HALTED: halt_sign_in!
+    MFA_PENDING --> EXPIRED: expire_sign_in!
+    MFA_PENDING --> CANCELLED: cancel_sign_in!
+    MFA_PENDING --> HALTED: halt_sign_in!
+    GUARDRAIL_PENDING --> EXPIRED: expire_sign_in!
+    GUARDRAIL_PENDING --> CANCELLED: cancel_sign_in!
+    GUARDRAIL_PENDING --> HALTED: halt_sign_in!
+    SESSION_ISSUANCE_PENDING --> EXPIRED: expire_sign_in!
+    SESSION_ISSUANCE_PENDING --> CANCELLED: cancel_sign_in!
+    SESSION_ISSUANCE_PENDING --> HALTED: halt_sign_in!
+    CHECKPOINT_PENDING --> EXPIRED: expire_sign_in!
+    CHECKPOINT_PENDING --> CANCELLED: cancel_sign_in!
+    CHECKPOINT_PENDING --> HALTED: halt_sign_in!
+    SELECTOR_PENDING --> EXPIRED: expire_sign_in!
+    SELECTOR_PENDING --> CANCELLED: cancel_sign_in!
+    SELECTOR_PENDING --> HALTED: halt_sign_in!
+
+    note right of SESSION_ISSUANCE_PENDING
+        Capacity is resolved by the separate durable
+        client session-limit child transaction.
+        The parent never enters SESSION_LIMIT_PENDING.
+        IDs 30, 70 and 80 remain historical tombstones.
     end note
+

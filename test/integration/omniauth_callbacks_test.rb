@@ -178,7 +178,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
     assert_predicate inertia_props.fetch("confirm_label"), :present?
   end
 
-  test "apple social login with MFA enabled does not require additional MFA challenge" do
+  test "apple social login with MFA enabled enters the ordinary MFA challenge" do
     user = Client.create!(birthdate: "2000-02-03", mfa_level_enabled: true)
     ClientTotpCredential.create!(
       user: user,
@@ -215,12 +215,12 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
         params: { state: state },
         headers: social_callback_headers(@host)
 
-    # The sign callback must not establish an MFA challenge or sign-side session
-    # for an established social login; it emits the base completion form only.
-    # The MFA / session decision belongs to base completion.
+    # The sign callback only hands evidence to Base. Base applies the ordinary
+    # sign-in graph, where social is not a local MFA bypass.
     assert_emits_acme_completion_only!
-    assert_no_match(%r{/sign/in/challenge}, response.body)
-    assert_nil session[:pending_mfa]
+    assert_response :redirect
+    assert_match %r{/sign/in/challenge}, response.location
+    assert_predicate session[:pending_mfa], :present?
   end
 
   test "should sign in with existing Google user" do
@@ -304,7 +304,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
     assert_not ClientToken.exists?(user_id: user.id), "ClientToken must not be created before birthdate checkpoint"
   end
 
-  test "social login with MFA enabled does not require additional MFA challenge" do
+  test "social login with MFA enabled enters the ordinary MFA challenge" do
     user = Client.create!(birthdate: "2000-02-03")
     user.update!(mfa_level_enabled: true)
     ClientTotpCredential.create!(
@@ -342,11 +342,12 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
         params: { state: state },
         headers: social_callback_headers(@host)
 
-    # The sign callback must not establish an MFA challenge or sign-side session
-    # for an established social login; it emits the base completion form only.
+    # The sign callback only hands evidence to Base. Base applies the ordinary
+    # sign-in graph, where social is not a local MFA bypass.
     assert_emits_acme_completion_only!
-    assert_no_match(%r{/sign/in/challenge}, response.body)
-    assert_nil session[:pending_mfa]
+    assert_response :redirect
+    assert_match %r{/sign/in/challenge}, response.location
+    assert_predicate session[:pending_mfa], :present?
   end
 
   test "google login with missing user_token_kind does not crash callback" do
@@ -430,13 +431,16 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
 
   private
 
-  # Pin the sign-side authority boundary for established social login: the sign
-  # callback returns the one-shot base completion form (signed result only) and
-  # does not perform a sign-side session/redirect itself.
+  # Pin the D-81 receiver boundary for established social login: the sign
+  # callback redirects to Base, whose GET renders the one-shot form and whose
+  # same-origin POST performs the completion.
   def assert_emits_acme_completion_only!
-    assert_response :ok
-    assert_includes response.body, "social-completion-form"
-    assert_includes response.body, "social_ceremony_result"
+    assert_response :see_other
+    completion = URI.parse(response.location.to_s)
+    assert_equal "/social/authentication/completion", completion.path
+    query = Rack::Utils.parse_nested_query(completion.query.to_s)
+    assert_predicate query["result_ref"], :present?
+    assert follow_social_completion_redirect_if_present!
   end
 
   def create_rotated_active_user_session(user, rotations:)
@@ -769,6 +773,8 @@ class OmniauthCallbacksTest
   end
 
   def submit_social_completion_if_present!
+    return if follow_social_completion_redirect_if_present!
+
     return unless response.media_type == "text/html"
     return unless response.body.include?("social-completion-form")
 

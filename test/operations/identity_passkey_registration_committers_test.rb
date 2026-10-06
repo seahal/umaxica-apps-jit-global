@@ -15,11 +15,15 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
     @token = ClientToken.create!(user: @actor, root_login_established_at: Time.current)
     @requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    @transaction = BaseStepUpAdmissionIssuer.call!(
+    @transaction = issue_base_step_up_admission!(
       actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/birthdate",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: @token,
     ).transaction
     @record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: @transaction.transaction_id)
     @ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
@@ -104,12 +108,16 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
   test "a registration challenge cannot be issued for an ordinary step-up transaction" do
     stranger = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: stranger)
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: stranger, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
+        scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: stranger.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up", audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
       ), return_to: "/identity/birthdate",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: token,
     ).transaction
     record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: transaction.transaction_id)
 

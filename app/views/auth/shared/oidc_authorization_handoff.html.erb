@@ -14,18 +14,6 @@
       <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
       <%= hidden_field_tag :ri, ri if ri.present? %>
     </form>
-    <script nonce="<%= content_security_policy_nonce %>">
-      (function () {
-        const form = document.getElementById("oidc-authorization-handoff-form");
-        if (form.requestSubmit) {
-          form.requestSubmit();
-        } else {
-          form.submit();
-        }
-      })();
-    </script>
-    <noscript>
-      <button form="oidc-authorization-handoff-form" type="submit">Continue</button>
-    </noscript>
+    <button form="oidc-authorization-handoff-form" type="submit">Continue</button>
   </body>
 </html>

@@ -18,6 +18,9 @@ class OperatorSignOutFlowStatus < OrgTicketRecord
   AWAITING_EXPIRY = 40
   COMPLETED = 100
   FAILED = 900
+  EXPIRED = 910
+  CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     NOTHING,
     REQUESTED,
@@ -26,6 +29,9 @@ class OperatorSignOutFlowStatus < OrgTicketRecord
     AWAITING_EXPIRY,
     COMPLETED,
     FAILED,
+    EXPIRED,
+    CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :operator_sign_out_flows,

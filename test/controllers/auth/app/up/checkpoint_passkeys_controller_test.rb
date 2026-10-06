@@ -6,18 +6,30 @@ require "test_helper"
 
 module Auth::App::Up
   class CheckpointPasskeysControllerTest < ActionDispatch::IntegrationTest
+    SECRET_LIFETIME_VALUES = {
+      "APP_SECRET_ISSUANCE_TTL_SECONDS" => "600",
+      "APP_SECRET_PURGE_DELAY_SECONDS" => "86400",
+      "APP_SECRET_OUTBOX_RETENTION_SECONDS" => "604800",
+      "APP_SECRET_PROOF_RETENTION_SECONDS" => "2592000",
+    }.freeze
+
     fixtures :app_preference_chronicle_levels, :app_preference_chronicle_events,
              :client_statuses, :client_telephone_statuses, :client_passkey_statuses,
              :client_chronicle_events, :client_chronicle_levels
 
     setup do
       host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      @previous_lifetimes = ENV.to_h.slice(*SECRET_LIFETIME_VALUES.keys)
+      SECRET_LIFETIME_VALUES.each { |key, value| ENV[key] = value }
 
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
     end
 
     teardown do
+      SECRET_LIFETIME_VALUES.each_key do |key|
+        @previous_lifetimes.key?(key) ? ENV[key] = @previous_lifetimes.fetch(key) : ENV.delete(key)
+      end
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.challenge_response = nil
     end
@@ -37,7 +49,7 @@ module Auth::App::Up
       finish_path = auth_app_sign_up_check_telephone_passkey_path(ri: "jp")
 
       assert_equal finish_path, props.fetch("finish_url")
-      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"), props.fetch("success_redirect_url")
+      assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp"), props.fetch("success_redirect_url")
       assert_equal cycle.checkpoint_version, props.fetch("checkpoint_version")
     end
 
@@ -144,10 +156,10 @@ module Auth::App::Up
 
       assert_response :created
       assert_equal "ok", response.parsed_body["status"]
-      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"), response.parsed_body["redirect_url"]
+      assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp"), response.parsed_body["redirect_url"]
       assert_predicate session[:user_telephone_registration], :present?
       assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
-      assert cycle.reload.requirement_cleared?(:passkey)
+      assert_not cycle.reload.requirement_cleared?(:passkey)
       assert_not cycle.requirement_cleared?(:birthdate)
       assert_not_includes cycle.completed_requirements.keys, "passcode"
     end
@@ -251,7 +263,7 @@ module Auth::App::Up
       end
 
       assert_response :created
-      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
+      assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp"),
                    response.parsed_body["redirect_url"]
     end
 
@@ -318,31 +330,35 @@ module Auth::App::Up
     end
 
     test "telephone sign up rejects one day before the sixteenth birthday with sixteen birthday copy" do
-      travel_to Time.zone.local(2026, 6, 25, 12, 0, 0) do
+      now = Client.database_now.in_time_zone("Asia/Tokyo")
+      sixteenth_birthday = now.to_date - 16.years
+      travel_to now do
         telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("under16")
 
         patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp"), params: {
           requirement: "birthdate",
-          birthdate: "2010-06-26",
+          birthdate: (sixteenth_birthday + 1.day).iso8601,
           checkpoint_version: cycle.reload.checkpoint_version,
         }
 
         assert_response :success
         assert_includes response.body, "16歳の誕生日"
         assert_not_includes response.body, "13歳の誕生日"
-        assert_equal ClientSignUpFlowStatus::FAILED, cycle.reload.status_id
+        assert_equal ClientSignUpFlowStatus::HALTED, cycle.reload.status_id
         assert_not cycle.requirement_cleared?(:birthdate)
         assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
       end
     end
 
     test "telephone sign up allows the sixteenth birthday" do
-      travel_to Time.zone.local(2026, 6, 25, 12, 0, 0) do
+      now = Client.database_now.in_time_zone("Asia/Tokyo")
+      sixteenth_birthday = now.to_date - 16.years
+      travel_to now do
         telephone, cycle = advance_telephone_signup_to_birthdate_checkpoint!("sixteen")
 
         patch auth_app_sign_up_check_telephone_birthdate_url(ri: "jp"), params: {
           requirement: "birthdate",
-          birthdate: "2010-06-25",
+          birthdate: sixteenth_birthday.iso8601,
           checkpoint_version: cycle.reload.checkpoint_version,
         }
 
@@ -352,7 +368,7 @@ module Auth::App::Up
       end
     end
 
-    test "sign-in failure after durable sign-up does not delete completed account data" do
+    test "durable sign-up preserves account data before Base session completion" do
       telephone = verify_telephone_via_otp!
       cycle = current_sign_up_flow(telephone)
 
@@ -387,12 +403,9 @@ module Auth::App::Up
 
       assert_response :created
 
-      # Simulate sign-in boundary failure by marking the actor as RESERVED before finalization.
-      # SignAppUpTelephoneRegistrationFinalizer skips the VERIFIED_WITH_SIGN_UP status upgrade
-      # when the actor is not UNVERIFIED_WITH_SIGN_UP, and then login_allowed? returns false
-      # for RESERVED actors, triggering the sign_in_handoff_failed path.
+      complete_secret_requirement!(cycle)
+
       user = telephone.user
-      user.update_column(:status_id, ClientStatus::RESERVED)
 
       get auth_app_sign_up_check_telephone_birthdate_url(ri: "jp")
 
@@ -404,18 +417,18 @@ module Auth::App::Up
         checkpoint_version: cycle.reload.checkpoint_version,
       }
 
-      # Finalization ran but sign-in handoff failed: 422 is the expected response.
-      assert_response :unprocessable_content
+      assert_response :redirect
+      assert_equal auth_app_sign_in_check_path(ri: "jp"), URI.parse(response.location).request_uri
 
       user.reload
 
       # The actor must not be deleted after finalization, even though sign-in failed.
       assert_not_nil Client.find_by(id: user.id),
                      "actor must not be deleted after a sign-in failure post-finalization"
-      # No token should be issued since sign-in failed.
+      # The Auth admission records evidence; Base still owns root session issuance.
       assert_not ClientToken.exists?(user_id: user.id)
-      # Ticket is finalized but NOT completed (handoff failed, complete event never ran).
-      assert_not_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
+      assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
+      assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
     end
 
     test "POST create rejects stale checkpoint version before creating passkey" do
@@ -451,6 +464,13 @@ module Auth::App::Up
     private
 
     def verify_telephone_via_otp!
+      ensure_local_sign_in_admission!(
+        surface: "app",
+        path: auth_app_sign_in_path(ri: "jp"),
+        params: { ri: "jp" },
+        headers: { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL") },
+      )
+
       post(
         auth_app_sign_up_telephone_url,
         params: {
@@ -531,15 +551,43 @@ module Auth::App::Up
       end
 
       assert_response :created
-      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"),
+      assert_equal auth_app_sign_up_check_telephone_secret_path(ri: "jp"),
                    response.parsed_body["redirect_url"]
-      assert cycle.reload.requirement_cleared?(:passkey)
+      assert_not cycle.reload.requirement_cleared?(:passkey)
+
+      complete_secret_requirement!(cycle)
 
       get(auth_app_sign_up_check_telephone_birthdate_url(ri: "jp"))
 
       assert_response :success
 
       [telephone, cycle]
+    end
+
+    def complete_secret_requirement!(cycle)
+      secret_path = auth_app_sign_up_check_telephone_secret_path(ri: "jp")
+      get(secret_path)
+
+      assert_response :success
+      issuance = ClientSecretIssuance.find_by!(sign_up_flow_ref: cycle.public_id)
+      values = []
+
+      if issuance.planned_count.positive?
+        post(secret_path)
+
+        assert_response :success
+        values = response.parsed_body.css("[data-secret-value] code").map(&:text)
+
+        assert_equal issuance.planned_count, values.length
+      end
+
+      params = { checkpoint_version: cycle.reload.checkpoint_version }
+      params[:stored] = "1" if values.any?
+      patch(secret_path, params: params)
+
+      assert_response :see_other
+      assert_equal auth_app_sign_up_check_telephone_birthdate_path(ri: "jp"), URI.parse(response.location).request_uri
+      assert cycle.reload.requirement_cleared?(:passkey)
     end
 
     def registration_telephone

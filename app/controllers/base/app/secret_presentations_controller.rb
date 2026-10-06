@@ -3,7 +3,6 @@
 class Base::App::SecretPresentationsController < Base::App::ApplicationController
   AUTHENTICATION_MODE = :private
   declare_authentication_mode! :private
-  before_action :authenticate_client!
 
   public
 
@@ -35,7 +34,6 @@ class Base::App::SecretPresentationsController < Base::App::ApplicationControlle
       actor_context: context,
       token: current_session_token, issuance: @issuance, purge_after: ClientSecretLifetimesValue.purge_delay,
     )
-    session.delete(:client_secret_operation_id)
     render plain: t("base.app.secrets.payload_unavailable"), status: :gone
   rescue ClientSecretPresentationIssuer::Denied
     render plain: t("errors.messages.invalid_request"), status: :forbidden

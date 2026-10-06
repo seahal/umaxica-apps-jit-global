@@ -206,10 +206,17 @@ module ActorSupport
     return Actor::StepUp::NULL unless defined?(StepUpResolver)
     return Actor::StepUp::NULL unless respond_to?(:current_session_token, true)
 
+    scope = resolved_current_step_up_scope
+    return Actor::StepUp::NULL if scope.blank? || !respond_to?(:step_up_requirement, true)
+
+    # This runs before the authentication gate. A request without a session has no Step-Up state to
+    # resolve, and a requirement cannot be built without a session binding; the gate refuses it.
+    token = current_session_token
+    return Actor::StepUp::NULL if token.nil?
+
     StepUpResolver.call(
-      token: current_session_token,
-      scope: resolved_current_step_up_scope,
-      required_aal: resolved_current_step_up_required_aal,
+      token: token,
+      requirement: step_up_requirement(scope: scope),
     )
   rescue StandardError => e
     raise_actor_resolution_error!(:step_up, e)
@@ -219,12 +226,6 @@ module ActorSupport
     return verification_scope if respond_to?(:verification_required?, true) && verification_required?
 
     nil
-  end
-
-  def resolved_current_step_up_required_aal
-    return verification_required_aal if respond_to?(:verification_required_aal, true)
-
-    StepUpResolver::DEFAULT_REQUIRED_AAL
   end
 
   def raise_actor_resolution_error!(component, exception)

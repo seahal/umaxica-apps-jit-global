@@ -167,7 +167,8 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
   # Success case: Unlink when user has multiple auth methods
   # ============================================================================
   test "unlink Google succeeds when user has another auth method" do
-    # Client has both Google and Apple
+    # D-85 permits only one effective social binding per Client. A verified
+    # email is the second allowed method for this unlink operation.
     google_identity = ClientGoogleIdentity.create!(
       user: @user,
       uid: "google_to_unlink_#{SecureRandom.hex(4)}",
@@ -177,34 +178,19 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       user_google_identity_status: client_google_identity_statuses(:active),
     )
 
-    ClientAppleIdentity.create!(
-      user: @user,
-      uid: "apple_backup_#{SecureRandom.hex(4)}",
-      provider: "apple",
-      token: "token",
-      expires_at: 1.week.from_now.to_i,
-      user_apple_identity_status: client_apple_identity_statuses(:active),
-    )
+    create_effective_email!("google-backup-#{SecureRandom.hex(4)}@example.com")
 
     delete auth_app_settings_google_url(ri: "jp", host: @host),
            headers: social_unlink_headers
 
     assert_response :redirect
 
-    assert_not ClientGoogleIdentity.exists?(google_identity.id), "Google identity should be removed"
-    assert_equal 1, ClientAppleIdentity.where(user: @user).count
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: google_identity.id),
+               "Google identity should be released"
+    assert_not_nil google_identity.reload.released_at
   end
 
-  test "unlink Apple succeeds when user has Google linked" do
-    ClientGoogleIdentity.create!(
-      user: @user,
-      uid: "google_backup_#{SecureRandom.hex(4)}",
-      provider: "google_app",
-      token: "token",
-      expires_at: 1.week.from_now.to_i,
-      user_google_identity_status: client_google_identity_statuses(:active),
-    )
-
+  test "unlink Apple succeeds when a verified email remains available" do
     apple_identity = ClientAppleIdentity.create!(
       user: @user,
       uid: "apple_to_unlink_#{SecureRandom.hex(4)}",
@@ -213,13 +199,16 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       expires_at: 1.week.from_now.to_i,
       user_apple_identity_status: client_apple_identity_statuses(:active),
     )
+    create_effective_email!("apple-backup-#{SecureRandom.hex(4)}@example.com")
 
     delete auth_app_settings_apple_url(ri: "jp", host: @host),
            headers: social_unlink_headers
 
     assert_response :redirect
 
-    assert_not ClientAppleIdentity.exists?(apple_identity.id), "Apple identity should be removed"
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: apple_identity.id),
+               "Apple identity should be released"
+    assert_not_nil apple_identity.reload.released_at
   end
 
   test "unlink Google succeeds when passkey exists without verified telephone" do
@@ -252,7 +241,8 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
            headers: social_unlink_headers
 
     assert_response :redirect
-    assert_not ClientGoogleIdentity.exists?(google_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
+    assert_not_nil google_identity.reload.released_at
   end
 
   test "unlink Google succeeds with passkey and verified telephone" do
@@ -283,7 +273,8 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
            headers: social_unlink_headers
 
     assert_response :redirect
-    assert_not ClientGoogleIdentity.exists?(google_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
+    assert_not_nil google_identity.reload.released_at
   end
 
   # ============================================================================
@@ -341,45 +332,25 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
       token: "token",
       expires_at: 1.week.from_now.to_i,
       user_google_identity_status: client_google_identity_statuses(:revoked),
+      released_at: Time.current,
     )
 
-    # Create an active email for the user
-    ClientEmail.create!(
-      user: @user,
-      address: "active@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    create_effective_email!("active-#{SecureRandom.hex(4)}@example.com")
 
-    # Client also has ACTIVE Apple identity
-    apple_identity = ClientAppleIdentity.create!(
-      user: @user,
-      uid: "active_apple_#{SecureRandom.hex(4)}",
-      provider: "apple",
-      token: "token",
-      expires_at: 1.week.from_now.to_i,
-      user_apple_identity_status: client_apple_identity_statuses(:active),
-    )
-
-    # Try to unlink Apple - should succeed because user has email as backup
-    delete auth_app_settings_apple_url(ri: "jp", host: @host),
+    # A released legacy row is not an effective social binding and is already
+    # idempotently unlinked; the effective email remains available.
+    delete auth_app_settings_google_url(ri: "jp", host: @host),
            headers: social_unlink_headers
 
     assert_response :redirect
     assert ClientGoogleIdentity.exists?(inactive_google.id)
-    assert_not ClientAppleIdentity.exists?(apple_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: inactive_google.id)
   end
 
   test "unlink fails when only active identity is social and others are REVOKED" do
-    # Client has REVOKED Apple and ACTIVE Google only
-    ClientAppleIdentity.create!(
-      user: @user,
-      uid: "revoked_apple_#{SecureRandom.hex(4)}",
-      provider: "apple",
-      token: "token",
-      expires_at: 1.week.from_now.to_i,
-      user_apple_identity_status: client_apple_identity_statuses(:revoked),
-    )
-
+    # D-85 permits only one binding row per Client, so the other methods are
+    # represented by the unverified email/TOTP fixtures rather than a second
+    # social row.
     google_identity = ClientGoogleIdentity.create!(
       user: @user,
       uid: "only_active_google_#{SecureRandom.hex(4)}",
@@ -532,7 +503,11 @@ class SocialAuthUnlinkTest
       otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
-    )
+    ).tap { |email| email.finalize_binding! }
+  end
+
+  def create_effective_email!(address)
+    insert_verified_user_email!(user_id: @user.id, address: address)
   end
 
   def insert_verified_visitor_email!(visitor_id:, address:)
@@ -861,6 +836,10 @@ class SocialAuthUnlinkTest
         last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
         last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
         last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+        last_step_up_credential_ref: ("test-step-up-credential" if token.respond_to?(:last_step_up_credential_ref)),
+        last_step_up_phishing_resistant: (false if token.respond_to?(:last_step_up_phishing_resistant)),
+        last_step_up_user_verified: (true if token.respond_to?(:last_step_up_user_verified)),
+        last_step_up_full_reauthentication: (false if token.respond_to?(:last_step_up_full_reauthentication)),
         updated_at: Time.current,
       }.compact,
     )

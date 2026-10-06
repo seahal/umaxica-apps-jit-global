@@ -20,7 +20,6 @@ module Base
 
           AUTHENTICATION_MODE = :private
 
-          before_action :authenticate_operator!
           # Object-level authorization (ActionPolicy): registering an email is a fresh-record action
           # for the authenticated operator, so gate by actor type. Each flow step builds/looks up the
           # email through current_operator.staff_emails (owner-scoped). Step-up/turnstile remain below.
@@ -44,7 +43,9 @@ module Base
           end
 
           def create
-            email_params = params(staff_email: %i(raw_address address notifiable))
+            email_params = params.slice(:staff_email).permit(staff_email: %i(raw_address address notifiable)).fetch(
+              :staff_email, {},
+            )
             email_address = email_params[:raw_address] || email_params[:address]
             email_preferences = email_params.slice(:notifiable)
             @staff_email = current_operator.staff_emails.build(

@@ -364,3 +364,23 @@ writes exist outside the state machines.
 - `adr/base-auth-ceremony-and-seven-rp-boundary.md`
 - `adr/sign-up-cycle-cancellation-retention.md`
 - `adr/logout-ceremony-boundary.md`
+
+## Unified implementation amendment (2026-10-06)
+
+The implementation cycle amends this future contract with the concrete sign-in graph and writer
+rules in `two.md`. The sign-in states are `PRIMARY_PENDING (10)`, `MFA_PENDING (20)`,
+`GUARDRAIL_PENDING (40)`, `SESSION_ISSUANCE_PENDING (50)`, `CHECKPOINT_PENDING (60)`,
+`SELECTOR_PENDING (65)`, and `COMPLETED (100)`, with every non-terminal state allowed to expire,
+cancel, or halt. `SESSION_LIMIT_PENDING (30)`, `DASHBOARD_PENDING (70)`, `RETURN_PENDING (80)`,
+and `FAILED (900)` remain readable tombstone rows and are never written by the new runtime.
+
+The owning writer transaction locks and reloads the carrier, uses that model's database clock,
+checks expiry before mutation, rejects stale or illegal sources, and writes through one named
+transition definition. An overdue non-terminal is committed as `EXPIRED` and refused after the
+transaction; a terminal row is never rewritten. Reference rows are migration-owned and FKs are
+validated. The same authority pattern applies to sign-up, sign-out, and the three realm-specific
+session-limit child transactions.
+
+This is an **amendment** to the target storage contract. The id-only reference-table rule,
+immutable ids, restrictive ownership, no request-time reference creation, and no universal workflow
+table are **retained**.

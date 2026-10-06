@@ -6,17 +6,15 @@ class SignAppUpTelephoneSignupCreator
   # Outcome consumed by the surface controller.
   Result = Data.define(:status, :telephone, :session_payload)
 
-  def self.call(telephone:, existing_telephone:, pending_public_id:)
+  def self.call(telephone:, pending_public_id:)
     new(
       telephone: telephone,
-      existing_telephone: existing_telephone,
       pending_public_id: pending_public_id,
     ).call
   end
 
-  def initialize(telephone:, existing_telephone:, pending_public_id:)
+  def initialize(telephone:, pending_public_id:)
     @telephone = telephone
-    @existing_telephone = existing_telephone
     @pending_public_id = pending_public_id
     @result = nil
   end
@@ -45,13 +43,6 @@ class SignAppUpTelephoneSignupCreator
   def perform_create_under_lock
     cleanup_pending_signup
 
-    locked_existing = lock_existing_telephone
-    if rate_limited_existing?(locked_existing)
-      @result = Result.new(status: :rate_limited, telephone: @telephone, session_payload: nil)
-      raise ActiveRecord::Rollback
-    end
-
-    remove_existing_unverified_telephones
     create_pending_telephone
   end
 
@@ -64,34 +55,6 @@ class SignAppUpTelephoneSignupCreator
     pending_user = pending_telephone.user
     pending_telephone.destroy!
     pending_user.destroy! if pending_user&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
-  end
-
-  def lock_existing_telephone
-    ClientTelephone.lock.find_by(id: @existing_telephone.id) if @existing_telephone
-  end
-
-  def rate_limited_existing?(locked_existing)
-    return true if locked_existing&.locked?
-
-    locked_existing&.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP &&
-      locked_existing.reregistration_window_active?
-  end
-
-  def remove_existing_unverified_telephones
-    number_digest = @telephone.number_digest
-    return if number_digest.blank?
-
-    existing_telephones = ClientTelephone.where(
-      number_digest: number_digest,
-      user_identity_telephone_status_id: [ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP],
-    ).to_a
-
-    pending_user_ids = existing_telephones.filter_map(&:user_id)
-    if pending_user_ids.any?
-      Client.where(id: pending_user_ids, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
-        .find_each(&:destroy!)
-    end
-    existing_telephones.each(&:destroy!)
   end
 
   def create_pending_telephone

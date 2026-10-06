@@ -12,6 +12,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
            :client_token_dbsc_statuses, :client_chronicle_events, :client_chronicle_levels
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
     @user = clients(:one)
@@ -21,19 +22,24 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+    install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @user, token: @token)
     # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.
     passkey = @user.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "app-contact-verification-public-key", sign_count: 0,
     )
     requirement = StepUpRequirement.new(
       scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:app",
+      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @user.public_id,
+      resource_ref: nil, tenant_ref: nil,
       session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: @user, token: @token, requirement: requirement, return_to: "/identity/emails/registration/new",
     ).transaction
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true,
+      user_verified: true,
       verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: passkey.public_id,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
@@ -85,7 +91,11 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
       BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
       browser = open_session
+      browser.https!
       browser.host!(@host)
+      install_base_browser_rp_credentials!(
+        surface: "app", host: @host, actor: actor, token: token, cookie_jar: browser.cookies,
+      )
       browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
         actor, host: @host, session_public_id: token.public_id,
                resource_type: "client", jwt_issuer_id: "surface:BASE_APP",

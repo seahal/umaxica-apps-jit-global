@@ -14,8 +14,8 @@ class SignUpExpiryJob < ApplicationJob
   def perform(batch_size: 100)
     raise ArgumentError, "batch_size must be positive" unless batch_size.to_i.positive?
 
-    now = Time.current
     TICKET_CLASSES.each do |ticket_class|
+      now = ticket_class.database_now
       expired_scope(ticket_class, now: now).in_batches(of: batch_size) do |batch|
         batch.each { |ticket| expire_ticket(ticket) }
       end

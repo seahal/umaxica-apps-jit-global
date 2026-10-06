@@ -73,19 +73,25 @@ module TokenStatusManagement
 
   # Concrete token models provide step_up_authority_binding. Only explicit lifecycle changes
   # touch these rows; normal requests do not acquire additional credential or ceremony locks.
-  def revoke_step_up_authority!(now: nil)
+  def revoke_step_up_authority!(now: nil, except_transaction_ref: nil)
     session_model, transaction_model, ceremony_model, token_key = step_up_authority_binding
     self.class.connection_class_for_self.connected_to(role: :writing) do
       with_lock do
         decision_time = now || self.class.database_now
         update!(
-          last_step_up_at: nil, last_step_up_scope: nil, last_step_up_aal: nil,
+          last_step_up_at: nil, last_step_up_scope: nil,
+          # @deprecated `last_step_up_aal` is a historical label and never an authority input.
+          last_step_up_aal: nil,
           last_step_up_method: nil, last_step_up_purpose: nil, last_step_up_audience: nil,
           last_step_up_session_public_id: nil, last_step_up_phishing_resistant: false,
+          last_step_up_user_verified: nil, last_step_up_credential_ref: nil,
+          last_step_up_full_reauthentication: nil, last_step_up_resource_ref: nil,
+          last_step_up_tenant_ref: nil,
         )
         record = session_model.where(token_key => id).lock.first
         record&.update!(discard_at: decision_time)
         transactions = transaction_model.where(session_ref: public_id, status: %w(pending verified))
+        transactions = transactions.where.not(transaction_id: except_transaction_ref) if except_transaction_ref.present?
         transactions.order(:id).lock.each do |ceremony_transaction|
           ceremony_transaction.commit_revocation!(now: decision_time)
           ceremonies = ceremony_model.where(step_up_ceremony_transaction_ref: ceremony_transaction.transaction_id)

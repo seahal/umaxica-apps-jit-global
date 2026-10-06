@@ -26,7 +26,9 @@ module SignSettingsEmailRegistration
               "email candidate is already verified" unless locked.public_send(config.fetch(:status_key)) ==
                 config.fetch(:unverified_status)
 
-        locked.update!(config.fetch(:status_key) => config.fetch(:verified_status))
+        attributes = { config.fetch(:status_key) => config.fetch(:verified_status) }
+        attributes[:binding_finalized_at] = config.fetch(:record_class).database_now if config[:binding]
+        locked.update!(attributes)
         record_settings_email_registration_audit!(config, actor, locked)
         locked
       end
@@ -50,6 +52,7 @@ module SignSettingsEmailRegistration
         status_key: :user_email_status_id,
         unverified_status: ClientEmailStatus::UNVERIFIED,
         verified_status: ClientEmailStatus::VERIFIED,
+        binding: true,
         audit_event_id: ClientChronicleEvent::EMAIL_REGISTERED,
       },
       "com" => {
@@ -58,6 +61,7 @@ module SignSettingsEmailRegistration
         status_key: :visitor_email_status_id,
         unverified_status: VisitorEmailStatus::UNVERIFIED,
         verified_status: VisitorEmailStatus::VERIFIED,
+        binding: true,
       },
       "org" => {
         record_class: OperatorEmail,

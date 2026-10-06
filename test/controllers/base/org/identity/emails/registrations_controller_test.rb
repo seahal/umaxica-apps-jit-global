@@ -9,9 +9,10 @@ require "test_helper"
 class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses, :operator_email_statuses,
            :operator_token_kinds, :operator_token_statuses, :operator_token_binding_methods,
-           :operator_token_dbsc_statuses
+           :operator_token_dbsc_statuses, :operator_passkeys
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
     @operator = operators(:one)
@@ -23,6 +24,9 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    install_base_browser_rp_credentials!(surface: "org", host: @host, actor: @operator, token: @token)
+    passkey = @operator.operator_passkeys.first!
+    passkey.update!(uv_verified_at: Time.current)
     _verification, raw_verification = OperatorVerification.issue_for_token!(token: @token)
     cookies[OperatorVerification.cookie_name] = raw_verification
     @token.update!(
@@ -33,6 +37,10 @@ class Base::Org::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
       last_step_up_session_public_id: @token.public_id,
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
+      last_step_up_credential_ref: passkey.external_id,
+      last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
     access_token = AuthenticationToken.encode(
       @operator, host: @host, session_public_id: @token.public_id,

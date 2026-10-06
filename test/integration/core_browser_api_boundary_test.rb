@@ -367,7 +367,10 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_operator Time.at(access_claims.fetch("exp")).utc, :<=, absolute_expiry
 
-    assert_no_match(/expires=/i, refresh_cookie)
+    assert_match(/expires=/i, refresh_cookie)
+    refresh_expiry = refresh_cookie[/expires=([^;]+)/i, 1]
+
+    assert_operator Time.httpdate(refresh_expiry), :<=, absolute_expiry
   end
 
   private

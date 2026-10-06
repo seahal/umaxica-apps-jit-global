@@ -11,8 +11,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_operator!
-
       def index
         authorize!(:org_console, to: :support?, with: OrgConsolePolicy)
         response.headers["Cache-Control"] = "private, no-store"

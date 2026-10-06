@@ -25,9 +25,6 @@ module SignEmailRegistrable
   }.freeze
 
   SESSION_KEY = :sign_up_email_flow_state
-  EXISTING_EMAIL_SESSION_KEY = :sign_up_existing_email_id
-  EXISTING_EMAIL_SKIP_OTP_SESSION_KEY = :sign_up_existing_email_skip_otp
-  DUMMY_EXISTING_EMAIL_SESSION_KEY = :sign_up_dummy_existing_email
 
   private
 
@@ -60,9 +57,6 @@ module SignEmailRegistrable
 
   def reset_email_flow!
     session[SESSION_KEY] = STATE_INIT
-    session.delete(EXISTING_EMAIL_SESSION_KEY)
-    session.delete(EXISTING_EMAIL_SKIP_OTP_SESSION_KEY)
-    session.delete(DUMMY_EXISTING_EMAIL_SESSION_KEY)
   end
 
   def redirect_flow_violation
@@ -73,7 +67,6 @@ module SignEmailRegistrable
   def initiate_email_verification!(
     email_address,
     confirm_policy: "1",
-    allow_existing: false,
     email_preferences: {}
   )
     ensure_signup_reference_defaults!
@@ -86,23 +79,22 @@ module SignEmailRegistrable
 
     return false if @user_email.address_digest.blank?
 
-    create_and_send_verified_email!(allow_existing)
+    create_and_send_verified_email!
   rescue ActiveRecord::RecordInvalid => e
     @user_email = e.record if e.record.is_a?(ClientEmail)
     false
   end
 
-  def create_and_send_verified_email!(allow_existing)
+  def create_and_send_verified_email!
     result =
       SignUpEmailPendingGuard.with_lock(
         address_digest: @user_email.address_digest,
         model_class: ClientEmail,
       ) do
-        process_email_registration_under_lock(allow_existing)
+        process_email_registration_under_lock
       end
 
     return :cooldown if result[:cooldown]
-    return true if result[:status] == :dummy_existing
     return result[:status] if result[:status] == false || result[:status] == :cooldown
     return false unless result[:status] == :ok
 
@@ -110,41 +102,12 @@ module SignEmailRegistrable
     true
   end
 
-  def process_email_registration_under_lock(allow_existing)
-    existing_email =
-      allow_existing ?
-               ClientEmail.find_by(address_digest: @user_email.address_digest) : nil
-    uniqueness_only = email_uniqueness_only_error?(@user_email)
+  def process_email_registration_under_lock
     has_errors = @user_email.errors.details.except(:user, :user_id).any?
 
-    if allow_existing && existing_email && !pending_email_status?(existing_email) &&
-        (uniqueness_only || !has_errors)
-      cleanup_pending_signup!
-      mark_dummy_existing_email_flow!
-      return { status: :dummy_existing }
-    end
-
-    if has_errors
-      return { status: false } unless allow_existing && uniqueness_only &&
-        pending_email_status?(existing_email)
-    end
-
-    if pending_email_status?(existing_email) &&
-        existing_email.reregistration_window_active?
-      mark_dummy_existing_email_flow!
-      return { status: :dummy_existing }
-    end
-
-    if pending_email_status?(existing_email)
-      locked = ClientEmail.lock.find_by(id: existing_email.id)
-      if locked&.reregistration_window_active?
-        mark_dummy_existing_email_flow!
-        return { status: :dummy_existing }
-      end
-    end
-
     cleanup_pending_signup!
-    remove_existing_unverified_emails!
+    return { status: false } if has_errors
+
     create_pending_user!
 
     otp_number = generate_otp_attributes(@user_email)
@@ -224,22 +187,6 @@ module SignEmailRegistrable
   def cleanup_pending_signup!
   end
 
-  def remove_existing_unverified_emails!
-    return if @user_email.address_digest.blank?
-
-    existing_emails = ClientEmail.where(
-      address_digest: @user_email.address_digest,
-      user_email_status_id: pending_email_status_ids,
-    ).to_a
-
-    pending_user_ids = existing_emails.filter_map(&:user_id)
-    Client.where(id: pending_user_ids).find_each(&:destroy!) if pending_user_ids.any?
-
-    existing_emails.each do |email|
-      email.destroy! if email.user_id.blank?
-    end
-  end
-
   def pending_email_status_id
     ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
   end
@@ -285,36 +232,5 @@ module SignEmailRegistrable
 
   def email_otp_purpose
     nil
-  end
-
-  def dummy_existing_email_session_payload
-    {
-      "existing" => true,
-      "dummy" => true,
-      "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
-    }
-  end
-
-  def mark_dummy_existing_email_flow!
-    session[DUMMY_EXISTING_EMAIL_SESSION_KEY] = dummy_existing_email_session_payload
-    @user_email.errors.clear
-  end
-
-  def email_uniqueness_only_error?(user_email)
-    # ignore :user and :user_id error
-    errors_to_check = user_email.errors.details.except(:user, :user_id)
-    return false if errors_to_check.empty?
-
-    # Fields that can have uniqueness errors
-    uniqueness_fields = %i(address raw_address address_digest)
-
-    # Check if all errors are :taken errors on the uniqueness fields
-    errors_to_check.each do |field, errors|
-      return false unless uniqueness_fields.include?(field)
-      return false unless errors.all? { |error| error[:error] == :taken }
-    end
-
-    # Ensure at least one uniqueness error is present
-    user_email.errors.details.any?
   end
 end

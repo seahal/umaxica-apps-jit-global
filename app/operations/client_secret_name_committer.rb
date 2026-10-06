@@ -73,9 +73,12 @@ class ClientSecretNameCommitter
 
       now = ClientToken.database_now
       requirement = StepUpRequirement.new(
-        scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
+        scope: "settings_secret_credential", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
         session_binding: locked_token.public_id, token_binding: locked_token.public_id,
-        require_session_binding: true,
+        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       unless locked_token.currently_usable?(now) && !locked_token.restricted? &&
           StepUpResolver.call(token: locked_token, requirement: requirement, now: now).satisfied?

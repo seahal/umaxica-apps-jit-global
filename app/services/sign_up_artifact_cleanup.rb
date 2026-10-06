@@ -64,7 +64,7 @@ class SignUpArtifactCleanup
   end
 
   def self.cleanup_status_ids(cycle_class)
-    %w(CANCELLED EXPIRED FAILED).filter_map do |status_name|
+    %w(CANCELLED EXPIRED FAILED HALTED).filter_map do |status_name|
       cycle_class.status_id_for(status_name)
     rescue KeyError
       nil

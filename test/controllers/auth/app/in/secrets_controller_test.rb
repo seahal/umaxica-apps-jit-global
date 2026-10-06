@@ -34,7 +34,9 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
         "Origin" => "https://#{host}",
         "Sec-Fetch-Site" => "same-origin",
       }
-      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      )
       get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       post auth_app_sign_in_path(ri: "jp"), params: {

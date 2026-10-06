@@ -5,15 +5,29 @@
 module BaseLocalAuthenticationCompletion
   public
 
+  def show
+    apply_base_browser_continuation_headers!
+    validate_result_lookup_params!
+    render "base/shared/result_continuation", layout: false,
+                                              locals: { action_url: request.path,
+                                                        result_ref: params[:result_ref],
+                                                        transaction_ref: params[:transaction_ref],
+                                                        ri: params[:ri], }
+  rescue ActionController::BadRequest, ArgumentError
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
+
   def create
+    apply_base_browser_continuation_headers!
+    transaction_reference = transaction_reference_param
     locator = session[SignInCycleLocator::SESSION_KEYS.fetch(local_login_surface.to_sym)]
-    unless locator.is_a?(Hash) && locator["public_id"] == params[:transaction_ref]
+    unless locator.is_a?(Hash) && locator["public_id"] == transaction_reference
       raise BaseAuthAdmissionCoordinator::Denied, "local browser binding missing"
     end
 
-    flow = local_login_flow(locator.fetch("public_id"))
-    binding = LocalAuthenticationResultCoordinator.read!(
-      flow: flow, surface: local_login_surface, raw_code: params[:result],
+    flow = local_login_flow(transaction_reference)
+    binding = LocalAuthenticationResultCoordinator.read_reference!(
+      flow: flow, surface: local_login_surface, reference: result_reference_param,
     )
     actor = local_login_actor(flow)
     if logged_in? && !(flow.base_finalized_at && current_session&.id == flow.token_id)
@@ -33,6 +47,25 @@ module BaseLocalAuthenticationCompletion
   end
 
   private
+
+  def validate_result_lookup_params!
+    result_reference_param
+    transaction_reference_param
+  end
+
+  def result_reference_param
+    value = params[:result_ref]
+    raise ActionController::BadRequest unless value.is_a?(String) && value.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+
+    value
+  end
+
+  def transaction_reference_param
+    value = params[:transaction_ref]
+    raise ActionController::BadRequest unless value.is_a?(String) && value.present?
+
+    value
+  end
 
   def complete_local_login_response!(result, locator:)
     case result.fetch(:status)

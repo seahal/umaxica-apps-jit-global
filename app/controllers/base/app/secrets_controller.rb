@@ -6,7 +6,6 @@ class Base::App::SecretsController < Base::App::ApplicationController
   AUTHENTICATION_MODE = :private
   declare_authentication_mode! :private
 
-  before_action :authenticate_client!
   step_up only: %i(new create edit update destroy), scope: "settings_secret_credential"
   before_action :load_secret, only: %i(show edit update destroy)
   rate_limit to: 5, within: 1.minute, by: -> { current_client.id },
@@ -41,11 +40,13 @@ class Base::App::SecretsController < Base::App::ApplicationController
 
   def new
     authorize!(ClientSecretCredential, to: :create?)
+    operation = prepare_manual_operation_locator!
     render inertia: "base/app/secrets/new", props: {
       title: t("base.app.secrets.add"),
       action: base_app_secrets_path,
       authenticity_token: form_authenticity_token,
       submit: t("actions.continue"),
+      operation_id: operation.fetch("id"),
     }
   end
 
@@ -56,13 +57,15 @@ class Base::App::SecretsController < Base::App::ApplicationController
 
   def create
     authorize!(ClientSecretCredential, to: :create?)
-    # The browser retains only a nonsecret operation locator. Retrying this POST cannot
-    # produce a second allocation; a completed allocation is cleared by confirmation.
-    operation_id = session[:client_secret_operation_id] ||= SecureRandom.uuid
+    operation_id = exact_manual_operation_id
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: secret_actor_context, token: current_session_token, operation_id: operation_id,
       expires_after: ClientSecretLifetimesValue.issuance_ttl,
     )
+    state = issuance.state(at: Client.database_now)
+    return redirect_to(base_app_secret_issuance_path(issuance.public_id), status: :see_other) if
+      %i(confirmed pending_confirmation).include?(state)
+
     ClientSecretPresentationIssuer.prepare!(
       actor_context: secret_actor_context, token: current_session_token,
       issuance: issuance,
@@ -96,6 +99,36 @@ class Base::App::SecretsController < Base::App::ApplicationController
 
   def secret_actor_context
     ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :base)
+  end
+
+  def prepare_manual_operation_locator!
+    token_ref = current_session_token&.public_id.to_s
+    locator = session[:client_secret_operation]
+    locator = locator.stringify_keys if locator.respond_to?(:stringify_keys)
+    valid_locator = locator.is_a?(Hash) && locator["id"].is_a?(String) &&
+      locator["id"].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/) &&
+      locator["session_ref"].to_s == token_ref
+
+    if valid_locator
+      prior = ClientSecretIssuance.find_by(origin_operation_id: locator["id"], client_id: current_client.id)
+      valid_locator = false if prior && %i(confirmed canceled expired).include?(prior.state(at: Client.database_now))
+    end
+
+    locator = { "id" => SecureRandom.uuid, "session_ref" => token_ref } unless valid_locator
+    session[:client_secret_operation] = locator
+    locator
+  end
+
+  def exact_manual_operation_id
+    operation_id = params[:operation_id]
+    locator = session[:client_secret_operation]
+    locator = locator.stringify_keys if locator.respond_to?(:stringify_keys)
+    unless operation_id.is_a?(String) && operation_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/) &&
+        locator.is_a?(Hash) && locator["id"] == operation_id && locator["session_ref"] == current_session_token&.public_id
+      raise ClientSecretManualReservationIssuer::Denied, "Secret operation locator is unavailable"
+    end
+
+    operation_id
   end
 
   def render_secret_detail

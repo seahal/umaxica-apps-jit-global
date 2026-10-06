@@ -205,11 +205,20 @@ module SocialAuth
   def social_auth_step_up_requirement(token, ttl:)
     StepUpRequirement.new(
       scope: SOCIAL_LINK_SCOPE,
+      step_up_required: true,
+      allowed_methods: step_up_supported_methods,
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
       session_binding: token&.public_id,
       token_binding: token&.public_id,
       ttl: ttl,
       purpose: :step_up,
       audience: social_auth_step_up_audience,
+      require_session_binding: true,
+      actor_ref: current_resource&.public_id,
+      resource_ref: nil,
+      tenant_ref: nil,
     )
   end
 
@@ -267,22 +276,16 @@ module SocialAuth
       operation: "login",
       challenge_id: extract_callback_state,
     )
+    result_reference = Valkey::AuthState::SocialCeremonyResultStore.new.issue!(
+      token: result_token, expires_at: grant.expires_at,
+    )
     clear_social_auth_intent!
-    render(
-      "sign/shared/social_completion",
-      locals: {
-        # The browser posts this form, so the target must be the public base
-        # host, not the internal one, and https, because the CSP form-action
-        # allowlist carries https origins only.
-        completion_url: base_app_social_authentication_completion_url(
-          id: callback_result.principal.provider,
-          host: base_authority_host,
-          protocol: "https",
-        ),
-        result_token: result_token,
-        ri: params[:ri],
-      },
-      layout: false,
+    redirect_to(
+      base_app_social_authentication_completion_url(
+        id: callback_result.principal.provider, result_ref: result_reference, ri: params[:ri],
+        host: base_authority_host, protocol: "https",
+      ), status: :see_other,
+      allow_other_host: true,
     )
     nil
   end

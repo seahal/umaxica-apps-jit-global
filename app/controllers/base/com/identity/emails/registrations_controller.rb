@@ -13,6 +13,9 @@ module Base
           include CommonOtp
 
           include CommonRedirect
+          # `preserve_pt` and `retrieve_pt` below come from here; BrowserRpAuthentication does not
+          # bring them in.
+          include ::AuthenticationRedirects
           include SignSettingsEmailRegistration
 
           include EnforcementIdentifierGate
@@ -21,7 +24,6 @@ module Base
 
           AUTHENTICATION_MODE = :private
 
-          before_action :authenticate_visitor!
           # Object-level authorization (ActionPolicy): registering an email is a fresh-record action
           # for the authenticated visitor, so gate by actor type. Each flow step builds/looks up the
           # email through current_visitor.visitor_emails (owner-scoped). Step-up/turnstile remain below.
@@ -45,7 +47,9 @@ module Base
           end
 
           def create
-            email_params = params(visitor_email: %i(raw_address address notifiable))
+            email_params = params.slice(:visitor_email).permit(visitor_email: %i(raw_address address notifiable)).fetch(
+              :visitor_email, {},
+            )
             email_address = email_params[:raw_address] || email_params[:address]
 
             # adr/unified-enforcement.md, Identifier attachment enforcement: an in-force

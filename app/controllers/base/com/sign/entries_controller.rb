@@ -5,27 +5,12 @@ module Base
   module Com
     module Sign
       class EntriesController < Base::Com::ApplicationController
-        include ::BaseNeutralSignEntry
+        include ::OidcRpSignEntry
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
+        before_action :reject_authenticated_rp_start!
         helper_method :neutral_sign_form_url
-
-        private
-
-        # The start POST only issues an admission; it needs no preference authority, so a stale
-        # preference credential must not refuse it.
-        def preference_entry_recovery_action?
-          action_name == "create"
-        end
-
-        def base_sign_surface = "com"
-
-        def auth_sign_in_url_for(admission)
-          auth_com_sign_in_url(
-            ri: params[:ri], host: oidc_sign_host, protocol: "https", entry_ref: admission.reference,
-          )
-        end
       end
     end
   end

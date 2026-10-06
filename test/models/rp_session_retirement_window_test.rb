@@ -10,7 +10,7 @@ class RpSessionRetirementWindowTest < ActiveSupport::TestCase
   setup do
     @session = ClientRpSession.create!(
       client_token: ClientToken.create!(user: Client.create!),
-      oidc_client_id: "core-next-rp",
+      oidc_client_id: "core-app",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )

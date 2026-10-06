@@ -27,7 +27,7 @@
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
-#  device_session_id                  :bigint
+#  device_session_id                  :bigint           not null
 #  last_step_up_session_public_id     :string
 #  oidc_client_id                     :string(64)
 #  oidc_connection_id                 :bigint
@@ -77,6 +77,7 @@
 one:
   public_id: 651 # was one_user_token_000001
   user: one
+  device_session_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
   user_token_binding_method_id: <%= ClientTokenBindingMethod::NOTHING %>
   user_token_dbsc_status_id: <%= ClientTokenDbscStatus::NOTHING %>
   user_token_kind_id: <%= ClientTokenKind::BROWSER_WEB %>
@@ -88,6 +89,7 @@ one:
 two:
   public_id: 615 # was two_user_token_000001
   user: two
+  device_session_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
   user_token_binding_method_id: <%= ClientTokenBindingMethod::NOTHING %>
   user_token_dbsc_status_id: <%= ClientTokenDbscStatus::NOTHING %>
   user_token_kind_id: <%= ClientTokenKind::BROWSER_WEB %>

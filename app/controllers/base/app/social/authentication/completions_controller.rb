@@ -5,35 +5,45 @@ module Base
   module App
     module Social
       module Authentication
-        # POST /social/authentication/completion
+        # GET renders the receiver-local form; POST consumes the server-side result.
         # Consumes the signed social ceremony result posted back from the Auth
         # host and establishes the app session (or enters the sign-up cycle).
-        class CompletionsController < ::Base::App::ApplicationController
+        class CompletionsController < ::Base::App::AuthorityController
           include SocialCeremonyParams
 
           AUTHENTICATION_MODE = :open
           declare_authentication_mode! :open
 
-          # The browser posts the signed ceremony result here from the Auth host
-          # (auth/shared/social_completion.html.erb), so the Origin is the Auth
-          # origin, not this Base origin. Base::App::ApplicationController trusts
-          # its own origin only, which rejects that handoff before the action
-          # runs and strands the ceremony on the auto-posting page. Trust the Auth
-          # origin locally, as Base::App::Oidc::LogoutsController does for its own
-          # cross-surface POST. The payload itself is still only accepted through
-          # IdentitySocialCeremonyFinalCommitter's signature and one-shot checks.
-          SOCIAL_COMPLETION_TRUSTED_ORIGINS = JitHostOriginEnv.trusted_origins(
-            ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-            ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-          ).freeze
+          protect_from_forgery using: :header_or_legacy_token, with: :exception
 
-          protect_from_forgery using: :header_or_legacy_token,
-                               trusted_origins: SOCIAL_COMPLETION_TRUSTED_ORIGINS,
-                               with: :exception
+          def show
+            apply_base_browser_continuation_headers!
+            provider = social_provider_param
+            result_reference = params[:result_ref]
+            unless result_reference.is_a?(String) && result_reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+              raise ActionController::BadRequest
+            end
+
+            render "base/shared/result_continuation", layout: false,
+                                                      locals: { action_url: "#{request.path}?id=#{CGI.escape(provider)}",
+                                                                result_ref: result_reference,
+                                                                transaction_ref: nil,
+                                                                ri: params[:ri], }
+          rescue ActionController::BadRequest
+            render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+          end
 
           def create
+            apply_base_browser_continuation_headers!
             provider = social_provider_param
-            result_token = params.require(:social_ceremony_result)
+            result_reference = params[:result_ref]
+            unless result_reference.is_a?(String) && result_reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN)
+              raise ActionController::BadRequest
+            end
+
+            result_token = Valkey::AuthState::SocialCeremonyResultStore.new.read(reference: result_reference)
+            raise ActionController::BadRequest if result_token.blank?
+
             # The payload here is UNVERIFIED/untrusted. We read `operation` only to
             # fail-safe REJECT link completions on this login-only base path. The
             # actual trust decision happens in IdentitySocialCeremonyFinalCommitter
@@ -56,35 +66,14 @@ module Base
               social_sign_up_required?(commit)
 
             complete_social_login!(commit, provider)
-          rescue IdentitySocialCeremonyContract::Error, ActionController::ParameterMissing, ActiveRecord::RecordNotFound
+          rescue IdentitySocialCeremonyContract::Error, ActionController::ParameterMissing,
+                 ActionController::BadRequest, ActiveRecord::RecordNotFound
             render_social_completion_failure
           rescue SocialAuth::BaseError => e
             render_social_completion_failure(message: e.message)
           end
 
           private
-
-          # An access proxy in front of this host redirects the handoff POST through its
-          # own origin before it reaches Rails. That cross-origin redirect sets the
-          # browser's tainted origin flag, so the request arrives with `Origin: null`
-          # instead of the Auth origin and the trusted-origin list above never matches.
-          #
-          # Accept the opaque origin only when the browser also reports
-          # Sec-Fetch-Site: same-site, which a cross-site attacker page cannot claim:
-          # its submission arrives as "cross-site". Trust still rests on the signed,
-          # one-shot ceremony result verified in the action.
-          #
-          # Remove this once no proxy redirects the POST: the browser then sends the
-          # real Auth origin, which SOCIAL_COMPLETION_TRUSTED_ORIGINS already allows.
-          def valid_request_origin?
-            return true if opaque_same_site_ceremony_post?
-
-            super
-          end
-
-          def opaque_same_site_ceremony_post?
-            request.origin.to_s == "null" && sec_fetch_site_value == "same-site"
-          end
 
           def reject_social_link_completion!(provider)
             redirect_to_surface_url(
@@ -196,9 +185,9 @@ module Base
             !commit.existing_account || commit.user&.birthdate.blank?
           end
 
-          def complete_base_social_signup_flow!(commit, sign_in_result)
+          def complete_base_social_signup_flow!(commit, _sign_in_result)
             # Unknown social identities enter the sign-up cycle first, then
-            # reuse the shared finalize/handoff/complete path once the
+            # reuse the shared finalize/complete path once the
             # callback has been bound to the pending ticket.
             flow_id = commit.result["actor_ref"].to_s
             return if flow_id.blank?
@@ -221,17 +210,6 @@ module Base
                 )
                 raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless finalize.success?
 
-                handoff = SignUpStateMachine.call(
-                  ticket: cycle,
-                  event: :handoff_to_sign_in,
-                  actor_context: Actor.authn,
-                  payload: {
-                    sign_in_handoff_status: :accepted,
-                    sign_in_handoff: sign_in_result.status,
-                  },
-                )
-                raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless handoff.success?
-
                 complete = SignUpStateMachine.call(
                   ticket: cycle,
                   event: :complete,
@@ -247,7 +225,6 @@ module Base
             # durable identity graph is still created later by the shared
             # sign-up finalize boundary.
             AppTicketRecord.connected_to(role: :writing) do
-              ClientSignUpFlowStatus.ensure_defaults!
               ClientSignUpFlow.create!(
                 principal_id: nil,
                 status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,

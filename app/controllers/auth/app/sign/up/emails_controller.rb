@@ -84,7 +84,6 @@ module Auth
             result = initiate_email_verification!(
               email_address,
               confirm_policy: email_params[:confirm_policy],
-              allow_existing: true,
               email_preferences: email_params.slice(:promotional, :notifiable),
             )
 
@@ -105,7 +104,7 @@ module Auth
               return
             end
 
-            bind_sign_up_flow_to_email!(@user_email) unless dummy_existing_email_flow?
+            bind_sign_up_flow_to_email!(@user_email)
             progress_email_flow!(:create)
             redirect_params = {}
             sanitize_redirect_params!(redirect_params)
@@ -284,41 +283,10 @@ module Auth
           end
 
           def valid_email_session?
-            return dummy_existing_email_session_valid? if dummy_existing_email_flow?
             return false if @user_email.blank?
+            return false if @user_email.otp_expired?
 
-            if existing_signup_email_flow?
-              return false unless Integer(session_existing_email_id.to_s, 10) == @user_email.id
-
-              existing_signup_skip_otp? || !@user_email.otp_expired?
-            else
-              return false if @user_email.otp_expired?
-
-              @user_email.user_email_status_id == ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
-            end
-          end
-
-          def existing_signup_email_flow?
-            session_existing_email_id.present?
-          end
-
-          def dummy_existing_email_flow?
-            session[SignEmailRegistrable::DUMMY_EXISTING_EMAIL_SESSION_KEY].present?
-          end
-
-          def dummy_existing_email_session_valid?
-            payload = session[SignEmailRegistrable::DUMMY_EXISTING_EMAIL_SESSION_KEY]
-            return false unless payload.is_a?(Hash) && payload["dummy"] == true
-
-            payload["expires_at"].to_i > Time.current.to_i
-          end
-
-          def session_existing_email_id
-            session[SignEmailRegistrable::EXISTING_EMAIL_SESSION_KEY]
-          end
-
-          def existing_signup_skip_otp?
-            session[SignEmailRegistrable::EXISTING_EMAIL_SKIP_OTP_SESSION_KEY] == true
+            @user_email.user_email_status_id == ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
           end
 
           def log_signup_email_errors
@@ -340,12 +308,6 @@ module Auth
           end
 
           def current_registration_email
-            return ClientEmail.new if dummy_existing_email_flow?
-
-            if existing_signup_email_flow?
-              return ClientEmail.find_by(id: session_existing_email_id)
-            end
-
             # Resolve the pending email through the same ticket lookup the step
             # gate uses (`current_sign_up_flow_ticket`), which falls back to the
             # sequence id when the locator session payload is absent or its nonce
@@ -385,10 +347,6 @@ module Auth
           end
 
           def issue_sign_up_flow!
-            AppTicketRecord.connected_to(role: :writing) do
-              ClientSignUpFlowStatus.ensure_defaults!
-            end
-
             sign_up_flow_locator.issue!(
               ClientSignUpFlow.create!(
                 principal_id: nil,

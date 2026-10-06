@@ -23,7 +23,7 @@ module AuthCeremonyAdmission
     apply_admission_transport_headers!
 
     return render_invalid_admission_request! if params[:admission].present?
-    return render_invalid_admission_request! if multiple_admission_references?
+    return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
     if request.get? && admission_reference_param.present?
       return render_admission_continuation!
     end
@@ -58,15 +58,29 @@ module AuthCeremonyAdmission
   end
 
   def redeem_admission_reference_and_redirect!(expected_intent:)
-    return render_invalid_admission_request! if multiple_admission_references?
+    return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
+
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: auth_ceremony_surface, reference: admission_reference_param,
+    )
+    raw_auth_sid = read_auth_ceremony_sid_cookie
+    if binding.redeemed? && raw_auth_sid.present?
+      model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
+      current_session = model.find_active_by_raw_sid(raw_auth_sid)
+      if current_session&.admitted? && current_session.id == binding.admitted_auth_ceremony_session_id
+        return redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
+      end
+    end
 
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: admission_reference_param,
       surface: auth_ceremony_surface,
       expected_intent: expected_intent,
+      binding: binding,
+      raw_auth_sid: raw_auth_sid,
     )
     if BaseAuthAdmissionCoordinator.local_entry_purpose?(payload: payload, intent: expected_intent)
-      admit_local_entry_payload!(payload)
+      admit_local_entry_payload!(payload, binding: binding)
     elsif BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
       transaction = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
         payload: payload, surface: auth_ceremony_surface, expected_intent: expected_intent,
@@ -74,13 +88,14 @@ module AuthCeremonyAdmission
       rotate_auth_ceremony_session!(
         admission_purpose: payload.fetch("purpose"),
         step_up_ceremony_transaction_ref: transaction.transaction_id,
+        admission_binding: binding,
       )
       log_step_up_ceremony(
         "ceremony_accepted", transaction: transaction, outcome: "accepted", stage: "auth_admission",
                              state_before: transaction.status,
       )
     else
-      admit_oidc_payload!(payload, expected_intent: expected_intent)
+      admit_oidc_payload!(payload, expected_intent: expected_intent, binding: binding)
     end
     redirect_to(auth_ceremony_clean_url(expected_intent: expected_intent), status: :see_other)
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
@@ -91,7 +106,7 @@ module AuthCeremonyAdmission
     render_invalid_admission_request!
   end
 
-  def admit_local_entry_payload!(payload)
+  def admit_local_entry_payload!(payload, binding:)
     model = BaseAuthAdmissionCoordinator::LOCAL_SIGN_IN_FLOW.fetch(auth_ceremony_surface)
     model.connection_class_for_self.connected_to(role: :writing) do
       flow = model.find_by!(public_id: payload.fetch("subject_ref"))
@@ -101,11 +116,12 @@ module AuthCeremonyAdmission
 
       rotate_auth_ceremony_session!(
         admission_purpose: payload.fetch("purpose"), local_sign_in_flow_ref: flow.public_id,
+        admission_binding: binding,
       )
     end
   end
 
-  def admit_oidc_payload!(payload, expected_intent:)
+  def admit_oidc_payload!(payload, expected_intent:, binding:)
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
       surface: auth_ceremony_surface,
       transaction_id: payload.fetch("subject_ref"),
@@ -132,19 +148,34 @@ module AuthCeremonyAdmission
     rotate_auth_ceremony_session!(
       admission_purpose: payload.fetch("purpose"),
       authorization_transaction_ref: transaction.transaction_id,
+      admission_binding: binding,
     )
   end
 
   def rotate_auth_ceremony_session!(admission_purpose:, authorization_transaction_ref: nil, local_sign_in_flow_ref: nil,
-                                    step_up_ceremony_transaction_ref: nil)
+                                    step_up_ceremony_transaction_ref: nil, admission_binding:)
     model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
-    record, sid = model.rotate_and_admit!(
-      admission_purpose: admission_purpose,
-      previous_raw_sid: read_auth_ceremony_sid_cookie,
-      authorization_transaction_ref: authorization_transaction_ref,
-      local_sign_in_flow_ref: local_sign_in_flow_ref,
-      step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
-    )
+    raw_sid = read_auth_ceremony_sid_cookie
+    record, sid =
+      admission_binding.class.connection_owner.connected_to(role: :writing) do
+      admission_binding.class.transaction do
+        locked_binding = admission_binding.class.lock.find(admission_binding.id)
+        attached_session = model.lock.find(locked_binding.auth_ceremony_session_id)
+        unless raw_sid.present? && model.find_active_by_raw_sid(raw_sid)&.id == attached_session.id
+          raise AuthCeremonySession::InvalidTransition, "Auth ceremony session does not match binding"
+        end
+
+        admitted, admitted_sid = model.rotate_and_admit!(
+          admission_purpose: admission_purpose,
+          previous_raw_sid: raw_sid,
+          authorization_transaction_ref: authorization_transaction_ref,
+          local_sign_in_flow_ref: local_sign_in_flow_ref,
+          step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
+        )
+        locked_binding.redeem!(auth_session: attached_session, admitted_auth_session: admitted)
+        [admitted, admitted_sid]
+      end
+    end
     write_auth_ceremony_sid_cookie!(sid)
     record
   end
@@ -161,40 +192,61 @@ module AuthCeremonyAdmission
   def apply_admission_transport_headers!
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
   end
 
   def render_admission_continuation!
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: auth_ceremony_surface, reference: admission_reference_param,
+    )
+    action_url =
+      if binding.attached? && binding.confirmed?
+        auth_ceremony_admitted_action_url
+      else
+        auth_ceremony_admission_action_url
+      end
+
     render "auth/shared/admission_continuation",
            layout: false,
            locals: {
-             action_url: auth_ceremony_admission_action_url,
+             action_url: action_url,
              reference_param: admission_reference_param_name,
              reference: admission_reference_param,
              ri: params[:ri],
              pt: params[:pt],
            }
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+    render_invalid_admission_request!
   end
 
   def render_invalid_admission_request!
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
-  def auth_ceremony_admission_action_url = request.path
+  def auth_ceremony_admission_action_url
+    case auth_ceremony_surface
+    when "app" then auth_app_ceremony_bindings_path
+    when "com" then auth_com_ceremony_bindings_path
+    when "org" then auth_org_ceremony_bindings_path
+    else raise ArgumentError, "unsupported Auth ceremony surface"
+    end
+  end
+
+  def auth_ceremony_admitted_action_url = request.path
 
   def admission_reference_param
-    refs = {
-      "transaction_ref" => params[:transaction_ref].to_s.presence,
-      "entry_ref" => params[:entry_ref].to_s.presence,
-    }.compact
-    refs.values.first
+    params[:entry_ref].to_s.presence
   end
 
   def multiple_admission_references?
-    params[:transaction_ref].to_s.present? && params[:entry_ref].to_s.present?
+    params[:transaction_ref].present?
+  end
+
+  def invalid_admission_reference_params?
+    params[:entry_ref].present? && !params[:entry_ref].is_a?(String)
   end
 
   def admission_reference_param_name
-    return "transaction_ref" if params[:transaction_ref].to_s.present?
     return "entry_ref" if params[:entry_ref].to_s.present?
 
     raise ArgumentError, "admission reference is missing"

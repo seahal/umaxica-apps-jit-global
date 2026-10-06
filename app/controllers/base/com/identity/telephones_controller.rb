@@ -20,7 +20,6 @@ module Base
           VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP,
         ].freeze
 
-        before_action :authenticate_visitor!
         # Object-level authorization (ActionPolicy): new/create gate the actor type; edit
         # authorize the owned record (find_by! is owner-scoped, so a non-owner gets 404 first).
         # Verification/rate-limit guards remain in place.
@@ -46,7 +45,9 @@ module Base
           visitor = current_visitor
           return head :unauthorized if visitor.blank?
 
-          tel_params = params(user_telephone: [:raw_number, :number])
+          tel_params = params.slice(:user_telephone).permit(user_telephone: [:raw_number, :number]).fetch(
+            :user_telephone, {},
+          )
           number = tel_params[:raw_number] || tel_params[:number]
           if initiate_visitor_telephone_verification(visitor, number, auto_accept_confirmations: true)
             redirect_to(edit_base_com_identity_telephones_registration_path(ri: params[:ri]))
@@ -66,7 +67,9 @@ module Base
             return
           end
 
-          telephone.destroy!
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_visitor, credential: telephone, current_session: current_session, request: request,
+          )
           create_audit_event!(ClientChronicleEvent::TELEPHONE_REMOVED, subject: telephone)
 
           redirect_to(

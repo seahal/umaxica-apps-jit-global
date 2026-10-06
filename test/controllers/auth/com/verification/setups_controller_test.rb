@@ -14,10 +14,13 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
       visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       root_login_established_at: Time.current,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_telephone", purpose: "bootstrap", step_up_required: false,
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil,
         allowed_methods: [:passkey], audience: "step_up:com", session_binding: token.public_id,
         token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
       ), return_to: "/identity/telephones",
@@ -35,7 +38,7 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
     assert_includes props.fetch("methods").map { |method| method.fetch("href") },
-                    new_auth_com_settings_passkey_path(ri: "jp")
+                    new_auth_com_verification_registration_passkey_path(ri: "jp")
     assert_not props.key?("back_link")
     assert_equal auth_com_verification_cancellation_path(ri: "jp"), props.fetch("cancel").fetch("action")
     assert_equal "post", props.fetch("cancel").fetch("method")

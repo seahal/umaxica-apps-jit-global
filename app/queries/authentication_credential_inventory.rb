@@ -6,46 +6,30 @@ class AuthenticationCredentialInventory
     Struct.new(
       :actor,
       :excluding,
-      :aal1_methods,
-      :aal2_methods,
-      :aal3_methods,
+      :sign_in_methods,
       :step_up_methods,
       :uv_step_up_methods,
       :contact_identifiers,
       :phishing_resistant_methods,
       keyword_init: true,
     ) do
-      alias_method :login_methods, :aal1_methods
-
-      def aal1_method_count = aal1_methods.count
-
-      def aal2_method_count = aal2_methods.count
-
-      def aal3_method_count = aal3_methods.count
+      def sign_in_method_count = sign_in_methods.count
 
       def contact_identifier_count = contact_identifiers.count
 
-      def login_method_count = aal1_method_count
+      def login_method_count = sign_in_method_count
 
       def step_up_method_count = step_up_methods.count
 
-      def aal1_available? = aal1_method_count.positive?
-
-      def aal2_available? = aal2_method_count.positive?
-
-      def aal3_available? = aal3_method_count.positive?
+      def sign_in_available? = sign_in_method_count.positive?
 
       def contactable? = contact_identifier_count.positive?
 
-      def login_available? = aal1_available?
+      def login_available? = sign_in_available?
 
       def step_up_available? = step_up_method_count.positive?
 
-      def retains_aal1? = aal1_available?
-
-      def retains_aal2? = aal2_available?
-
-      def retains_aal3? = aal3_available?
+      def retains_sign_in? = sign_in_available?
 
       def retains_contactability? = contactable?
 
@@ -55,23 +39,17 @@ class AuthenticationCredentialInventory
 
       def retains_uv_step_up? = uv_step_up_methods.any?
 
-      def last_aal1_method? = aal1_method_count.zero?
-
-      def last_aal2_method? = aal2_method_count.zero?
+      def last_sign_in_method? = sign_in_method_count.zero?
 
       def last_contact_identifier? = contact_identifier_count.zero?
 
-      def last_login_method? = last_aal1_method?
+      def last_login_method? = last_sign_in_method?
 
       def last_step_up_method? = step_up_method_count.zero?
 
-      def removable_aal1_credential? = !last_aal1_method?
-
-      def removable_aal2_credential? = !last_aal2_method?
-
       def removable_contact_identifier? = !last_contact_identifier?
 
-      def removable_login_credential? = removable_aal1_credential?
+      def removable_login_credential? = !last_sign_in_method?
 
       def removable_step_up_credential? = !last_step_up_method?
     end
@@ -111,9 +89,7 @@ class AuthenticationCredentialInventory
     Result.new(
       actor: actor,
       excluding: excluding,
-      aal1_methods: aal1_methods,
-      aal2_methods: aal2_methods,
-      aal3_methods: [],
+      sign_in_methods: sign_in_methods,
       step_up_methods: normal_step_up_methods,
       uv_step_up_methods: uv_step_up_methods,
       contact_identifiers: contact_identifiers,
@@ -125,9 +101,7 @@ class AuthenticationCredentialInventory
     Result.new(
       actor: actor,
       excluding: excluding,
-      aal1_methods: [],
-      aal2_methods: [],
-      aal3_methods: [],
+      sign_in_methods: [],
       step_up_methods: [],
       uv_step_up_methods: [],
       contact_identifiers: [],
@@ -135,13 +109,17 @@ class AuthenticationCredentialInventory
     )
   end
 
-  def aal1_methods
+  def sign_in_methods
     methods = []
     methods.concat(client_social_login_methods)
-    methods << :email_otp if aal1_email_count.positive?
+    methods << :email_otp if contact_email_count.positive?
     methods << :passkey if active_passkey_count.positive?
-    methods << :secret if active_client_secret_count.positive?
+    methods << :secret if active_client_secret_count.positive? && contact_identifier_count.positive?
     methods
+  end
+
+  def contact_identifier_count
+    contact_email_count + contact_telephone_count
   end
 
   def active_client_secret_count
@@ -154,13 +132,9 @@ class AuthenticationCredentialInventory
     end
   end
 
-  def aal2_methods
-    []
-  end
-
   def normal_step_up_methods
     methods = []
-    methods << :email_otp if aal1_email_count.positive?
+    methods << :email_otp if (actor.is_a?(Client) || actor.is_a?(Visitor)) && contact_email_count.positive?
     methods << :passkey if active_passkey_count.positive?
     methods << :totp if active_totp_count.positive?
     methods
@@ -181,9 +155,9 @@ class AuthenticationCredentialInventory
     scope =
       case actor
       when Client
-        actor.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+        actor.client_emails.effective_binding.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
       when Visitor
-        actor.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+        actor.visitor_emails.effective_binding.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
       when Operator
         return 0
       else
@@ -212,22 +186,15 @@ class AuthenticationCredentialInventory
   def common_client_social_login_methods
     return [] unless actor.respond_to?(:client_external_identities)
 
-    scope = actor.client_external_identities.where(state: "active")
+    scope = actor.client_external_identities.effective_binding.where(state: "active")
     scope = scope.where.not(id: excluding.id) if excluding.is_a?(ClientExternalIdentity)
     scope.pluck(:provider).map(&:to_sym)
-  end
-
-  def aal1_email_count
-    return contact_email_count if actor.respond_to?(:client_emails)
-    return contact_email_count if actor.respond_to?(:visitor_emails)
-
-    0
   end
 
   def contact_email_count
     if actor.respond_to?(:client_emails)
       return count_scope(
-        actor.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+        actor.client_emails.effective_binding.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
           .where("discard_at > ?", decision_time),
         "ClientEmail",
       )
@@ -235,7 +202,7 @@ class AuthenticationCredentialInventory
 
     if actor.respond_to?(:visitor_emails)
       return count_scope(
-        actor.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+        actor.visitor_emails.effective_binding.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
           .where("discard_at > ?", decision_time),
         "VisitorEmail",
       )
@@ -259,7 +226,7 @@ class AuthenticationCredentialInventory
   def contact_telephone_count
     if actor.respond_to?(:client_telephones)
       return count_scope(
-        actor.client_telephones.where(
+        actor.client_telephones.effective_binding.where(
           user_identity_telephone_status_id: AuthMethodGuard::VERIFIED_TELEPHONE_STATUSES,
         ).where("discard_at > ?", decision_time),
         "ClientTelephone",
@@ -268,7 +235,7 @@ class AuthenticationCredentialInventory
 
     if actor.respond_to?(:visitor_telephones)
       return count_scope(
-        actor.visitor_telephones.where(
+        actor.visitor_telephones.effective_binding.where(
           visitor_telephone_status_id: AuthMethodGuard::VISITOR_VERIFIED_TELEPHONE_STATUSES,
         ).where("discard_at > ?", decision_time),
         "VisitorTelephone",

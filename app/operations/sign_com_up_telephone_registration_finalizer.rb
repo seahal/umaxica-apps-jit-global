@@ -33,6 +33,7 @@ class SignComUpTelephoneRegistrationFinalizer
       telephone.confirm_using_mfa = "1"
       telephone.clear_otp
       telephone.visitor_telephone_status_id = VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP
+      telephone.binding_finalized_at = VisitorTelephone.database_now
       telephone.save!
     end
 

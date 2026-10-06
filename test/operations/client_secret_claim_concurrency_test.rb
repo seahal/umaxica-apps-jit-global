@@ -17,6 +17,8 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: @actor, actor_type: :client, tld: :app, surface: :base)
     @issuance = ClientSecretManualReservationIssuer.call!(
@@ -27,9 +29,14 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: @token, issuance: @issuance)
     @browsers =
       Array.new(2) do
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        )
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+        _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
         payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: admission.reference, surface: "app", expected_intent: "sign_in",
+          binding:, raw_auth_sid: raw_sid,
         )
         flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
         ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
@@ -53,7 +60,10 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
                 ticket.select_value("SELECT set_config('lock_timeout', '5000', true)")
                 ready << source.select_value("SELECT pg_backend_pid()")
                 release.pop
-                ClientSecretClaimCommitter.call!(secret: @raw, flow: flow, ceremony: ceremony)&.public_id
+                ClientSecretClaimCommitter.call!(
+                  client: @actor, secret: @raw, flow: flow,
+                  ceremony: ceremony,
+                )&.public_id
               end
             end
           ensure
@@ -75,7 +85,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_equal credential.public_id, results.compact.first
     assert_equal 1,
                  ClientSecretAuditOutbox.where(credential_ref: credential.public_id, event_name: "secret.claimed").count
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     winner = @browsers.find { |flow, _| flow.public_id == credential.claim_sign_in_flow_ref }
 
     assert_equal winner.last.id, credential.claim_ceremony_session_id
@@ -89,7 +99,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
 
   test "withdrawal revokes a claimed Secret without collecting its live continuation proof" do
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
     operation_id = credential.claim_operation_id
     now = Client.database_now
     @actor.update!(withdrawn_at: now, terminated_at: now)
@@ -99,10 +109,10 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_equal operation_id, credential.claim_operation_id
     assert_equal Float::INFINITY, credential.discard_at
     assert_equal Float::INFINITY, credential.purge_eligible_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_equal :pending, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.day)
     assert ClientSignInFlow.exists?(flow.id)
-    flow.fail_sign_in!(now: ClientSignInFlow.database_now)
+    flow.halt_sign_in!
 
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.day)
     assert_operator credential.reload.discard_at, :<=, Client.database_now
@@ -112,54 +122,58 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
   test "source claim survives Ticket rollback and terminal reconciliation retires the unbound flow" do
     flow, ceremony = @browsers.first
     AppTicketRecord.transaction do
-      assert ClientSecretClaimCommitter.call!(secret: @raw, flow: flow, ceremony: ceremony)
+      assert ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
       raise ActiveRecord::Rollback
     end
     credential = ClientSecretCredential.find_by!(issuance_id: @issuance.id)
 
     assert credential.claimed_at
     assert_nil flow.reload.principal_id
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_equal :pending, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
-    flow.with_lock { flow.fail_sign_in!(now: ClientSignInFlow.database_now) }
+    flow.with_lock { flow.halt_sign_in! }
 
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_nil credential.consumed_at
     assert_equal @actor.id, flow.reload.principal_id
-    assert_equal "flow_failed", ClientSecretAuditOutbox.find_by!(
+    assert_equal "flow_halted", ClientSecretAuditOutbox.find_by!(
       credential_ref: credential.public_id, event_name: "secret.discarded",
     ).reason
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
-    assert_nil ClientSecretClaimCommitter.call!(secret: @raw, flow: @browsers.last.first, ceremony: @browsers.last.last)
+    assert_nil ClientSecretClaimCommitter.call!(
+      client: @actor, secret: @raw, flow: @browsers.last.first,
+      ceremony: @browsers.last.last,
+    )
   end
 
   test "expiry refuses a live flow and reconciliation retains its reason after Ticket terminalization" do
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
     assert_raises(FlowInvalidTransition) { flow.expire_sign_in! }
     assert_predicate flow.reload, :sign_in_primary_pending?
     now = ClientSignInFlow.database_now
     flow.update!(issued_at: now - 16.minutes, expires_at: now)
     flow.expire_sign_in!
 
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_predicate flow.reload, :sign_in_expired?
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
     assert_nil credential.reload.consumed_at
     assert_equal "flow_expired", ClientSecretAuditOutbox.find_by!(
       credential_ref: credential.public_id, event_name: "secret.discarded",
     ).reason
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
   end
 
   test "missing durable Ticket proof leaves the source claim unknown and permanently unusable" do
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
     # Simulate loss of the independent Ticket evidence, without mocking a login
     # result. Source claim persistence must not infer success or safe retirement.
     ceremony.destroy!
+    ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
     flow.destroy!
 
     assert_equal :unknown, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
@@ -167,8 +181,11 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_nil credential.consumed_at
     assert_equal Float::INFINITY, credential.discard_at
     assert_equal Float::INFINITY, credential.purge_eligible_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
-    assert_nil ClientSecretClaimCommitter.call!(secret: @raw, flow: @browsers.last.first, ceremony: @browsers.last.last)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
+    assert_nil ClientSecretClaimCommitter.call!(
+      client: @actor, secret: @raw, flow: @browsers.last.first,
+      ceremony: @browsers.last.last,
+    )
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
     assert_equal 0, ClientSecretAuditOutbox.where(
@@ -190,11 +207,12 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
       )
     end
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
     now = ClientSignInFlow.database_now
     flow.update!(discard_at: now, purge_eligible_at: now)
     unrelated = @browsers.last.first
     @browsers.last.last.destroy!
+    ClientAuthAdmissionBinding.where(sign_in_flow_id: unrelated.id).delete_all
     unrelated.update!(discard_at: now, purge_eligible_at: now)
 
     RetentionPurgeJob.perform_now(batch_size: 1)
@@ -204,14 +222,18 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_equal :pending, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
     assert_nil credential.reload.consumed_at
     assert_equal Float::INFINITY, credential.discard_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
   ensure
     config_keys.each { |key| ENV[key] = original_config[key] }
   end
 
   teardown do
-    @browsers&.each { |flow, ceremony| ceremony.destroy!; flow.destroy! }
+    @browsers&.each do |flow, ceremony|
+      ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all if flow&.id
+      ceremony.destroy! if ceremony&.persisted?
+      flow.destroy! if flow&.persisted?
+    end
     if @actor
       Chronicle.where(subject_type: "Client", subject_id: @actor.id).find_each(&:destroy!)
       ClientSecretAuditOutbox.where(client_ref: @actor.public_id).find_each(&:destroy!)

@@ -11,34 +11,27 @@ class Auth::App::Verification::CancellationsController < Auth::App::ApplicationC
   def create
     return unless load_cancellation_ceremony_context!
 
-    state_before = @step_up_ceremony_transaction.status
-    canceled = IdentityStepUpCeremonyCancellationCommitter.call!(
-      actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+    issuance = BaseAuthAdmissionCoordinator.issue_cancellation!(
       transaction: @step_up_ceremony_transaction,
+      ceremony_session_ref: @step_up_ceremony_session.id.to_s,
     )
-    unless canceled
-      log_step_up_ceremony(
-        "refused", transaction: @step_up_ceremony_transaction, outcome: "refused", stage: "auth_cancellation",
-                   error_code: "transaction_unavailable", state_before: state_before,
-      )
-      return render_invalid_step_up_context!
-    end
-
     log_step_up_ceremony(
-      "canceled", transaction: @step_up_ceremony_transaction, outcome: "canceled", stage: "auth_cancellation",
-                  state_before: state_before, state_after: @step_up_ceremony_transaction.status,
+      "cancellation_handoff_issued", transaction: @step_up_ceremony_transaction, outcome: "issued",
+                                     stage: "auth_cancellation", state_before: @step_up_ceremony_transaction.status,
     )
-    cookies.delete(auth_ceremony_sid_cookie_name, path: "/")
-    reset_session
-    redirect_to_surface_url(
-      base_app_dashboard_url(
-        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ri: params[:ri],
-        protocol: "https",
-      ), status: :see_other,
+    redirect_to(
+      base_app_verification_cancellation_url(
+        cancellation_handoff: issuance.handoff, cancellation_ref: issuance.reference,
+        transaction_ref: @step_up_ceremony_transaction.transaction_id, ri: params[:ri],
+        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https",
+      ), status: :see_other, allow_other_host: true,
     )
-  rescue IdentityStepUpCeremonyContract::Error, ActiveRecord::RecordNotFound => e
+  rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error,
+         ActiveRecord::RecordNotFound, ArgumentError => e
     log_step_up_refusal(e, transaction: @step_up_ceremony_transaction, stage: "auth_cancellation")
     render_invalid_step_up_context!
+  rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError
+    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
   end
 
   private

@@ -28,21 +28,22 @@ class SignFlowTest < ActiveSupport::TestCase
     assert_operator OperatorSignUpFlow, :<, OrgTicketRecord
   end
 
-  test "sign-in cycles accept expected protocol boundary statuses" do
+  test "sign-in cycles accept expected protocol boundary states" do
     SIGN_IN_CLASSES.each do |cycle_class|
-      cycle_class::STATUS_MODEL.ensure_defaults!
-      statuses = cycle_class::STATUS_MODEL.where(id: cycle_class::STATUS_IDS).index_by(&:id)
+      states = cycle_class::STATE_MODEL.where(id: cycle_class::STATE_IDS).index_by(&:id)
 
-      cycle_class::STATUS_IDS.each do |status_id|
+      cycle_class::STATES.values.each do |state_id|
         cycle = build_cycle(
           cycle_class,
-          status: statuses.fetch(status_id),
-          step: step_for_status(cycle_class.status_name_for(status_id)),
+          state: states.fetch(state_id),
         )
-        cycle.completed_at = Time.current if status_id == cycle_class.completed_status_id
+        cycle.completed_at = Time.current if state_id == cycle_class.completed_state_id
 
-        assert_predicate cycle, :valid?, "#{cycle_class.name} #{status_id}"
+        assert_predicate cycle, :valid?, "#{cycle_class.name} #{state_id}"
       end
+
+      assert_equal "DASHBOARD_PENDING", cycle_class.state_name_for(cycle_class::STATE_MODEL::DASHBOARD_PENDING)
+      assert_equal "RETURN_PENDING", cycle_class.state_name_for(cycle_class::STATE_MODEL::RETURN_PENDING)
     end
   end
 
@@ -52,21 +53,23 @@ class SignFlowTest < ActiveSupport::TestCase
         %w(
           PRIMARY_PENDING
           MFA_PENDING
-          SESSION_LIMIT_PENDING
           GUARDRAIL_PENDING
           SESSION_ISSUANCE_PENDING
           CHECKPOINT_PENDING
           SELECTOR_PENDING
-          DASHBOARD_PENDING
-          RETURN_PENDING
           COMPLETED
           FAILED
+          EXPIRED
+          CANCELLED
+          HALTED
         ),
-        cycle_class::STATUSES.keys,
+        cycle_class::STATES.keys,
         cycle_class.name,
       )
 
-      assert_not_includes cycle_class::STATUSES, "POST_LOGIN_PENDING", cycle_class.name
+      assert_not_includes cycle_class::STATES, "POST_LOGIN_PENDING", cycle_class.name
+      assert_equal cycle_class::STATE_MODEL::SESSION_LIMIT_PENDING,
+                   cycle_class::HISTORICAL_STATES.fetch("SESSION_LIMIT_PENDING"), cycle_class.name
     end
   end
 
@@ -120,7 +123,7 @@ class SignFlowTest < ActiveSupport::TestCase
   test "com sign-up cycles do not expose social callback state" do
     assert_not_includes VisitorSignUpFlow::STATUSES, "SOCIAL_CALLBACK_PENDING"
     assert_not_includes VisitorSignUpFlow::STEPS, "social_callback"
-    assert_not_includes VisitorSignUpFlowStatus::DEFAULTS, 36
+    assert_not_includes VisitorSignUpFlow::STATUS_MODEL::DEFAULTS, 36
   end
 
   test "sign-up cycles reject unsafe return paths" do
@@ -243,7 +246,6 @@ class SignFlowTest < ActiveSupport::TestCase
 
   test "sign-up cycle cleanup predicates track the configured cleanup status" do
     [ClientSignUpFlow, VisitorSignUpFlow].each do |cycle_class|
-      cycle_class.cleanup_status_class.ensure_defaults!
       cycle = build_cycle(cycle_class, cleanup_status_id: cycle_class.cleanup_status_id_for(:pending))
 
       assert_predicate cycle, :cleanup_pending?, cycle_class.name
@@ -254,7 +256,14 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   test "cycles require completed_at when state is completed" do
-    (SIGN_IN_CLASSES + SIGN_UP_CLASSES).each do |cycle_class|
+    SIGN_IN_CLASSES.each do |cycle_class|
+      cycle = build_cycle(cycle_class, state_id: cycle_class.completed_state_id)
+
+      assert_not cycle.valid?, cycle_class.name
+      assert_not_empty cycle.errors[:completed_at]
+    end
+
+    SIGN_UP_CLASSES.each do |cycle_class|
       cycle = build_cycle(
         cycle_class, status_id: cycle_class.completed_status_id,
                      step: completion_step_for(cycle_class),
@@ -273,68 +282,61 @@ class SignFlowTest < ActiveSupport::TestCase
     assert_not cycle.nonce_matches?(nil)
   end
 
-  test "transition_to allows forward sign-in transitions and rejects reverse transitions" do
+  test "named sign-in transitions allow forward edges and reject reverse edges" do
     cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
 
-    cycle.transition_to!("MFA_PENDING", step: "mfa")
+    cycle.advance_sign_in_to_mfa!
 
-    assert_equal ClientSignInFlowStatus::MFA_PENDING, cycle.status_id
-    assert_equal "MFA_PENDING", cycle.state
-    assert_equal "mfa", cycle.step
+    assert_equal ClientSignInFlowState::MFA_PENDING, cycle.state_id
 
     error =
-      assert_raises(ArgumentError) do
-        cycle.transition_to!("PRIMARY_PENDING", step: "primary")
+      assert_raises(FlowInvalidTransition) do
+        cycle.advance_sign_in_to_mfa!
       end
     assert_match(/invalid transition/, error.message)
   end
 
-  test "sign-in cycles reject legacy state that disagrees with status" do
-    cycle = build_cycle(
-      ClientSignInFlow,
-      status_id: ClientSignInFlowStatus::MFA_PENDING,
-      state: "PRIMARY_PENDING",
-      step: "mfa",
-    )
-
-    assert_not cycle.valid?
-    assert_not_empty cycle.errors[:state]
+  test "sign-in flows use only the durable state foreign key" do
+    assert_includes ClientSignInFlow.column_names, "state_id"
+    assert_not_includes ClientSignInFlow.column_names, "status_id"
+    assert_not_includes ClientSignInFlow.column_names, "state"
+    assert_not_includes ClientSignInFlow.column_names, "step"
   end
 
-  test "sign-in cycles reject step that disagrees with status" do
-    cycle = build_cycle(
-      ClientSignInFlow,
-      status_id: ClientSignInFlowStatus::MFA_PENDING,
-      state: "MFA_PENDING",
-      step: "primary",
-    )
+  test "sign-in state foreign keys reject unknown values and protect referenced rows" do
+    SIGN_IN_CLASSES.each do |cycle_class|
+      flow = cycle_class.create!(cycle_attrs(cycle_class))
+      state_class = cycle_class::STATE_MODEL
+      state_id = cycle_class::STATE_IDS.first
 
-    assert_not cycle.valid?
-    assert_not_empty cycle.errors[:step]
-  end
+      assert_raises(ActiveRecord::InvalidForeignKey, cycle_class.name) do
+        cycle_class.transaction(requires_new: true) do
+          # Bypass model inclusion validation to exercise the database FK itself.
+          flow.update_columns(state_id: 999)
+        end
+      end
 
-  test "sign-in transition_to ignores mismatched step input and keeps canonical step" do
-    cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
-
-    cycle.transition_to!("MFA_PENDING", step: "checkpoint")
-
-    assert_equal ClientSignInFlowStatus::MFA_PENDING, cycle.status_id
-    assert_equal "mfa", cycle.step
-  end
-
-  test "sign-in transition_to always uses the row lock path" do
-    cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
-    called = false
-
-    cycle.define_singleton_method(:with_cycle_lock) do |&block|
-      called = true
-      block.call
+      assert_raises(ActiveRecord::InvalidForeignKey, cycle_class.name) do
+        state_class.transaction(requires_new: true) do
+          state_class.where(id: state_id).delete_all
+        end
+      end
     end
+  end
 
-    cycle.transition_to!("MFA_PENDING", step: "mfa")
+  test "named sign-in transition owns the canonical step" do
+    cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
 
-    assert called
-    assert_equal ClientSignInFlowStatus::MFA_PENDING, cycle.status_id
+    cycle.advance_sign_in_to_mfa!
+
+    assert_equal ClientSignInFlowState::MFA_PENDING, cycle.state_id
+  end
+
+  test "arbitrary transition entry points are not public" do
+    cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
+
+    assert_not_respond_to cycle, :transition_to!
+    assert_not_respond_to cycle, :transition_cycle_to!
   end
 
   test "sign-in cycles reject zero-length lifetimes" do
@@ -355,37 +357,49 @@ class SignFlowTest < ActiveSupport::TestCase
       cycle.advance_sign_in_to_mfa!
 
       assert_predicate cycle, :sign_in_mfa_pending?, cycle_class.name
-      assert_equal "mfa", cycle.step
-
-      cycle.advance_sign_in_to_session_limit!
-
-      assert_predicate cycle, :sign_in_session_limit_pending?, cycle_class.name
-      assert_equal "session_limit", cycle.step
+      assert_equal ClientSignInFlowState::MFA_PENDING, cycle.state_id
 
       cycle.advance_sign_in_to_guardrail!
 
       assert_predicate cycle, :sign_in_guardrail_pending?, cycle_class.name
-      assert_equal "guardrail", cycle.step
+      assert_equal ClientSignInFlowState::GUARDRAIL_PENDING, cycle.state_id
 
       cycle.advance_sign_in_to_checkpoint!
 
       assert_predicate cycle, :sign_in_checkpoint_pending?, cycle_class.name
-      assert_equal "checkpoint", cycle.step
+      assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, cycle.state_id
 
       cycle.advance_sign_in_to_selector!
 
       assert_predicate cycle, :sign_in_selector_pending?, cycle_class.name
-      assert_equal "selector", cycle.step
+      assert_equal ClientSignInFlowState::SELECTOR_PENDING, cycle.state_id
 
       cycle.advance_sign_in_to_session_issuance!
 
       assert_predicate cycle, :sign_in_session_issuance_pending?, cycle_class.name
-      assert_equal "session_issuance", cycle.step
+      assert_equal ClientSignInFlowState::SESSION_ISSUANCE_PENDING, cycle.state_id
 
       cycle.complete_sign_in!
 
       assert_predicate cycle, :sign_in_completed?, cycle_class.name
-      assert_equal "completed", cycle.step
+      assert_equal ClientSignInFlowState::COMPLETED, cycle.state_id
+    end
+  end
+
+  test "sign-in cycles keep session-limit resolution outside the main graph" do
+    SIGN_IN_CLASSES.each do |cycle_class|
+      cycle = cycle_class.create!(cycle_attrs(cycle_class))
+      cycle.advance_sign_in_to_mfa!
+
+      assert_not cycle.can_transition_to?(cycle_class::STATE_MODEL::SESSION_LIMIT_PENDING)
+
+      cycle.advance_sign_in_to_guardrail!
+      cycle.advance_sign_in_to_checkpoint!
+      cycle.advance_sign_in_to_selector!
+      cycle.advance_sign_in_to_session_issuance!
+
+      assert_predicate cycle, :sign_in_session_issuance_pending?, cycle_class.name
+      assert_not cycle.can_transition_to?(cycle_class::STATE_MODEL::SESSION_LIMIT_PENDING)
     end
   end
 
@@ -395,25 +409,22 @@ class SignFlowTest < ActiveSupport::TestCase
 
     error =
       assert_raises(FlowInvalidTransition) do
-        cycle.transition_cycle_to!(
-          ClientSignInFlowStatus::PRIMARY_PENDING,
-          allowed_from: [ClientSignInFlowStatus::PRIMARY_PENDING],
-        )
+        cycle.advance_sign_in_to_mfa!
       end
 
     assert_match(/invalid transition/, error.message)
-    assert_equal ClientSignInFlowStatus::MFA_PENDING, cycle.reload.status_id
+    assert_equal ClientSignInFlowState::MFA_PENDING, cycle.reload.state_id
   end
 
   test "sign-in cycle completion stamps completed_at while the current schema requires it" do
-    now = Time.zone.local(2026, 5, 19, 11, 0, 0)
+    now = ClientSignInFlow.database_now
     cycle = ClientSignInFlow.create!(
       cycle_attrs(ClientSignInFlow).merge(issued_at: now - 1.minute, expires_at: now + 1.hour),
     )
-    cycle.advance_sign_in_to_guardrail!(now: now - 50.seconds)
-    cycle.advance_sign_in_to_checkpoint!(now: now - 40.seconds)
-    cycle.advance_sign_in_to_selector!(now: now - 30.seconds)
-    cycle.advance_sign_in_to_session_issuance!(now: now - 20.seconds)
+    cycle.advance_sign_in_to_guardrail!
+    cycle.advance_sign_in_to_checkpoint!
+    cycle.advance_sign_in_to_selector!
+    cycle.advance_sign_in_to_session_issuance!
 
     travel_to now do
       cycle.complete_sign_in!
@@ -422,23 +433,23 @@ class SignFlowTest < ActiveSupport::TestCase
     cycle.reload
 
     assert_predicate cycle, :sign_in_completed?
-    assert_equal "completed", cycle.step
-    assert_equal now, cycle.completed_at
+    assert_equal ClientSignInFlowState::COMPLETED, cycle.state_id
+    assert_operator cycle.completed_at, :>=, now
   end
 
-  test "sign-in cycle can fail from every non-terminal state" do
-    non_terminal_statuses = ClientSignInFlow::STATUSES.except("COMPLETED", "FAILED")
+  test "sign-in cycle can be cancelled from every non-terminal state" do
+    non_terminal_states = ClientSignInFlow::STATES.except("COMPLETED", "FAILED", "EXPIRED", "CANCELLED", "HALTED")
 
     prosopite_pause do
-      non_terminal_statuses.each do |status_name, status_id|
+      non_terminal_states.each do |state_name, state_id|
         cycle = ClientSignInFlow.create!(
-          cycle_attrs(ClientSignInFlow).merge(status_id: status_id, step: step_for_status(status_name)),
+          cycle_attrs(ClientSignInFlow).merge(state_id: state_id),
         )
 
-        cycle.fail_sign_in!
+        cycle.cancel_sign_in!
 
-        assert_predicate cycle, :sign_in_failed?, status_name
-        assert_equal "failed", cycle.step
+        assert_predicate cycle, :sign_in_cancelled?, state_name
+        assert_equal ClientSignInFlowState::CANCELLED, cycle.state_id
       end
     end
   end
@@ -446,16 +457,15 @@ class SignFlowTest < ActiveSupport::TestCase
   test "terminal sign-in cycles do not transition again" do
     completed = ClientSignInFlow.create!(
       cycle_attrs(ClientSignInFlow).merge(
-        status_id: ClientSignInFlowStatus::COMPLETED,
-        step: "completed",
+        state_id: ClientSignInFlowState::COMPLETED,
         completed_at: Time.current,
       ),
     )
 
-    assert_raises(FlowInvalidTransition) { completed.fail_sign_in! }
+    assert_raises(FlowInvalidTransition) { completed.cancel_sign_in! }
 
     failed = ClientSignInFlow.create!(
-      cycle_attrs(ClientSignInFlow).merge(status_id: ClientSignInFlowStatus::FAILED, step: "failed"),
+      cycle_attrs(ClientSignInFlow).merge(state_id: ClientSignInFlowState::FAILED),
     )
 
     assert_raises(FlowInvalidTransition) { failed.advance_sign_in_to_guardrail! }
@@ -471,52 +481,50 @@ class SignFlowTest < ActiveSupport::TestCase
       assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa! }
     end
 
-    assert_equal ClientSignInFlowStatus::PRIMARY_PENDING, cycle.reload.status_id
+    assert_equal ClientSignInFlowState::EXPIRED, cycle.reload.state_id
   end
 
-  test "sign-in transition_to rejects expired cycles" do
+  test "named sign-in transitions reject expired cycles after terminalizing them" do
     now = Time.zone.local(2026, 5, 19, 11, 0, 0)
     cycle = ClientSignInFlow.create!(
       cycle_attrs(ClientSignInFlow).merge(issued_at: now - 1.minute, expires_at: now),
     )
 
     travel_to now do
-      assert_raises(FlowInvalidTransition) { cycle.transition_to!("MFA_PENDING") }
+      assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa! }
     end
 
-    assert_equal ClientSignInFlowStatus::PRIMARY_PENDING, cycle.reload.status_id
+    assert_equal ClientSignInFlowState::EXPIRED, cycle.reload.state_id
   end
 
   test "sign-up cycles cannot complete before sign-in handoff" do
     cycle = ClientSignUpFlow.create!(cycle_attrs(ClientSignUpFlow))
 
-    cycle.transition_to!("CONTACT_PENDING", step: "contact")
-    cycle.transition_to!("CONTACT_VERIFIED", step: "contact_verified")
-    cycle.transition_to!("GUARDRAIL_PENDING", step: "guardrail")
-    cycle.transition_to!("CHECKPOINT_PENDING", step: "checkpoint")
+    cycle.advance_sign_up_to_contact!
+    cycle.verify_sign_up_contact!
+    cycle.advance_sign_up_to_guardrail!
+    cycle.advance_sign_up_to_checkpoint!
 
-    assert_raises(ArgumentError) { cycle.transition_to!("COMPLETED", step: "completed") }
+    assert_not_respond_to cycle, :transition_to!
     assert_raises(FlowInvalidTransition) { cycle.complete_sign_up! }
   end
 
-  test "transition_to stamps completed_at for post-handoff completed transitions" do
+  test "named sign-up transitions stamp completed_at after durable finalization" do
     now = Time.zone.local(2026, 5, 18, 9, 0, 0)
     cycle = ClientSignUpFlow.create!(cycle_attrs(ClientSignUpFlow))
 
     travel_to now do
-      cycle.transition_to!("CONTACT_PENDING", step: "contact")
-      cycle.transition_to!("CONTACT_VERIFIED", step: "contact_verified")
-      cycle.transition_to!("GUARDRAIL_PENDING", step: "guardrail")
-      cycle.transition_to!("CHECKPOINT_PENDING", step: "checkpoint")
-      cycle.transition_to!("FINALIZING", step: "finalizing")
-      cycle.transition_to!("FINALIZED", step: "finalized")
-      cycle.transition_to!("SIGN_IN_HANDOFF_PENDING", step: "sign_in_handoff")
+      cycle.advance_sign_up_to_contact!
+      cycle.verify_sign_up_contact!
+      cycle.advance_sign_up_to_guardrail!
+      cycle.advance_sign_up_to_checkpoint!
+      cycle.begin_sign_up_finalization!
       cycle.complete_sign_up!
     end
 
     assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.status_id
     assert_equal "COMPLETED", cycle.state
-    assert_equal now, cycle.completed_at
+    assert_operator cycle.completed_at, :>=, now
   end
 
   test "expired reflects expires_at and discard_at boundaries" do
@@ -547,13 +555,12 @@ class SignFlowTest < ActiveSupport::TestCase
     assert_equal user.id, cycle.principal_id
   end
 
-  test "transition_to! derives the step from STEP_BY_STATUS_ID for sign-in flows" do
+  test "named sign-in transitions derive the step from the status" do
     cycle = ClientSignInFlow.create!(cycle_attrs(ClientSignInFlow))
 
-    cycle.transition_to!("MFA_PENDING")
+    cycle.advance_sign_in_to_mfa!
 
-    assert_equal ClientSignInFlow.status_id_for("MFA_PENDING"), cycle.status_id
-    assert_equal "mfa", cycle.step
+    assert_equal ClientSignInFlow.state_id_for("MFA_PENDING"), cycle.state_id
   end
 
   private
@@ -563,19 +570,27 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   def cycle_attrs(cycle_class, nonce: "nonce")
-    if cycle_class < SignUpFlowTicket && cycle_class.respond_to?(:cleanup_status_class)
-      cycle_class.cleanup_status_class.ensure_defaults!
-    end
-
-    attrs = {
-      principal_id: 123,
-      status_id: cycle_class::STATUS_IDS.first,
-      step: cycle_class::STEPS.first,
-      return_to: "/dashboard",
-      nonce_digest: cycle_class.digest_nonce(nonce),
-      issued_at: Time.current,
-      expires_at: 15.minutes.from_now,
-    }
+    attrs =
+      if cycle_class < SignInFlow
+        {
+          principal_id: 123,
+          state_id: cycle_class::STATE_IDS.first,
+          return_to: "/dashboard",
+          nonce_digest: cycle_class.digest_nonce(nonce),
+          issued_at: Time.current,
+          expires_at: 15.minutes.from_now,
+        }
+      else
+        {
+          principal_id: 123,
+          status_id: cycle_class::STATUS_IDS.first,
+          step: cycle_class::STEPS.first,
+          return_to: "/dashboard",
+          nonce_digest: cycle_class.digest_nonce(nonce),
+          issued_at: Time.current,
+          expires_at: 15.minutes.from_now,
+        }
+      end
     attrs[:entry_method] = default_sign_up_entry_method(cycle_class) if cycle_class < SignUpFlowTicket
     attrs
   end
@@ -593,10 +608,11 @@ class SignFlowTest < ActiveSupport::TestCase
       "CHECKPOINT_PENDING" => "checkpoint",
       "SELECTOR_PENDING" => "selector",
       "SESSION_ISSUANCE_PENDING" => "session_issuance",
-      "DASHBOARD_PENDING" => "dashboard",
-      "RETURN_PENDING" => "return_to",
       "COMPLETED" => "completed",
       "FAILED" => "failed",
+      "EXPIRED" => "expired",
+      "CANCELLED" => "cancelled",
+      "HALTED" => "halted",
     }.fetch(status_name)
   end
 

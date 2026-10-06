@@ -13,7 +13,6 @@ module StepUpCeremonyTransactionable
   STATUS_REVOKED = "revoked"
   STATUSES = %w(pending verified consumed canceled expired revoked).freeze
   PURPOSES = %w(step_up reauthentication bootstrap credential_registration credential_change).freeze
-  METHOD_AALS = { "passkey" => "aal1", "totp" => "aal1", "email_otp" => "none" }.freeze
   RETENTION_PERIOD = 7.days
 
   included do
@@ -41,13 +40,20 @@ module StepUpCeremonyTransactionable
     validates :result_jti, uniqueness: true, allow_nil: true
     validates :allowed_methods, presence: true
     validates :surface, inclusion: { in: IdentityStepUpCeremonyContract::SURFACES }
+    # @deprecated `required_aal` is a storage label only; remove it after the AAL removal ledger
+    # has retired historical rows and signed compatibility fixtures.
     validates :required_aal, inclusion: { in: IdentityStepUpCeremonyContract::AALS }
     validates :aal, inclusion: { in: IdentityStepUpCeremonyContract::AALS }, allow_blank: true
     validates :method, inclusion: { in: IdentityStepUpCeremonyContract::METHODS }, allow_blank: true
     validates :status, inclusion: { in: STATUSES }
+    validates :step_up_required, :user_verification_required, :full_reauthentication_required,
+              :phishing_resistant_required,
+              :require_session_binding, inclusion: { in: [true, false] }
+    validates :audience, :token_binding, presence: true
     validate :surface_matches_transaction_class
     validate :allowed_methods_are_valid
     validate :consumed_transaction_has_result
+    validate :cancellation_handoff_fields_are_consistent
   end
 
   class_methods do
@@ -58,10 +64,15 @@ module StepUpCeremonyTransactionable
       ceremony_surface_name
     end
 
-    def create_transaction!(surface: ceremony_surface, actor_ref:, session_ref:, required_scope:, required_aal:,
-                            allowed_methods:, phishing_resistant_required: false, resource_ref: nil, return_to: nil,
+    def create_transaction!(surface: ceremony_surface, actor_ref:, session_ref:, required_scope:,
+                            required_aal: StepUpRequirement::NO_AAL,
+                            step_up_required: true, user_verification_required: false,
+                            full_reauthentication_required: false, audience: nil, token_binding: nil,
+                            require_session_binding: true, tenant_ref: nil, allowed_methods:,
+                            phishing_resistant_required: false, resource_ref: nil, return_to: nil,
                             transaction_id: nil, grant_jti: nil, expires_at: nil, now: nil, purpose: "step_up")
       raise ArgumentError, "unsupported ceremony purpose" unless PURPOSES.include?(purpose)
+      raise ArgumentError, "legacy AAL requirements are unsupported" unless required_aal.to_s == StepUpRequirement::NO_AAL
 
       connection_owner.connected_to(role: :writing) do
         now ||= database_now
@@ -72,7 +83,16 @@ module StepUpCeremonyTransactionable
           actor_ref: actor_ref,
           session_ref: session_ref,
           required_scope: required_scope.to_s,
-          required_aal: required_aal.to_s,
+          # @deprecated `required_aal` is retained as a non-authoritative label until the removal
+          # ledger permits dropping the column. Explicit AAL demands never reach this writer.
+          required_aal: StepUpRequirement::NO_AAL,
+          step_up_required: step_up_required,
+          user_verification_required: user_verification_required,
+          full_reauthentication_required: full_reauthentication_required,
+          audience: audience.to_s.presence || "step_up:#{surface}",
+          token_binding: token_binding.to_s.presence || session_ref.to_s,
+          require_session_binding: require_session_binding,
+          tenant_ref: tenant_ref,
           phishing_resistant_required: phishing_resistant_required,
           allowed_methods: serialize_allowed_methods(allowed_methods),
           resource_ref: resource_ref,
@@ -118,11 +138,12 @@ module StepUpCeremonyTransactionable
 
   def verified? = status == STATUS_VERIFIED
 
-  def record_verification!(method:, aal:, phishing_resistant:, verified_at:, verified_credential_ref:)
+  def record_verification!(method:, aal:, phishing_resistant:, user_verified:, verified_at:, verified_credential_ref:)
     self.class.connection_owner.connected_to(role: :writing) do
       with_lock do
         now = self.class.database_now
-        unless %w(step_up reauthentication).include?(purpose) && status == STATUS_PENDING && !expired?(now: now)
+        unless %w(step_up reauthentication).include?(purpose) && step_up_required && status == STATUS_PENDING &&
+            !expired?(now: now)
           raise IdentityStepUpCeremonyContract::Error.new(
             "step-up transaction is not pending",
             code: unavailable_refusal_code(expected_purposes: %w(step_up reauthentication), now: now),
@@ -133,22 +154,13 @@ module StepUpCeremonyTransactionable
         end
 
         validate_verification_evidence!(
-          method: method, aal: aal, phishing_resistant: phishing_resistant,
+          method: method, aal: aal, phishing_resistant: phishing_resistant, user_verified: user_verified,
           verified_at: verified_at, verified_credential_ref: verified_credential_ref, now: now,
         )
 
-        requirement_rank = IdentityStepUpCeremonyContract::AALS.index(required_aal)
-        achieved_rank = IdentityStepUpCeremonyContract::AALS.index(aal.to_s)
-        unless requirement_rank && achieved_rank && achieved_rank >= requirement_rank
-          raise IdentityStepUpCeremonyContract::Error.new(
-            "step-up assurance is insufficient",
-            code: "authorization_denied",
-          )
-        end
-
         write_status!(
           STATUS_VERIFIED, method: method.to_s, aal: aal.to_s,
-                           phishing_resistant: phishing_resistant, verified_at: verified_at,
+                           phishing_resistant: phishing_resistant, user_verified: user_verified, verified_at: verified_at,
                            result_jti: SecureRandom.uuid, verified_credential_ref: verified_credential_ref,
         )
         self
@@ -163,7 +175,8 @@ module StepUpCeremonyTransactionable
       with_lock do
         now = self.class.database_now
         unless %w(bootstrap credential_registration).include?(purpose) && status == STATUS_PENDING &&
-            !expired?(now: now) && required_aal == "none" && !phishing_resistant_required &&
+            !expired?(now: now) && !step_up_required && !phishing_resistant_required &&
+            !user_verification_required && !full_reauthentication_required &&
             %w(passkey totp).include?(method) && allowed_methods_array.include?(method) &&
             permitted_ceremony_methods.include?(method) && verified_at &&
             verified_at >= created_at && verified_at <= now && verified_at < expires_at
@@ -171,7 +184,7 @@ module StepUpCeremonyTransactionable
         end
 
         write_status!(
-          STATUS_VERIFIED, method: method, aal: "none", phishing_resistant: false,
+          STATUS_VERIFIED, method: method, aal: "none", phishing_resistant: false, user_verified: false,
                            verified_at: verified_at, result_jti: SecureRandom.uuid, verified_credential_ref: nil,
         )
         self
@@ -203,6 +216,52 @@ module StepUpCeremonyTransactionable
     end
   end
 
+  def prepare_cancellation_handoff!(reference:, ciphertext:)
+    unless reference.is_a?(String) && reference.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i)
+      raise ArgumentError, "invalid cancellation handoff reference"
+    end
+    raise ArgumentError,
+          "invalid cancellation handoff ciphertext" unless ciphertext.is_a?(String) && ciphertext.present?
+
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        if cancellation_handoff_ref.present? &&
+            (cancellation_handoff_ref != reference || cancellation_handoff_ciphertext != ciphertext)
+          raise IdentityStepUpCeremonyContract::Error.new(
+            "cancellation handoff is already bound", code: "transaction_conflict",
+          )
+        end
+        update!(cancellation_handoff_ref: reference, cancellation_handoff_ciphertext: ciphertext) if
+          cancellation_handoff_ref.blank? && cancellation_handoff_ciphertext.blank?
+        self
+      end
+    end
+  end
+
+  def commit_cancellation!(now:, cancellation_handoff_digest: nil)
+    unless cancellation_handoff_digest.nil? ||
+        (cancellation_handoff_digest.is_a?(String) && cancellation_handoff_digest.match?(/\A[0-9a-f]{64}\z/))
+      raise ArgumentError, "invalid cancellation handoff digest"
+    end
+
+    if canceled?
+      if cancellation_handoff_digest.present? && self.cancellation_handoff_digest.present? &&
+          self.cancellation_handoff_digest != cancellation_handoff_digest
+        raise IdentityStepUpCeremonyContract::Error.new(
+          "cancellation handoff is already bound", code: "transaction_conflict",
+        )
+      end
+      update!(cancellation_handoff_digest:) if cancellation_handoff_digest.present? && self.cancellation_handoff_digest.blank?
+      return self
+    end
+
+    attributes = { canceled_at: now }
+    if cancellation_handoff_digest.present?
+      attributes[:cancellation_handoff_digest] = cancellation_handoff_digest
+    end
+    write_status!(STATUS_CANCELED, **attributes)
+  end
+
   def result_delivery_matches?(result_digest:, result_generation:, now: nil)
     now ||= self.class.database_now
     return false unless verified? || consumed?
@@ -223,6 +282,13 @@ module StepUpCeremonyTransactionable
       "jti" => grant_jti,
       "required_scope" => required_scope,
       "required_aal" => required_aal,
+      "step_up_required" => step_up_required,
+      "user_verification_required" => user_verification_required,
+      "full_reauthentication_required" => full_reauthentication_required,
+      "audience" => audience,
+      "token_binding" => token_binding,
+      "require_session_binding" => require_session_binding,
+      "tenant_ref" => tenant_ref,
       "phishing_resistant_required" => phishing_resistant_required,
       "allowed_methods" => allowed_methods_array,
       "resource_ref" => resource_ref,
@@ -265,12 +331,6 @@ module StepUpCeremonyTransactionable
   #
   # Repeating a cancellation converges on the first result. Every other write to a terminal
   # transaction is refused by write_status!.
-  def commit_cancellation!(now:)
-    return self if canceled?
-
-    write_status!(STATUS_CANCELED, canceled_at: now)
-  end
-
   # Persists an expiry that the caller already decided. Read-only paths refuse an expired
   # transaction through expired? and never call this.
   def commit_expiry!
@@ -282,16 +342,33 @@ module StepUpCeremonyTransactionable
   end
 
   def commit_consumption!(now:)
+    unless %w(step_up reauthentication).include?(purpose) && status == STATUS_VERIFIED
+      raise IdentityStepUpCeremonyContract::Error.new(
+        "step-up transaction is not ready for consumption",
+        code: unavailable_refusal_code(expected_purposes: %w(step_up reauthentication), now: now),
+      )
+    end
+
     write_status!(STATUS_CONSUMED, consumed_at: now)
   end
 
   # Passkey and TOTP registration arrive verified by Auth. Email registration is confirmed inside
   # Base, so it has no Auth evidence step and is consumed directly from pending.
   def commit_registration_consumption!(now:, method:, registered_credential_ref:)
+    unless %w(bootstrap credential_registration).include?(purpose) &&
+        %w(passkey totp email_otp).include?(method.to_s) &&
+        !step_up_required && !phishing_resistant_required && !user_verification_required &&
+        !full_reauthentication_required
+      raise IdentityStepUpCeremonyContract::Error.new(
+        "registration transaction is not ready for consumption", code: "transaction_unavailable",
+      )
+    end
+
     attributes = { consumed_at: now, verified_credential_ref: registered_credential_ref }
     if status == STATUS_PENDING
       attributes.merge!(
-        method: method, aal: "none", phishing_resistant: false, verified_at: now, result_jti: SecureRandom.uuid,
+        method: method, aal: "none", phishing_resistant: false, user_verified: false,
+        verified_at: now, result_jti: SecureRandom.uuid,
       )
     end
     write_status!(STATUS_CONSUMED, **attributes)
@@ -327,7 +404,9 @@ module StepUpCeremonyTransactionable
          [STATUS_VERIFIED, STATUS_CANCELED], [STATUS_VERIFIED, STATUS_EXPIRED], [STATUS_VERIFIED, STATUS_REVOKED]
       true
     when [STATUS_PENDING, STATUS_CONSUMED]
-      %w(bootstrap credential_registration).include?(purpose) && attributes[:method] == "email_otp"
+      %w(bootstrap credential_registration).include?(purpose) && !step_up_required &&
+        !phishing_resistant_required && !user_verification_required && !full_reauthentication_required &&
+        attributes[:method] == "email_otp"
     else
       false
     end
@@ -344,15 +423,23 @@ module StepUpCeremonyTransactionable
     end
   end
 
-  def validate_verification_evidence!(method:, aal:, phishing_resistant:, verified_at:, verified_credential_ref:, now:)
+  def validate_verification_evidence!(method:, aal:, phishing_resistant:, user_verified:, verified_at:,
+                                      verified_credential_ref:, now:)
     unless verified_credential_ref.is_a?(String) && verified_credential_ref.present? &&
         verified_at && verified_at >= created_at && verified_at <= now && verified_at < expires_at &&
+        valid_legacy_label?(method: method, aal: aal) &&
         [true, false].include?(phishing_resistant) &&
-        phishing_resistant == (method.to_s == "passkey") && METHOD_AALS.fetch(method.to_s) == aal.to_s &&
-        (!phishing_resistant_required || phishing_resistant == true)
+        [true, false].include?(user_verified) &&
+        phishing_resistant == (method.to_s == "passkey") &&
+        (!phishing_resistant_required || phishing_resistant == true) &&
+        (!user_verification_required || user_verified == true)
       raise IdentityStepUpCeremonyContract::Error.new("step-up evidence is invalid", code: "invalid_evidence")
     end
+  end
 
+  def valid_legacy_label?(method:, aal:)
+    expected = (method.to_s == "email_otp") ? "none" : "aal1"
+    IdentityStepUpCeremonyContract::AALS.include?(aal.to_s) && aal.to_s == expected
   end
 
   def surface_matches_transaction_class
@@ -373,5 +460,32 @@ module StepUpCeremonyTransactionable
     errors.add(:method, "is required for consumed transaction") if method.blank?
     errors.add(:aal, "is required for consumed transaction") if aal.blank?
     errors.add(:verified_at, "is required for consumed transaction") if verified_at.blank?
+    errors.add(:user_verified, "is required for consumed transaction") unless [true, false].include?(user_verified)
+    return unless %w(step_up reauthentication).include?(purpose) && verified_credential_ref.blank?
+
+    errors.add(:verified_credential_ref, "is required for step-up consumption")
+
+  end
+
+  def cancellation_handoff_fields_are_consistent
+    ref_present = cancellation_handoff_ref.present?
+    ciphertext_present = cancellation_handoff_ciphertext.present?
+    errors.add(:cancellation_handoff_ref, "must be paired with ciphertext") if ref_present != ciphertext_present
+
+    return unless persisted?
+
+    if will_save_change_to_cancellation_handoff_ref? && cancellation_handoff_ref_in_database.present? &&
+        cancellation_handoff_ref != cancellation_handoff_ref_in_database
+      errors.add(:cancellation_handoff_ref, "cannot change after issuance")
+    end
+    if will_save_change_to_cancellation_handoff_ciphertext? && cancellation_handoff_ciphertext_in_database.present? &&
+        cancellation_handoff_ciphertext != cancellation_handoff_ciphertext_in_database
+      errors.add(:cancellation_handoff_ciphertext, "cannot change after issuance")
+    end
+    if will_save_change_to_cancellation_handoff_digest? && cancellation_handoff_digest_in_database.present? &&
+        cancellation_handoff_digest != cancellation_handoff_digest_in_database
+      errors.add(:cancellation_handoff_digest, "cannot change after cancellation")
+    end
+
   end
 end

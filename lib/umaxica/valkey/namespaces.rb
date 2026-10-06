@@ -9,6 +9,7 @@ module Umaxica
       AUTHORIZATION_CODES = "auth_state:authorization_code"
       SIGN_OUT_NOTICES = "auth_state:sign_out_notice"
       ADMISSION = "auth_state:admission"
+      RP_REFRESH_COORDINATION = "auth_state:rp_refresh"
 
       RUNTIME_ID_PATTERN = /\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/.freeze
 
@@ -22,6 +23,10 @@ module Umaxica
 
       def admission(suite_run_id: nil, worker_id: nil, test_id: nil)
         namespace(ADMISSION, suite_run_id: suite_run_id, worker_id: worker_id, test_id: test_id)
+      end
+
+      def rp_refresh(suite_run_id: nil, worker_id: nil, test_id: nil)
+        namespace(RP_REFRESH_COORDINATION, suite_run_id: suite_run_id, worker_id: worker_id, test_id: test_id)
       end
 
       # A test run supplies a unique scope before Rails boots. Production and development keep

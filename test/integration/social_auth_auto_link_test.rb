@@ -349,6 +349,8 @@ class SocialAuthAutoLinkTest
   end
 
   def submit_social_completion_if_present!
+    return if follow_social_completion_redirect_if_present!
+
     return unless response.media_type == "text/html"
     return unless response.body.include?("social-completion-form")
 

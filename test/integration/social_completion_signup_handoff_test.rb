@@ -17,6 +17,8 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
     @now = Time.current
     @session_ref = SecureRandom.uuid
     @uid = "signup-handoff-#{SecureRandom.hex(6)}"
+    @original_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
 
     @client = clients(:one)
     @client.update_columns(birthdate: nil)
@@ -30,18 +32,16 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
     )
   end
 
+  teardown do
+    ActionController::Base.allow_forgery_protection = @original_forgery_protection
+  end
+
   test "a login for an account without a birthdate is handed to the sign-up guard" do
     travel_to(@now) do
       result_token = issue_login_result
 
       assert_difference -> { ClientSignUpFlow.where(principal_id: @client.id).count }, 1 do
-        post base_app_social_authentication_completion_path(id: "google"),
-             params: { social_ceremony_result: result_token, ri: "jp" },
-             headers: {
-               "Host" => @base_host,
-               "Origin" => "https://#{@auth_host}",
-               "Sec-Fetch-Site" => "same-site",
-             }
+      complete_staged_result!(result_token: result_token, provider: "google")
       end
 
       assert_response :redirect
@@ -65,13 +65,7 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
   test "a link completion posted to the login endpoint is sent back to settings" do
     travel_to(@now) do
       assert_no_difference -> { ClientSignUpFlow.where(principal_id: @client.id).count } do
-        post base_app_social_authentication_completion_path(id: "google"),
-             params: { social_ceremony_result: issue_link_result, ri: "jp" },
-             headers: {
-               "Host" => @base_host,
-               "Origin" => "https://#{@auth_host}",
-               "Sec-Fetch-Site" => "same-site",
-             }
+        complete_staged_result!(result_token: issue_link_result, provider: "google")
       end
 
       assert_response :see_other
@@ -86,13 +80,7 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
 
   test "an apple link completion is sent back to the apple settings page" do
     travel_to(@now) do
-      post base_app_social_authentication_completion_path(id: "apple"),
-           params: { social_ceremony_result: issue_link_result(provider: "apple"), ri: "jp" },
-           headers: {
-             "Host" => @base_host,
-             "Origin" => "https://#{@auth_host}",
-             "Sec-Fetch-Site" => "same-site",
-           }
+      complete_staged_result!(result_token: issue_link_result(provider: "apple"), provider: "apple")
 
       assert_response :see_other
       gateway = URI.parse(response.location)
@@ -105,6 +93,31 @@ class SocialCompletionSignupHandoffTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def complete_staged_result!(result_token:, provider:)
+    reference = Valkey::AuthState::SocialCeremonyResultStore.new.issue!(
+      token: result_token,
+      expires_at: @now + 1.minute,
+      now: @now,
+    )
+    host!(@base_host)
+    https!
+    get base_app_social_authentication_completion_path(
+      id: provider, result_ref: reference, ri: "jp",
+    )
+    assert_response :success
+
+    form = response.parsed_body.at_css("form")
+    assert form
+    params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    post form["action"],
+         params: params,
+         headers: {
+           "Host" => @base_host,
+           "Origin" => "https://#{@base_host}",
+           "Sec-Fetch-Site" => "same-origin",
+         }
+  end
 
   def issue_link_result(provider: "google")
     grant = IdentitySocialCeremonyGrantIssuer.issue!(

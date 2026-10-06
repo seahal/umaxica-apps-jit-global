@@ -13,14 +13,14 @@ transport role, not the logical credential kind.
 | Preference access   | `__Host-preference_access`  | `preference_access`    |
 | Preference refresh  | `__Host-preference_refresh` | `preference_refresh`   |
 | Preference DBSC     | `__Host-preference_dbsc`    | `preference_dbsc`      |
-| RP access            | `__Host-oidc_rp_access`     | `oidc_rp_access`       |
-| RP refresh           | `__Host-oidc_rp_refresh`    | `oidc_rp_refresh`      |
+| RP access            | `__Host-rp-access`          | `rp-access`            |
+| RP refresh           | `__Host-rp-refresh`         | `rp-refresh`           |
 
 New credential cookie writes are host-only. They use `Path=/`; secure contexts use `Secure` and the
 `__Host-` prefix. They never carry a `Domain` attribute.
 
 Cookie names must not include `global`, `regional`, `app`, `com`, `org`, `core`, or `palm`. For
-example, Auth's `__Host-auth_access` and a Core RP's `__Host-oidc_rp_access` are separate cookies
+example, Auth's `__Host-auth_access` and a Core RP's `__Host-rp-access` are separate cookies
 because the browser stores them per host.
 
 ## JS-Readable Preference Mirrors

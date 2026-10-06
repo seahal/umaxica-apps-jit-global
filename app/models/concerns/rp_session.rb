@@ -64,13 +64,15 @@ module RpSession
   end
 
   def parent_token
-    public_send(parent_association_name)
+    parent_device_session&.current_refresh_token
   end
 
   def parent_token_active?(now = nil)
-    token = parent_token
+    device_session = parent_device_session
+    return false unless device_session&.usable?
+
+    token = device_session.current_refresh_token
     return false unless token
-    return false unless token.respond_to?(:currently_usable?)
 
     token.currently_usable?(now || self.class.database_now)
   end
@@ -92,6 +94,9 @@ module RpSession
         refresh_token_expires_at: expires_at,
         refresh_token_rotated_at: nil,
         previous_refresh_token_digest: nil,
+        refresh_delivery_ciphertext: nil,
+        refresh_delivery_predecessor_digest: nil,
+        refresh_delivery_expires_at: nil,
         last_used_at: decision_time,
       )
       raw_refresh_token
@@ -117,10 +122,39 @@ module RpSession
         refresh_token_digest: encoded_refresh_token_digest(verifier),
         refresh_token_expires_at: expires_at,
         refresh_token_rotated_at: decision_time,
+        refresh_generation: refresh_generation + 1,
+        refresh_delivery_ciphertext: nil,
+        refresh_delivery_predecessor_digest: nil,
+        refresh_delivery_expires_at: nil,
         last_used_at: decision_time,
       )
       raw_refresh_token
     end
+  end
+
+  def store_refresh_delivery_receipt!(ciphertext:, predecessor_digest:, expires_at:)
+    raise ArgumentError, "refresh delivery ciphertext is required" if ciphertext.blank?
+    raise ArgumentError, "refresh delivery predecessor digest is required" if predecessor_digest.blank?
+    raise ArgumentError, "refresh delivery expiry is required" unless expires_at.respond_to?(:to_time)
+
+    update!(
+      refresh_delivery_ciphertext: ciphertext,
+      refresh_delivery_predecessor_digest: predecessor_digest,
+      refresh_delivery_expires_at: expires_at,
+    )
+  end
+
+  def refresh_delivery_receipt_present?
+    refresh_delivery_ciphertext.present? || refresh_delivery_predecessor_digest.present? ||
+      refresh_delivery_expires_at.present?
+  end
+
+  def clear_refresh_delivery_receipt!
+    update!(
+      refresh_delivery_ciphertext: nil,
+      refresh_delivery_predecessor_digest: nil,
+      refresh_delivery_expires_at: nil,
+    )
   end
 
   def authenticate_refresh_token(verifier)
@@ -181,11 +215,28 @@ module RpSession
   end
 
   def with_parent_and_self_lock
-    parent = parent_token
-    return with_lock { yield } unless parent
+    device_session = parent_device_session
+    raise IssuanceRejected, "RP Session device session is missing" unless device_session
 
-    parent.with_lock do
-      with_lock { yield }
+    device_session.with_lock do
+      parent = device_session.current_refresh_token
+      raise IssuanceRejected, "RP Session current root token is missing" unless parent
+
+      parent.with_lock do
+        with_lock { yield }
+      end
     end
   end
+
+  def parent_device_session
+    case self
+    when ClientRpSession then ClientDeviceSession.find_by(id: self[:device_session_id])
+    when VisitorRpSession then VisitorDeviceSession.find_by(id: self[:device_session_id])
+    when OperatorRpSession then OperatorDeviceSession.find_by(id: self[:device_session_id])
+    else
+      raise IssuanceRejected, "unsupported RP Session class"
+    end
+  end
+
+  public :parent_device_session, :with_parent_and_self_lock
 end

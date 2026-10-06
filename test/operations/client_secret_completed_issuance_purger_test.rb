@@ -30,7 +30,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     assert_equal :dependent, ClientSecretIssuancePurger.call_terminated_signup!(
       issuance: issuance, executor_job_id: "live-payload-flow", retention_after: 1.second,
     )
-    flow.transition_to!("CANCELLED", now: ClientSignUpFlow.database_now)
+    flow.cancel_sign_up!
     ClientSecretPasskeyReservationIssuer.terminate_sign_up!(flow: flow, purge_after: 1.day)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
@@ -64,7 +64,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
       principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
-      nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now - 2.seconds,
+      nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now + 5.minutes,
       completed_requirements: [],
     )
     issuance = ClientSecretIssuance.create!(
@@ -75,12 +75,13 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Expired signup", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     ClientSecretIssuanceExpiryInvalidator.call!(
       issuance: issuance, executor_job_id: "original-expiry", purge_after: 0.000001.seconds,
     )
-    flow.transition_to!("CANCELLED", now: ClientSignUpFlow.database_now)
+    flow.cancel_sign_up!
+    # Advance only the retention deadline used by this collection scenario.
+    flow.update_columns(expires_at: ClientSignUpFlow.database_now - 1.second)
     ClientSecretPasskeyReservationIssuer.terminate_sign_up!(flow: flow, purge_after: 1.day)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
@@ -104,12 +105,12 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     actor = clients(:one)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
-    %w(CANCELLED EXPIRED FAILED).each do |terminal|
+    %w(CANCELLED EXPIRED FAILED HALTED).each do |terminal|
       [0, 1, 2].each do |count|
         now = ClientSignUpFlow.database_now
         flow = ClientSignUpFlow.create!(
           principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
-          nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now - 2.seconds,
+          nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now + 5.minutes,
           completed_requirements: [],
         )
         facts = count.positive? ? { expires_at: now - 2.seconds } : {}
@@ -124,14 +125,29 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
             raw = SecureRandom.base58(32)
             ClientSecretCredential.create!(
               client: actor, issuance: issuance, name: "Pending signup", password: raw,
-              lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: issuance.confirmed_at,
+              confirmed_at: issuance.confirmed_at,
             )
           end
 
         assert_equal :dependent, ClientSecretIssuancePurger.call_terminated_signup!(
           issuance: issuance, executor_job_id: "live-signup", retention_after: 0.000001.seconds,
         )
-        flow.transition_to!(terminal, now: ClientSignUpFlow.database_now)
+        case terminal
+        when "CANCELLED" then flow.cancel_sign_up!
+        when "EXPIRED"
+          # Move only the deadline to the nearest expired value; the named
+          # transition verifies the database-clock deadline itself.
+          flow.update_columns(expires_at: ClientSignUpFlow.database_now - 1.second)
+          flow.expire_sign_up!
+        when "FAILED"
+          # Preserve a historical FAILED row as a reader-compatibility case;
+          # production transitions now use HALTED.
+          flow.update_columns(status_id: ClientSignUpFlowStatus::FAILED)
+        when "HALTED" then flow.halt_sign_up!
+        end
+        # The terminal transition is authoritative; this only advances the
+        # independent retention deadline for the purge contract under test.
+        flow.update_columns(expires_at: ClientSignUpFlow.database_now - 1.second)
         ClientSecretPasskeyReservationIssuer.terminate_sign_up!(flow: flow, purge_after: 0.000001.seconds)
         ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
 
@@ -165,14 +181,16 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
       principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
-      nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now - 2.seconds,
+      nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now + 5.minutes,
       completed_requirements: [],
     )
     issuance = ClientSecretIssuance.create!(
       client: actor, origin: "passkey_registration", origin_operation_id: SecureRandom.uuid,
       attempt_number: 1, sign_up_flow_ref: flow.public_id, planned_count: 0, created_at: now - 1.minute,
     )
-    flow.transition_to!("CANCELLED", now: ClientSignUpFlow.database_now)
+    flow.cancel_sign_up!
+    # Advance only the retention deadline used by this collection scenario.
+    flow.update_columns(expires_at: ClientSignUpFlow.database_now - 1.second)
 
     assert_equal :pending, ClientSecretIssuancePurger.call_terminated_signup!(
       issuance: issuance, executor_job_id: "before-source-retirement", retention_after: 1.second,
@@ -268,12 +286,20 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
+    actor.client_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Time.current,
+    )
+    ClientEmail.create!(
+      user: actor, address: "purger-#{SecureRandom.hex(4)}@example.com",
+      user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: ClientEmail.database_now,
+    )
     token = ClientToken.create!(user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -282,7 +308,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
-    credential = ClientSecretLookupQuery.call(secret: raw)
+    credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
     )
@@ -304,7 +330,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     ClientSecretLifecycleJob.perform_now(batch_size: 500)
 
     assert_not ClientSecretIssuance.exists?(issuance.id)
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     event = ClientSecretAuditOutbox.find_by!(
       operation_ref: issuance.origin_operation_id, event_name: "secret.issuance_purged",
     )

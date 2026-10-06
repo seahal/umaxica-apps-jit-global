@@ -97,12 +97,9 @@ module Auth
 
             @user_telephone.validate
 
-            existing_telephone = find_existing_telephone_by_digest
-            uniqueness_only = telephone_uniqueness_only_error?(@user_telephone)
-
             has_errors = @user_telephone.errors.details.except(:user, :user_id).any?
 
-            if has_errors && !uniqueness_only
+            if has_errors
               log_signup_telephone_errors
               log_sign_signup_event(
                 "sign.signup.telephone.create.rejected",
@@ -112,36 +109,11 @@ module Auth
               return
             end
 
-            if existing_telephone &&
-                existing_telephone.user_telephone_status_id != ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-              if existing_telephone.locked?
-                return render_otp_resend_too_soon
-              end
-
-              cleanup_pending_telephone_signup!
-              dispatch_existing_telephone_verification!(existing_telephone)
-              return
-            end
-
-            if existing_telephone&.locked?
-              return render_otp_resend_too_soon
-            end
-
-            if existing_telephone&.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP &&
-                existing_telephone.reregistration_window_active?
-              return dispatch_existing_telephone_verification!(existing_telephone)
-            end
-
             begin
               result = SignAppUpTelephoneSignupCreator.call(
                 telephone: @user_telephone,
-                existing_telephone: existing_telephone,
                 pending_public_id: session_public_id_from_registration,
               )
-
-              if result.status == :rate_limited
-                return render_otp_resend_too_soon
-              end
 
               @user_telephone = result.telephone
               session[:user_telephone_registration] = result.session_payload
@@ -265,15 +237,9 @@ module Auth
           end
 
           def valid_telephone_session?
-            return dummy_existing_telephone_session_valid? if dummy_existing_telephone_flow?
             return false unless @user_telephone.present? && !@user_telephone.otp_expired?
 
-            if existing_signup_telephone_flow?(session[:user_telephone_registration])
-              session_public_id = session_public_id_from_registration
-              session_public_id.to_s == @user_telephone.public_id.to_s
-            else
-              @user_telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-            end
+            @user_telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
           end
 
           def redirect_telephone_session_expired
@@ -322,54 +288,6 @@ module Auth
             pending_user.destroy! if pending_user&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
           end
 
-          def existing_signup_telephone_flow?(registration_session)
-            registration_session&.dig(:existing) == true || registration_session&.dig("existing") == true
-          end
-
-          def dummy_existing_telephone_flow?(registration_session = session[:user_telephone_registration])
-            registration_session&.dig(:dummy) == true || registration_session&.dig("dummy") == true
-          end
-
-          def dummy_existing_telephone_session_valid?
-            registration_session = session[:user_telephone_registration]
-            return false unless dummy_existing_telephone_flow?(registration_session)
-
-            registration_session["expires_at"].to_i > Time.current.to_i
-          end
-
-          def dispatch_existing_telephone_verification!(_existing_telephone)
-            sign_up_flow_locator.clear!
-            @user_telephone = ClientTelephone.new
-
-            session[:user_telephone_registration] = {
-              expires_at: CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
-              existing: true,
-              dummy: true,
-            }
-
-            redirect_to(
-              auth_app_sign_up_check_telephone_otp_path(ri: params[:ri]),
-            )
-          end
-
-          def telephone_uniqueness_only_error?(user_telephone)
-            # ignore :user and :user_id error
-            errors_to_check = user_telephone.errors.details.except(:user, :user_id)
-            return false if errors_to_check.empty?
-
-            # Fields that can have uniqueness errors
-            uniqueness_fields = %i(number raw_number number_digest)
-
-            # Check if all errors are :taken errors on the uniqueness fields
-            errors_to_check.each do |field, errors|
-              return false unless uniqueness_fields.include?(field)
-              return false unless errors.all? { |error| error[:error] == :taken }
-            end
-
-            # Ensure at least one uniqueness error is present
-            user_telephone.errors.details.any?
-          end
-
           def log_signup_telephone_errors
             return unless @user_telephone&.errors&.any?
 
@@ -381,17 +299,7 @@ module Auth
             )
           end
 
-          def find_existing_telephone_by_digest
-            return nil if @user_telephone.number_digest.blank?
-
-            ClientTelephone.find_by(number_digest: @user_telephone.number_digest)
-          end
-
           def issue_sign_up_flow!
-            AppTicketRecord.connected_to(role: :writing) do
-              ClientSignUpFlowStatus.ensure_defaults!
-            end
-
             sign_up_flow_locator.issue!(
               ClientSignUpFlow.create!(
                 principal_id: nil,
@@ -433,8 +341,6 @@ module Auth
           end
 
           def current_registration_telephone
-            return ClientTelephone.new if dummy_existing_telephone_flow?
-
             public_id = session_public_id_from_registration
             return if public_id.blank?
 

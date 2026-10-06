@@ -8,36 +8,33 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_token_kinds
 
   setup do
-    host! ENV.fetch("PUBLIC_CORE_SERVICE_URL", ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"))
+    @host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost")
+    host! @host
   end
 
-  test "get sign out renders confirmation without mutation" do
+  test "RP cookie sign out renders confirmation without mutation" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    authenticate_rp!(user, token)
 
-    get edit_core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
+    get edit_core_app_sign_out_url(ri: "jp")
 
     assert_response :success
     assert_select "form[action*=?][method=?]", core_app_sign_out_path, "post"
     assert_predicate token.reload, :currently_usable?
   end
 
-  # Core keeps its sign-out pages in ERB, which cannot carry Inertia's clearHistory. The completion
-  # response instead tells the browser to drop this origin's cache and storage; storage includes
-  # the sessionStorage key that decrypts Core's Inertia history.
-  test "sign-out completion clears this origin's cache and storage" do
+  test "sign-out launch does not clear site data before the authority phase" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
-    state = Rack::Utils.parse_nested_query(URI.parse(handoff_form["action"]).query.to_s).fetch("state")
 
-    get core_app_sign_out_url(ri: "jp", state: state)
-
-    assert_response :success
-    assert_includes response.body, I18n.t("sign.shared.sign_out.completed_title")
-    assert_equal '"cache", "storage"', response.headers["Clear-Site-Data"]
+    assert_response :see_other
+    assert_nil response.headers["Clear-Site-Data"]
+    assert_predicate token.reload, :currently_usable?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "the sign-out confirmation page does not clear site data" do
@@ -50,25 +47,25 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.headers["Clear-Site-Data"]
   end
 
-  test "post sign out redirects to base oidc logout with completion state" do
+  test "post sign out redirects to the registered base authority" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
-    Rack::Utils.parse_nested_query(location.query.to_s)
+    assert_response :see_other
+    location = URI.parse(response.location)
+    query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_predicate handoff_input_value("logout_challenge"), :present?
-    assert_equal "jp", handoff_input_value("ri")
-    assert_predicate @rp_session.reload, :revoked?
+    assert_predicate query["logout_challenge"], :present?
+    assert_equal "jp", query["ri"]
+    assert_predicate @rp_session.reload, :active?
   end
 
-  test "post sign out revokes only the RP Session authenticated by RP cookies" do
+  test "post sign out leaves parent and RP rows unchanged until authority confirmation" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     oidc_client = OidcClientRegistry.find!("core-app")
@@ -77,6 +74,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
@@ -86,6 +84,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       host: @host,
       resource_type: "client",
       session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
       oidc_sid: rp_session.public_id,
       oidc_jti: rp_session.oidc_jti,
       expires_at: 10.minutes.from_now,
@@ -101,20 +100,21 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post core_app_sign_out_url(ri: "jp")
 
-    assert_response :success
-    assert_predicate rp_session.reload, :revoked?
+    assert_response :see_other
+    assert_predicate rp_session.reload, :active?
     assert_predicate token.reload, :currently_usable?
   end
 
   test "post sign out rejects a sibling RP credential without revoking either session" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    oidc_client = OidcClientRegistry.find!("side-app")
+    oidc_client = OidcClientRegistry.find!("warp-app")
     sibling_session = ClientRpSession.create!(
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
@@ -123,6 +123,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       host: @host,
       resource_type: "client",
       session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
       oidc_sid: sibling_session.public_id,
       oidc_jti: sibling_session.oidc_jti,
       expires_at: 10.minutes.from_now,
@@ -159,16 +160,15 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post core_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_equal "us", handoff_input_value("ri")
-    assert_includes query.fetch("post_logout_redirect_uri"), "ri=us"
-    assert_predicate handoff_input_value("logout_challenge"), :present?
-    assert_predicate @rp_session.reload, :revoked?
+    assert_equal "us", query["ri"]
+    assert_predicate query["logout_challenge"], :present?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "post sign out canonicalizes unsupported region to default" do
@@ -178,14 +178,14 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post core_app_sign_out_url(ri: "xx"), headers: app_session_headers(user, token)
 
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_equal "/oidc/logout", location.path
-    assert_equal RequestContextContract.default_region, handoff_input_value("ri")
-    assert_includes query.fetch("post_logout_redirect_uri"), "ri=#{RequestContextContract.default_region}"
-    assert_predicate @rp_session.reload, :revoked?
+    assert_equal RequestContextContract.default_region, query["ri"]
+    assert_predicate query["logout_challenge"], :present?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "transaction issuance failure does not render success completion" do
@@ -218,45 +218,29 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post core_app_sign_out_url, headers: app_session_headers(user, token)
 
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_predicate handoff_input_value("logout_challenge"), :present?
-    assert_equal RequestContextContract.default_region, handoff_input_value("ri")
-    assert_includes query.fetch("post_logout_redirect_uri"), "ri=#{RequestContextContract.default_region}"
+    assert_predicate query["logout_challenge"], :present?
+    assert_equal RequestContextContract.default_region, query["ri"]
   end
 
-  test "post sign out relay advances to sign coordination hop" do
+  test "post sign out does not route through Auth" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
-    challenge = handoff_input_value("logout_challenge")
+    assert_response :see_other
+    location = URI.parse(response.location)
 
-    post acme_app_oidc_logout_url(
-      host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"), ri: "jp",
-      logout_challenge: challenge,
-    ), headers: {
-      "Host" => ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
-      "Origin" => "https://#{ENV.fetch(
-        "PUBLIC_CORE_SERVICE_URL",
-        ENV.fetch("PUBLIC_CORE_SERVICE_URL", "core.app.localhost"),
-      )}",
-      "Sec-Fetch-Site" => "same-site",
-    }
-
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
-
-    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host, location.host
-    assert_equal "/sign/out", location.path
-    assert_equal challenge, handoff_input_value("logout_challenge")
-    assert_equal "jp", handoff_input_value("ri")
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
+    assert_equal "/oidc/logout", location.path
+    assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), location.host
   end
 
   private
@@ -268,6 +252,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
@@ -276,6 +261,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       host: @host,
       resource_type: "client",
       session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
       oidc_sid: @rp_session.public_id,
       oidc_jti: @rp_session.oidc_jti,
       expires_at: 10.minutes.from_now,
@@ -327,15 +313,6 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       else "APP"
       end
     "surface:AUTH_#{surface}"
-  end
-
-  def handoff_form
-    assert_select "form#sign-out-handoff-form[method=post][data-turbo=false]", 1
-    css_select("form#sign-out-handoff-form").first
-  end
-
-  def handoff_input_value(name)
-    css_select(%(form#sign-out-handoff-form input[name="#{name}"])).first&.[]("value")
   end
 end
 

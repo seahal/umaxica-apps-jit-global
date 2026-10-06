@@ -45,6 +45,7 @@ class ClientTelephone < AppPrincipalRecord
   include Retainable
   include Telephone
   include PublicId
+  include ContactBinding
 
   def to_param
     public_id
@@ -64,13 +65,7 @@ class ClientTelephone < AppPrincipalRecord
   validates :otp_counter, presence: true
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :user_identity_telephone_status_id, numericality: { only_integer: true }
-  validates :number_digest,
-            blind_index_uniqueness: {
-              error_attribute: :number,
-              status_column: :user_identity_telephone_status_id,
-              deleted_status_id: ClientTelephoneStatus::DELETED,
-            },
-            allow_blank: true
+  validates :number_digest, presence: true, if: :binding_effective?
   validates_with AssociatedRecordLimitValidator,
                  on: :create,
                  owner: :user,
@@ -82,6 +77,10 @@ class ClientTelephone < AppPrincipalRecord
 
   after_initialize do
     self.number ||= ""
+  end
+
+  def contact_binding_digest
+    number_digest
   end
 
   # Note: :number encryption is handled by Telephone concern

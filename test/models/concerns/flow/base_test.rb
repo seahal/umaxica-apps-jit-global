@@ -65,73 +65,10 @@ class FlowBaseTest < ActiveSupport::TestCase
     assert_match(/cycle_status_column/, error.message)
   end
 
-  test "transition_cycle_to updates status when current status is allowed" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
+  test "transition_cycle_to is private and cannot bypass named operations" do
+    record = build_record
 
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now + 1.hour)
-      record.transition_cycle_to!(20, allowed_from: [10])
-
-      assert_equal 20, record.reload.cycle_status_id
-    end
-  end
-
-  test "transition_cycle_to applies additional changes with the status update" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now + 1.hour)
-      record.transition_cycle_to!(20, allowed_from: [10], changes: { expires_at: now + 2.hours })
-      record.reload
-
-      assert_equal 20, record.cycle_status_id
-      assert_equal now + 2.hours, record.expires_at
-    end
-  end
-
-  test "transition_cycle_to rejects disallowed current status without mutation" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now + 1.hour)
-      error =
-        assert_raises(FlowInvalidTransition) do
-          record.transition_cycle_to!(30, allowed_from: [20])
-        end
-
-      assert_match(/invalid transition/, error.message)
-      assert_equal 10, record.reload.cycle_status_id
-    end
-  end
-
-  test "transition_cycle_to rejects discarded cycles" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discard_at: now, purge_eligible_at: now + 1.day)
-      error =
-        assert_raises(FlowInvalidTransition) do
-          record.transition_cycle_to!(20, allowed_from: [10])
-        end
-
-      assert_match(/cycle is discarded/, error.message)
-      assert_equal 10, record.reload.cycle_status_id
-    end
-  end
-
-  test "transition_cycle_to rejects expired cycles" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, expires_at: now)
-      error =
-        assert_raises(FlowInvalidTransition) do
-          record.transition_cycle_to!(20, allowed_from: [10])
-        end
-
-      assert_match(/cycle is expired/, error.message)
-      assert_equal 10, record.reload.cycle_status_id
-    end
+    assert_not_respond_to record, :transition_cycle_to!
   end
 
   test "discard_cycle updates retention timestamps when order is valid" do

@@ -15,13 +15,6 @@ module Auth
               skip_before_action :enforce_email_flow!
 
               def show
-                if dummy_existing_email_flow?
-                  @user_email = VisitorEmail.new
-                  return render_sign_up_email_edit if valid_email_session?
-
-                  return redirect_invalid_session
-                end
-
                 return unless load_gate_context!(gate_for_show)
 
                 @user_email = current_registration_email
@@ -43,16 +36,6 @@ module Auth
               end
 
               def update
-                if dummy_existing_email_flow?
-                  @user_email = VisitorEmail.new
-                  return unless verify_otp_turnstile!
-
-                  submitted_code = submitted_pass_code
-                  return render_code_required if submitted_code.blank?
-
-                  return render_otp_ceremony_result(verify_otp_ceremony!(submitted_code))
-                end
-
                 return unless load_gate_context!(gate_for_update)
 
                 @user_email = current_registration_email
@@ -116,8 +99,6 @@ module Auth
               end
 
               def verify_otp_ceremony!(submitted_code)
-                return verify_dummy_otp_ceremony!(submitted_code) if dummy_existing_email_flow?
-
                 SignOtpCeremony.verify!(
                   purpose: :sign_up,
                   surface: :com,
@@ -127,19 +108,6 @@ module Auth
                   code: submitted_code,
                   session_nonce: @sign_up_ticket.public_id,
                   request_context: request,
-                )
-              end
-
-              # The decoy flow must be indistinguishable from a wrong code, so it
-              # burns the submitted value and always reports an invalid code.
-              def verify_dummy_otp_ceremony!(submitted_code)
-                verify_dummy_otp(submitted_code)
-                SignOtpCeremony::Result.new(
-                  success?: false,
-                  status: :invalid_code,
-                  record: nil,
-                  code: nil,
-                  error: :invalid_code,
                 )
               end
 

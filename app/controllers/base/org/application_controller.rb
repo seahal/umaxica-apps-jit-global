@@ -15,9 +15,11 @@ module Base
 
       include ::PreferenceAdoption
 
-      include ::AuthenticationOperator
+      include ::BrowserRpAuthentication
+      include ::BrowserRpSafeRequestRefresh
+      include ::BrowserRpUnsafeRequestRefresh
+      include ::BaseAdmissionBrowserBinding
       include ::SignErrorResponses
-      include ::TrustedOriginForgeryProtection
       include ::SessionLimitGate
       include ::AuthorizationAudit
 
@@ -26,6 +28,7 @@ module Base
       include ::VerificationOperator
 
       include ActionPolicy::Controller
+      include ::OidcSsoInitiator
       include ::RestrictedSessionGuard
 
       include SurfaceRouteAliasHelper
@@ -35,6 +38,7 @@ module Base
       include ::Finisher
 
       AUTHENTICATION_MODE = :deny_all
+      base_admission_surface "org"
 
       prepend_before_action :apply_default_no_store
 
@@ -53,12 +57,12 @@ module Base
 
       # NOTE: Order matters (dependencies rely on this sequence)
       # Layer order: explicit RateLimit -> CurrentContext -> Preference -> AuthN ->
-      # CurrentActor -> side-effect reflection -> Verification -> AuthZ
+      # CurrentActor -> effect reflection -> Verification -> AuthZ
       # Existing jump-return handling runs before rate limiting; keep that order
       # for this extraction and review the risk in a follow-up lifecycle PR.
       before_action :verify_jump_return_rt!, if: :jump_return_rt_request?
       # Surface-wide default web request limit (defense-in-depth baseline).
-      # RateLimit stays a side-effect-free helper; the limit and its numeric
+      # RateLimit stays an effect-free helper; the limit and its numeric
       # value are declared here on the inheriting controller.
       rate_limit(
         to: 300,
@@ -75,7 +79,6 @@ module Base
       before_action :resolve_param_context
       before_action :set_region
 
-      before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
       before_action :apply_localization_preferences
       before_action :set_locale
@@ -87,19 +90,27 @@ module Base
       before_action :set_current_observability
       prepend_around_action :with_actor_lifecycle
 
-      # Base org accepts browser POSTs only from its own staff host.
-      protect_from_forgery using: :header_or_legacy_token,
-                           trusted_origins: JitHostOriginEnv.trusted_origins(
-                             ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-                           ),
-                           with: :exception
+      protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       private
 
-      # Base owns the browser session and is not its own RP. A protected request is pointed at Base's
-      # passive GET /sign; only the user's POST there issues an admission.
-      def sign_in_url_with_pt(_return_to)
-        base_org_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]))
+      def browser_rp_client_id
+        "base-org-ww"
+      end
+
+      def browser_rp_resource_type
+        "operator"
+      end
+
+      def oidc_client_id
+        browser_rp_client_id
+      end
+
+      def sign_in_url_with_pt(pt)
+        base_org_sign_show_path(
+          ri: RequestContextContract.normalize_region(params[:ri]),
+          pt: decode_pt(pt).presence,
+        )
       end
 
       # The browser is redirected to this host for the OIDC hop, so it has to be the public
@@ -107,6 +118,10 @@ module Base
       # the visitor to a name their browser cannot resolve.
       def oidc_sign_host
         ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+      end
+
+      def oidc_base_authority_host
+        ENV.fetch("PUBLIC_BASE_STAFF_URL")
       end
 
       private
@@ -117,7 +132,7 @@ module Base
 
       # Base collects consent and issues the scoped admission before leaving its root session.
       def actor_verification_setup_path(**args)
-        base_org_verification_path(**args, scope: verification_scope)
+        base_org_verification_setup_path(**args)
       end
 
       def cross_host_redirect_allowed?

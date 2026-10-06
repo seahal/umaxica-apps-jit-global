@@ -15,18 +15,6 @@
       <%= hidden_field_tag :ri, ri if ri.present? %>
       <%= hidden_field_tag :pt, pt if pt.present? %>
     </form>
-    <script nonce="<%= content_security_policy_nonce %>">
-      (function () {
-        const form = document.getElementById("auth-admission-continuation-form");
-        if (form.requestSubmit) {
-          form.requestSubmit();
-        } else {
-          form.submit();
-        }
-      })();
-    </script>
-    <noscript>
-      <button form="auth-admission-continuation-form" type="submit">Continue</button>
-    </noscript>
+    <button form="auth-admission-continuation-form" type="submit">Continue</button>
   </body>
 </html>

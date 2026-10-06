@@ -31,8 +31,13 @@ module JitSecurityJwtRegistry
     ACME_APP ACME_COM ACME_ORG
     CORE_APP CORE_COM CORE_ORG
     BASE_APP BASE_COM BASE_ORG
-    SIDE_APP SIDE_COM SIDE_ORG
+    BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
+    WARP_APP WARP_COM WARP_ORG
     EDIT_ORG
+  ).freeze
+  REQUIRED_OIDC_CLIENT_NAMESPACES = %w(
+    BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
+    WARP_APP WARP_COM WARP_ORG
   ).freeze
   # Issuer metadata for surface records without Jump issuer capability. Jump issuer records take
   # JumpRtSurface's PUBLIC_* origin instead, so the record that holds a Jump signing key names the
@@ -211,12 +216,24 @@ module JitSecurityJwtRegistry
   end
 
   def build_oidc_client_issuer(namespace, source:)
+    active_kid_name = "OIDC_CLIENT_#{namespace}_ACTIVE_KID"
+    private_key_name = "OIDC_CLIENT_#{namespace}_PRIVATE_KEY"
+    active_kid = source.value(active_kid_name)
+    private_key = source.value(private_key_name)
+    require_oidc_client_key_material!(
+      namespace,
+      active_kid_name:,
+      private_key_name:,
+      active_kid:,
+      private_key:,
+    )
+
     JitSecurityJwtIssuerBuilder.build_surface_issuer_record(
       namespace: namespace,
       id: "oidc_client:#{namespace}",
-      active_kid: source.value("OIDC_CLIENT_#{namespace}_ACTIVE_KID"),
-      private_key: source.value("OIDC_CLIENT_#{namespace}_PRIVATE_KEY"),
-      private_key_source: "OIDC_CLIENT_#{namespace}_PRIVATE_KEY",
+      active_kid:,
+      private_key:,
+      private_key_source: private_key_name,
       public_keyset: source.fetch("OIDC_CLIENT_#{namespace}_PUBLIC_KEYSET", nil),
       public_keyset_source: "OIDC_CLIENT_#{namespace}_PUBLIC_KEYSET",
       revoked_kids: source.csv("OIDC_CLIENT_#{namespace}_REVOKED_KIDS"),
@@ -225,6 +242,16 @@ module JitSecurityJwtRegistry
     )
   rescue JitSecurityJwtIssuerBuilder::Error => e
     raise ConfigurationError, e.message
+  end
+
+  def require_oidc_client_key_material!(namespace, active_kid_name:, private_key_name:, active_kid:, private_key:)
+    return unless REQUIRED_OIDC_CLIENT_NAMESPACES.include?(namespace)
+    return if active_kid.present? && private_key.present?
+
+    missing = []
+    missing << active_kid_name if active_kid.blank?
+    missing << private_key_name if private_key.blank?
+    raise ConfigurationError, "missing required OIDC client configuration: #{missing.join(", ")}"
   end
 
   def jump_gateway_audience
@@ -371,7 +398,8 @@ module JitSecurityJwtRegistry
     RESERVED_ENV_KID_PATTERN.match?(kid.to_s)
   end
 
-  private_class_method :build_issuers, :build_oidc_client_issuer, :jump_gateway_audience,
+  private_class_method :build_issuers, :build_oidc_client_issuer, :require_oidc_client_key_material!,
+                       :jump_gateway_audience,
                        :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
                        :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
                        :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,

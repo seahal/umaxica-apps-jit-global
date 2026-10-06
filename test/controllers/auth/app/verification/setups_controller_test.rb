@@ -11,10 +11,13 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   test "an admitted bootstrap shows the registration methods and cancellation, never a back link" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_telephone", purpose: "bootstrap", step_up_required: false,
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil,
         allowed_methods: %i(passkey totp), audience: "step_up:app", session_binding: token.public_id,
         token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
       ), return_to: "/identity/telephones",
@@ -34,7 +37,7 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     methods = props.fetch("methods").to_h { |method| [method.fetch("key"), method.fetch("href")] }
 
     assert_equal %w(email passkey totp), methods.keys.sort
-    assert_equal new_auth_app_settings_passkey_path(ri: "jp"), methods.fetch("passkey")
+    assert_equal new_auth_app_verification_registration_passkey_path(ri: "jp"), methods.fetch("passkey")
     assert_equal new_auth_app_settings_totp_path(ri: "jp"), methods.fetch("totp")
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(methods.fetch("email")).host
     assert_equal "/identity/emails/registration/new", URI.parse(methods.fetch("email")).path
@@ -62,10 +65,13 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   test "a step-up admission is not accepted by the setup entry" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -80,16 +86,16 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     ).count
   end
 
-  # Pins a confirmed defect: Passkey registration still runs on the retired Auth login contract,
-  # so its setup link leaves the admitted ceremony for Base sign-in. This test changes when Passkey
-  # registration becomes an admission-only ceremony.
-  test "the passkey registration link currently leaves the admitted bootstrap for Base sign-in through Jump" do
+  test "the admitted bootstrap opens the Auth passkey registration ceremony" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_telephone", purpose: "bootstrap", step_up_required: false,
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil,
         allowed_methods: %i(passkey totp), audience: "step_up:app", session_binding: token.public_id,
         token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
       ), return_to: "/identity/telephones",
@@ -97,16 +103,11 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
 
-    get new_auth_app_settings_passkey_path(ri: "jp")
+    get new_auth_app_verification_registration_passkey_path(ri: "jp")
 
-    assert_response :found
-    jump = URI.parse(response.location)
-
-    assert_equal "jump.umaxica.net", jump.host
-    target, = JWT.decode(Rack::Utils.parse_nested_query(jump.query).fetch("rt"), nil, false)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(target.fetch("url")).host
-    assert_equal "/sign", URI.parse(target.fetch("url")).path
+    assert_response :success
+    assert_not_includes response.body, "jump.umaxica.net"
+    assert_not_includes response.body, "/sign"
     assert_equal "pending", issuance.transaction.reload.status
   end
 end

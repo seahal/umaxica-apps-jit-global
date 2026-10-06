@@ -22,7 +22,6 @@ module Base
         STEP_UP_SCOPE = "enforcement_case_apply"
 
         declare_authentication_mode! :private
-        before_action :authenticate_operator!
         before_action :no_store
         before_action :authorize_enforcement_index!, only: :index
         before_action :set_enforcement_case, only: :show

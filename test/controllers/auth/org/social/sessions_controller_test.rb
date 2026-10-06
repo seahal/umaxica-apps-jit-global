@@ -36,7 +36,9 @@ class Auth::Org::Social::SessionsControllerTest < ActionDispatch::IntegrationTes
     )
     redeem_auth_ceremony_entry!(
       "/sign/in",
-      reference: BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference,
+      reference: BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+      ).reference,
       params: { ri: "jp" },
     )
 

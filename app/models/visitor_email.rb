@@ -49,6 +49,7 @@ class VisitorEmail < ComPrincipalRecord
   include Email
   include MfaStatusCredential
   include PromotionalEmailUnsubscribable
+  include ContactBinding
 
   self.filter_attributes += %w(address)
 
@@ -65,13 +66,7 @@ class VisitorEmail < ComPrincipalRecord
   validates :otp_counter, presence: true
   validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_email_status_id, numericality: { only_integer: true }
-  validates :address_digest,
-            blind_index_uniqueness: {
-              error_attribute: :address,
-              status_column: :visitor_email_status_id,
-              deleted_status_id: VisitorEmailStatus::DELETED,
-            },
-            allow_blank: true
+  validates :address_digest, presence: true, if: :binding_effective?
   validates_with AssociatedRecordLimitValidator,
                  on: :create,
                  owner: :visitor,
@@ -104,6 +99,10 @@ class VisitorEmail < ComPrincipalRecord
 
   def promotional_unsubscribe_scope
     :visitor
+  end
+
+  def contact_binding_digest
+    address_digest
   end
 
   private

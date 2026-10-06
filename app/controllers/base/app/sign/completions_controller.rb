@@ -3,13 +3,15 @@
 module Base
   module App
     module Sign
-      class CompletionsController < ::Base::App::ApplicationController
+      class CompletionsController < ::Base::App::AuthorityController
         include BaseLocalAuthenticationCompletion
 
         AUTHENTICATION_MODE = :open
+        # The first root login has no Browser-RP credential yet. The signed, one-shot Auth result,
+        # Base browser locator, and normal CSRF/origin checks are the admission boundary here.
+        skip_before_action :authenticate_browser_rp_unsafe_request!, raise: false
+
         declare_authentication_mode! :open
-        LOCAL_RESULT_ORIGINS = JitHostOriginEnv.trusted_origins(ENV.fetch("PUBLIC_AUTH_SERVICE_URL")).freeze
-        protect_from_forgery using: :header_or_legacy_token, trusted_origins: LOCAL_RESULT_ORIGINS, with: :exception
 
         private
 
@@ -26,11 +28,7 @@ module Base
         end
 
         def authorize_local_login!(flow, actor)
-          if flow.sign_in_session_limit_pending?
-            authorize!(flow, to: :manage_session_limit?, context: { user: actor })
-          else
-            authorize!(flow, to: :issue_session?, context: { user: actor })
-          end
+          authorize!(flow, to: :issue_session?, context: { user: actor })
         end
 
         def local_login_pending_response

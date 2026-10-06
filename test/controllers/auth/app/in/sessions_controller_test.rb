@@ -52,9 +52,8 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     Rails.application.reload_routes!
   end
 
-  # The page opens only for a verified sign-in flow waiting on the session limit. Every case below
-  # reaches that state through the real email sign-in, so the flow locator in this browser's
-  # session -- not a principal id, and not a restricted session -- is what grants access
+  # The page opens only for a verified sign-in flow with a browser-bound durable
+  # resolution. Every case below reaches that state through the real email sign-in.
   # (adr/root-login-establishment-boundary.md).
 
   test "show for a pending sign-in lists the account's sessions and the cancel action" do
@@ -129,7 +128,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     patch auth_app_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }
 
     assert_response :unprocessable_content
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "update revokes the selected session and commits the waiting sign-in" do
@@ -156,7 +155,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     end
 
     assert_response :success
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "update ignores ref belonging to another user" do
@@ -168,7 +167,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     patch auth_app_sign_in_session_url(ri: "jp"), params: { revoke_refs: [other_token.signed_ref] }
 
     assert_predicate other_token.reload, :currently_usable?
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "update with ref param revokes that session and commits the waiting sign-in" do
@@ -186,7 +185,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     patch auth_app_sign_in_session_url(ri: "jp"), params: { ref: "totally_invalid_ref" }
 
     assert_response :success
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "OIDC email verification reaches the Auth handoff without issuing an Auth session" do
@@ -204,7 +203,9 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     # Auth is ceremony-only: a direct `login_challenge` param no longer admits the ceremony (see
     # AuthCeremonyAdmission#admit_or_render_sign_ceremony!). The entry has to redeem a real
     # admission code issued by Base, same as AuthOidcEntrancesTest and AuthenticationFlowTest.
-    admission_reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+    admission_reference = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
 
     # `host!` (not just a per-call `Host` header) so the integration session's cookie jar
     # associates the domain-scoped session cookie with this host and resends it on
@@ -305,7 +306,8 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
     assert_response :see_other
     assert_redirected_to auth_app_sign_in_url(ri: "jp")
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_predicate flow.reload, :sign_in_cancelled?
+    assert_predicate latest_resolution, :cancelled?
     assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
@@ -316,7 +318,8 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     delete auth_app_sign_in_session_url(ri: "jp", format: :json)
 
     assert_response :no_content
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_predicate flow.reload, :sign_in_cancelled?
+    assert_predicate latest_resolution, :cancelled?
   end
 
   test "destroy with ref param revokes that session and re-renders show" do
@@ -352,7 +355,7 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   private
 
   # Fills the limit, then signs in through the real email ceremony so the browser holds a verified
-  # flow in SESSION_LIMIT_PENDING. Returns the sessions that fill the limit.
+  # flow with a durable session-limit resolution. Returns the sessions that fill the limit.
   def enter_pending_session_limit!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -369,7 +372,8 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       params: { "user_email" => { "pass_code" => pass_code }, "cf-turnstile-response" => "t" },
     )
 
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_flow, :sign_in_session_issuance_pending?
+    assert_predicate latest_resolution, :open?
     existing
   ensure
     TurnstileVerifierStub.challenge_enabled = false
@@ -378,6 +382,10 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   def latest_flow
     ClientSignInFlow.where(principal_id: @user.id).recent_first.first
+  end
+
+  def latest_resolution
+    ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: latest_flow.id).recent_first.first
   end
 
   def create_active_session(user)
@@ -396,8 +404,8 @@ class Auth::App::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
-        redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+        client_id: "core-app",
+        redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
         code_challenge: "challenge",
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),

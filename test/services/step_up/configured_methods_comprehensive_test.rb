@@ -11,8 +11,8 @@ class StepUpConfiguredMethodsComprehensiveTest < ActiveSupport::TestCase
     assert_equal [], StepUpConfiguredMethodsQuery.call(nil)
   end
 
-  test "returns empty array for object without email/passkey/totp associations" do
-    assert_equal [], StepUpConfiguredMethodsQuery.call(Object.new)
+  test "rejects an object without a supported credential inventory actor" do
+    assert_raises(ArgumentError) { StepUpConfiguredMethodsQuery.call(Object.new) }
   end
 
   test "call includes email_otp when user has emails" do

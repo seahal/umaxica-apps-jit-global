@@ -7,6 +7,7 @@ module Base
       class TokensController < ActionController::API
         include ActionController::MimeResponds
         include ::RateLimit
+        include ::FqdnAvailabilityGate
         include ::DefaultNoStore
         include BaseOauthEndpoint
         include BaseOauthTokenEndpoint

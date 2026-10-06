@@ -6,9 +6,11 @@ class IdentityStepUpCeremonyGrant
   PURPOSE = "step_up_ceremony"
 
   REQUIRED_CLAIMS = %w(
-    typ iss aud purpose surface actor_ref session_ref transaction_id jti required_scope required_aal iat exp
+    typ iss aud purpose surface actor_ref session_ref transaction_id jti required_scope required_aal
+    step_up_required user_verification_required full_reauthentication_required phishing_resistant_required
+    audience token_binding require_session_binding allowed_methods iat exp
   ).freeze
-  OPTIONAL_CLAIMS = %w(allowed_methods resource_ref return_to phishing_resistant_required).freeze
+  OPTIONAL_CLAIMS = %w(resource_ref tenant_ref return_to).freeze
   ALLOWED_CLAIMS = (REQUIRED_CLAIMS + OPTIONAL_CLAIMS).freeze
 
   attr_reader :payload, :kid
@@ -41,9 +43,16 @@ class IdentityStepUpCeremonyGrant
   def [](key) = payload[key.to_s]
 
   def required_aal
+    # @deprecated This is a wire/storage label only and never authorizes a ceremony.
     value = self[:required_aal].to_s
     (value == StepUpRequirement::NO_AAL) ? nil : value.to_sym
   end
+
+  def step_up_required? = self[:step_up_required] == true
+
+  def user_verification_required? = self[:user_verification_required] == true
+
+  def full_reauthentication_required? = self[:full_reauthentication_required] == true
 
   def phishing_resistant_required? = self[:phishing_resistant_required] == true
 
@@ -61,6 +70,14 @@ class IdentityStepUpCeremonyGrant
       payload,
       "phishing_resistant_required",
     ) if payload.key?("phishing_resistant_required")
+    %w(step_up_required user_verification_required full_reauthentication_required require_session_binding).each do |key|
+      IdentityStepUpCeremonyContract.validate_boolean!(payload, key)
+    end
+    IdentityStepUpCeremonyContract.validate_boolean!(payload, "phishing_resistant_required")
+    if payload["required_aal"].to_s != StepUpRequirement::NO_AAL
+      raise IdentityStepUpCeremonyContract::Error, "legacy AAL requirements are unsupported"
+    end
+
     validate_allowed_methods!
   end
 
@@ -78,9 +95,9 @@ class IdentityStepUpCeremonyGrant
   private
 
   def validate_allowed_methods!
-    return if payload["allowed_methods"].blank?
-
     methods = Array(payload["allowed_methods"]).map(&:to_s)
+    raise IdentityStepUpCeremonyContract::Error, "allowed_methods is required" if methods.empty?
+
     invalid = methods - IdentityStepUpCeremonyContract::METHODS
     raise IdentityStepUpCeremonyContract::Error,
           "allowed_methods contains invalid methods: #{invalid.join(", ")}" if invalid.present?

@@ -120,13 +120,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
 
   test "flow sign in and sign out delegate their remaining public transitions" do
     sign_in = ClientSignInFlow.new
-    sign_in_calls = []
-    sign_in.stub(:complete_sign_in!, ->(**options) { sign_in_calls << options }) do
-      now = Time.current
-      sign_in.advance_sign_in_to_dashboard!(now: now)
-
-      assert_equal({ step: "dashboard", now: now }, sign_in_calls.last)
-    end
+    assert_raises(FlowInvalidTransition) { sign_in.advance_sign_in_to_dashboard! }
     discard_calls = []
     sign_in.stub(:discard_cycle!, ->(**options) { discard_calls << options }) do
       sign_in.discard_sign_in!(now: Time.current)
@@ -201,7 +195,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     credential = VisitorSecretCredential.new(
       secret_kind: "unsupported",
       usage_policy: "unsupported",
-      lookup_digest: "digest",
       safe_prefix: "prefix",
     )
 

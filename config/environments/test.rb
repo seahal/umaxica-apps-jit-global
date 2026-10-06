@@ -7,6 +7,7 @@ require_relative "../../lib/umaxica/valkey/configuration_error"
 require_relative "../../lib/umaxica/valkey/settings"
 require_relative "../../lib/umaxica/valkey/test_namespace"
 require_relative "../../lib/umaxica/valkey/store_error_handler"
+require_relative "../../lib/umaxica/test_environment/migration_failure_propagation"
 
 if Rails.env.test?
   Umaxica::Valkey::TestNamespace.ensure!

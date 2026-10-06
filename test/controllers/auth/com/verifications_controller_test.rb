@@ -23,10 +23,13 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
       description: "Entry passkey", sign_count: 0,
     )
     token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_email", allowed_methods: %i(email_otp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/emails",
@@ -79,10 +82,13 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     actor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_email", allowed_methods: %i(email_otp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_email", allowed_methods: %i(email_otp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/emails",

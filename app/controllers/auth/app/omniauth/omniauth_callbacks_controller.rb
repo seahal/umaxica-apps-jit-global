@@ -312,7 +312,6 @@ module Auth
 
         def create_pending_social_sign_up_flow!(provider, pt: nil)
           AppTicketRecord.connected_to(role: :writing) do
-            ClientSignUpFlowStatus.ensure_defaults!
             cycle = ClientSignUpFlow.create!(
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
@@ -463,7 +462,6 @@ module Auth
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless user && identity
 
           AppTicketRecord.connected_to(role: :writing) do
-            ClientSignUpFlowStatus.ensure_defaults!
             cycle = ClientSignUpFlow.create!(
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,

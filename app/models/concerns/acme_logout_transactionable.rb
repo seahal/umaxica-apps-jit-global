@@ -4,7 +4,11 @@
 module AcmeLogoutTransactionable
   extend ActiveSupport::Concern
 
-  ORIGIN_SURFACES = %w(sign acme base core side palm).freeze
+  ORIGIN_SURFACES = %w(sign acme base core warp edit palm).freeze
+  LEGACY_WORKFLOW = "legacy"
+  BROWSER_RP_WORKFLOW = "browser_rp"
+  WORKFLOWS = [LEGACY_WORKFLOW, BROWSER_RP_WORKFLOW].freeze
+  BROWSER_RP_ORIGIN_SURFACES = %w(base core warp edit).freeze
   STATUS_INITIATED = "initiated"
   STATUS_IN_PROGRESS = "in_progress"
   STATUS_FINALIZED = "finalized"
@@ -16,37 +20,71 @@ module AcmeLogoutTransactionable
   STEP_ACME_CLEARED = "acme_cleared"
   STEP_SIGN_CLEARED = "sign_cleared"
   STEP_FINALIZED = "finalized"
-  STEPS = [STEP_ORIGIN_CLEARED, STEP_ACME_CLEARED, STEP_SIGN_CLEARED, STEP_FINALIZED].freeze
+  STEP_AUTHORITY_REVOKED = "authority_revoked"
+  STEP_AUTHORITY_CLEANUP_ISSUED = "authority_cleanup_issued"
+  STEP_ORIGIN_CLEANUP_ISSUED = "origin_cleanup_issued"
+  STEP_ORIGIN_RP_SESSION_REVOKED = "origin_rp_session_revoked"
+  STEPS = [
+    STEP_ORIGIN_CLEARED,
+    STEP_ACME_CLEARED,
+    STEP_SIGN_CLEARED,
+    STEP_AUTHORITY_REVOKED,
+    STEP_AUTHORITY_CLEANUP_ISSUED,
+    STEP_ORIGIN_CLEANUP_ISSUED,
+    STEP_ORIGIN_RP_SESSION_REVOKED,
+    STEP_FINALIZED,
+  ].freeze
 
   included do
     include ::PublicId
 
     validates :origin_surface, inclusion: { in: ORIGIN_SURFACES }
+    validates :workflow, inclusion: { in: WORKFLOWS }
     validates :initiating_client_id, :completion_url, :status, :expected_step, :expires_at, presence: true
     validates :status, inclusion: { in: STATUSES }
     validates :expected_step, inclusion: { in: STEPS }
     validates :public_id, uniqueness: true
     validate :completed_steps_are_valid
-    validate :expected_step_matches_origin
+    validate :completed_steps_match_workflow
+    validate :expected_step_matches_workflow
   end
 
   class_methods do
-    def step_sequence_for(origin_surface)
+    def step_sequence_for(origin_surface, workflow: LEGACY_WORKFLOW)
+      return browser_rp_step_sequence if workflow.to_s == BROWSER_RP_WORKFLOW
+
       case origin_surface.to_s
       when "sign"
         [STEP_ORIGIN_CLEARED, STEP_ACME_CLEARED]
       when "acme", "base"
         [STEP_ORIGIN_CLEARED, STEP_SIGN_CLEARED]
-      when "core", "side", "palm"
+      when "core", "warp", "palm"
         [STEP_ORIGIN_CLEARED, STEP_ACME_CLEARED, STEP_SIGN_CLEARED]
       else
         raise ArgumentError, "unsupported logout origin surface: #{origin_surface.inspect}"
       end
     end
+
+    def browser_rp_step_sequence
+      [
+        STEP_AUTHORITY_REVOKED,
+        STEP_AUTHORITY_CLEANUP_ISSUED,
+        STEP_ORIGIN_CLEANUP_ISSUED,
+        STEP_ORIGIN_RP_SESSION_REVOKED,
+      ]
+    end
   end
 
   def initiated?
     status == STATUS_INITIATED
+  end
+
+  def browser_rp_workflow?
+    workflow == BROWSER_RP_WORKFLOW
+  end
+
+  def legacy_workflow?
+    workflow == LEGACY_WORKFLOW
   end
 
   def in_progress?
@@ -66,7 +104,7 @@ module AcmeLogoutTransactionable
   end
 
   def step_sequence
-    self.class.step_sequence_for(origin_surface)
+    self.class.step_sequence_for(origin_surface, workflow: workflow)
   end
 
   def completed_steps
@@ -145,11 +183,27 @@ module AcmeLogoutTransactionable
     errors.add(:completed_steps, "contains invalid logout steps") if invalid.present?
   end
 
-  def expected_step_matches_origin
+  def expected_step_matches_workflow
     return if origin_surface.blank? || expected_step.blank?
     return if expected_step == STEP_FINALIZED
-    return if step_sequence.include?(expected_step)
 
-    errors.add(:expected_step, "is not valid for the origin surface")
+    if browser_rp_workflow?
+      return if BROWSER_RP_ORIGIN_SURFACES.include?(origin_surface) && step_sequence.include?(expected_step)
+    elsif step_sequence.include?(expected_step)
+      return
+    end
+
+    errors.add(:expected_step, "is not valid for the logout workflow")
+  end
+
+  def completed_steps_match_workflow
+    return if workflow.blank?
+
+    allowed_steps = (browser_rp_workflow? ? self.class.browser_rp_step_sequence : self.class.step_sequence_for(origin_surface)) +
+      [STEP_FINALIZED]
+    invalid = completed_steps - allowed_steps
+    return if invalid.empty?
+
+    errors.add(:completed_steps, "contains steps from another logout workflow")
   end
 end

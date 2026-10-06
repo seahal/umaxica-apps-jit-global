@@ -78,6 +78,33 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     assert ClientAuthCeremonySession.exists?(continuity.id)
   end
 
+  test "retires an expired binding before deleting it and its parent" do
+    now = Time.current.change(usec: 0)
+    token = ClientToken.create!(user: clients(:one), created_at: now - 9.days)
+    parent = ClientStepUpCeremonyTransaction.create_transaction!(
+      actor_ref: clients(:one).public_id, session_ref: token.public_id, required_scope: "settings_passkey",
+      required_aal: "none", allowed_methods: ["passkey"], now: now - 9.days,
+      expires_at: now - 8.days,
+    )
+    binding = ClientAuthAdmissionBinding.create!(
+      entry_ref: SecureRandom.uuid, purpose: "step_up_handoff",
+      step_up_ceremony_transaction_id: parent.id, base_token_id: token.id,
+      base_browser_digest: "a" * 64, expires_at: now - 8.days,
+      created_at: now - 9.days, updated_at: now - 9.days,
+    )
+
+    assert_equal 0, IdentityStepUpCeremonyTransactionPurger.new(now: now).call.fetch(:app)
+    assert ClientStepUpCeremonyTransaction.exists?(parent.id)
+    assert_predicate binding.reload, :retired?
+    assert_nil binding.redeemed_at
+
+    later = now + StepUpCeremonyTransactionable::RETENTION_PERIOD
+
+    assert_operator IdentityStepUpCeremonyTransactionPurger.new(now: later).call.fetch(:app), :>=, 1
+    assert_not ClientStepUpCeremonyTransaction.exists?(parent.id)
+    assert_not ClientAuthAdmissionBinding.exists?(binding.id)
+  end
+
   test "a retained StepUpSession prevents parent deletion until its explicit purge deadline" do
     now = Time.current
     token = ClientToken.create!(user: clients(:one), created_at: now - 9.days)

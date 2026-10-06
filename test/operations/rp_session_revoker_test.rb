@@ -14,7 +14,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
     )
     @session_b = ClientRpSession.create!(
       client_token: @root,
-      oidc_client_id: "side-app",
+      oidc_client_id: "warp-app",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )

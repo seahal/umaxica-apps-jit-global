@@ -123,6 +123,7 @@ module AuthenticationBase
     oidc_state
     oidc_nonce
     oidc_pt
+    oidc_pending_flows
   ).freeze
 
   # AuthenticationToken TTLs
@@ -323,7 +324,8 @@ module AuthenticationBase
   # transaction), never a restricted token.
   def log_in(resource, establishment:, record_login_audit: true, token_kind_id: "BROWSER_WEB",
              require_totp_check: true, audit_context: {}, established_authentication_method: nil,
-             authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil)
+             authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil,
+             oidc_authorization_transaction: nil)
     raise SignInFlowIssuanceRejected, "Auth cannot establish a browser session" if auth_credential_ceremony?
     if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret" &&
         !sign_in_flow.is_a?(ClientSignInFlow)
@@ -352,8 +354,19 @@ module AuthenticationBase
           authentication_context: authentication_context,
           authentication_event_at: authentication_event_at,
           sign_in_flow: sign_in_flow,
+          oidc_authorization_transaction: oidc_authorization_transaction,
         )
       end
+    if issuance[:status] == :session_limit_pending && issuance[:resolution_challenge].present? &&
+        respond_to?(:issue_session_limit_gate!, true)
+      issue_session_limit_gate!(
+        pt: sign_in_flow&.return_to || session_limit_gate_pt,
+        flow: sign_in_flow&.public_id || issuance[:sign_in_flow_public_id],
+        resolution_challenge: issuance[:resolution_challenge],
+        resolution_binding: issuance[:resolution_binding],
+        actor_type: resource.class.name,
+      )
+    end
     return issuance unless issuance[:status] == :committed
 
     bind_committed_login!(
@@ -384,8 +397,11 @@ module AuthenticationBase
   # state (adr/unified-enforcement.md, Session revocation) rather than a guess.
   ESTABLISHED_AUTHENTICATION_METHOD_MAP = {
     "email" => "email",
+    "email_otp" => "email",
     "telephone" => "telephone",
+    "sms" => "telephone",
     "secret_credential" => "secret",
+    "passcode" => "secret",
     "passkey" => "passkey",
     "totp" => "totp",
     "google" => "google",
@@ -519,14 +535,37 @@ module AuthenticationBase
   # writes that establish the session observe and change one consistent state.
   # A raise (cooldown, invalid flow, database error) rolls every write back.
   def commit_login_session!(resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
-                            authentication_context:, authentication_event_at:, sign_in_flow:)
+                            authentication_context:, authentication_event_at:, sign_in_flow:,
+                            oidc_authorization_transaction: nil)
     token_record_connection_owner.connected_to(role: :writing) do
       token_class.transaction(requires_new: true) do
         check_login_cooldown!(resource) if establishment == :root_login
         locked_flow = lock_sign_in_flow_for_issuance!(sign_in_flow, resource) if sign_in_flow
+        locked_flow ||= create_oidc_issuance_flow!(
+          resource,
+          authentication_method: established_authentication_method,
+          authentication_event_at: authentication_event_at,
+        ) if establishment == :root_login && authentication_event_at.present?
 
         if session_limit_state_for(resource) == :at_limit
-          { status: :session_limit_pending }
+          raise SignInFlowIssuanceRejected, "session-limit resolution requires a sign-in flow" unless locked_flow
+
+          raw_binding = SecureRandom.urlsafe_base64(32)
+          resolution_model = SessionLimitResolutionTransactionable.model_for(resource)
+          resolution = resolution_model.issue!(
+            sign_in_flow: locked_flow,
+            actor: resource,
+            browser_binding_digest: resolution_model.digest_challenge(raw_binding),
+            oidc_authorization_transaction: oidc_authorization_transaction,
+            audit_context: { auth_method: established_authentication_method }.compact,
+          )
+          {
+            status: :session_limit_pending,
+            resolution_challenge: resolution.challenge,
+            resolution_binding: raw_binding,
+            resolution_transaction: resolution.transaction,
+            sign_in_flow_public_id: locked_flow.public_id,
+          }
         else
           now = Time.current
           token_record = create_login_token_record(
@@ -589,22 +628,71 @@ module AuthenticationBase
     raise SignInFlowIssuanceRejected, "sign-in flow is not bound to the actor" unless flow.principal_id == resource.id
     raise SignInFlowIssuanceRejected, "sign-in flow already issued a session" if flow.token_id.present?
     raise SignInFlowIssuanceRejected, "sign-in flow is expired" if flow.expired?
-    unless flow.sign_in_session_issuance_pending? || flow.sign_in_session_limit_pending?
-      raise SignInFlowIssuanceRejected, "sign-in flow is not waiting for session issuance"
-    end
+
+    advance_sign_in_flow_to_issuance!(flow, resource) unless flow.sign_in_session_issuance_pending?
+    flow.reload
+    raise SignInFlowIssuanceRejected, "sign-in flow is not waiting for session issuance" unless
+      flow.sign_in_session_issuance_pending?
 
     flow
+  end
+
+  # A verified primary factor may reach the final session boundary while the cycle is still in an
+  # earlier ordinary phase. Walk only the named graph operations that are clear without another
+  # browser prompt; a blocking guardrail or an ambiguous selector remains a refusal and never
+  # becomes an implicit state jump.
+  def advance_sign_in_flow_to_issuance!(flow, resource)
+    flow.advance_sign_in_to_guardrail! if flow.sign_in_primary_pending? || flow.sign_in_mfa_pending?
+
+    if flow.sign_in_guardrail_pending?
+      result = SignInGuardrailParticipant.new(cycle: flow, actor: resource).advance_if_clear!
+      raise SignInFlowIssuanceRejected, "sign-in guardrail is blocking" if result.blocking?
+    end
+
+    if flow.sign_in_checkpoint_pending?
+      result = SignInCheckpointParticipant.new(cycle: flow, actor: resource).advance_if_clear!
+      raise SignInFlowIssuanceRejected, "sign-in checkpoint is blocking" if result.blocking?
+    end
+
+    if flow.sign_in_selector_pending?
+      SignInSelectorParticipant.new(
+        cycle: flow,
+        actor: resource,
+        authn_public_id: Actor.authn.login_public_id,
+      ).auto_commit_single!
+    end
+  rescue SignInSelectorParticipant::Error => e
+    raise SignInFlowIssuanceRejected, e.message
+  end
+
+  # OIDC Auth evidence reaches Base without the Auth browser's local flow
+  # locator. Create the parent at the issuance boundary so a capacity refusal
+  # still has a durable, actor-bound parent for its resolution child.
+  def create_oidc_issuance_flow!(resource, authentication_method:, authentication_event_at:)
+    flow_class = sign_in_flow_class_for(resource)
+    now = flow_class.database_now
+    method = authentication_method.to_s.presence || "passkey"
+    unless AuthCeremonySession::AUTHENTICATION_METHODS.include?(method)
+      raise SignInFlowIssuanceRejected, "OIDC authentication method is unsupported"
+    end
+
+    flow_class.create!(
+      principal_id: resource.id,
+      state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: flow_class.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + flow_class.default_ttl,
+      authentication_method: method,
+      authentication_event_at: authentication_event_at || now,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+    )
   end
 
   def complete_sign_in_flow_issuance!(flow, token_record, now:)
     changes = { token: token_record }
     changes[:session_issued_at] = now if flow.has_attribute?(:session_issued_at)
     flow.update!(changes)
-    if flow.sign_in_session_limit_pending? && flow.authentication_event_at.nil?
-      flow.advance_sign_in_to_guardrail!(now: now)
-    else
-      flow.complete_sign_in!(now: now)
-    end
+    flow.complete_sign_in!
   end
 
   # Browser-side effects of a committed session. Nothing here decides whether
@@ -969,7 +1057,7 @@ module AuthenticationBase
   # AuthenticationBase via the `include AuthenticationWithdrawalGate` at the top.
 
   # ----------------------------------------------------------------------
-  # 6-3) Audit/occurrence writing (side-effect boundary)
+  # 6-3) Audit/occurrence writing (effect boundary)
   # ----------------------------------------------------------------------
   def record_audit(event_id, resource:, actor: resource, context: {})
     return unless resource && event_id
@@ -2427,7 +2515,7 @@ module AuthenticationBase
 
     if local_authentication_ceremony?
       cycle = auth_ceremony_local_sign_in_flow
-      return false unless cycle && cycle.state == "MFA_PENDING" && cycle.sign_in_mfa_pending? &&
+      return false unless cycle&.sign_in_mfa_pending? &&
         cycle.principal_id == data[:user_id]
     end
 
@@ -2457,7 +2545,7 @@ module AuthenticationBase
     actor = pending_mfa_user
     if actor
       cycle = pending_mfa_sign_in_flow_for(actor)
-      cycle.fail_sign_in! if cycle&.sign_in_mfa_pending?
+      cycle.halt_sign_in! if cycle&.sign_in_mfa_pending?
       sign_in_flow_locator_for(actor: actor).clear!
     end
     clear_pending_mfa!
@@ -2660,13 +2748,6 @@ module AuthenticationBase
       )
     end
 
-    # A non-authoritative early answer: the final count happens again under
-    # the actor lock in log_in. Nothing is issued here.
-    return session_limit_pending_after_primary!(
-      resource,
-      cycle: cycle,
-    ) if session_limit_state_for(resource) == :at_limit
-
     result = log_in(
       resource,
       establishment: :root_login,
@@ -2677,8 +2758,8 @@ module AuthenticationBase
       established_authentication_method: established_authentication_method,
       authentication_context: authentication_context,
       authentication_event_at: authentication_event_at,
+      sign_in_flow: cycle,
     )
-    return session_limit_pending_after_primary!(resource, cycle: cycle) if result[:status] == :session_limit_pending
     return result unless result[:status] == :success
 
     result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
@@ -2696,8 +2777,7 @@ module AuthenticationBase
           cycle.with_lock do
             ceremony.lock!
             now = cycle.class.database_now
-            valid_phase = (cycle.state == "PRIMARY_PENDING" && cycle.sign_in_primary_pending?) ||
-              (cycle.state == "MFA_PENDING" && cycle.sign_in_mfa_pending?)
+            valid_phase = cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
             unless valid_phase && cycle.principal_id == resource.id && !cycle.expired?(now) &&
                 ceremony.local_sign_in_flow_ref == cycle.public_id && ceremony.active?(now: now) &&
                 ceremony.admitted? && !cycle.authentication_event_at && !ceremony.authentication_evidence_recorded?
@@ -2714,21 +2794,6 @@ module AuthenticationBase
       end
     end
     { status: :authentication_evidence_recorded }
-  end
-
-  # The verified sign-in flow is the only pending state. The browser carries
-  # the flow locator, not a principal id; the Rails session id is rotated
-  # because the locator now identifies an authenticated principal's flow.
-  def session_limit_pending_after_primary!(resource, cycle:)
-    raise ArgumentError, "session-limit pending requires a sign-in flow" unless cycle
-
-    oidc_rp_session_state = preserved_oidc_rp_session_state
-    reset_session
-    restore_oidc_rp_session_state!(oidc_rp_session_state)
-    issue_session_limit_gate!(pt: session_limit_gate_pt, flow: session_limit_gate_flow)
-    _ = resource
-
-    { status: :session_limit_pending, redirect_path: session_management_path }
   end
 
   # Auth verifies the credential, but Base owns the Browser Session and every
@@ -2835,11 +2900,20 @@ module AuthenticationBase
   def count_active_sessions(resource)
     token_record_connection_owner(token_class_for_resource(resource)).connected_to(role: :writing) do
       if resource.is_a?(::Client)
-        ::ClientToken.active_status.where(user_id: resource.id).count
+        ::ClientToken.active_status.joins(:device_session)
+          .where(user_id: resource.id, client_device_sessions: { status_id: ClientDeviceSession::STATUS_ACTIVE,
+                                                                 revoked_at: nil, },)
+          .count
       elsif resource.is_a?(::Operator)
-        ::OperatorToken.active_status.where(staff_id: resource.id).count
+        ::OperatorToken.active_status.joins(:device_session)
+          .where(staff_id: resource.id, operator_device_sessions: { status_id: OperatorDeviceSession::STATUS_ACTIVE,
+                                                                    revoked_at: nil, },)
+          .count
       elsif resource.is_a?(::Visitor)
-        ::VisitorToken.active_status.where(visitor_id: resource.id).count
+        ::VisitorToken.active_status.joins(:device_session)
+          .where(visitor_id: resource.id, visitor_device_sessions: { status_id: VisitorDeviceSession::STATUS_ACTIVE,
+                                                                     revoked_at: nil, },)
+          .count
       else
         0
       end
@@ -3357,6 +3431,6 @@ module AuthenticationBase
   private :check_totp_requirement_before_session_rotation, :resource_connection_owner,
           :preserved_oidc_rp_session_state, :restore_oidc_rp_session_state!, :store_authentication_return_target!,
           :commit_login_session!, :write_secret_sign_in_receipt!,
-          :lock_sign_in_flow_for_issuance!, :complete_sign_in_flow_issuance!,
-          :bind_committed_login!, :apply_committed_login!, :session_limit_pending_after_primary!
+          :lock_sign_in_flow_for_issuance!, :advance_sign_in_flow_to_issuance!, :complete_sign_in_flow_issuance!,
+          :bind_committed_login!, :apply_committed_login!
 end

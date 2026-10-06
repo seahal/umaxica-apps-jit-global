@@ -25,10 +25,22 @@ module OidcRpLogoutLauncher
 
   private
 
-  def launch_oidc_rp_logout!(client_id:, issuer_resource_type:, token_issuer:, session_authority:)
-    @oidc_rp_logout_session_authority = session_authority
+  # A completed authority phase deliberately revokes the parent Browser Session before the
+  # initiating RP returns to its own origin. The origin therefore sees a stale RP credential while
+  # it is still required to finish its local cleanup. The live logout challenge is the authority
+  # for that continuation; it must not turn an ordinary stale credential into an authenticated
+  # request.
+  def browser_rp_invalid_credentials_are_ignored?
+    return true if params[:logout_challenge].present?
+
+    super
+  end
+
+  def launch_oidc_rp_logout!(client_id:, issuer_resource_type: nil, token_issuer: nil, session_authority: :rp_session)
+    _ = [issuer_resource_type, token_issuer, session_authority]
     completion_region = rp_logout_region
     transaction_options = {
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
       origin_surface: logout_origin_surface,
       initiating_client_id: client_id,
       completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
@@ -36,8 +48,8 @@ module OidcRpLogoutLauncher
         ri: completion_region,
         surface: logout_surface_name,
       ),
-      actor_ref: logout_authority_resource.try(:public_id),
-      session_ref: logout_authority_session_public_id,
+      actor_ref: oidc_rp_logout_resource.try(:public_id),
+      session_ref: oidc_rp_logout_session.public_id,
       callback_state: nil,
       surface: logout_surface_name,
     }
@@ -56,57 +68,79 @@ module OidcRpLogoutLauncher
       result: "issued",
     )
 
-    handoff_oidc_rp_logout!(
-      transaction,
-      client_id: client_id,
-      issuer_resource_type: issuer_resource_type,
-      token_issuer: token_issuer,
-      completion_region: completion_region,
+    redirect_to(
+      browser_rp_logout_authority_url(transaction, client_id: client_id, region: completion_region),
+      allow_other_host: true,
+      status: :see_other,
     )
   end
 
-  def handoff_oidc_rp_logout!(transaction, client_id:, issuer_resource_type:, token_issuer:, completion_region:)
-    state = SecureRandom.hex(16)
-    id_token_hint = oidc_rp_logout_id_token_hint(
-      client_id: client_id,
-      issuer_resource_type: issuer_resource_type,
-      token_issuer: token_issuer,
-    )
-    prepare_sign_out_completion_notice!(state: state)
-    log_sign_out_event("auth.sign_out.step.started", transaction: transaction, result: "started")
-    logout_authority_session!
-    log_sign_out_event(
-      "auth.sign_out.step.cleaned",
-      transaction: transaction,
-      cleanup_performed: true,
-      result: "cleaned",
-    )
-    issue_sign_out_notice!
-    AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
-    log_sign_out_event(
-      "auth.sign_out.step.advanced",
-      transaction: transaction.reload,
-      step_after: transaction.expected_step,
-      cleanup_performed: true,
-      redirect_target_surface: "acme",
-      result: "advanced",
-    )
+  def continue_browser_rp_logout!
+    transaction = browser_rp_logout_transaction_for_origin
+    return head(:not_found) unless transaction
 
-    render_cross_origin_sign_out_handoff(
-      target_url: acme_oidc_logout_url(
-        ri: completion_region,
-        id_token_hint: id_token_hint,
-        post_logout_redirect_uri: AcmeLogoutTransactionCoordinator.completion_url_for(
-          origin_surface: logout_origin_surface,
-          ri: completion_region,
-          surface: logout_surface_name,
-        ),
-        state: state,
-        logout_challenge: transaction.logout_challenge,
-        protocol: "https",
-      ),
-      transaction: transaction,
+    @logout_transaction = transaction
+    return render_browser_rp_logout_continuation! if request.get? || request.head?
+
+    complete_browser_rp_logout_at_origin!(transaction)
+  end
+
+  def render_browser_rp_logout_continuation!
+    render "auth/shared/sign_outs/edit", status: :ok
+  end
+
+  def browser_rp_logout_authority_url(transaction, client_id:, region:)
+    client = OidcClientRegistry.find!(client_id)
+    resource_type = OidcIssuer.resource_type_for_client(client)
+    uri = URI.parse(OidcIssuer.end_session_endpoint(resource_type))
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    query["logout_challenge"] = transaction.logout_challenge
+    query["ri"] = region if region.present?
+    uri.query = query.to_query
+    uri.to_s
+  rescue URI::InvalidURIError
+    raise OidcRpLogoutError, "logout authority endpoint is invalid"
+  end
+
+  def complete_browser_rp_logout_at_origin!(transaction)
+    current_transaction = transaction
+    if current_transaction.expected_step == AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED
+      prepare_browser_rp_sign_out_notice!(current_transaction)
+      clear_oidc_rp_logout_cookies!
+      reset_session_and_clear_inertia_history!
+      issue_sign_out_notice! if session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY].blank?
+      current_transaction = advance_browser_rp_logout!(
+        current_transaction,
+        AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED,
+      )
+    end
+
+    if current_transaction.expected_step == AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED
+      issue_sign_out_notice! unless sign_out_notice_issued?
+      revoke_browser_rp_origin_session!(current_transaction)
+      current_transaction = advance_browser_rp_logout!(
+        current_transaction,
+        AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED,
+      )
+    end
+
+    if current_transaction.expected_step == AcmeLogoutTransaction::STEP_FINALIZED
+      result = AcmeLogoutTransactionCoordinator.finalize!(logout_challenge: current_transaction.logout_challenge)
+      return render_oidc_rp_logout_unavailable unless result.success?
+
+      current_transaction = result.transaction
+    end
+
+    redirect_to(current_transaction.completion_url, allow_other_host: true, status: :see_other)
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, RpSession::IssuanceRejected,
+         Umaxica::Valkey::Error => e
+    Rails.logger.warn(
+      "auth.sign_out.browser_rp_origin_failed " \
+      "error_class=#{e.class.name} " \
+      "error_fields=#{e.respond_to?(:record) ? e.record.errors.attribute_names.join(",") : "none"} " \
+      "result=unavailable",
     )
+    render_oidc_rp_logout_unavailable
   end
 
   def complete_oidc_rp_logout!
@@ -135,44 +169,82 @@ module OidcRpLogoutLauncher
     render_oidc_rp_logout_completion
   end
 
-  def oidc_rp_logout_id_token_hint(client_id:, issuer_resource_type:, token_issuer:)
-    OidcIdTokenIssuer.call(
-      resource: logout_authority_resource,
-      client: OidcClientRegistry.find!(client_id),
-      nonce: "sign-out",
-      issuer: OidcIssuer.for_resource_type(issuer_resource_type),
-      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(issuer_resource_type),
-      subject: OidcSubject.for(logout_authority_resource, resource_type: token_issuer),
-      sid: logout_authority_session_public_id,
-    )
-  end
-
-  def logout_current_rp_session!
-    result = RpSessionRevoker.call(
-      scope: :rp_session,
-      record: oidc_rp_logout_session,
-      status: "success",
-    )
-    raise OidcRpLogoutError, "RP Session revoke failed" unless result.success?
-
-    record_logout_audit(oidc_rp_logout_resource)
-  ensure
-    rotate_preference_after_sign_out! if respond_to?(:rotate_preference_after_sign_out!, true)
-    clear_oidc_rp_logout_cookies!
-    clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
-    Actor.clear if defined?(Actor)
-    reset_session_and_clear_inertia_history!
-  end
-
-  def logout_authority_session!
-    return logout_current_rp_session! if rp_session_logout?
-
-    logout_current_session!(reason: "user_logout")
-  end
-
   class OidcRpLogoutError < StandardError; end
 
   private
+
+  def browser_rp_logout_transaction_for_origin
+    challenge = params[:logout_challenge].to_s
+    return if challenge.blank?
+
+    transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge)
+    return unless transaction.browser_rp_workflow?
+    return unless transaction.origin_surface == logout_origin_surface
+    return if transaction.expired? && !transaction.finalized?
+
+    transaction
+  rescue ActiveRecord::RecordNotFound, ArgumentError
+    nil
+  end
+
+  def advance_browser_rp_logout!(transaction, step)
+    result = AcmeLogoutTransactionCoordinator.advance!(
+      logout_challenge: transaction.logout_challenge,
+      step: step,
+    )
+    raise RpSession::IssuanceRejected, result.error_description unless result.success?
+
+    result.transaction
+  end
+
+  def browser_rp_logout_session_for(transaction)
+    client = OidcClientRegistry.find!(transaction.initiating_client_id)
+    resource_type = OidcIssuer.resource_type_for_client(client)
+    case resource_type
+    when "client"
+      AppTicketRecord.connected_to(role: :writing) do
+        ClientRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+      end
+    when "visitor"
+      ComTicketRecord.connected_to(role: :writing) do
+        VisitorRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+      end
+    when "operator"
+      OrgTicketRecord.connected_to(role: :writing) do
+        OperatorRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+      end
+    else
+      raise ArgumentError, "unsupported Browser RP logout resource type"
+    end
+  end
+
+  def revoke_browser_rp_origin_session!(transaction)
+    session_record = browser_rp_logout_session_for(transaction)
+    return true unless session_record
+
+    result = RpSessionRevoker.call(scope: :rp_session, record: session_record, status: "success")
+    raise RpSession::IssuanceRejected, "RP Session revoke failed" unless result.success?
+
+    true
+  end
+
+  def prepare_browser_rp_sign_out_notice!(transaction)
+    @sign_out_access_expires_at = browser_rp_logout_access_expires_at
+    @sign_out_actor_ref = transaction.actor_ref
+    @sign_out_session_public_id = transaction.session_ref
+    @sign_out_state = transaction.callback_state
+  end
+
+  def browser_rp_logout_access_expires_at
+    value = @oidc_rp_logout_access_payload&.dig("exp")
+    value.present? ? Time.zone.at(Integer(value)) : nil
+  rescue ArgumentError, TypeError
+    nil
+  end
+
+  def sign_out_notice_issued?
+    session[SignOutNotice::SIGN_OUT_NOTICE_SESSION_KEY].is_a?(String)
+  end
 
   def resolve_oidc_rp_logout_credentials
     resource_type = oidc_rp_logout_resource_type
@@ -330,22 +402,6 @@ module OidcRpLogoutLauncher
     @oidc_rp_logout_session || raise(OidcRpLogoutError, "RP Session was not authenticated")
   end
 
-  def rp_session_logout?
-    @oidc_rp_logout_session_authority == :rp_session
-  end
-
-  def logout_authority_resource
-    return oidc_rp_logout_resource if rp_session_logout?
-
-    current_resource
-  end
-
-  def logout_authority_session_public_id
-    return oidc_rp_logout_session.public_id if rp_session_logout?
-
-    safe_current_session_public_id_for_logout
-  end
-
   def oidc_rp_logout_resource
     @oidc_rp_logout_resource || raise(OidcRpLogoutError, "RP resource was not authenticated")
   end
@@ -359,31 +415,6 @@ module OidcRpLogoutLauncher
       OidcRpBrowserCredentialContract::REFRESH_COOKIE,
       OidcRpBrowserCredentialContract.refresh_cookie_deletion_options,
     )
-  end
-
-  def acme_oidc_logout_url(**query)
-    region = RequestContextContract.normalize_region(query.delete(:ri).presence || rp_logout_region)
-    public_send(
-      "base_#{sign_surface_name}_oidc_logout_url",
-      host: oidc_base_authority_host,
-      ri: region,
-      **query,
-    )
-  end
-
-  def oidc_base_authority_host
-    case sign_surface_name
-    when "app"
-      ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    when "com"
-      ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    when "org"
-      ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    end
-  end
-
-  def oidc_acme_host
-    oidc_base_authority_host
   end
 
   def render_oidc_rp_logout_unavailable
@@ -404,10 +435,6 @@ module OidcRpLogoutLauncher
     return unless logout_surface_name == "app"
 
     params[:ri] = rp_logout_region
-  end
-
-  def sign_surface_name
-    controller_path.split("/").second
   end
 
   def logout_origin_surface

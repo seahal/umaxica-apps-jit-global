@@ -21,18 +21,32 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
     requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", required_aal: "aal1", allowed_methods: [:passkey],
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       session_binding: @token.public_id, token_binding: @token.public_id,
       purpose: "step_up", audience: "step_up:app", require_session_binding: true,
+      actor_ref: @user.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    @issuance = BaseStepUpAdmissionIssuer.call!(
+    @issuance = issue_base_step_up_admission!(
       actor: @user, token: @token, requirement: requirement, return_to: "/identity/birthdate?ri=jp",
+      base_browser_nonce: "test-browser-nonce", base_token: @token,
     )
     @ticket = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: @issuance.transaction.transaction_id)
     https!
     host! @host
     get auth_app_verification_path(ri: "jp", entry_ref: @issuance.reference)
     @csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_ceremony_bindings_path(ri: "jp"), params: {
+      entry_ref: @issuance.reference, authenticity_token: @csrf,
+    }
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: @issuance.reference)
+    binding.confirm_base!(
+      base_token: @token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: @issuance.reference, nonce: "test-browser-nonce",
+      ),
+    )
     post auth_app_verification_path(ri: "jp"), params: {
       entry_ref: @issuance.reference, authenticity_token: @csrf,
     }
@@ -66,18 +80,20 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
-  test "cancel closes the exact transaction and chooses the fixed Base dashboard" do
+  test "cancel issues an exact cancellation handoff to the fixed Base receiver" do
     post auth_app_verification_cancellation_path(ri: "jp"),
          params: { return_to: "/sign/in/challenge", pt: "/identity/birthdate" },
          headers: { "X-CSRF-Token" => @csrf }
 
     assert_response :see_other
     gateway = URI.parse(response.location)
-    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    params = Rack::Utils.parse_nested_query(gateway.query)
 
-    assert_equal base_app_dashboard_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ri: "jp", protocol: "https"),
-                 payload.fetch("url")
-    assert_equal "canceled", @issuance.transaction.reload.status
+    assert_equal base_app_verification_cancellation_path, gateway.path
+    assert_equal @issuance.transaction.transaction_id, params.fetch("transaction_ref")
+    assert_predicate params.fetch("cancellation_handoff"), :present?
+    assert_predicate params.fetch("cancellation_ref"), :present?
+    assert_equal "pending", @issuance.transaction.reload.status
     assert_nil @token.reload.last_step_up_at
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]

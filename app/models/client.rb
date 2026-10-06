@@ -293,7 +293,7 @@ class Client < AppPrincipalRecord
   end
 
   def client_google_identities
-    identity = client_external_identities.find_by(provider: "google")
+    identity = client_external_identities.effective_binding.find_by(provider: "google", state: "active")
     identity ? [identity] : []
   end
 
@@ -317,7 +317,7 @@ class Client < AppPrincipalRecord
   def remaining_social_unlink_methods(excluding_provider:)
     excluded = SocialIdentifiable.normalize_provider(excluding_provider)
     methods = []
-    methods << :email if client_emails.exists?(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+    methods << :email if client_emails.effective_binding.exists?(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
     methods << :passkey if client_passkeys.exists?(status_id: ClientPasskeyStatus::ACTIVE)
     methods << :google if excluded != "google" && active_google_identity_exists?
     methods << :apple if excluded != "apple" && active_apple_identity_exists?
@@ -326,7 +326,10 @@ class Client < AppPrincipalRecord
 
   def remaining_login_methods(excluding_provider: nil)
     excluded = excluding_provider.present? ? SocialIdentifiable.normalize_provider(excluding_provider) : nil
-    methods = authentication_credential_inventory.aal1_methods.map { |method| (method == :email_otp) ? :email : method }
+    methods =
+      authentication_credential_inventory.sign_in_methods.map { |method|
+        (method == :email_otp) ? :email : method
+      }
     return methods unless excluded
 
     methods - [excluded.to_sym]
@@ -334,15 +337,15 @@ class Client < AppPrincipalRecord
 
   def active_social_provider?(provider)
     normalized = SocialIdentifiable.normalize_provider(provider)
-    client_external_identities.exists?(provider: normalized, state: "active")
+    client_external_identities.effective_binding.exists?(provider: normalized, state: "active")
   end
 
   def active_google_identity_exists?
-    client_external_identities.exists?(provider: "google", state: "active")
+    client_external_identities.effective_binding.exists?(provider: "google", state: "active")
   end
 
   def active_apple_identity_exists?
-    client_external_identities.exists?(provider: "apple", state: "active")
+    client_external_identities.effective_binding.exists?(provider: "apple", state: "active")
   end
 
   def verified_email?
@@ -350,7 +353,7 @@ class Client < AppPrincipalRecord
       VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.user_email_status_id)
     } if client_emails.loaded?
 
-    client_emails.exists?(user_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
+    client_emails.effective_binding.exists?(user_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
   end
 
   def verified_telephone?
@@ -358,7 +361,7 @@ class Client < AppPrincipalRecord
       VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.user_identity_telephone_status_id)
     } if client_telephones.loaded?
 
-    client_telephones.exists?(user_identity_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
+    client_telephones.effective_binding.exists?(user_identity_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
   end
 
   def passkey_login_available?

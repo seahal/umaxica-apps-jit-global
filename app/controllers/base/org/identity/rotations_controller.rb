@@ -6,7 +6,6 @@ module Base
     module Identity
       class RotationsController < ::Base::Org::ApplicationController
         AUTHENTICATION_MODE = :private
-        before_action :authenticate_operator!
 
         def create
           secret = current_operator.staff_secret_credentials.find_by!(public_id: params.expect(:secret_id))

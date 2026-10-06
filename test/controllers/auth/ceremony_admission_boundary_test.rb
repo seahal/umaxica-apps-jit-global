@@ -8,7 +8,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     {
       name: "app",
       host_env: "PUBLIC_AUTH_SERVICE_URL",
-      client_id: "core-next-rp",
+      client_id: "core-app",
       realm: "client",
       sign_in: :auth_app_sign_in_url,
     },
@@ -79,7 +79,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
 
     assert_response :bad_request
     assert_nil session[:oidc_authorization_login_challenge]
-    assert_nil auth_ceremony_record_for(surface.fetch(:name))
+    assert_predicate auth_ceremony_record_for(surface.fetch(:name)), :present?
+    assert_not_predicate auth_ceremony_record_for(surface.fetch(:name)), :admitted?
   end
 
   test "replayed admission is rejected and does not create a Base session token" do
@@ -190,7 +191,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   def handoff_reference(issuance)
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
   end
 
   def authorize_params(surface_name)

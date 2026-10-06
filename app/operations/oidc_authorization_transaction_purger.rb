@@ -30,7 +30,9 @@ class OidcAuthorizationTransactionPurger
     MODELS.transform_values do |model|
       model.connection_owner.connected_to(role: :writing) do
         candidates = model.purgeable_at(now, retention_period: retention_period)
-        (model == ClientOidcAuthorizationTransaction) ? purge_app_transactions(candidates) : candidates.delete_all
+        (model == ClientOidcAuthorizationTransaction) ? purge_app_transactions(candidates) : purge_transactions(
+          candidates, model,
+        )
       end
     end
   end
@@ -53,10 +55,38 @@ class OidcAuthorizationTransactionPurger
         protected_flows = flows.filter_map { |id, reference| id if claimed_refs.include?(reference) } +
           ClientSecretSignInReceipt.where(sign_in_flow_id: flow_ids).pluck(:sign_in_flow_id)
         protected_ids = rows.filter_map { |row| row.id if protected_flows.include?(row.secret_sign_in_flow_id) }
-        protected_ids += ClientSessionLimitResolutionTransaction.where(
-          oidc_authorization_transaction_id: rows.map(&:id),
-        ).pluck(:oidc_authorization_transaction_id)
-        deleted += batch.where(id: rows.map(&:id) - protected_ids).delete_all
+        protected_ids += ClientSessionLimitResolutionTransaction
+          .joins(:sign_in_flow)
+          .where(oidc_authorization_transaction_id: rows.map(&:id))
+          .where(
+            "client_session_limit_resolution_transactions.state_id IN (10, 20) OR " \
+            "(client_session_limit_resolution_transactions.state_id = 100 AND client_sign_in_flows.token_id IS NULL)",
+          )
+          .pluck(:oidc_authorization_transaction_id)
+        rows.each do |row|
+          next if protected_ids.include?(row.id)
+          next unless AuthAdmissionBindingPurger.purge_for_parent!(
+            parent: row, now:, retention_period:,
+          )
+
+          deleted += ClientOidcAuthorizationTransaction.where(id: row.id).delete_all
+        end
+      end
+    end
+    deleted
+  end
+
+  def purge_transactions(candidates, model)
+    deleted = 0
+    candidates.in_batches(of: 500) do |batch|
+      model.transaction do
+        batch.lock.to_a.each do |row|
+          next unless AuthAdmissionBindingPurger.purge_for_parent!(
+            parent: row, now:, retention_period:,
+          )
+
+          deleted += model.where(id: row.id).delete_all
+        end
       end
     end
     deleted

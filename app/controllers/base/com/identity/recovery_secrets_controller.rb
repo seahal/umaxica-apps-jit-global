@@ -11,7 +11,6 @@ module Base
         AUTHENTICATION_MODE = :private
         REVEAL_PURPOSE = "visitor.recovery_secret_credential"
 
-        before_action :authenticate_visitor!
         before_action :set_no_store_for_secret_credential_pages
         before_action :reject_head_reveal!, only: :show
         before_action :authorize_secrets!, only: :show

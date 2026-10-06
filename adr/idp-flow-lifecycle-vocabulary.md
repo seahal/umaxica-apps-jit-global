@@ -252,3 +252,23 @@ The following are normative for any future shared lifecycle implementation:
 - `docs/security/sign-in-sequence.md`
 - `docs/security/sign-up-sequence.md`
 - `docs/security/logout-sequence.md`
+
+## Unified implementation amendment (2026-10-06)
+
+The implementation cycle amends this ADR's target vocabulary with the durable storage and
+transition contract in `two.md`. `ACTIVE` remains derived from a non-terminal row and is never
+stored. Sign-in, sign-up, and sign-out use named row-locked transitions and the immutable terminal
+ids `COMPLETED = 100`, `FAILED = 900` as a legacy tombstone, `EXPIRED = 910`, `CANCELLED = 920`,
+and `HALTED = 930`. Sign-in expiry is a durable `EXPIRED` transition evaluated with the owning
+writer's database clock; a terminal row is absorbing and never rewritten.
+
+For sign-in, dashboard, welcome, return-target, OIDC continuation, and RP continuation are
+post-completion routing decisions. They are not lifecycle states. Session-limit resolution is a
+durable child transaction of session issuance and no longer gives the parent an early pending state.
+Sign-up completion enters ordinary sign-in admission without a duplicated finalized or sign-in
+handoff lifecycle.
+
+This amendment **retains** the vocabulary distinction between lifecycle state, phase, outcome,
+reentry, replay, conflict, and external result. It **amends** the physical transition timing and
+terminal-id mapping; the current runtime status is still historical until the implementation tasks
+are complete.

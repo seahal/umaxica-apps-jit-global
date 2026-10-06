@@ -16,12 +16,7 @@ module AuthStepUpCeremonyContext
   end
 
   def load_cancellation_ceremony_context!
-    load_scoped_ceremony_context!(
-      auth_ceremony_ticket_transaction(
-        %w(step_up reauthentication bootstrap credential_registration
-           credential_change),
-      ),
-    )
+    load_scoped_ceremony_context!(auth_cancellation_transaction)
   end
 
   def load_scoped_ceremony_context!(transaction)

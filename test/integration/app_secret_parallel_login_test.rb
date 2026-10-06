@@ -41,6 +41,8 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     initial_count = ClientToken.where(user_id: @actor.id).count
     context = ActorValuesContext.empty.with(subject: @actor, actor_type: :client, tld: :app, surface: :base)
@@ -191,7 +193,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert_predicate @flow.token, :currently_usable?
     assert_equal @actor.public_id, receipt.client_ref
     assert credential.reload.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_nil @auth.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert callbacks.any? { |browser| browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY] }
     now = ClientSignInFlow.database_now
@@ -218,7 +220,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     credential = ClientSecretCredential.find_by!(issuance_id: @issuance.id)
 
     assert_nil credential.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     @base.get(base_app_sign_in_limitation_path(ri: "jp"))
 
     assert_equal 200, @base.response.status
@@ -235,7 +237,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     )
 
     assert_equal 303, @base.response.status
-    assert_predicate @flow.reload, :sign_in_failed?
+    assert_predicate @flow.reload, :sign_in_cancelled?
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
     stale_browser.post(
@@ -273,9 +275,9 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert_nil @base.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.day)
-    assert_predicate @flow.reload, :sign_in_failed?
+    assert_predicate @flow.reload, :sign_in_expired?
     assert_nil credential.reload.consumed_at
     assert_operator credential.discard_at, :<=, Client.database_now
     assert_equal "flow_expired", ClientSecretAuditOutbox.find_by!(
@@ -305,7 +307,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     credential = ClientSecretCredential.find_by!(issuance_id: @issuance.id)
 
     assert_nil credential.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     @base.get(base_app_sign_in_limitation_path(ri: "jp"))
 
     assert_equal 200, @base.response.status
@@ -321,7 +323,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert_predicate @flow.reload, :sign_in_session_limit_pending?
     assert_nil credential.reload.consumed_at
     assert_equal Float::INFINITY, credential.discard_at
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     page = JSON.parse(Nokogiri::HTML(@base.response.body).at_css("script[data-page='app']").text)
 
     assert_equal I18n.t("base.app.sign.in.limitations.capacity_still_full"), page.fetch("props").fetch("notice")
@@ -340,6 +342,6 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert_equal @flow.token.public_id, receipt.root_token_ref
     assert_predicate @flow.token, :currently_usable?
     assert_equal 2, ClientToken.currently_usable_at.where(user_id: @actor.id).count
-    assert_nil ClientSecretLookupQuery.call(secret: @raw)
+    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
   end
 end

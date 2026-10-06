@@ -3,6 +3,21 @@
 require "test_helper"
 
 class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
+  setup do
+    client_tokens(:one).update!(
+      last_step_up_at: ClientToken.database_now,
+      last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey",
+      last_step_up_session_public_id: client_tokens(:one).public_id,
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up",
+      last_step_up_full_reauthentication: false,
+    )
+  end
+
   test "scoped owner revokes the final Secret while a Passkey remains and preserves the current session" do
     actor = clients(:one)
     token = client_tokens(:one)
@@ -34,7 +49,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     assert_equal credential.revoked_at, credential.discard_at
     assert_equal 1.day, credential.purge_eligible_at - credential.discard_at
     assert_not credential.available_at?(at: Client.database_now)
-    assert_nil ClientSecretLookupQuery.call(secret: "a" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: "a" * 32)
     assert_equal before - 1, ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
     assert_equal original_token, token.reload.attributes
     assert_equal original_digest, credential.password_digest
@@ -319,7 +334,10 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
     now = Client.database_now
-    [{ confirmed_at: nil }, { claimed_at: now, claim_operation_id: SecureRandom.uuid },
+    [{ confirmed_at: nil }, { claimed_at: now,
+                              claim_operation_id: SecureRandom.uuid,
+                              claim_sign_in_flow_ref: "claimed-test-flow",
+                              claim_ceremony_session_id: 1, },
      { discard_at: now }, { revoked_at: now },].each do |state|
       Client.transaction(requires_new: true) do
         ClientSecretCredential.where(id: credential.id).update_all(state)
@@ -350,7 +368,7 @@ class ClientSecretRevocationCommitterTest < ActiveSupport::TestCase
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     credential = client_secret_credentials(:one)
-    [{ name: "" }, { password_digest: "" }, { lookup_digest: "g" * 64 }].each do |invalid|
+    [{ name: "" }, { password_digest: "" }].each do |invalid|
       Client.transaction(requires_new: true) do
         ClientSecretCredential.where(id: credential.id).update_all(invalid)
         assert_no_difference("ClientSecretAuditOutbox.count") do

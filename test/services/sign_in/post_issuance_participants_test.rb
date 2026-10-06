@@ -28,13 +28,12 @@ module SignIn
       end
     end
 
-    test "dashboard evaluator must return SignInParticipantItem" do
+    test "post-auth routing requires a completed flow" do
       actor = create_client
-      cycle = create_cycle(actor, status_name: "DASHBOARD_PENDING")
-      evaluator = lambda { |**| "not-an-item" }
+      cycle = create_cycle(actor, status_name: "CHECKPOINT_PENDING")
 
       assert_raises ArgumentError do
-        SignInDashboardParticipant.new(cycle: cycle, actor: actor, evaluators: [evaluator]).evaluate
+        PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
       end
     end
 
@@ -82,20 +81,15 @@ module SignIn
       assert_equal "checkpoint", cycle.step
     end
 
-    test "dashboard always advances to return pending after evaluation" do
+    test "post-auth routing resolves dashboard without a second lifecycle transition" do
       actor = create_client
-      cycle = create_cycle(actor, status_name: "DASHBOARD_PENDING")
-      evaluator =
-        lambda do |**|
-          SignInParticipantItem.new(key: :welcome, blocking: false, cleared: false)
-        end
+      cycle = create_cycle(actor, status_name: "COMPLETED", return_to: nil)
 
-      result = SignInDashboardParticipant.new(cycle: cycle, actor: actor, evaluators: [evaluator]).advance!
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_not_predicate result, :blocking?
-      assert_equal [:welcome], result.stack.map(&:key)
-      assert_predicate cycle.reload, :sign_in_return_pending?
-      assert_equal "return_to", cycle.step
+      assert_equal :dashboard, decision.kind
+      assert_equal "/dashboard", decision.target
+      assert_predicate cycle.reload, :sign_in_completed?
     end
 
     test "selector auto-commits a single candidate to session issuance under cycle lock" do
@@ -157,39 +151,42 @@ module SignIn
       end
     end
 
-    test "legacy return participant consumes safe return path and completes cycle" do
+    test "post-auth routing returns a safe signed target without mutating the completed cycle" do
       actor = create_client
-      cycle = create_cycle(actor, status_name: "RETURN_PENDING", return_to: "/settings?tab=sessions")
+      cycle = create_cycle(actor, status_name: "COMPLETED", return_to: "/settings?tab=sessions")
 
-      destination = SignInReturnParticipant.new(cycle: cycle, default_path: "/settings").consume!
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/settings")
 
-      assert_equal "/settings?tab=sessions", destination
+      assert_equal :signed_return, decision.kind
+      assert_equal "/settings?tab=sessions", decision.target
       assert_predicate cycle.reload, :sign_in_completed?
       assert_equal "completed", cycle.step
       assert_not_nil cycle.completed_at
-      assert_nil cycle.return_to
+      assert_equal "/settings?tab=sessions", cycle.return_to
     end
 
-    test "legacy return participant discards unsafe return path and completes cycle with default" do
+    test "post-auth routing discards an unsafe signed target and uses dashboard" do
       actor = create_client
-      cycle = create_cycle(actor, status_name: "RETURN_PENDING", return_to: "https://evil.example/path")
+      cycle = create_cycle(actor, status_name: "COMPLETED", return_to: "https://evil.example/path")
 
-      destination = SignInReturnParticipant.new(cycle: cycle, default_path: "/settings").consume!
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/settings")
 
-      assert_equal "/settings", destination
+      assert_equal :dashboard, decision.kind
+      assert_equal "/settings", decision.target
       assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
+      assert_equal "https://evil.example/path", cycle.return_to
     end
 
-    test "legacy return participant rejects protocol-relative return path" do
+    test "post-auth routing discards a protocol-relative signed target and uses dashboard" do
       actor = create_client
-      cycle = create_cycle(actor, status_name: "RETURN_PENDING", return_to: "//evil.example/path")
+      cycle = create_cycle(actor, status_name: "COMPLETED", return_to: "//evil.example/path")
 
-      destination = SignInReturnParticipant.new(cycle: cycle, default_path: "/settings").consume!
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/settings")
 
-      assert_equal "/settings", destination
+      assert_equal :dashboard, decision.kind
+      assert_equal "/settings", decision.target
       assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
+      assert_equal "//evil.example/path", cycle.return_to
     end
 
     test "checkpoint and selector participants work for visitor and operator cycles" do
@@ -230,6 +227,7 @@ module SignIn
         nonce_digest: cycle_class.digest_nonce("nonce"),
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
+        completed_at: (Time.current if status_name == "COMPLETED"),
       )
     end
 
@@ -238,8 +236,7 @@ module SignIn
         "CHECKPOINT_PENDING" => "checkpoint",
         "SELECTOR_PENDING" => "selector",
         "SESSION_ISSUANCE_PENDING" => "session_issuance",
-        "DASHBOARD_PENDING" => "dashboard",
-        "RETURN_PENDING" => "return_to",
+        "COMPLETED" => "completed",
       }.fetch(status_name)
     end
   end

@@ -148,9 +148,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_APP_HOST}/sign/in/limitation", method: :delete },
     )
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/oidc/callback", method: :get)
-    end
+    assert_recognizes(
+      { controller: "base/app/oidc/callbacks", action: "show" },
+      { path: "http://#{BASE_APP_HOST}/oidc/callback", method: :get },
+    )
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/oidc/authorization", method: :get)
@@ -227,6 +228,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "base/app/oauth/userinfos", action: "show" },
       { path: "http://#{BASE_APP_HOST}/oauth/userinfo", method: :get },
+    )
+    assert_recognizes(
+      { controller: "base/app/oauth/userinfos", action: "create" },
+      { path: "http://#{BASE_APP_HOST}/oauth/userinfo", method: :post },
     )
 
     assert_recognizes(
@@ -508,9 +513,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_COM_HOST}/switcher", method: :patch },
     )
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/oidc/callback", method: :get)
-    end
+    assert_recognizes(
+      { controller: "base/com/oidc/callbacks", action: "show" },
+      { path: "http://#{BASE_COM_HOST}/oidc/callback", method: :get },
+    )
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/oidc/authorization", method: :get)
@@ -589,6 +595,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "base/com/oauth/userinfos", action: "show" },
       { path: "http://#{BASE_COM_HOST}/oauth/userinfo", method: :get },
+    )
+    assert_recognizes(
+      { controller: "base/com/oauth/userinfos", action: "create" },
+      { path: "http://#{BASE_COM_HOST}/oauth/userinfo", method: :post },
     )
 
     assert_recognizes(
@@ -739,9 +749,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
       { path: "http://#{BASE_ORG_HOST}/switcher", method: :patch },
     )
 
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/oidc/callback", method: :get)
-    end
+    assert_recognizes(
+      { controller: "base/org/oidc/callbacks", action: "show" },
+      { path: "http://#{BASE_ORG_HOST}/oidc/callback", method: :get },
+    )
 
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/oidc/authorization", method: :get)
@@ -845,6 +856,10 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     assert_recognizes(
       { controller: "base/org/oauth/userinfos", action: "show" },
       { path: "http://#{BASE_ORG_HOST}/oauth/userinfo", method: :get },
+    )
+    assert_recognizes(
+      { controller: "base/org/oauth/userinfos", action: "create" },
+      { path: "http://#{BASE_ORG_HOST}/oauth/userinfo", method: :post },
     )
 
     assert_recognizes(

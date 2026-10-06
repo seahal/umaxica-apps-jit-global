@@ -4,6 +4,11 @@
 module SignEmailRegistrationFlow
   extend ActiveSupport::Concern
 
+  # The return-target helpers (`preserve_pt`, `retrieve_pt`, `path_from_signed_pt`) are a direct
+  # dependency of this flow. Base controllers authenticate through BrowserRpAuthentication, which
+  # does not bring them in.
+  include AuthenticationRedirects
+
   def new
     @user_email = ClientEmail.new
     reset_email_registration_flow!

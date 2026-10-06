@@ -78,6 +78,10 @@ module SignOutInertiaPages
     render inertia: sign_out_page_component("edit"), props: sign_out_confirmation_props
   end
 
+  def render_browser_rp_logout_continuation!
+    render_sign_out_confirmation_page
+  end
+
   # `clear_history` is what actually ends the signed-in session's presence in the browser.
   # `encrypt_history` is on globally, but it only encrypts each history entry; the key that decrypts
   # them lives in the tab's own sessionStorage and `reset_session` does not reach it, so without this

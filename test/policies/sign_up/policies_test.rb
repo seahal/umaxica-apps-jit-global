@@ -332,14 +332,10 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     assert_not_predicate SignUp::TicketPolicy.new(context, user: nil), :clear_requirement?
   end
 
-  test "ticket policy handoff_to_sign_in requires finalized step" do
-    ticket = build_ticket(
-      ClientSignUpFlow,
-      step: "finalized",
-      principal_id: 42,
-    )
+  test "ticket policy does not authorize a second action after finalization starts" do
+    ticket = build_ticket(ClientSignUpFlow, step: "finalizing", principal_id: 42)
 
-    assert_not_predicate SignUp::TicketPolicy.new(policy_context(ticket), user: nil), :handoff_to_sign_in?
+    assert_not_predicate SignUp::TicketPolicy.new(policy_context(ticket), user: nil), :finalize?
   end
 
   test "requirement policy clear_birthdate delegates to clear_named_requirement" do
@@ -425,12 +421,12 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     end
   end
 
-  test "finalization policy allows handoff to sign in from finalized step" do
+  test "finalization policy only authorizes checkpoint finalization" do
     ticket = build_ticket(
       ClientSignUpFlow,
       entry_method: "email",
-      status_id: ClientSignUpFlowStatus::FINALIZED,
-      step: "finalized",
+      status_id: ClientSignUpFlowStatus::FINALIZING,
+      step: "finalizing",
       principal_id: 42,
       completed_requirements: {
         "otp" => { "cleared" => true },
@@ -444,7 +440,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
       pending_actor: PendingActor.new(id: 42),
     )
 
-    assert_predicate SignUp::FinalizationPolicy.new(context, user: nil), :handoff_to_sign_in?
+    assert_not_predicate SignUp::FinalizationPolicy.new(context, user: nil), :finalize?
   end
 
   test "finalization policy rescues argument error in requirements check" do

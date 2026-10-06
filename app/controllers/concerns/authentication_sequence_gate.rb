@@ -6,9 +6,13 @@ module AuthenticationSequenceGate
 
   def sign_in_sequence_redirect_path(pt: nil, default_path: after_dashboard_path)
     cycle = current_db_sign_in_flow_for_sequence
+    return sign_in_session_limit_path(pt: pt) if respond_to?(
+      :session_limit_resolution,
+      true,
+    ) && session_limit_resolution
+
     if cycle
       url_pt = signed_pt_token(pt || cycle.return_to)
-      return sign_in_session_limit_path(pt: url_pt) if cycle.sign_in_session_limit_pending?
       return sign_in_checkpoint_path(pt: url_pt) if cycle.sign_in_checkpoint_pending?
       return sign_in_selector_path(pt: url_pt) if cycle.sign_in_selector_pending?
       return issue_welcome_gate_and_path(pt: url_pt, sequence_id: cycle.public_id) if cycle.sign_in_completed?
@@ -108,7 +112,6 @@ module AuthenticationSequenceGate
         return redirect_local_checkpoint_result!(cycle)
       end
 
-      record_dashboard_handoff!(cycle)
       if oidc_authorization_login_challenge.present?
         redirect_to_surface_url(after_login_path)
         return
@@ -160,12 +163,24 @@ module AuthenticationSequenceGate
 
     cycle = current_db_sign_in_flow_for_sequence
     actor = cycle && sign_in_flow_actor(cycle)
-    return reject_invalid_sign_in_sequence! unless cycle&.sign_in_dashboard_pending?
+    return reject_invalid_sign_in_sequence! unless cycle && oidc_result_handoff_cycle_ready?(cycle)
     return reject_invalid_sign_in_sequence! unless actor.is_a?(resource_class)
     return reject_invalid_sign_in_sequence! unless actor.login_allowed?
 
     @current_resource = actor
     true
+  end
+
+  # Auth transfers OIDC evidence before Base commits the root session. The cycle is therefore
+  # allowed to remain in the ordinary post-primary graph until Base's issuance lock advances it
+  # to SESSION_ISSUANCE_PENDING and completes it. This is an evidence handoff, not post-auth
+  # routing; terminal cycles and cycles that have not recorded a primary event have no authority.
+  def oidc_result_handoff_cycle_ready?(cycle)
+    cycle.authentication_event_at.present? &&
+      !cycle.sign_in_failed? && !cycle.sign_in_expired? && !cycle.sign_in_cancelled? &&
+      !cycle.sign_in_halted? &&
+      (cycle.sign_in_checkpoint_pending? || cycle.sign_in_selector_pending? ||
+        cycle.sign_in_session_issuance_pending? || cycle.sign_in_completed?)
   end
 
   # rubocop:disable Metrics/AbcSize
@@ -180,42 +195,25 @@ module AuthenticationSequenceGate
 
   def process_cycle_based_sequence!(cycle)
     if cycle.sign_in_completed?
+      decision = PostAuthenticationRoutingResolver.call(
+        flow: cycle,
+        default_path: after_welcome_path,
+        oidc_continuation: oidc_authorization_login_challenge.present? ? after_login_path : nil,
+      )
       clear_welcome_gate!
       clear_current_sign_in_flow_locator!
-      return redirect_to(after_welcome_path)
+      return redirect_to(decision.target)
     end
-    return redirect_to(sign_in_session_limit_path(pt: cycle.return_to)) if cycle.sign_in_session_limit_pending?
+    return redirect_to(sign_in_session_limit_path(pt: cycle.return_to)) if session_limit_resolution
     return redirect_to(sign_in_checkpoint_path(pt: cycle.return_to)) if cycle.sign_in_checkpoint_pending?
     return redirect_to(sign_in_selector_path(pt: cycle.return_to)) if cycle.sign_in_selector_pending?
-    return reject_invalid_sign_in_sequence! unless cycle.sign_in_dashboard_pending? || cycle.sign_in_return_pending?
     return redirect_to(after_welcome_path) unless welcome_gate_available?
     return redirect_to(after_welcome_path) unless consume_welcome_gate!(sequence_id: cycle.public_id)
 
     bind_current_session_to_sign_in_flow!(cycle)
-    return reject_invalid_sign_in_sequence! unless authorize_sign_in_sequence!(cycle)
-
-    if cycle.sign_in_dashboard_pending?
-      result =
-        with_sign_in_flow_writing(cycle) do
-          sign_in_dashboard_participant(cycle).advance!
-        end
-      return if result.blocking?
-    end
-
-    reloaded_cycle = cycle.reload
-    destination =
-      with_sign_in_flow_writing(reloaded_cycle) do
-        SignInReturnParticipant.new(
-          cycle: reloaded_cycle,
-          default_path: after_welcome_path,
-        ).consume!
-      end
-
     clear_welcome_gate!
     clear_current_sign_in_flow_locator!
-    fallback_destination = safe_non_welcome_return_path(after_welcome_path)
-    destination = safe_non_welcome_return_path(destination) || fallback_destination
-    @welcome_next_path = destination if destination.present?
+    @welcome_next_path = after_welcome_path
   end
 
   def process_non_cycle_sequence!
@@ -307,6 +305,8 @@ module AuthenticationSequenceGate
   end
 
   def sign_in_selector_allowed_request?
+    return true if oidc_authorization_login_challenge_present? && controller_path.end_with?("/oidc_handoffs")
+
     allowed_paths = [
       sign_in_selector_path,
       sign_in_session_limit_path,
@@ -382,8 +382,6 @@ module AuthenticationSequenceGate
     return true if allowed
 
     sign_in_sequence_carrier.expire! if sequence.present? && sequence.expired?
-    sign_in_sequence_carrier.fail! if sequence.present? && !sequence.expired?
-
     Rails.logger.info(
       JitLogEvent.format(
         "authentication.sign_in_sequence.rejected",
@@ -400,6 +398,11 @@ module AuthenticationSequenceGate
 
   def current_db_sign_in_flow_for_sequence
     return auth_ceremony_local_sign_in_flow if local_authentication_ceremony?
+
+    if respond_to?(:session_limit_resolution, true)
+      resolution = session_limit_resolution
+      return resolution.sign_in_flow if resolution
+    end
 
     @current_db_sign_in_flow_for_sequence ||=
       begin
@@ -430,10 +433,6 @@ module AuthenticationSequenceGate
     SignInGuardrailParticipant.new(cycle: cycle, actor: sign_in_flow_actor(cycle))
   end
 
-  def sign_in_dashboard_participant(cycle)
-    SignInDashboardParticipant.new(cycle: cycle, actor: current_resource)
-  end
-
   def clear_current_sign_in_flow_locator!
     sign_in_flow_locator_for(actor: current_resource, token: current_session).clear!
   rescue ArgumentError
@@ -461,13 +460,7 @@ module AuthenticationSequenceGate
 
       with_sign_in_flow_writing(cycle) do
         cycle.with_lock do
-          claimed_secret = authentication_method == "secret" && resource.is_a?(Client) &&
-            cycle.principal_id == resource.id && ClientSecretCredential.exists?(
-              client_id: resource.id, claim_sign_in_flow_ref: cycle.public_id,
-              claim_ceremony_session_id: admitted_auth_ceremony_session.id,
-              consumed_at: nil, discard_at: Float::INFINITY,
-            )
-          unless cycle.sign_in_primary_pending? && (cycle.principal_id.nil? || claimed_secret)
+          unless cycle.sign_in_primary_pending? && (cycle.principal_id.nil? || cycle.principal_id == resource.id)
             raise AuthCeremonySession::InvalidTransition, "local authentication flow is already bound"
           end
 
@@ -481,8 +474,7 @@ module AuthenticationSequenceGate
     nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
     cycle_class.create!(
       principal_id: resource.id,
-      status_id: cycle_class.status_id_for("PRIMARY_PENDING"),
-      step: "primary",
+      state_id: cycle_class.state_id_for("PRIMARY_PENDING"),
       return_to: path_from_signed_pt(signed_pt_token(pt)),
       nonce_digest: cycle_class.digest_nonce(nonce),
     )
@@ -522,10 +514,15 @@ module AuthenticationSequenceGate
 
   def advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
     return result unless cycle&.persisted?
+    # The final session issuer may advance the same flow through session
+    # issuance and completion while this request still holds the pre-issuance
+    # object. A committed flow is terminal; do not replay the pre-issuance
+    # guardrail transition against that terminal state.
+    cycle.reload
+    return result if cycle.sign_in_completed?
 
     case result[:status]
     when :session_limit_pending
-      cycle.advance_sign_in_to_session_limit! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
       sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     when :success, :authentication_evidence_recorded
       cycle.advance_sign_in_to_guardrail! if cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
@@ -535,7 +532,8 @@ module AuthenticationSequenceGate
       end
       sign_in_flow_locator_for(actor: resource).issue!(cycle.reload) unless local_authentication_ceremony?
     else
-      cycle.fail_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed?
+      cycle.halt_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
+        cycle.sign_in_cancelled? || cycle.sign_in_halted?
       sign_in_flow_locator_for(actor: resource).issue!(cycle) if result[:status] == :session_limit_hard_reject
     end
     result
@@ -556,11 +554,27 @@ module AuthenticationSequenceGate
   # Session-limit resolution ends in the same final issuance boundary as any
   # root login: log_in re-locks the flow, re-counts the limit, re-checks the
   # cooldown, and binds the new session to this flow in one transaction. When
-  # the limit is full again by then, the flow stays SESSION_LIMIT_PENDING and
-  # nothing is issued.
+  # the limit is full again by then, the durable resolution remains terminally
+  # resolved and the parent remains pending for a fresh resolution.
   def promote_current_session_limit_cycle!(actor)
     cycle = current_db_sign_in_flow_for_sequence
-    return false unless cycle&.sign_in_session_limit_pending?
+    resolution = respond_to?(:session_limit_resolution, true) ? session_limit_resolution : nil
+    return false unless cycle && resolution
+    return false unless resolution.actor_ref == actor.public_id && resolution.resolved?
+
+    if (local_locator = local_sign_in_locator_for_pending_resume(cycle))
+      result = LocalAuthenticationSessionCommitter.resume_pending!(
+        controller: self, flow: cycle, actor: actor, nonce: local_locator.fetch(:nonce),
+      )
+      return false unless result[:status] == :success
+
+      session[local_locator.fetch(:session_key)] = local_locator.fetch(:value)
+      reset_current_db_sign_in_flow_for_sequence!
+      return true
+    end
+
+    authentication_event_at = cycle.authentication_event_at
+    return false if authentication_event_at.blank?
 
     session_result = log_in(
       actor,
@@ -570,7 +584,8 @@ module AuthenticationSequenceGate
       token_kind_id: "BROWSER_WEB",
       require_totp_check: false,
       audit_context: { auth_method: "session_limit_promotion" },
-      authentication_event_at: current_authentication_event_at,
+      established_authentication_method: cycle.authentication_method,
+      authentication_event_at: authentication_event_at,
     )
     return false unless session_result[:status] == :success
 
@@ -583,6 +598,20 @@ module AuthenticationSequenceGate
     sign_in_flow_locator_for(actor: actor, token: current_session).issue!(cycle.reload)
     reset_current_db_sign_in_flow_for_sequence!
     true
+  end
+
+  def local_sign_in_locator_for_pending_resume(cycle)
+    session_key =
+      case cycle
+      when ClientSignInFlow then SignInCycleLocator::SESSION_KEYS.fetch(:app)
+      when VisitorSignInFlow then SignInCycleLocator::SESSION_KEYS.fetch(:com)
+      when OperatorSignInFlow then SignInCycleLocator::SESSION_KEYS.fetch(:org)
+      else return nil
+      end
+    value = session[session_key]
+    return unless value.is_a?(Hash) && value["public_id"].to_s == cycle.public_id.to_s
+
+    { session_key: session_key, value: value, nonce: value.fetch("nonce") }
   end
 
   # Selector completion issues the root login for a flow that has not issued
@@ -672,36 +701,7 @@ module AuthenticationSequenceGate
     )
   end
 
-  def authorize_sign_in_sequence!(cycle)
-    rule = cycle.sign_in_dashboard_pending? ? :show_dashboard? : :consume_return?
-    return false unless allowed_to?(rule, cycle)
-
-    authorize!(cycle, to: rule)
-    true
-  end
-
-  def record_dashboard_handoff!(cycle)
-    with_sign_in_flow_writing(cycle) do
-      changes = {
-        status_id: cycle.status_id_for("DASHBOARD_PENDING"),
-        state: "DASHBOARD_PENDING",
-        step: "dashboard",
-      }
-      secret_oidc_evidence = cycle.is_a?(ClientSignInFlow) && cycle.authentication_method == "secret" &&
-        auth_ceremony_authorization_transaction&.secret_sign_in_flow_id == cycle.id
-      unless secret_oidc_evidence
-        changes[:token] =
-          current_session if cycle.has_attribute?(:token_id) && cycle.token_id.blank? && current_session
-        changes[:session_issued_at] = Time.current if cycle.has_attribute?(:session_issued_at)
-      end
-
-      cycle.reload.update!(changes)
-    end
-  end
-
-  private :record_dashboard_handoff!
-
   private :redirect_local_checkpoint_result!, :reject_invalid_sign_in_sequence_path, :welcome_gate_expired?,
-          :authorize_sign_in_sequence!, :authenticate_sign_in_sequence_actor!,
-          :authenticate_oidc_result_actor!, :oidc_authorization_login_challenge_present?
+          :authenticate_sign_in_sequence_actor!, :authenticate_oidc_result_actor!,
+          :oidc_authorization_login_challenge_present?
 end

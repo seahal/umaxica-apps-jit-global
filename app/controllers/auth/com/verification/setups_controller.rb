@@ -25,9 +25,17 @@ module Auth
 
         def auth_ceremony_entry_intent = "bootstrap"
 
-        def auth_step_up_ceremony_clean_url = new_auth_com_verification_setup_path(ri: params[:ri])
+        def auth_step_up_ceremony_clean_url
+          if auth_ceremony_registration_transaction&.allowed_methods_array == ["passkey"]
+            new_auth_com_verification_registration_passkey_path(ri: params[:ri])
+          else
+            new_auth_com_verification_setup_path(ri: params[:ri])
+          end
+        end
 
-        def auth_ceremony_admission_action_url = auth_com_verification_setup_path(ri: params[:ri])
+        def auth_ceremony_admission_action_url = auth_com_ceremony_bindings_path
+
+        def auth_ceremony_admitted_action_url = auth_com_verification_setup_path(ri: params[:ri])
 
         def ceremony_actor_model = Visitor
 
@@ -37,7 +45,7 @@ module Auth
 
         def ceremony_token_owned_by?(token, actor) = token.visitor_id == actor.id
 
-        def ceremony_supported_methods = [:passkey]
+        def ceremony_supported_methods = %i(passkey email_otp)
 
         def authorize_step_up_ceremony_actor!(actor)
           authorize!(actor, to: :show?, context: { user: actor })
@@ -63,7 +71,15 @@ module Auth
             methods << {
               key: "passkey",
               label: t("sign.app.verification.setup.methods.passkey"),
-              href: new_auth_com_settings_passkey_path(ri: params[:ri]),
+              href: new_auth_com_verification_registration_passkey_path(ri: params[:ri]),
+            }
+          end
+
+          if @missing_methods.include?(:email_otp)
+            methods << {
+              key: "email_otp",
+              label: t("sign.com.verification.setup.methods.email"),
+              href: new_auth_com_verification_email_path(ri: params[:ri]),
             }
           end
 

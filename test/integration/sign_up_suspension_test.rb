@@ -153,7 +153,9 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       )
-    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction)
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     [issuance.transaction, handoff.reference]
   end
 end

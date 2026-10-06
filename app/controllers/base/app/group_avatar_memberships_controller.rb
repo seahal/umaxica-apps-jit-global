@@ -9,7 +9,6 @@ module Base
 
       rescue_from AvatarOwnerMembershipLockService::AuthorizationDenied, with: :forbid_owner_mutation
 
-      before_action :authenticate_client!
       before_action :set_group
       before_action :set_membership, only: %i(update destroy)
 

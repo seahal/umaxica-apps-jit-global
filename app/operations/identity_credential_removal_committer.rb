@@ -58,9 +58,9 @@ class IdentityCredentialRemovalCommitter
   def validate_binding!
     owner_matches =
       case [actor, credential, current_session]
-      in [Client, ClientPasskey | ClientTotpCredential, ClientToken]
+      in [Client, ClientPasskey | ClientTotpCredential | ClientEmail | ClientTelephone, ClientToken]
         credential.user_id == actor.id && current_session.user_id == actor.id
-      in [Visitor, VisitorPasskey, VisitorToken]
+      in [Visitor, VisitorPasskey | VisitorEmail | VisitorTelephone, VisitorToken]
         credential.visitor_id == actor.id && current_session.visitor_id == actor.id
       in [Operator, OperatorPasskey, OperatorToken]
         credential.staff_id == actor.id && current_session.staff_id == actor.id
@@ -87,6 +87,7 @@ class IdentityCredentialRemovalCommitter
     when VisitorPasskey then [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].include?(credential.status_id)
     when OperatorPasskey then credential.status_id == OperatorPasskeyStatus::REVOKED
     when ClientTotpCredential then credential.revoked? || credential.deleted?
+    when ClientEmail, ClientTelephone, VisitorEmail, VisitorTelephone then credential.binding_released?
     else raise ArgumentError, "unsupported removal credential"
     end
   end
@@ -95,6 +96,9 @@ class IdentityCredentialRemovalCommitter
     case credential
     when ClientPasskey, VisitorPasskey, OperatorPasskey then AuthMethodGuard.can_remove_passkey?(actor, credential)
     when ClientTotpCredential then AuthMethodGuard.can_remove_totp?(actor, credential)
+    when ClientEmail then AuthMethodGuard.can_remove_email?(actor, credential)
+    when ClientTelephone, VisitorTelephone then AuthMethodGuard.can_remove_telephone?(actor, credential)
+    when VisitorEmail then AuthMethodGuard.can_remove_email?(actor, credential)
     else raise ArgumentError, "unsupported removal credential"
     end
   end
@@ -105,6 +109,18 @@ class IdentityCredentialRemovalCommitter
     when VisitorPasskey then credential.update!(status_id: VisitorPasskeyStatus::DELETED)
     when OperatorPasskey then credential.update!(status_id: OperatorPasskeyStatus::REVOKED)
     when ClientTotpCredential then credential.update!(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::DELETED)
+    when ClientEmail
+      credential.release_binding!(at: ClientEmail.database_now)
+      credential.update!(user_email_status_id: ClientEmailStatus::DELETED)
+    when ClientTelephone
+      credential.release_binding!(at: ClientTelephone.database_now)
+      credential.update!(user_identity_telephone_status_id: ClientTelephoneStatus::DELETED)
+    when VisitorEmail
+      credential.release_binding!(at: VisitorEmail.database_now)
+      credential.update!(visitor_email_status_id: VisitorEmailStatus::DELETED)
+    when VisitorTelephone
+      credential.release_binding!(at: VisitorTelephone.database_now)
+      credential.update!(visitor_telephone_status_id: VisitorTelephoneStatus::DELETED)
     else raise ArgumentError, "unsupported removal credential"
     end
   end

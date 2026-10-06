@@ -23,7 +23,9 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
              OperatorSignInFlow, OperatorAuthCeremonySession,]
           end
         # Synthetic proof isolates revocation; real authentication is exercised by integration tests.
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in")
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        )
         flow = issuance.transaction
         flow.update!(principal_id: actor.id)
         flow.record_local_authentication_evidence!(method: "passkey")
@@ -100,7 +102,9 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
             actor = Operator.create!(id: 9_122_000_000_000 + index)
             [actor, OperatorToken.create!(staff: actor), OperatorSignInFlow, OperatorAuthCeremonySession]
           end
-        flow = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in").transaction
+        flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        ).transaction
         now = flow_model.database_now
         flow.update!(
           principal_id: actor.id, issued_at: now - 1.minute,
@@ -280,7 +284,9 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           actor = Operator.create!(id: 9_121_000_000_000)
           [actor, OperatorToken.create!(staff: actor), OperatorAuthCeremonySession]
         end
-      flow = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in").transaction
+      flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      ).transaction
       flow.update!(principal_id: actor.id)
       ceremony, = ceremony_model.rotate_and_admit!(
         admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
@@ -499,7 +505,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
       require_session_binding: true,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     ).transaction
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(

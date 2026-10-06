@@ -12,9 +12,8 @@ class SignUpStateMachine
     enter_checkpoint
     clear_requirement
     finalize
-    handoff_to_sign_in
     complete
-    fail
+    halt
     expire
     cancel
   ).freeze
@@ -70,13 +69,16 @@ class SignUpStateMachine
 
   def evaluate_event
     return ok if event == :cancel && ticket.respond_to?(:sign_up_cancelled?) && ticket.sign_up_cancelled?
-    # Reject events on TTL-expired or logically-discarded tickets. The union
-    # is intentional: discarded rows must not accept transitions any more
-    # than expired ones can, but the two states are surfaced separately
-    # (SignFlow#expired? = TTL only; Retainable#lapsed? = logical deletion).
-    return expired_result if (ticket.expired? || ticket_lapsed?) && event != :expire
-
     return invalid("terminal ticket cannot transition") if terminal? && !terminal_event_allowed?
+
+    # An expired non-terminal row is durably terminalized before the caller
+    # receives the refusal. Logical discard remains a separate retention
+    # condition and is rejected without changing lifecycle state.
+    if event != :expire && ticket.expired?(ticket.class.database_now)
+      ticket.expire_sign_up!
+      return expired_result
+    end
+    return expired_result if ticket_lapsed? && event != :expire
 
     dispatch_event
   end
@@ -90,39 +92,41 @@ class SignUpStateMachine
     when :start
       ok(next_event: :submit_contact)
     when :submit_contact
-      transition_to!("CONTACT_PENDING", step: "contact", next_event: :verify_contact)
+      ticket.advance_sign_up_to_contact!
+      SignUpResult.build(status: :advanced, ticket: ticket, next_event: :verify_contact)
     when :verify_contact
-      transition_to!("CONTACT_VERIFIED", step: "contact_verified", next_event: :enter_guardrail)
+      ticket.verify_sign_up_contact!
+      SignUpResult.build(status: :advanced, ticket: ticket, next_event: :enter_guardrail)
     when :start_social_callback
       start_social_callback
     when :complete_social_callback
       complete_social_callback
     when :enter_guardrail
-      transition_to!("GUARDRAIL_PENDING", step: "guardrail", next_event: :enter_checkpoint)
+      ticket.advance_sign_up_to_guardrail!
+      SignUpResult.build(status: :advanced, ticket: ticket, next_event: :enter_checkpoint)
     when :enter_checkpoint
       return invalid("guardrail is required") unless status?("GUARDRAIL_PENDING")
 
-      transition_to!("CHECKPOINT_PENDING", step: "checkpoint", next_event: :clear_requirement)
+      ticket.advance_sign_up_to_checkpoint!
+      SignUpResult.build(status: :advanced, ticket: ticket, next_event: :clear_requirement)
     when :clear_requirement
       clear_requirement
     when :finalize
       finalize
-    when :handoff_to_sign_in
-      handoff_to_sign_in
     when :complete
       complete
-    when :fail
-      terminal_transition!("FAILED", step: "failed", timestamp: :failed_at, status: :failed, cleanup_required: true)
+    when :halt
+      ticket.halt_sign_up!
+      SignUpResult.build(status: :failed, ticket: ticket, cleanup_required: true)
     when :expire
-      terminal_transition!("EXPIRED", step: "expired", status: :expired, cleanup_required: true)
+      ticket.expire_sign_up!
+      SignUpResult.build(status: :expired, ticket: ticket, cleanup_required: true)
     when :cancel
       return invalid("ticket is not cancelable") if ticket.respond_to?(:sign_up_cancelable?) &&
         !ticket.sign_up_cancelable?
 
-      terminal_transition!(
-        "CANCELLED", step: "cancelled", timestamp: :cancelled_at, status: :failed,
-                     cleanup_required: true,
-      )
+      ticket.cancel_sign_up!
+      SignUpResult.build(status: :failed, ticket: ticket, cleanup_required: true)
     end
   end
 
@@ -130,23 +134,16 @@ class SignUpStateMachine
     registry = SignUpRequirementRegistry.for_ticket(ticket)
     return invalid("social callback is app social only") unless registry.surface == :app && registry.social?
 
-    transition_to!("SOCIAL_CALLBACK_PENDING", step: "social_callback", next_event: :complete_social_callback)
+    ticket.start_sign_up_social_callback!
+    SignUpResult.build(status: :advanced, ticket: ticket, next_event: :complete_social_callback)
   end
 
   def complete_social_callback
     registry = SignUpRequirementRegistry.for_ticket(ticket)
     return invalid("social callback is app social only") unless registry.surface == :app && registry.social?
 
-    if payload[:sign_in_handoff].present?
-      SignUpResult.build(
-        status: :sign_in_handoff_accepted,
-        ticket: ticket,
-        sign_in_handoff: payload[:sign_in_handoff],
-        next_event: :handoff_to_sign_in,
-      )
-    else
-      transition_to!("CHECKPOINT_PENDING", step: "checkpoint", next_event: :clear_requirement)
-    end
+    ticket.advance_sign_up_to_checkpoint!
+    SignUpResult.build(status: :advanced, ticket: ticket, next_event: :clear_requirement)
   end
 
   def clear_requirement
@@ -195,52 +192,13 @@ class SignUpStateMachine
       cleanup_required: true,
     ) unless payload[:finalization_result].to_sym == :accepted
 
-    ticket.transition_to!("FINALIZING", step: "finalizing")
-    ticket.transition_to!("FINALIZED", step: "finalized")
-    SignUpResult.build(status: :advanced, ticket: ticket, next_event: :handoff_to_sign_in)
-  end
-
-  def handoff_to_sign_in
-    return invalid("ticket is not finalized") unless status?("FINALIZED")
-
-    handoff_status = payload[:sign_in_handoff_status]&.to_sym
-    handoff_result = payload[:sign_in_handoff]
-    return blocked("sign-in handoff result is required") if handoff_status.blank?
-
-    case handoff_status
-    when :accepted
-      ticket.transition_to!("SIGN_IN_HANDOFF_PENDING", step: "sign_in_handoff")
-      SignUpResult.build(
-        status: :sign_in_handoff_accepted,
-        ticket: ticket,
-        sign_in_handoff: handoff_result,
-        next_event: :complete,
-      )
-    when :stopped
-      SignUpResult.build(status: :sign_in_handoff_stopped, ticket: ticket, sign_in_handoff: handoff_result)
-    when :failed
-      SignUpResult.build(status: :sign_in_handoff_failed, ticket: ticket, sign_in_handoff: handoff_result)
-    else
-      invalid("unknown sign-in handoff status")
-    end
+    ticket.begin_sign_up_finalization!
+    SignUpResult.build(status: :advanced, ticket: ticket, next_event: :complete)
   end
 
   def complete
     ticket.complete_sign_up!
     SignUpResult.build(status: :completed, ticket: ticket)
-  end
-
-  def transition_to!(status_name, step:, next_event:)
-    ticket.transition_to!(status_name, step: step)
-    SignUpResult.build(status: :advanced, ticket: ticket, next_event: next_event)
-  end
-
-  def terminal_transition!(status_name, step:, status:, cleanup_required:, timestamp: nil)
-    attrs = { step: step }
-    attrs[timestamp] = Time.current if timestamp && ticket.has_attribute?(timestamp)
-    ticket.update!(attrs)
-    ticket.transition_to!(status_name, step: step)
-    SignUpResult.build(status: status, ticket: ticket, cleanup_required: cleanup_required)
   end
 
   def status?(status_name)
@@ -251,7 +209,7 @@ class SignUpStateMachine
     if ticket.respond_to?(:sign_up_terminal?)
       ticket.sign_up_terminal?
     else
-      %w(COMPLETED FAILED EXPIRED CANCELLED).any? { |status_name| status?(status_name) }
+      %w(COMPLETED FAILED EXPIRED CANCELLED HALTED).any? { |status_name| status?(status_name) }
     end
   end
 

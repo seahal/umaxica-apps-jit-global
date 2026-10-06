@@ -20,12 +20,15 @@ class OrgStepUpPasskeyCommittersTest < ActiveSupport::TestCase
       webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
     @requirement = StepUpRequirement.new(
-      scope: "settings_passkey", allowed_methods: [:passkey], purpose: "step_up",
+      scope: "settings_passkey", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @actor.public_id,
+      resource_ref: nil, tenant_ref: nil, purpose: "step_up",
       audience: "step_up:org", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    @transaction = BaseStepUpAdmissionIssuer.call!(
-      actor: @actor, token: @token, requirement: @requirement, return_to: "/settings/passkeys",
+    @transaction = issue_base_step_up_admission!(
+      actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/passkeys",
     ).transaction
     @record = OperatorStepUpSession.find_by!(step_up_ceremony_transaction_ref: @transaction.transaction_id)
     @config = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: @fake.origin)

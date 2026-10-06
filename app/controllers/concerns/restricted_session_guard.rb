@@ -18,7 +18,10 @@ module RestrictedSessionGuard
   private
 
   def enforce_restricted_session_guard!
-    current_resource if respond_to?(:current_resource, true)
+    security_context = current_browser_session_security_context if respond_to?(
+      :current_browser_session_security_context, true,
+    )
+    current_resource if security_context.nil? && respond_to?(:current_resource, true)
     return unless respond_to?(:current_session_restricted?, true)
 
     restricted = current_session_restricted?
@@ -43,7 +46,7 @@ module RestrictedSessionGuard
   end
 
   def restricted_session_expired?
-    session = current_session
+    session = browser_rp_root_token_for_guard || current_session
     return false unless session&.restricted?
 
     expired =
@@ -71,6 +74,12 @@ module RestrictedSessionGuard
     )
 
     true
+  end
+
+  def browser_rp_root_token_for_guard
+    return unless respond_to?(:current_browser_session_security_context, true)
+
+    current_browser_session_security_context&.root_token
   end
 
   def handle_restricted_session_block

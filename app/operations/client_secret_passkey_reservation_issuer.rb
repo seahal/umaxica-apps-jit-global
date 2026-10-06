@@ -25,6 +25,8 @@ class ClientSecretPasskeyReservationIssuer
                 when "CANCELLED" then "flow_canceled"
                 when "EXPIRED" then "flow_expired"
                 when "FAILED" then "flow_failed"
+                when "HALTED" then "flow_halted"
+                when "FINALIZED", "SIGN_IN_HANDOFF_PENDING" then "flow_halted"
                 else raise Denied, "Secret signup retirement requires a confirmed terminal flow"
                 end
               retire_signup_batch!(current, reason, purge_after)
@@ -45,7 +47,9 @@ class ClientSecretPasskeyReservationIssuer
               current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id, principal_id: actor.id)
               raise Denied, "Secret activation requires completed signup" unless current.sign_up_completed?
 
-              owned = ClientSecretIssuance.lock.find_by(sign_up_flow_ref: current.public_id, client_id: actor.id)
+              owned = ClientSecretIssuance.lock.where(
+                sign_up_flow_ref: current.public_id, client_id: actor.id,
+              ).order(attempt_number: :desc).first
               return unless owned
               return owned if owned.signup_completed_at
               unless [ClientStatus::ACTIVE, ClientStatus::VERIFIED_WITH_SIGN_UP].include?(actor.status_id) &&
@@ -107,6 +111,30 @@ class ClientSecretPasskeyReservationIssuer
       raise Denied, "Secret signup delivery is unavailable"
     end
 
+    def reattempt_for_sign_up!(flow:, nonce:, predecessor:, expires_after:)
+      unless flow.is_a?(ClientSignUpFlow) && flow.persisted? && predecessor.is_a?(ClientSecretIssuance) &&
+          predecessor.persisted? && expires_after.is_a?(ActiveSupport::Duration) &&
+          expires_after.value.finite? && expires_after.value.positive?
+        raise Denied, "Secret signup reattempt requires its durable flow, predecessor and finite deadline"
+      end
+
+      actor = Client.find(flow.principal_id)
+      AppTicketRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.transaction do
+          AppZenithRecord.connected_to(role: :writing) do
+            actor.with_lock do
+              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
+              registered = actor.client_passkeys.lock.find(current.pending_passkey_registration_id)
+              verify_sign_up_registration!(actor, current, registered, nonce)
+              reattempt_sign_up!(actor, current, registered, predecessor, expires_after)
+            end
+          end
+        end
+      end
+    rescue ActiveRecord::RecordNotFound
+      raise Denied, "Secret signup reattempt is unavailable"
+    end
+
     def call_for_sign_up!(flow:, nonce:, passkey:, expires_after:)
       unless flow.is_a?(ClientSignUpFlow) && flow.persisted? && passkey.is_a?(ClientPasskey) &&
           expires_after.is_a?(ActiveSupport::Duration) && expires_after.value.finite? && expires_after.value.positive?
@@ -154,7 +182,9 @@ class ClientSecretPasskeyReservationIssuer
     private
 
     def retire_signup_batch!(flow, reason, delay)
-      owned = ClientSecretIssuance.lock.find_by(sign_up_flow_ref: flow.public_id, client_id: flow.principal_id)
+      owned = ClientSecretIssuance.lock.where(
+        sign_up_flow_ref: flow.public_id, client_id: flow.principal_id,
+      ).order(attempt_number: :desc).first
       return unless owned
       raise Denied, "Activated signup credentials cannot be retired as pending" if owned.signup_completed_at
 
@@ -199,15 +229,14 @@ class ClientSecretPasskeyReservationIssuer
     def reserve_sign_up!(actor, flow, passkey, duration)
       operation = registration_operation(passkey)
       verify_uncollected_operation!(operation)
-      prior = ClientSecretIssuance.lock.find_by(origin_operation_id: operation)
+      prior = ClientSecretIssuance.lock.where(
+        origin_operation_id: operation, client_id: actor.id, sign_up_flow_ref: flow.public_id,
+        browser_session_ref: nil, origin: "passkey_registration",
+      ).order(attempt_number: :desc).first
       if prior
-        unless prior.client_id == actor.id && prior.sign_up_flow_ref == flow.public_id &&
-            prior.browser_session_ref.nil? && prior.origin == "passkey_registration"
-          raise Denied, "Secret signup allocation belongs to another registration flow"
-        end
-
         return prior
       end
+
       now = Client.database_now
       count = ClientSecretCapacityQuery.call(client: actor, at: now).passkey_count
       deadline = [now + duration, flow.expires_at].min.round(6) if count.positive?
@@ -223,6 +252,57 @@ class ClientSecretPasskeyReservationIssuer
       )
       ClientSecretCapacityQuery.call(client: actor, at: now)
       issuance
+    end
+
+    def reattempt_sign_up!(actor, flow, passkey, predecessor, duration)
+      operation = registration_operation(passkey)
+      owned = ClientSecretIssuance.lock.find_by(
+        id: predecessor.id, public_id: predecessor.public_id, client_id: actor.id,
+        sign_up_flow_ref: flow.public_id, browser_session_ref: nil,
+        origin: "passkey_registration", origin_operation_id: operation,
+      )
+      raise Denied, "Secret signup reattempt predecessor is unavailable" unless owned
+
+      latest_attempt = ClientSecretIssuance.where(
+        client_id: actor.id, sign_up_flow_ref: flow.public_id, origin_operation_id: operation,
+      ).maximum(:attempt_number)
+      unless latest_attempt == owned.attempt_number && payload_failed?(owned)
+        raise Denied, "Secret signup reattempt requires the exact retired latest allocation"
+      end
+
+      successor_attempt = owned.attempt_number + 1
+      successor = ClientSecretIssuance.lock.find_by(
+        client_id: actor.id, sign_up_flow_ref: flow.public_id, origin_operation_id: operation,
+        origin: "passkey_registration", browser_session_ref: nil, attempt_number: successor_attempt,
+      )
+      return successor if successor
+
+      now = Client.database_now
+      count = ClientSecretCapacityQuery.call(client: actor, at: now).passkey_count
+      deadline = [now + duration, flow.expires_at].min.round(6) if count.positive?
+      successor = ClientSecretIssuance.create!(
+        client: actor, origin: "passkey_registration", origin_operation_id: operation,
+        attempt_number: successor_attempt, sign_up_flow_ref: flow.public_id, planned_count: count,
+        expires_at: deadline, created_at: now, updated_at: now,
+      )
+      ClientSecretAuditOutbox.record!(
+        actor_context: ActorValuesContext.empty.with(
+          subject: actor, actor_type: :client, tld: :app, surface: :sign,
+        ),
+        client_ref: actor.public_id, operation_ref: operation, occurred_at: now,
+        event_name: count.zero? ? "secret.issuance_omitted" : "secret.issuance_started",
+        reason: count.zero? ? "capacity_full" : "reattempt", item_count: count,
+      )
+      ClientSecretCapacityQuery.call(client: actor, at: now)
+      successor
+    end
+
+    def payload_failed?(issuance)
+      issuance.canceled_at.present? && ClientSecretAuditOutbox.exists?(
+        client_ref: issuance.client.public_id, operation_ref: issuance.origin_operation_id,
+        event_name: "secret.issuance_canceled", reason: "payload_unavailable",
+        occurred_at: issuance.canceled_at, item_count: issuance.planned_count,
+      )
     end
 
     def registration_operation(passkey)
@@ -241,8 +321,12 @@ class ClientSecretPasskeyReservationIssuer
       current = ClientToken.lock.find_by(id: token.id, public_id: token.public_id, user_id: actor.id)
       registered = ClientPasskey.lock.find_by(id: passkey.id, public_id: passkey.public_id, user_id: actor.id)
       requirement = StepUpRequirement.new(
-        scope: "settings_passkey", purpose: "step_up", audience: "step_up:app",
-        session_binding: current&.public_id, token_binding: current&.public_id, require_session_binding: true,
+        scope: "settings_passkey", step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
+        session_binding: current&.public_id, token_binding: current&.public_id,
+        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       ticket_now = ClientToken.database_now
       unless actor.login_allowed? && current && registered && registered.status_id == ClientPasskeyStatus::ACTIVE &&

@@ -62,7 +62,7 @@ class ClientSecretLifecycleJobTest < ActiveJob::TestCase
           attempt_number: 1, sign_up_flow_ref: flow.public_id, planned_count: 0,
         )
       end
-    flows.last.transition_to!("CANCELLED", now: ClientSignUpFlow.database_now)
+    flows.last.cancel_sign_up!
 
     assert_predicate flows.last.reload, :sign_up_cancelled?
     ClientSecretLifecycleJob.perform_now(batch_size: 1)
@@ -100,7 +100,6 @@ class ClientSecretLifecycleJobTest < ActiveJob::TestCase
         raw = SecureRandom.base58(32)
         credential = ClientSecretCredential.create!(
           client: actor, issuance: issuance, name: "Expired candidate", password: raw,
-          lookup_digest: SignSecretLookupDigest.digest(raw),
         )
         ClientSecretIssuanceExpiryInvalidator.call!(
           issuance: issuance, executor_job_id: "expired-fixture", purge_after: 0.000001.seconds,

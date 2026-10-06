@@ -126,7 +126,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     cycle = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
 
-    assert_equal ClientSignInFlowStatus::CHECKPOINT_PENDING, cycle.status_id
+    assert_equal ClientSignInFlowState::COMPLETED, cycle.state_id
   end
 
   test "Google login with session limit pending redirects to acme sign-in limitation" do
@@ -164,8 +164,9 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_equal "/sign/in/limitation", redirect_uri.path
     assert_nil Rack::Utils.parse_nested_query(redirect_uri.query.to_s)["social_resolution"]
     assert_equal 2, ClientToken.where(user_id: existing_user.id).count
-    assert_predicate ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first,
-                     :sign_in_session_limit_pending?
+    flow = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
+    assert_predicate flow, :sign_in_session_issuance_pending?
+    assert_predicate ClientSessionLimitResolutionTransaction.find_by!(sign_in_flow_id: flow.id), :open?
 
     # The limitation page itself, reached through the flow locator held by the Base session, is
     # exercised in test/controllers/base/app/sign/in/limitations_controller_test.rb.
@@ -211,26 +212,32 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           headers: browser_headers.merge(@callback_headers)
     end
 
+    assert_response :redirect
+    completion = URI.parse(response.location)
+    assert_equal "/social/authentication/completion", completion.path
+
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host!(base_host)
+    https!
+    get completion.request_uri,
+        headers: {
+          "Host" => base_host,
+          "Origin" => "https://#{base_host}",
+          "Sec-Fetch-Site" => "same-origin",
+        }
+
     assert_response :success
-    assert_includes response.body, "social-completion-form"
+    form = response.parsed_body.at_css("form")
+    assert form
     assert_not_includes response.body, "transport_access_token"
     assert_not_includes response.body, "transport_refresh_token"
     assert_not_includes response.body, "old_token"
 
-    form = response.parsed_body.at_css("form#social-completion-form")
-
     assert_equal "post", form["method"]
-    assert_equal(
-      # The browser posts this form, so the target is the public Base origin over
-      # https: the CSP form-action allowlist carries https public origins only.
-      base_app_social_authentication_completion_url(
-        id: "google",
-        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-        protocol: "https",
-      ),
-      form["action"],
-    )
-    assert form.at_css("input[name='social_ceremony_result']")
+    # The receiver renders a same-origin relative action; the browser remains on
+    # the public Base host for the CSRF-protected POST.
+    assert_equal "/social/authentication/completion?id=google", form["action"]
+    assert form.at_css("input[name='result_ref']")
     assert_nil form.at_css("input[name='return_to']")
 
     assert_not_respond_to identity.reload, :token
@@ -273,7 +280,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     sign_in_cycle = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
 
-    assert_equal ClientSignInFlowStatus::CHECKPOINT_PENDING, sign_in_cycle.reload.status_id
+    assert_equal ClientSignInFlowState::COMPLETED, sign_in_cycle.reload.state_id
     assert_equal "social_callback", sign_up_cycle.reload.step
   end
 
@@ -520,7 +527,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     sign_in_cycle = ClientSignInFlow.where(principal_id: existing_user.id).recent_first.first
 
-    assert_equal ClientSignInFlowStatus::CHECKPOINT_PENDING, sign_in_cycle.reload.status_id
+    assert_equal ClientSignInFlowState::COMPLETED, sign_in_cycle.reload.state_id
     assert_equal "social_callback", sign_up_cycle.reload.step
   end
 
@@ -613,8 +620,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :ok
-    assert_includes response.body, "social-completion-form"
+    assert_response :redirect
+    assert_equal "/social/authentication/completion", URI.parse(response.location).path
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientGoogleIdentity.count", 1) do
@@ -735,8 +742,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :ok
-    assert_includes response.body, "social-completion-form"
+    assert_response :redirect
+    assert_equal "/social/authentication/completion", URI.parse(response.location).path
 
     assert_difference("Client.count", 1) do
       assert_difference("ClientAppleIdentity.count", 1) do
@@ -1135,6 +1142,8 @@ class SocialAuthLoginTest
   end
 
   def submit_social_completion_if_present!
+    return if follow_social_completion_redirect_if_present!
+
     return unless response.media_type == "text/html"
     return unless response.body.include?("social-completion-form")
 

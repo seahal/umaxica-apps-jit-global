@@ -7,12 +7,10 @@ class SignUpExpiryRaceTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
   setup do
-    ClientSignUpFlowStatus.ensure_defaults!
-    ClientSignUpFlowCleanupStatus.ensure_defaults!
     @flow = ClientSignUpFlow.create!(
       principal_id: nil,
-      status_id: ClientSignUpFlowStatus::SIGN_IN_HANDOFF_PENDING,
-      step: "sign_in_handoff",
+      status_id: ClientSignUpFlowStatus::FINALIZING,
+      step: "finalizing",
       nonce_digest: ClientSignUpFlow.digest_nonce("expiry-race-nonce"),
       issued_at: 1.minute.ago,
       expires_at: 1.minute.from_now,
@@ -29,7 +27,7 @@ class SignUpExpiryRaceTest < ActiveSupport::TestCase
     stale_flow = ClientSignUpFlow.find(@flow.id)
 
     ClientSignUpFlow.connection_pool.with_connection do
-      ClientSignUpFlow.find(@flow.id).complete_sign_up!(now: Time.current)
+      ClientSignUpFlow.find(@flow.id).complete_sign_up!
     end
 
     result = nil

@@ -81,7 +81,17 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
       @current_user_identity
     end
 
+    def find_for_user_for_link(_client)
+      @current_user_identity
+    end
+
     def find_by_subject(*)
+      raise ActiveRecord::RecordNotUnique if @raise_on_subject_lookup
+
+      @subject_identity
+    end
+
+    def find_by_subject_for_link(*)
       raise ActiveRecord::RecordNotUnique if @raise_on_subject_lookup
 
       @subject_identity

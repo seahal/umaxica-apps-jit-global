@@ -16,6 +16,10 @@ module AuthAuthorizationHeader
     bearer_token(request) || dpop_token(request)
   end
 
+  def value(request)
+    authorization_value_for(request)
+  end
+
   def scheme(request)
     authorization_value_for(request).to_s.split(/\s+/, 2).first.presence
   end

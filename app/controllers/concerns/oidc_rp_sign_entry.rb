@@ -21,11 +21,17 @@ module OidcRpSignEntry
 
   private
 
+  def browser_rp_invalid_credentials_are_ignored?
+    true
+  end
+
   def reject_authenticated_rp_start!
     return unless request.post?
     return unless logged_in? || authenticated_rp_browser?
 
-    render_sign_in_unavailable_while_authenticated
+    response.set_header("Cache-Control", "no-store")
+    render plain: I18n.t("errors.messages.operation_not_permitted"), status: :forbidden,
+           content_type: "text/plain"
   end
 
   def authenticated_rp_browser?

@@ -3,8 +3,8 @@
 
 module OidcRpCookieName
   HOST_COOKIE_PREFIX = "__Host-"
-  ACCESS_BASENAME = "oidc_rp_access"
-  REFRESH_BASENAME = "oidc_rp_refresh"
+  ACCESS_BASENAME = "rp-access"
+  REFRESH_BASENAME = "rp-refresh"
 
   module_function
 

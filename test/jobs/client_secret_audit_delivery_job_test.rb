@@ -89,7 +89,6 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     credential = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Pending", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
     previous_retention = ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"]
@@ -104,7 +103,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     reference = credential.public_id
 
     assert_nil issuance.reload.encrypted_payload
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert_equal :undelivered,
                  ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "withdrawal-before-audit")
     ClientSecretLifecycleJob.perform_now(batch_size: 500)
@@ -202,14 +201,14 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Pending", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), created_at: now - 2.seconds,
+      created_at: now - 2.seconds,
     )
     ClientSecretIssuanceExpiryInvalidator.call!(
       issuance: issuance, executor_job_id: "expiry-test",
       purge_after: 0.000001.seconds,
     )
 
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert_equal :dependent, ClientSecretIssuancePurger.call!(issuance: issuance, executor_job_id: "pending-candidate")
     assert_equal :undelivered, ClientSecretCredentialPurger.call!(credential: candidate, executor_job_id: "purge-test")
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 60)
@@ -331,13 +330,13 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
-    credential = ClientSecretLookupQuery.call(secret: raw)
+    credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
     reference = credential.public_id
     ClientSecretRevocationCommitter.call!(
       actor_context: context, token: token, credential: credential, purge_after: 0.000001.seconds,
     )
 
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert_equal :undelivered,
                  ClientSecretCredentialPurger.call!(credential: credential, executor_job_id: "before-delivery")
     assert ClientSecretCredential.exists?(credential.id)
@@ -366,7 +365,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
 
     assert_nil purged.delivered_at
     assert_not Chronicle.exists?(event_uuid: purged.event_id)
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
 
     assert purged.reload.delivered_at

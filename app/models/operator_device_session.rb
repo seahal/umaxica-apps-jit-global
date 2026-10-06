@@ -42,4 +42,7 @@ class OperatorDeviceSession < OrgTicketRecord
   belongs_to :current_refresh_token, class_name: "OperatorToken", optional: true
   has_many :staff_tokens, class_name: "OperatorToken", foreign_key: :device_session_id,
                           dependent: :restrict_with_exception, inverse_of: :device_session
+  has_many :operator_rp_sessions, foreign_key: :device_session_id,
+                                  dependent: :restrict_with_exception,
+                                  inverse_of: :operator_device_session
 end

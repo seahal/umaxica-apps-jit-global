@@ -14,9 +14,10 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
            :visitor_token_binding_methods, :visitor_token_dbsc_statuses,
            :operators, :operator_statuses, :operator_secret_credential_kinds,
            :operator_secret_credential_statuses, :operator_token_kinds, :operator_token_statuses,
-           :operator_token_binding_methods, :operator_token_dbsc_statuses
+           :operator_token_binding_methods, :operator_token_dbsc_statuses, :operator_passkeys
 
   setup do
+    https!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
@@ -33,7 +34,9 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     VisitorEmail.create!(
       visitor: visitor, address: "com_secret_removal_contact@example.com", confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).finalize_binding!
+    visitor_passkey = visitor.visitor_passkeys.create!(webauthn_id: "com-management-passkey", public_key: "public-key")
+    visitor_passkey.update!(uv_verified_at: Time.current)
     VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::ACTIVE)
     VisitorSecretCredentialStatus.find_or_create_by!(id: VisitorSecretCredentialStatus::DELETED)
     VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::LOGIN)
@@ -48,19 +51,30 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     token = VisitorToken.create!(
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
+      root_login_established_at: Time.current,
       last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:com",
+      last_step_up_credential_ref: visitor_passkey.public_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
     token.update_columns(last_step_up_session_public_id: token.public_id)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_purpose: "step_up", last_step_up_audience: "step_up:com",
+      last_step_up_session_public_id: token.public_id, last_step_up_credential_ref: visitor_passkey.public_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+    install_base_browser_rp_credentials!(surface: "com", host: host, actor: visitor, token: token)
     access_token = AuthenticationToken.encode(
       visitor, host: host, session_public_id: token.public_id,
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
     post base_com_identity_secret_removal_url(removable.public_id, ri: "jp", host: host),
          headers: {
            "Authorization" => "Bearer #{access_token}",
@@ -78,6 +92,8 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! host
     operator = operators(:one)
+    operator_passkey = operator.operator_passkeys.first!
+    operator_passkey.update!(uv_verified_at: Time.current)
     OperatorSecretCredentialStatus.find_or_create_by!(id: OperatorSecretCredentialStatus::ACTIVE)
     OperatorSecretCredentialStatus.find_or_create_by!(id: OperatorSecretCredentialStatus::DELETED)
     OperatorSecretCredentialKind.find_or_create_by!(id: OperatorSecretCredentialKind::LOGIN)
@@ -92,13 +108,25 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
+      root_login_established_at: Time.current,
       last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
+      last_step_up_credential_ref: operator_passkey.external_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
     token.update_columns(last_step_up_session_public_id: token.public_id)
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: operator, session: token)
+    token.update!(
+      last_step_up_at: Time.current, last_step_up_scope: "settings_secret_credential",
+      last_step_up_method: "passkey", last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
+      last_step_up_session_public_id: token.public_id, last_step_up_credential_ref: operator_passkey.external_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+    install_base_browser_rp_credentials!(surface: "org", host: host, actor: operator, token: token)
     access_token = AuthenticationToken.encode(
       operator, host: host, session_public_id: token.public_id,
                 resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
@@ -120,19 +148,24 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
     client = clients(:one)
+    passkey = client.client_passkeys.create!(webauthn_id: "mfa-management-passkey", public_key: "public-key")
     token = ClientToken.create!(
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
+      root_login_established_at: Time.current,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     BaseSelectorAuthority.prepare(surface: :app, principal: client, session: token)
+    install_base_browser_rp_credentials!(surface: "app", host: host, actor: client, token: token)
     _verification, raw_verification = ClientVerification.issue_for_token!(token: token)
     cookies[ClientVerification.cookie_name] = raw_verification
     token.update!(
       last_step_up_at: Time.current, last_step_up_scope: "settings_mfa",
       last_step_up_aal: "aal2", last_step_up_method: "passkey",
       last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-      last_step_up_audience: "step_up:app",
+      last_step_up_audience: "step_up:app", last_step_up_credential_ref: passkey.public_id,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
     access_token = AuthenticationToken.encode(
       client, host: host, session_public_id: token.public_id,

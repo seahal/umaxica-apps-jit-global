@@ -6,6 +6,8 @@ require "test_helper"
 require "base64"
 
 class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationTest
+  include AuthCeremonyEntryHelper
+
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     host! @host
@@ -25,6 +27,12 @@ class Auth::Com::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       public_key: "login_key",
       description: "Login Key",
       status_id: VisitorPasskeyStatus::ACTIVE,
+    )
+    ensure_local_sign_in_admission!(
+      surface: "com",
+      path: auth_com_sign_in_path,
+      params: { ri: "jp" },
+      headers: { "Host" => @host },
     )
   end
 
@@ -192,7 +200,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
 
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
-    assert_operator VisitorToken.where(visitor_id: other_visitor.id).count, :>, 0
+    assert_empty VisitorToken.where(visitor_id: other_visitor.id)
   end
 
   test "verification rejects a disabled discoverable credential" do

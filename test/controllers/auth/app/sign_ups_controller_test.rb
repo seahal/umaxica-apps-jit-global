@@ -182,14 +182,16 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
       intent: "sign_up",
       params: authorize_params,
     ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
   end
 
   def authorize_params
     {
       response_type: "code",
-      client_id: "core-next-rp",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+      client_id: "core-app",
+      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: SecureRandom.urlsafe_base64(16),

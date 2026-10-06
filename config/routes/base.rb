@@ -11,15 +11,17 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :app, as: :app) do
       root "roots#index"
-      # Neutral entry: GET renders one form, POST issues the Base admission and starts Auth at
-      # /sign/in. Base is not its own RP (adr/sign-neutral-entry-and-logout-target-authorization.md).
+      # Self-RP entry: GET renders a neutral form; POST starts the shared OIDC authorization flow.
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
       end
       namespace :sign do
-        resource :completion, only: :create
+        resource :completion, only: %i(show create)
       end
+      get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
+                                                         as: :ceremony_binding_confirmation
+      post "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#create"
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -37,6 +39,7 @@ scope(module: :base, as: :base) do
       resources :billings, only: :index
       resources :secrets, only: %i(index show new create edit update destroy)
       resources :secret_issuances, only: %i(show update destroy) do
+        post :reattempt, on: :member
         resource :presentation, only: :create, controller: :secret_presentations
       end
       resources :groups, only: %i(index show create update destroy) do
@@ -113,19 +116,20 @@ scope(module: :base, as: :base) do
                                only: %i(show new edit create)
       end
 
-      # Base is the AS/IdP only: no first-party browser RP callback routes.
+      # Base is both the authority and a first-party browser RP on this host.
 
       # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
       # OIDC Core; resource names stay nouns.
       namespace(:oauth) do
         resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
-        resource(:userinfo, only: :show, controller: :userinfos)
+        resource(:userinfo, only: %i(show create), controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
       end
 
-      # OIDC AS end-session. Discovery advertises /oidc/logout; this is not an RP callback.
+      # OIDC AS end-session and the self-RP callback.
       namespace(:oidc) do
+        resource(:callback, only: :show)
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -171,7 +175,7 @@ scope(module: :base, as: :base) do
         # Auth host; completion consumes the signed ceremony result.
         namespace :authentication do
           resource :continuation, only: :create
-          resource :completion, only: :create
+          resource :completion, only: %i(show create)
         end
 
         # Non-resourceful exception: OmniAuth middleware owns these fixed provider callback paths.
@@ -204,8 +208,8 @@ scope(module: :base, as: :base) do
       # Step-up verification.
       resource :verification, only: %i(show create)
       namespace :verification do
-        resource :cancellation, only: :create
-        resource :completion, only: :create
+        resource :cancellation, only: %i(show create)
+        resource :completion, only: %i(show create)
         # Choice of a first authenticator. GET shows the methods; POST starts one bootstrap.
         resource :setup, only: %i(show create)
       end
@@ -228,6 +232,8 @@ scope(module: :base, as: :base) do
 
       namespace :identity do
         resource :standing, only: :show
+        resources :passkeys, only: %i(index show new update destroy)
+        resources :totps, only: %i(index show update destroy)
         resource :recovery, only: :show do
           resource :completion, only: :create, module: :recovery
         end
@@ -284,15 +290,20 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :com, as: :com) do
       root "roots#index"
-      # Neutral entry: GET renders one form, POST issues the Base admission and starts Auth at
-      # /sign/in. Base is not its own RP (adr/sign-neutral-entry-and-logout-target-authorization.md).
+      # Self-RP entry: GET renders a neutral form; POST starts the shared OIDC authorization flow.
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
       end
       namespace :sign do
-        resource :completion, only: :create
+        resource :completion, only: %i(show create)
+        namespace :in do
+          resource :limitation, only: %i(show update destroy), controller: :limitations
+        end
       end
+      get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
+                                                         as: :ceremony_binding_confirmation
+      post "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#create"
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -376,19 +387,20 @@ scope(module: :base, as: :base) do
                                only: %i(show new edit create)
       end
 
-      # Base is the AS/IdP only: no first-party browser RP callback routes.
+      # Base is both the authority and a first-party browser RP on this host.
 
       # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
       # OIDC Core; resource names stay nouns.
       namespace(:oauth) do
         resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
-        resource(:userinfo, only: :show, controller: :userinfos)
+        resource(:userinfo, only: %i(show create), controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
       end
 
-      # OIDC AS end-session. Discovery advertises /oidc/logout; this is not an RP callback.
+      # OIDC AS end-session and the self-RP callback.
       namespace(:oidc) do
+        resource(:callback, only: :show)
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -422,8 +434,9 @@ scope(module: :base, as: :base) do
       # Step-up verification.
       resource :verification, only: %i(show create)
       namespace :verification do
-        resource :cancellation, only: :create
-        resource :completion, only: :create
+        resource :cancellation, only: %i(show create)
+        resource :completion, only: %i(show create)
+        resource :setup, only: %i(show create)
       end
 
       resource :identity, only: :show
@@ -434,6 +447,7 @@ scope(module: :base, as: :base) do
       namespace :identity do
         resource :standing, only: :show
         resource :recovery_secret, only: :show, path: "recovery-secret"
+        resources :passkeys, only: %i(index show new update destroy)
         namespace :mfa do
           resource :reset, only: :show
         end
@@ -489,15 +503,20 @@ scope(module: :base, as: :base) do
   ) do
     scope(module: :org, as: :org) do
       root "roots#index"
-      # Neutral entry: GET renders one form, POST issues the Base admission and starts Auth at
-      # /sign/in. Base is not its own RP (adr/sign-neutral-entry-and-logout-target-authorization.md).
+      # Self-RP entry: GET renders a neutral form; POST starts the shared OIDC authorization flow.
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
       end
       namespace :sign do
         resource :completion, only: :create
+        namespace :in do
+          resource :limitation, only: %i(show update destroy), controller: :limitations
+        end
       end
+      get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
+                                                         as: :ceremony_binding_confirmation
+      post "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#create"
 
       # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
       # transport carries every protocol method in the JSON-RPC body, so one create action is the
@@ -633,19 +652,20 @@ scope(module: :base, as: :base) do
                                only: %i(show new edit create)
       end
 
-      # Base is the AS/IdP only: no first-party browser RP callback routes.
+      # Base is both the authority and a first-party browser RP on this host.
 
       # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
       # OIDC Core; resource names stay nouns.
       namespace(:oauth) do
         resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
-        resource(:userinfo, only: :show, controller: :userinfos)
+        resource(:userinfo, only: %i(show create), controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
       end
 
-      # OIDC AS end-session. Discovery advertises /oidc/logout; this is not an RP callback.
+      # OIDC AS end-session and the self-RP callback.
       namespace(:oidc) do
+        resource(:callback, only: :show)
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -679,8 +699,9 @@ scope(module: :base, as: :base) do
       # Step-up verification.
       resource :verification, only: %i(show create)
       namespace :verification do
-        resource :cancellation, only: :create
-        resource :completion, only: :create
+        resource :cancellation, only: %i(show create)
+        resource :completion, only: %i(show create)
+        resource :setup, only: %i(show create)
       end
 
       resource :identity, only: :show
@@ -690,6 +711,7 @@ scope(module: :base, as: :base) do
       resources :sessions, controller: "identity/sessions", only: %i(index show destroy)
       namespace :identity do
         resource :standing, only: :show
+        resources :passkeys, only: %i(index show new update destroy)
         namespace :mfa do
           resource :reset, only: :show
         end

@@ -17,7 +17,6 @@ module Base
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
 
-          before_action :authenticate_client!
           before_action :preserve_email_registration_redirect_parameter, only: :create
           before_action :authorize_email_redelivery!, only: :create
           step_up only: :create, bootstrap: true

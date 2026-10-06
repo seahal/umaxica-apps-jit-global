@@ -25,6 +25,8 @@ class RetentionPurgeJob < ApplicationJob
   RETAINABLE_MODELS = %w(
     AppPreferenceChronicle ComPreferenceChronicle OrgPreferenceChronicle
     ClientChronicle OperatorChronicle
+    ClientSessionLimitResolutionTransaction VisitorSessionLimitResolutionTransaction
+    OperatorSessionLimitResolutionTransaction
     ClientSignInFlow VisitorSignInFlow OperatorSignInFlow
     ClientSignOutFlow VisitorSignOutFlow OperatorSignOutFlow
     ClientWithdrawalFlow VisitorWithdrawalFlow
@@ -91,8 +93,19 @@ class RetentionPurgeJob < ApplicationJob
 
       next unless klass.column_names.include?("purge_eligible_at")
 
-      if [ClientSignInFlow, ClientSignUpFlow].include?(klass)
+      if [ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow].include?(klass)
+        purge_sign_in_flows(klass, now: now, batch_size: limit)
+        next
+      end
+
+      if klass == ClientSignUpFlow
         purge_client_authentication_flows(klass, now: now, batch_size: limit)
+        next
+      end
+
+      if [ClientSessionLimitResolutionTransaction, VisitorSessionLimitResolutionTransaction,
+          OperatorSessionLimitResolutionTransaction,].include?(klass)
+        purge_session_limit_resolutions(klass, now: now, batch_size: limit)
         next
       end
 
@@ -126,6 +139,39 @@ class RetentionPurgeJob < ApplicationJob
         batch.where(public_id: references - protected_references).delete_all
       end
     end
+  end
+
+  def purge_sign_in_flows(klass, now:, batch_size:)
+    klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
+      klass.transaction do
+        batch.lock.to_a.each do |flow|
+          next unless AuthAdmissionBindingPurger.purge_for_parent!(
+            # The flow itself is selected only after its model-owned retention
+            # deadline. Admission terminal facts need only cross the same
+            # already-established boundary before the restrictive parent FK
+            # can be removed.
+            parent: flow, now:, retention_period: 1.second,
+          )
+
+          klass.where(id: flow.id).delete_all
+        end
+      end
+    end
+  end
+
+  def purge_session_limit_resolutions(klass, now:, batch_size:)
+    flow_class =
+      case klass.name
+      when "ClientSessionLimitResolutionTransaction" then ClientSignInFlow
+      when "VisitorSessionLimitResolutionTransaction" then VisitorSignInFlow
+      when "OperatorSessionLimitResolutionTransaction" then OperatorSignInFlow
+      else
+        raise FlowConfigurationError, "unsupported session-limit resolution class: #{klass.name}"
+      end
+    terminal_states = [klass::RESOLVED, klass::EXPIRED, klass::CANCELLED]
+    parent_ids = flow_class.where(purge_eligible_at: ..now).select(:id)
+    klass.where(state_id: terminal_states, sign_in_flow_id: parent_ids, purge_eligible_at: ..now)
+      .in_batches(of: batch_size).delete_all
   end
 
   def normalized_batch_size(value)

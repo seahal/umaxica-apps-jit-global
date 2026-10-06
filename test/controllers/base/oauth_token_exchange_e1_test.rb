@@ -9,7 +9,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     @user_session_token = ClientToken.create!(user: @user, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(@code_verifier), padding: false)
-    @client = OidcClientRegistry.find("core-next-rp")
+    @client = OidcClientRegistry.find("core-app")
     @redirect_uri = @client.redirect_uris.first
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
   end
@@ -20,14 +20,14 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     owner_body = nil
     OidcClientRegistry.stub(
       :authenticate_assertion,
-      ->(cid, assertion, token_url:) { cid == "core-next-rp" && assertion.present? && token_url.present? },
+      ->(cid, assertion, token_url:) { cid == "core-app" && assertion.present? && token_url.present? },
     ) do
       post base_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
              redirect_uri: @redirect_uri,
-             client_id: "core-next-rp",
+             client_id: "core-app",
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: "test-client-assertion",
              code_verifier: @code_verifier,
@@ -53,20 +53,20 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     assert_operator access_token.fetch("iat"), :>=, event_at
     owner_session = ClientRpSession.order(:created_at).last
     owner_digest = owner_session.refresh_token_digest
-    warp_client = OidcClientRegistry.find("side-app")
+    warp_client = OidcClientRegistry.find("warp-app")
 
     OidcClientRegistry.stub(
       :authenticate_assertion,
-      ->(cid, assertion, token_url:) { cid == "side-app" && assertion.present? && token_url.present? },
+      ->(cid, assertion, token_url:) { cid == "warp-app" && assertion.present? && token_url.present? },
     ) do
       post base_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
              redirect_uri: warp_client.redirect_uris.first,
-             client_id: "side-app",
+             client_id: "warp-app",
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-             client_assertion: "side-app-client-assertion",
+             client_assertion: "warp-app-client-assertion",
              code_verifier: @code_verifier,
            }
     end
@@ -88,14 +88,14 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
 
     OidcClientRegistry.stub(
       :authenticate_assertion,
-      ->(cid, assertion, token_url:) { cid == "core-next-rp" && assertion.present? && token_url.present? },
+      ->(cid, assertion, token_url:) { cid == "core-app" && assertion.present? && token_url.present? },
     ) do
       post base_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
              redirect_uri: @redirect_uri,
-             client_id: "core-next-rp",
+             client_id: "core-app",
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: "test-client-assertion",
              code_verifier: @code_verifier,
@@ -108,7 +108,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
              grant_type: "authorization_code",
              code: code_record.code,
              redirect_uri: @redirect_uri,
-             client_id: "core-next-rp",
+             client_id: "core-app",
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: "test-client-assertion",
              code_verifier: @code_verifier,
@@ -128,7 +128,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     OidcAuthorizationCodeIssuer.call(
       client: @client,
       params: {
-        client_id: "core-next-rp",
+        client_id: "core-app",
         redirect_uri: @redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",

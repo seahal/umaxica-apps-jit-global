@@ -10,8 +10,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_operator!
-
       public
 
       def show
@@ -27,6 +25,8 @@ module Base
 
       def create
         authorize!(current_operator, to: :show?)
+        return redirect_to_bootstrap_choice if available_step_up_methods(current_operator).blank?
+
         redirect_to_step_up_ceremony!(
           actor: current_operator, token: current_session_token, allowed_scopes: StepUpScopeCatalog::ORG,
           sign_url_builder: ->(**query) {
@@ -41,6 +41,17 @@ module Base
       end
 
       private
+
+      def redirect_to_bootstrap_choice
+        return if reject_step_up_for_authentication_context!
+
+        scope = requested_step_up_scope(StepUpScopeCatalog::ORG)
+        requested_step_up_return_to(scope: scope, allowed_scopes: StepUpScopeCatalog::ORG)
+        redirect_to(
+          base_org_verification_setup_path(scope: scope, pt: params[:pt], ri: params[:ri]),
+          status: :see_other,
+        )
+      end
 
       def bootstrap_registration_methods = [:passkey]
 

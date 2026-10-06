@@ -118,7 +118,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
                  error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
   end
 
-  test "token device session reference must exist while remaining nullable" do
+  test "token device session reference must exist and cannot be NULL" do
     missing_session_id = OperatorDeviceSession.lease_connection.select_value(
       "SELECT nextval(pg_get_serial_sequence('operator_device_sessions', 'id'))",
     )
@@ -133,9 +133,13 @@ class OperatorTokenTest < ActiveSupport::TestCase
     assert_includes %w(fk_operator_tokens_on_device_session_id fk_operator_tokens_on_staff_id_and_device_session_id),
                     error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
 
-    @token.update_column(:device_session_id, nil)
+    assert_raises(ActiveRecord::NotNullViolation) do
+      OperatorToken.transaction(requires_new: true) do
+        @token.update_column(:device_session_id, nil)
+      end
+    end
 
-    assert_nil @token.reload.device_session_id
+    assert_not_nil @token.reload.device_session_id
   end
 
   test "token device session must belong to the same staff" do

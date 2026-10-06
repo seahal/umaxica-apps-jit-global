@@ -31,7 +31,7 @@ class ClientSecretCredentialRebuildTest < ActiveSupport::TestCase
 
   test "whole secret lookup and password verification accept exact server generated value only" do
     raw = SecureRandom.base58(32)
-    credential = ClientSecretCredential.new(password: raw, lookup_digest: SignSecretLookupDigest.digest(raw))
+    credential = ClientSecretCredential.new(password: raw)
 
     assert credential.matches_secret?(raw)
     assert_not credential.matches_secret?(SecureRandom.base58(32))
@@ -42,7 +42,7 @@ class ClientSecretCredentialRebuildTest < ActiveSupport::TestCase
 
   test "secret format rejects adjacent lengths missing values types and forbidden alphabet" do
     raw = "a" * 32
-    credential = ClientSecretCredential.new(password: raw, lookup_digest: SignSecretLookupDigest.digest(raw))
+    credential = ClientSecretCredential.new(password: raw)
 
     ["a" * 31, "a" * 33, "", nil, 0, [], {}, ("a" * 31) + "\0", "0" * 32].each do |input|
       assert_not credential.matches_secret?(input)
@@ -53,7 +53,7 @@ class ClientSecretCredentialRebuildTest < ActiveSupport::TestCase
 
   test "verification rejects invalid UTF-8 and UTF-16 input without raising or normalizing" do
     raw = "a" * 32
-    credential = ClientSecretCredential.new(password: raw, lookup_digest: SignSecretLookupDigest.digest(raw))
+    credential = ClientSecretCredential.new(password: raw)
 
     ["\xFF".b.force_encoding("UTF-8") * 32, raw.encode("UTF-16LE")].each do |input|
       assert_not credential.matches_secret?(input)
@@ -79,7 +79,6 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     credential = ClientSecretCredential.create!(
       client: owner, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
 
     credential.reload
@@ -174,7 +173,6 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     credential = ClientSecretCredential.create!(
       client: owner, issuance: issuance, name: "Pending Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
@@ -185,7 +183,7 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
     assert_equal 0, issuance.reserved_count(at: Client.database_now)
     assert credential.reload.revoked_at
     assert_operator credential.discard_at, :<=, Client.database_now
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert ClientSecretAuditOutbox.exists?(credential_ref: credential.public_id, event_name: "secret.revoked")
     assert ClientSecretAuditOutbox.exists?(credential_ref: credential.public_id, event_name: "secret.discarded")
   ensure

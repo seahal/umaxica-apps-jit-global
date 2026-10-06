@@ -62,7 +62,7 @@ class ClientSecretPresentationIssuer
         values.map do |raw|
           ClientSecretCredential.create!(
             client: context.subject, issuance: owned, name: "Secret",
-            password: raw, lookup_digest: SignSecretLookupDigest.digest(raw),
+            password: raw,
           ).public_id
         end
       owned.update!(
@@ -131,8 +131,11 @@ class ClientSecretPresentationIssuer
 
               scope = (owned.origin == "manual") ? "settings_secret_credential" : "settings_passkey"
               requirement = StepUpRequirement.new(
-                scope: scope, purpose: "step_up", audience: "step_up:app", session_binding: current.public_id,
-                token_binding: current.public_id, require_session_binding: true,
+                scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+                phishing_resistant_required: false, user_verification_required: false,
+                full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app", session_binding: current.public_id,
+                token_binding: current.public_id, require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+                actor_ref: context.subject.public_id, resource_ref: nil, tenant_ref: nil,
               )
               unless current.currently_usable?(ClientToken.database_now) && !current.restricted? &&
                   StepUpResolver.call(

@@ -14,7 +14,6 @@ module Base
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
 
-        before_action :authenticate_visitor!, only: %i(new update)
         before_action :withdrawal_ceremony_required!, only: %i(edit create destroy)
         before_action :authorize_withdrawal!, only: %i(new update)
         before_action :authorize_withdrawal_ceremony!, only: %i(edit create destroy)

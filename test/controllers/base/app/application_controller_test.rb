@@ -13,11 +13,10 @@ module Base
         assert_includes controller.class, RateLimit
         assert_includes controller.class, ::PreferenceGlobal
         assert_includes controller.class, ::PreferenceAdoption
-        assert_includes controller.class, ::AuthenticationClient
         assert_includes controller.class, ::AuthorizationClient
         assert_includes controller.class, ::VerificationClient
         assert_includes controller.class, ActionPolicy::Controller
-        assert_not_includes controller.class, ::OidcSsoInitiator
+        assert_includes controller.class, ::OidcSsoInitiator
         assert_includes controller.class, ::ActorSupport
         assert_includes controller.class, ::Finisher
       end
@@ -69,11 +68,10 @@ module Base
         assert_includes around_filters, :with_actor_lifecycle
       end
 
-      def test_trusts_only_the_base_app_origin_by_default
+      def test_does_not_add_cross_host_origins_to_rails_csrf_allowlist
         trusted_origins = ApplicationController.forgery_protection_trusted_origins
 
-        assert_includes trusted_origins, "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")}"
-        assert_not_includes trusted_origins, "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}"
+        assert_empty trusted_origins
       end
     end
   end

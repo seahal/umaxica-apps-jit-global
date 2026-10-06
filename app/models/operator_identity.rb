@@ -36,6 +36,8 @@ class OperatorIdentity < OrgRpRecord
                               inverse_of: :operator_identities
   has_one :agent, dependent: :restrict_with_error, inverse_of: :operator_identity
   has_many :agent_assignments, dependent: :destroy, inverse_of: :operator_identity
+  has_many :oidc_identity_bindings, class_name: "OperatorOidcIdentityBinding",
+                                    dependent: :restrict_with_error, inverse_of: :operator_identity
 
   validates :issuer, :subject, :audience, :source_record_id, presence: true
   validates :public_id, uniqueness: true

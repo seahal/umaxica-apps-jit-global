@@ -211,7 +211,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
 
   # Deployments publish this family as PUBLIC_CORE_*_URL. Without this fallback the core
   # origins kept the jpx.umaxica.* development defaults, so production Host Authorization
-  # and the core-next-rp redirect URIs named jpx while config/routes/core.rb routed the
+  # and the core-app redirect URIs named jpx while config/routes/core.rb routed the
   # surface on the PUBLIC_CORE_* value.
   test "core origins fall back to PUBLIC_CORE_*_URL instead of the jpx default" do
     env = {

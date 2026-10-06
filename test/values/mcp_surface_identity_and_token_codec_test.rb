@@ -15,6 +15,10 @@ class McpSurfaceIdentityAndTokenCodecTest < ActiveSupport::TestCase
 
     assert_match(/unsupported MCP realm: martian/, realm_error.message)
 
+    retired_realm_error = assert_raises(ArgumentError) { McpSurfaceIdentity.new(realm: "side", surface: "app") }
+
+    assert_match(/unsupported MCP realm: side/, retired_realm_error.message)
+
     surface_error = assert_raises(ArgumentError) { McpSurfaceIdentity.new(realm: "base", surface: "martian") }
 
     assert_match(/unsupported MCP surface: martian/, surface_error.message)
@@ -40,7 +44,7 @@ class McpSurfaceIdentityAndTokenCodecTest < ActiveSupport::TestCase
     base_app = McpSurfaceIdentity.new(realm: "base", surface: "app")
     same = McpSurfaceIdentity.new(realm: "base", surface: "app")
     other_surface = McpSurfaceIdentity.new(realm: "base", surface: "com")
-    other_realm = McpSurfaceIdentity.new(realm: "side", surface: "app")
+    other_realm = McpSurfaceIdentity.new(realm: "warp", surface: "app")
 
     assert_equal base_app, same
     assert_equal base_app.hash, same.hash

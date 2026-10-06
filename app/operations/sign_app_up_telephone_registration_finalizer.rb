@@ -42,6 +42,7 @@ class SignAppUpTelephoneRegistrationFinalizer
       telephone.confirm_using_mfa = "1"
       telephone.clear_otp
       telephone.user_telephone_status_id = ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP
+      telephone.binding_finalized_at = ClientTelephone.database_now
       telephone.save!
 
       if user.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP

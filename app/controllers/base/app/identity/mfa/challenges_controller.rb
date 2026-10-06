@@ -12,7 +12,6 @@ module Base
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
 
-          before_action :authenticate_client!
           before_action :authorize_mfa_challenge!, only: %i(show update)
           def show
             render inertia: true, props: mfa_challenge_page_props

@@ -20,7 +20,7 @@ class AuthMethodGuard
   ].freeze
 
   def self.remaining_count(actor, excluding: nil)
-    AuthenticationCredentialInventory.call(actor, excluding: excluding, reload: true).aal1_method_count
+    AuthenticationCredentialInventory.call(actor, excluding: excluding, reload: true).sign_in_method_count
   end
 
   def self.last_method?(actor, excluding: nil)
@@ -29,12 +29,12 @@ class AuthMethodGuard
 
   def self.can_remove_passkey?(actor, passkey)
     inventory = AuthenticationCredentialInventory.call(actor, excluding: passkey, reload: true)
-    inventory.retains_aal1? && inventory.retains_uv_step_up?
+    inventory.retains_sign_in? && inventory.retains_uv_step_up?
   end
 
   def self.can_remove_email?(actor, email)
     inventory = AuthenticationCredentialInventory.call(actor, excluding: email, reload: true)
-    inventory.retains_contactability? && inventory.retains_aal1? && inventory.retains_uv_step_up?
+    inventory.retains_sign_in? && inventory.retains_uv_step_up?
   end
 
   def self.can_remove_telephone?(actor, telephone)
@@ -46,6 +46,7 @@ class AuthMethodGuard
   end
 
   def self.can_remove_secret_credential?(actor, secret_credential)
-    AuthenticationCredentialInventory.call(actor, excluding: secret_credential, reload: true).retains_aal1?
+    AuthenticationCredentialInventory.call(actor, excluding: secret_credential, reload: true).retains_sign_in? &&
+      AuthenticationCredentialInventory.call(actor, excluding: secret_credential, reload: true).retains_uv_step_up?
   end
 end

@@ -114,71 +114,14 @@ module SignOutNotice
   end
 
   def render_cross_origin_sign_out_handoff(target_url:, transaction:)
-    @sign_out_handoff_url = target_url
-    @logout_transaction = transaction
-
-    render_sign_out_handoff("sign/shared/sign_outs/handoff")
-  end
-
-  # Cross-host sign-out cleanup cannot carry a same-origin Rails CSRF token after
-  # one surface has already cleared its own session. The one-shot logout challenge
-  # is the proof for these coordination posts; fetch metadata is still checked
-  # separately before any local cleanup runs.
-  def verified_request?
-    coordinated_sign_out_challenge_verifies_request? || super
-  end
-
-  def verify_coordinated_sign_out_post!(trusted_origins:)
-    return unless request.post? && params[:logout_challenge].present?
-
-    sec_fetch_site = request.headers["Sec-Fetch-Site"].to_s.downcase.presence
-    origin = request.origin.to_s.presence
-
-    trusted_origin_match = origin.present? && trusted_origins.include?(origin)
-    challenge_verified = coordinated_sign_out_challenge_verifies_request?
-    allowed_fetch_site = %w(same-origin same-site).include?(sec_fetch_site)
-    allowed_origin = origin.blank? || trusted_origin_match || (origin == "null" && challenge_verified)
-
-    unless allowed_fetch_site && allowed_origin
-      warn_sign_out_event(
-        "auth.sign_out.fetch_metadata.rejected",
-        sec_fetch_site: sec_fetch_site,
-        origin_host: origin_host_for_sign_out_log(origin),
-        trusted_origin_match: trusted_origin_match,
-        result: "rejected",
-        reason: fetch_metadata_rejection_reason(sec_fetch_site, allowed_origin),
-      )
-      render "auth/shared/sign_outs/unavailable", status: :forbidden, layout: false
-      return
-    end
-
-    log_sign_out_event(
-      "auth.sign_out.fetch_metadata.accepted",
-      sec_fetch_site: sec_fetch_site,
-      origin_host: origin_host_for_sign_out_log(origin),
-      trusted_origin_match: trusted_origin_match,
-      result: "accepted",
-    )
-  end
-
-  def coordinated_sign_out_challenge_verifies_request?
-    return false unless request.post? && params[:logout_challenge].present?
-
-    transaction = coordinated_sign_out_challenge_transaction
-    return false unless transaction
-    return false if transaction.expired?
-    return false if transaction.finalized? || transaction.failed?
-
-    transaction.expected_step.present?
-  end
-
-  def coordinated_sign_out_challenge_transaction
-    return @coordinated_sign_out_challenge_transaction if defined?(@coordinated_sign_out_challenge_transaction)
-
-    @coordinated_sign_out_challenge_transaction =
-      AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: params.expect(:logout_challenge))
-  rescue ActiveRecord::RecordNotFound, ArgumentError, ActionController::BadRequest
-    @coordinated_sign_out_challenge_transaction = nil
+    uri = URI.parse(target_url.to_s)
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    query["logout_challenge"] = transaction.logout_challenge
+    query["ri"] = params[:ri].to_s if params[:ri].present?
+    uri.query = query.to_query
+    redirect_to(uri.to_s, allow_other_host: true, status: :see_other)
+  rescue URI::InvalidURIError
+    render "auth/shared/sign_outs/unavailable", status: :unprocessable_content, layout: false
   end
 
   def log_sign_out_event(event_name, transaction: nil, **payload)
@@ -193,7 +136,6 @@ module SignOutNotice
     transaction ||= @logout_transaction if defined?(@logout_transaction)
     {
       request_id: request.request_id,
-      transaction_public_id: transaction&.public_id,
       origin_surface: transaction&.origin_surface || logout_origin_surface_for_logs,
       current_surface: logout_origin_surface_for_logs,
       next_surface: sign_out_next_surface_for_logs(transaction),
@@ -224,6 +166,12 @@ module SignOutNotice
     case transaction.expected_step
     when AcmeLogoutTransaction::STEP_ACME_CLEARED then "acme"
     when AcmeLogoutTransaction::STEP_SIGN_CLEARED then "sign"
+    when AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+         AcmeLogoutTransaction::STEP_AUTHORITY_CLEANUP_ISSUED
+      "base"
+    when AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED,
+         AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED
+      transaction.origin_surface
     when AcmeLogoutTransaction::STEP_FINALIZED then transaction.origin_surface
     end
   end

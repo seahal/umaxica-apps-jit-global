@@ -17,6 +17,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -25,7 +27,6 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Confirmation cancellation race", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     ClientSecretAuditOutbox.transaction do
       at = Client.database_now
@@ -113,6 +114,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -120,16 +123,21 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     )
     ClientSecretPresentationIssuer.prepare!(actor_context: context, token: token, issuance: issuance)
     raw = ClientSecretPresentationIssuer.call!(actor_context: context, token: token, issuance: issuance).first
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
     payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: admission.reference, surface: "app", expected_intent: "sign_in",
+      binding:, raw_auth_sid: raw_sid,
     )
     flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
     )
 
-    assert_nil ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+    assert_nil ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)
     ready = Queue.new
     release = Queue.new
     ActiveRecord::Base.connection_handler.clear_active_connections!
@@ -147,7 +155,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
                   actor_context: context.with(subject: owner), token: token, issuance: issuance,
                 ).public_id
               else
-                ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)&.public_id
+                ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)&.public_id
               end
             end
           ensure
@@ -171,14 +179,14 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       assert_operator candidate.claimed_at, :>=, candidate.confirmed_at
     else
       assert_nil candidate.claimed_at
-      assert ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+      assert ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)
     end
     claim_operation = candidate.reload.claim_operation_id
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
 
     assert_equal claim_operation, candidate.reload.claim_operation_id
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
-    assert_nil ClientSecretClaimCommitter.call!(secret: raw, flow: flow, ceremony: ceremony)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
+    assert_nil ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)
     events = ClientSecretAuditOutbox.where(client_ref: actor.public_id)
 
     assert_equal 1, events.where(event_name: "secret.storage_declared").count
@@ -192,6 +200,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
   ensure
     2.times { release << true } if release
     futures&.each { |future| future.wait(10) }
+    ClientAuthAdmissionBinding.where(sign_in_flow_id: flow&.id).delete_all if flow&.id
     ceremony&.destroy!
     flow&.destroy!
     if actor
@@ -210,6 +219,8 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -218,7 +229,6 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Concurrent confirmation", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     ClientSecretAuditOutbox.transaction do
       at = Client.database_now

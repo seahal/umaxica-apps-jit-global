@@ -17,11 +17,11 @@ module Base
           include EnforcementIdentifierGate
           include VerificationClient
           include StepUpCeremonyLogging
+          include BaseStepUpTransactionMarker
 
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
 
-          before_action :authenticate_client!
           before_action :preserve_email_registration_redirect_parameter, only: %i(new create edit update resend)
           before_action :authorize_email_registration!, only: %i(new create edit update)
           step_up only: %i(new create edit update), bootstrap: true
@@ -134,8 +134,12 @@ module Base
           end
 
           def open_email_bootstrap_transaction
-            reference = session[:base_step_up_transaction_ref]
-            return unless reference.is_a?(String) && reference.present?
+            step_up_session = ClientStepUpSession.find_by(user_token_id: current_session_token.id)
+            reference = step_up_session&.step_up_ceremony_transaction_ref
+            return unless reference.is_a?(String) && reference.present? &&
+              base_step_up_transaction_marker(
+                reference:, surface: "app", actor: current_client, token: current_session_token,
+              )
 
             ClientStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
               transaction = ClientStepUpCeremonyTransaction.find_by(
@@ -159,7 +163,6 @@ module Base
             IdentityEmailBootstrapCommitter.call!(
               actor: current_client, token: current_session_token, transaction: transaction, credential: user_email,
             )
-            session.delete(:base_step_up_transaction_ref)
             log_step_up_ceremony(
               "bootstrap_completed", transaction: transaction, outcome: "completed", method: "email_otp",
                                      state_before: "pending", state_after: transaction.status,

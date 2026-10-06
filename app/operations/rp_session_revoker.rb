@@ -44,19 +44,10 @@ class RpSessionRevoker < ApplicationService
     return 0 if session.blank? || session.revoked?
 
     with_writing_connection(session.class) do
-      parent = session.parent_token
-      return 0 if parent.blank?
-
-      # Token exchange and refresh rotation lock the Browser Session before
-      # the RP Session. Keep the child-only revoke in that order so a revoke
-      # cannot race a first exchange or a refresh that already owns the parent.
-      parent.with_lock do
-        session.with_lock do
-          return 0 if session.revoked?
-
-          session.revoke!(status: status, now: now)
-        end
-      end
+      # Token exchange and refresh rotation lock the stable Browser Session,
+      # then its current root token, then the RP Session. `revoke!` applies the
+      # same order and refuses a missing or ambiguous current token.
+      session.revoke!(status: status, now: now)
     end
     1
   end
@@ -65,23 +56,27 @@ class RpSessionRevoker < ApplicationService
     return 0 if token.blank?
 
     with_writing_connection(token.class) do
-      association = rp_sessions_association_for(token)
+      device_session = device_session_for(token)
+      raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session
 
-      # Token exchange locks the parent before it looks up or creates an RP
-      # Session. Keep browser-session revocation in that same order; locking a
-      # child first can deadlock when an exchange already owns the parent and is
-      # waiting for that child. The ordered child lock also makes concurrent
-      # multi-child revocations deterministic.
-      token.with_lock do
-        sessions =
-          token.public_send(association)
-            .currently_usable_at(now)
-            .order(:id)
-            .lock
-            .to_a
-        sessions.each { |session| session.revoke!(status: status, now: now) }
-        revoke_parent_token!(token)
-        sessions.size
+      # Lock the stable Browser Session first. The current root token and all
+      # RP children are then observed under that same lock; a historical token
+      # row is never treated as the session authority.
+      device_session.with_lock do
+        current_token = current_token_for(device_session)
+        raise RpSession::IssuanceRejected, "Browser Session current root token is missing" unless current_token
+
+        current_token.with_lock do
+          sessions =
+            rp_sessions_for(device_session)
+              .currently_usable_at(now)
+              .order(:id)
+              .lock
+              .to_a
+          sessions.each { |session| session.revoke!(status: status, now: now) }
+          revoke_parent_token!(current_token)
+          sessions.size
+        end
       end
     end
   end
@@ -121,13 +116,33 @@ class RpSessionRevoker < ApplicationService
     owner
   end
 
-  def rp_sessions_association_for(token)
+  def device_session_for(token)
     case token
-    when ClientToken then :client_rp_sessions
-    when VisitorToken then :visitor_rp_sessions
-    when OperatorToken then :operator_rp_sessions
+    when ClientToken then ClientDeviceSession.find_by(id: token.device_session_id)
+    when VisitorToken then VisitorDeviceSession.find_by(id: token.device_session_id)
+    when OperatorToken then OperatorDeviceSession.find_by(id: token.device_session_id)
     else
       raise ArgumentError, "unsupported Base Browser Session class: #{token.class.name}"
+    end
+  end
+
+  def current_token_for(device_session)
+    case device_session
+    when ClientDeviceSession then ClientToken.find_by(id: device_session.current_refresh_token_id)
+    when VisitorDeviceSession then VisitorToken.find_by(id: device_session.current_refresh_token_id)
+    when OperatorDeviceSession then OperatorToken.find_by(id: device_session.current_refresh_token_id)
+    else
+      raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
+    end
+  end
+
+  def rp_sessions_for(device_session)
+    case device_session
+    when ClientDeviceSession then ClientRpSession.where(device_session_id: device_session.id)
+    when VisitorDeviceSession then VisitorRpSession.where(device_session_id: device_session.id)
+    when OperatorDeviceSession then OperatorRpSession.where(device_session_id: device_session.id)
+    else
+      raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
     end
   end
 end

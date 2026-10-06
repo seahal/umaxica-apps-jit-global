@@ -14,6 +14,7 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    @base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.umaxica.org")
     host! @host
     @staff = operators(:one)
     # Clean up any existing tokens for this staff
@@ -58,23 +59,21 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     Rails.application.reload_routes!
   end
 
-  # The page opens only for a verified sign-in flow waiting on the session limit, reached here
-  # through the real Entra + passkey ceremony (adr/root-login-establishment-boundary.md).
+  # The Auth host only performs the credential ceremony. Base owns the durable session-limit
+  # resolution page reached after the real Entra + passkey ceremony.
 
-  test "show for a pending sign-in lists the active session and offers only cancellation" do
+  test "show for a pending sign-in lists the active session and offers resolution" do
     existing = enter_pending_session_limit!
 
-    get auth_org_sign_in_session_url(ri: "jp")
+    get base_org_sign_in_limitation_url(ri: "jp")
 
     assert_response :success
-    assert_equal "auth/org/sign/in/sessions/show", inertia_component
-    assert_equal auth_org_sign_in_session_path(ri: "jp"), inertia_props.fetch("form_action")
-    assert_nil inertia_props["revoke_session_ids"]
-    assert_not inertia_props.key?("back_link")
-    assert_equal I18n.t("session_limit.edit.cancel_logout"), inertia_props.fetch("cancel_logout_label")
-    rendered_ref = inertia_props.fetch("sessions").first.fetch("ref")
+    assert_equal "base/org/sign/in/limitations/show", inertia_component
+    assert_equal base_org_sign_in_limitation_path(ri: "jp"), inertia_props.fetch("action")
+    assert_equal I18n.t("session_limit.edit.cancel_logout"), inertia_props.fetch("cancel_label")
+    rendered_ref = inertia_props.fetch("sessions").first.fetch("session_ref")
 
-    assert_equal existing.first, OperatorToken.find_from_signed_ref(rendered_ref)
+    assert_equal existing.first, SessionLimitResolutionTokenRef.find_operator_token(rendered_ref)
   end
 
   test "show with active session returns forbidden" do
@@ -117,17 +116,18 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
   test "update without selections keeps the flow pending" do
     enter_pending_session_limit!
 
-    patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: [] }
+    patch base_org_sign_in_limitation_url(ri: "jp"), params: { revoke_refs: [] }
 
     assert_response :unprocessable_content
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "update revokes the selected session and commits the waiting sign-in" do
     existing = enter_pending_session_limit!
 
     assert_difference(-> { OperatorToken.where(staff_id: @staff.id).count }, 1) do
-      patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: [existing.first.signed_ref] }
+      patch base_org_sign_in_limitation_url(ri: "jp"),
+            params: { session_ref: resolution_ref(existing.first) }
     end
 
     assert_response :redirect
@@ -142,11 +142,11 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     enter_pending_session_limit!
 
     assert_no_difference(-> { OperatorToken.where(staff_id: @staff.id).count }) do
-      patch auth_org_sign_in_session_url(ri: "jp"), params: { ref: "totally_invalid_ref" }
+      patch base_org_sign_in_limitation_url(ri: "jp"), params: { session_ref: "totally_invalid_ref" }
     end
 
-    assert_response :success
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_response :unprocessable_content
+    assert_predicate latest_resolution, :open?
   end
 
   test "update ignores ref belonging to another staff" do
@@ -155,10 +155,10 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     other_token = OperatorToken.create!(staff: other_staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
     enter_pending_session_limit!
 
-    patch auth_org_sign_in_session_url(ri: "jp"), params: { revoke_refs: [other_token.signed_ref] }
+    patch base_org_sign_in_limitation_url(ri: "jp"), params: { session_ref: resolution_ref(other_token) }
 
     assert_predicate other_token.reload, :currently_usable?
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    assert_predicate latest_resolution, :open?
   end
 
   test "destroy without authentication redirects to login" do
@@ -181,38 +181,40 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
     existing = enter_pending_session_limit!
     flow = latest_flow
 
-    delete auth_org_sign_in_session_url(ri: "jp")
+    delete base_org_sign_in_limitation_url(ri: "jp")
 
     assert_response :see_other
-    assert_redirected_to auth_org_sign_in_url(ri: "jp")
-    assert_predicate flow.reload, :sign_in_failed?
+    assert_redirected_to base_org_sign_show_path(ri: "jp")
+    assert_predicate flow.reload, :sign_in_cancelled?
+    assert_predicate latest_resolution.reload, :cancelled?
     assert(existing.all? { |token| token.reload.currently_usable? })
   end
 
-  test "destroy with ref param revokes that session and re-renders show" do
+  test "update with a selected session revokes it and completes the pending sign-in" do
     existing = enter_pending_session_limit!
 
-    delete auth_org_sign_in_session_url(ri: "jp"), params: { ref: existing.first.signed_ref }
+    patch base_org_sign_in_limitation_url(ri: "jp"), params: { session_ref: resolution_ref(existing.first) }
 
-    assert_response :success
+    assert_response :see_other
     assert_not existing.first.reload.currently_usable?
   end
 
-  test "destroy with ref belonging to another staff does not revoke" do
+  test "update with a session belonging to another staff does not revoke" do
     other_staff = operators(:two)
     OperatorToken.where(staff: other_staff).delete_all
     other_token = OperatorToken.create!(staff: other_staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
     enter_pending_session_limit!
 
-    delete auth_org_sign_in_session_url(ri: "jp"), params: { ref: other_token.signed_ref }
+    patch base_org_sign_in_limitation_url(ri: "jp"), params: { session_ref: resolution_ref(other_token) }
 
     assert_predicate other_token.reload, :currently_usable?
+    assert_predicate latest_resolution, :open?
   end
 
   private
 
   # Fills the one-session limit, then completes Entra and the passkey stage so this browser holds a
-  # verified flow in SESSION_LIMIT_PENDING. Returns the session that fills the limit.
+  # verified flow with an open resolution child. Returns the session that fills the limit.
   def enter_pending_session_limit!
     @staff.update!(status_id: OperatorStatus::ACTIVE)
     existing = Array.new(OperatorToken::MAX_SESSIONS_PER_STAFF) { create_active_session(@staff) }
@@ -242,8 +244,27 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
       )
     end
 
-    assert_equal "session_limit_pending", response.parsed_body.fetch("status")
-    assert_predicate latest_flow, :sign_in_session_limit_pending?
+    get(response.parsed_body.fetch("redirect_url"))
+    follow_redirect! if response.redirect?
+    post(auth_org_sign_handoff_path(ri: "jp"), params: { ri: "jp" })
+    result_form = response.parsed_body.at_css("form")
+    result = result_form.at_css('input[name="result"]')["value"]
+    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+    host!(ENV.fetch("PUBLIC_BASE_STAFF_URL"))
+    post(
+      base_org_sign_completion_path,
+      params: { result: result, transaction_ref: transaction_ref, ri: "jp" },
+      headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-site" },
+    )
+    follow_redirect! if response.redirect?
+
+    assert_response :success
+    assert_equal "base/org/sign/in/limitations/show", inertia_component
+    @limitation_session_ref = inertia_props.fetch("sessions").first.fetch("session_ref")
+
+    assert_predicate latest_flow, :sign_in_session_issuance_pending?
+    assert_predicate latest_resolution, :open?
+    host!(@base_host)
     existing
   ensure
     TurnstileVerifierStub.challenge_enabled = false
@@ -252,6 +273,14 @@ class Auth::Org::Sign::In::SessionsControllerTest < ActionDispatch::IntegrationT
 
   def latest_flow
     OperatorSignInFlow.where(principal_id: @staff.id).recent_first.first
+  end
+
+  def latest_resolution
+    OperatorSessionLimitResolutionTransaction.where(sign_in_flow_id: latest_flow.id).order(created_at: :desc).first
+  end
+
+  def resolution_ref(token)
+    SessionLimitResolutionTokenRef.issue(token)
   end
 
   def create_active_session(staff)

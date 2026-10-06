@@ -59,6 +59,25 @@ module Jit
           end
         end
 
+        test "old Side OIDC keys do not satisfy the Warp registry" do
+          with_registry_inputs(
+            "OIDC_CLIENT_SIDE_APP_ACTIVE_KID" => "side-app-kid",
+            "OIDC_CLIENT_SIDE_APP_PRIVATE_KEY" => base64_der(@surface_key),
+          ) do
+            with_env(
+              "OIDC_CLIENT_WARP_APP_ACTIVE_KID" => nil,
+              "OIDC_CLIENT_WARP_APP_PRIVATE_KEY" => nil,
+            ) do
+              error =
+                assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
+                  JitSecurityJwtRegistry.reload!
+                end
+
+              assert_includes error.message, "OIDC_CLIENT_WARP_APP_ACTIVE_KID"
+            end
+          end
+        end
+
         test "namespace-less jwks includes auth active and grace public keys" do
           with_registry_inputs do
             JitSecurityJwtRegistry.reload!
@@ -342,6 +361,12 @@ module Jit
             "PREFERENCE_JWT_ISSUER" => "preference-test-issuer",
             "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-kid",
             "JWT_AUTH_APP_PUBLIC_KEYSET" => JSON.generate([legacy_jwk]),
+            "OIDC_CLIENT_WARP_APP_ACTIVE_KID" => "warp-app-kid",
+            "OIDC_CLIENT_WARP_APP_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_WARP_COM_ACTIVE_KID" => "warp-com-kid",
+            "OIDC_CLIENT_WARP_COM_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_WARP_ORG_ACTIVE_KID" => "warp-org-kid",
+            "OIDC_CLIENT_WARP_ORG_PRIVATE_KEY" => base64_der(@surface_key),
           }.merge(extra_env)
           clear_unused_registry_namespace_env(env)
           env["AUTH_JWT_PRIVATE_KEYSET"] =

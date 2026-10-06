@@ -3259,6 +3259,7 @@ en:
       authentication:
         secret:
           invalid: "Unable to sign in."
+          identifier_label: "Email address or phone number"
           label: "Secret"
           submit: "Sign in"
           title: "Secret Sign in"
@@ -3962,6 +3963,12 @@ en:
           back: Back
           description: Use your passkey to verify your identity.
           title: Verification
+        setup:
+          description: Please register a passkey or an email address before continuing.
+          methods:
+            email: Register email
+            passkey: Register passkey
+          title: Set up verification methods
     common:
       birthdate_parts:
         day: DD

@@ -35,6 +35,8 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
           last_step_up_at: Client.database_now, last_step_up_scope: "settings_passkey",
           last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
           last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+          last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+          last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
         )
         context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
         passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
@@ -85,7 +87,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Saved signup Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     assert_no_difference("ClientSecretAuditOutbox.count") do
       assert_raises(ClientSecretPasskeyReservationIssuer::Denied) do
@@ -93,12 +95,12 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       end
     end
     assert_nil issuance.reload.signup_completed_at
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: flow)
 
     assert issuance.reload.signup_completed_at
-    assert ClientSecretLookupQuery.call(secret: raw)
+    assert ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert_equal 1, ClientSecretAuditOutbox.where(
       operation_ref: issuance.origin_operation_id, event_name: "secret.signup_completed",
     ).count
@@ -158,14 +160,14 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     values = ClientSecretPresentationIssuer.present_for_sign_up!(flow: flow, nonce: nonce, issuance: issuance)
 
     assert_equal 2, values.length
-    values.each { |value| assert_nil ClientSecretLookupQuery.call(secret: value) }
+    values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
     assert_raises(ClientSecretPasskeyReservationIssuer::Denied) do
       ClientSecretStorageConfirmationCommitter.confirm_for_sign_up!(flow: flow, nonce: "wrong", issuance: issuance)
     end
     ClientSecretStorageConfirmationCommitter.confirm_for_sign_up!(flow: flow, nonce: nonce, issuance: issuance)
 
     assert issuance.reload.confirmed_at
-    values.each { |value| assert_nil ClientSecretLookupQuery.call(secret: value) }
+    values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
     result = SignUpCancellation.call(cycle: flow, actor_context: ActorValuesContext.empty)
 
     assert_predicate result, :success?
@@ -197,7 +199,9 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
       token.update!(
         last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
         last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
-        last_step_up_audience: "step_up:app",
+        last_step_up_audience: "step_up:app", last_step_up_phishing_resistant: true,
+        last_step_up_user_verified: true, last_step_up_credential_ref: "test-step-up",
+        last_step_up_full_reauthentication: false,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       active_count.times do
@@ -210,7 +214,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
         raw = SecureRandom.base58(32)
         ClientSecretCredential.create!(
           client: actor, issuance: prior, name: "Existing",
-          password: raw, lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+          password: raw, confirmed_at: now,
         )
       end
       passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "existing-public-key")

@@ -34,7 +34,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     test "#{surface}: a refresh cookie whose record does not exist reaches the sign-in ceremony on the first try" do
       host! ENV.fetch(config[:auth_env])
       plant_refresh_cookie(surface, stale_refresh_token(config))
-      reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in").reference
+      reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      ).reference
       preference_class = config[:preference].constantize
 
       logs =
@@ -130,7 +132,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
         open_session do |browser|
           browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
           browser.cookies[PreferenceCookieName.refresh(surface: :app)] = token
-          reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+          reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+            surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+          ).reference
 
           logs = capture_logs { browser.get(auth_app_sign_in_path(ri: "jp", entry_ref: reference)) }
 
@@ -151,7 +155,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     plant_refresh_cookie(:app, forged)
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
 
     logs = capture_logs { get(auth_app_sign_in_path(ri: "jp", entry_ref: reference)) }
 
@@ -168,7 +174,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     plant_refresh_cookie(:app, token)
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
 
     logs = capture_logs { get(auth_app_sign_in_path(ri: "jp", entry_ref: reference)) }
 
@@ -185,7 +193,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     plant_refresh_cookie(:app, token)
     cookies[PreferenceCookieName.access(surface: :app)] = access
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
 
     get auth_app_sign_in_path(ri: "jp", entry_ref: reference)
 
@@ -215,7 +225,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
 
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
     get auth_app_sign_in_path(ri: "jp", entry_ref: reference)
 
     assert_response :success
@@ -239,7 +251,9 @@ class PreferenceEntryRecoveryTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
     plant_refresh_cookie(:app, stale_refresh_token(SURFACES[:app]))
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
 
     post(
       auth_app_sign_in_path(ri: "jp"), params: { entry_ref: reference, authenticity_token: "stale-page-token" },

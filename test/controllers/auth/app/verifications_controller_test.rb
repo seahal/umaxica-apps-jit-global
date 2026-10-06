@@ -11,10 +11,13 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "GET with a Base admission reference shows a continuation and consumes nothing" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -41,15 +44,19 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "POST redeems the admission once and the clean entry page lists only the actor's usable methods" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    ClientEmail.create!(
+    email = ClientEmail.create!(
       user: actor, address: "verification-entry-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED, otp_private_key: "otp_private_key", otp_counter: "0",
     )
+    email.finalize_binding!
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -91,10 +98,13 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "an admission reference cannot be redeemed twice" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -106,8 +116,8 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
 
     post auth_app_verification_path(ri: "jp"), params: { entry_ref: issuance.reference }
 
-    assert_response :bad_request
-    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_response :see_other
+    assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
     assert_equal 1, ClientAuthCeremonySession.where(
       step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
     ).count
@@ -138,10 +148,13 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "a bootstrap admission is not accepted by the verification entry and stays redeemable for setup" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false, allowed_methods: %i(passkey totp),
+        scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, allowed_methods: %i(passkey totp),
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true, ttl: 15.minutes,
       ), return_to: "/identity/birthdate",
@@ -162,10 +175,13 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "an admission issued for the app surface is refused on the com host" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -182,10 +198,13 @@ class Auth::App::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "the entry page is refused once the Base session behind the ceremony is revoked" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey), purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",

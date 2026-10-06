@@ -3,8 +3,8 @@
 
 # Session-limit resolution for a sign-in that is waiting on the concurrent
 # session limit (1 active). The waiting sign-in has issued nothing: its verified
-# sign-in flow in SESSION_LIMIT_PENDING, located through this browser's
-# session, is the only authority this page acts on
+# browser-bound durable resolution transaction is the only authority this page
+# acts on
 # (adr/root-login-establishment-boundary.md).
 #
 #   - show: list the account's active sessions
@@ -87,8 +87,7 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
     else
       # Cancelling ends only this pending flow; it issued nothing, and no
       # other session of the account is touched.
-      flow = current_db_sign_in_flow_for_sequence
-      with_sign_in_flow_writing(flow) { flow.fail_sign_in! } if flow&.sign_in_session_limit_pending?
+      cancel_pending_session_limit_resolution!
       consume_session_limit_gate!
       clear_current_sign_in_flow_locator!
 
@@ -143,7 +142,7 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
   end
 
   def pending_session_limit_cycle?
-    current_db_sign_in_flow_for_sequence&.sign_in_session_limit_pending?
+    session_limit_resolution.present?
   end
 
   def redirect_to_login
@@ -156,11 +155,10 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
   # The actor is the pending flow's principal, read from the flow this
   # browser's locator names; never a principal id kept in the session.
   def resolve_current_operator
-    flow = current_db_sign_in_flow_for_sequence
-    return unless flow&.sign_in_session_limit_pending?
+    resolution = session_limit_resolution
+    return unless resolution
 
-    principal = with_sign_in_flow_writing(flow) { flow.principal }
-    principal if principal.is_a?(Operator)
+    Operator.find_by(public_id: resolution.actor_ref)
   end
 
   def load_session_data
@@ -183,6 +181,8 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
       return
     end
 
+    return resolve_child_session!(staff, token) if session_limit_resolution
+
     AuthenticationSelectedSessionRevoker.call(
       owner: staff,
       token: token,
@@ -193,6 +193,13 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
   end
 
   def revoke_sessions_by_refs(staff, refs)
+    if session_limit_resolution
+      token = OperatorToken.find_from_signed_ref(refs.first)
+      return 0 unless token
+
+      return resolve_child_session!(staff, token) ? 1 : 0
+    end
+
     revoked_count = 0
 
     OrgTicketRecord.connected_to(role: :writing) do
@@ -214,5 +221,48 @@ class Auth::Org::Sign::In::SessionsController < ::Auth::Org::ApplicationControll
     end
 
     revoked_count
+  end
+
+  def resolve_child_session!(actor, token)
+    resolution = session_limit_resolution
+    return false unless resolution && session_limit_resolution_binding
+
+    challenge = session[GATE_SESSION_KEY]["resolution_challenge"]
+    binding_digest = resolution.class.digest_challenge(session_limit_resolution_binding)
+    resolution.select_session!(
+      actor: actor,
+      challenge: challenge,
+      session_ref: token.public_id,
+      browser_binding_digest: binding_digest,
+    )
+    resolution.resolve!(
+      actor: actor,
+      challenge: challenge,
+      browser_binding_digest: binding_digest,
+    )
+    true
+  rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
+    false
+  end
+
+  def cancel_pending_session_limit_resolution!
+    resolution = session_limit_resolution
+    if resolution
+      actor = Operator.find_by(public_id: resolution.actor_ref)
+      binding = session_limit_resolution_binding
+      challenge = session[GATE_SESSION_KEY]["resolution_challenge"]
+      resolution.cancel!(
+        actor: actor,
+        challenge: challenge,
+        browser_binding_digest: resolution.class.digest_challenge(binding),
+      ) if actor && binding
+    end
+
+    flow = current_db_sign_in_flow_for_sequence
+    if flow && !flow.sign_in_completed? && !flow.sign_in_expired? && !flow.sign_in_cancelled? &&
+        !flow.sign_in_halted?
+      with_sign_in_flow_writing(flow) { flow.cancel_sign_in! }
+    end
+    clear_current_sign_in_flow_locator!
   end
 end

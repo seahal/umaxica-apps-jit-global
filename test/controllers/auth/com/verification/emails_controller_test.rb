@@ -15,11 +15,15 @@ class Auth::Com::Verification::EmailsControllerTest < ActionDispatch::Integratio
     email = actor.visitor_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     token = VisitorToken.create!(visitor: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:email_otp], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -57,11 +61,15 @@ class Auth::Com::Verification::EmailsControllerTest < ActionDispatch::Integratio
     email = actor.visitor_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     token = VisitorToken.create!(visitor: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:email_otp], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -96,11 +104,15 @@ class Auth::Com::Verification::EmailsControllerTest < ActionDispatch::Integratio
     email = actor.visitor_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     token = VisitorToken.create!(visitor: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -132,11 +144,15 @@ class Auth::Com::Verification::EmailsControllerTest < ActionDispatch::Integratio
     email = actor.visitor_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     token = VisitorToken.create!(visitor: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:email_otp], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",

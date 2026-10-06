@@ -72,13 +72,13 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
     credential = client_secret_credentials(:one)
 
-    assert_equal credential.id, ClientSecretLookupQuery.call(secret: "a" * 32).id
+    assert_equal credential.id, ClientSecretLookupQuery.call(client: @user, secret: "a" * 32).id
     @transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app", intent: "sign_in", ttl: 10.seconds, login_challenge_ttl: 10.seconds,
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
-        redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris_by_realm.fetch("client").first,
+        client_id: "core-app",
+        redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch("client").first,
         code_challenge: "challenge",
         code_challenge_method: "S256",
         state: "state",
@@ -86,7 +86,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
         scope: "openid profile",
       },
     ).transaction
-    reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: @transaction).reference
+    reference = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: @transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
     get auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference }
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference, authenticity_token: csrf }
@@ -107,7 +109,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_equal "secret", ceremony.authentication_method
     assert_nil credential.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: "a" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
@@ -222,7 +224,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_equal operation_id, credential.reload.claim_operation_id
     assert credential.claimed_at
     assert_nil credential.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: "a" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     assert_nil flow.reload.token_id
     OidcAuthorizationTransactionPurger.call(
       now: @transaction.expires_at + OidcAuthorizationTransactionable::RETENTION_PERIOD + 1.second,
@@ -287,7 +289,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     result = css_select("input[name=result]").first["value"]
     action = css_select("form#oidc-authorization-result-form").first["action"]
     flow = @transaction.reload.secret_sign_in_flow
-    flow.fail_sign_in!(now: ClientSignInFlow.database_now)
+    flow.halt_sign_in!
 
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
       post action, params: { transaction_ref: @transaction.transaction_id, result: result },
@@ -295,7 +297,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     end
     assert_response :bad_request
     assert_nil flow.reload.token_id
-    assert_nil ClientSecretLookupQuery.call(secret: "a" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential.reload, purge_after: 1.day)
     assert_nil credential.reload.consumed_at
     assert_equal "flow_failed", ClientSecretAuditOutbox.find_by!(
@@ -370,7 +372,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_failed?
     assert_operator credential.reload.discard_at, :<=, Client.database_now
     assert_nil credential.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: "a" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     executed = false
     assert_raises(ClientSessionLimitResolutionTransaction::InvalidSecretResolution) do
       admitted_resolution.with_secret_revocation_authority!(actor: @user, challenge: challenge) { executed = true }
@@ -410,7 +412,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_predicate @transaction.reload.secret_sign_in_flow, :sign_in_session_limit_pending?
     assert_nil credential.reload.consumed_at
-    assert_nil ClientSecretLookupQuery.call(secret: "a" * 32)
+    assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     challenge = Rack::Utils.parse_query(URI.parse(limitation).query).fetch("resolution_challenge")
     resolution = ClientSessionLimitResolutionTransaction.find_active_by_challenge(challenge)
 
@@ -540,7 +542,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     @transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app", intent: "sign_in", params: oidc_authorize_params(realm: "client"),
     ).transaction
-    reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: @transaction).reference
+    reference = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: @transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
     redeem_auth_ceremony_entry!(
       auth_app_sign_in_path, reference: reference,
                              params: { ri: "jp" }, headers: { "Host" => @host },
@@ -553,8 +557,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   def oidc_authorize_params(realm:)
     {
       response_type: "code",
-      client_id: "core-next-rp",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris_by_realm.fetch(realm).first,
+      client_id: "core-app",
+      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch(realm).first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",

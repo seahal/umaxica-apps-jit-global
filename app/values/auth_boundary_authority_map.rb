@@ -10,11 +10,16 @@ module AuthBoundaryAuthorityMap
     core-app
     core-com
     core-org
-    side-app
-    side-com
-    side-org
+    warp-app
+    warp-com
+    warp-org
     edit-org
+    base-app-ww
+    base-com-ww
+    base-org-ww
   ).freeze
+
+  BASE_SELF_RP_CLIENT_IDS = %w(base-app-ww base-com-ww base-org-ww).freeze
 
   # Approved expand-and-contract target. The active seven-client registry above remains in place
   # until each caller, URI, key namespace, and RP-session binding has migrated.
@@ -25,12 +30,12 @@ module AuthBoundaryAuthorityMap
     core-com-us
     core-org-jp
     core-org-us
-    side-app-jp
-    side-app-us
-    side-com-jp
-    side-com-us
-    side-org-jp
-    side-org-us
+    warp-app-jp
+    warp-app-us
+    warp-com-jp
+    warp-com-us
+    warp-org-jp
+    warp-org-us
   ).freeze
 
   APPROVED_RP_CLIENT_IDS = (REGIONAL_RP_CLIENT_IDS + ["edit-org"]).freeze
@@ -42,20 +47,18 @@ module AuthBoundaryAuthorityMap
     "core-com-us" => { surface: "core", face: "com", region: "us", actor: "visitor" },
     "core-org-jp" => { surface: "core", face: "org", region: "jp", actor: "operator" },
     "core-org-us" => { surface: "core", face: "org", region: "us", actor: "operator" },
-    "side-app-jp" => { surface: "warp", face: "app", region: "jp", actor: "client" },
-    "side-app-us" => { surface: "warp", face: "app", region: "us", actor: "client" },
-    "side-com-jp" => { surface: "warp", face: "com", region: "jp", actor: "visitor" },
-    "side-com-us" => { surface: "warp", face: "com", region: "us", actor: "visitor" },
-    "side-org-jp" => { surface: "warp", face: "org", region: "jp", actor: "operator" },
-    "side-org-us" => { surface: "warp", face: "org", region: "us", actor: "operator" },
+    "warp-app-jp" => { surface: "warp", face: "app", region: "jp", actor: "client" },
+    "warp-app-us" => { surface: "warp", face: "app", region: "us", actor: "client" },
+    "warp-com-jp" => { surface: "warp", face: "com", region: "jp", actor: "visitor" },
+    "warp-com-us" => { surface: "warp", face: "com", region: "us", actor: "visitor" },
+    "warp-org-jp" => { surface: "warp", face: "org", region: "jp", actor: "operator" },
+    "warp-org-us" => { surface: "warp", face: "org", region: "us", actor: "operator" },
     "edit-org" => { surface: "edit", face: "org", region: nil, actor: "operator" },
   }.freeze
 
   DEPRECATED_SHARED_BROWSER_CLIENT_IDS = %w(
     sign-rp
     base-rails-rp
-    side-rails-rp
-    core-next-rp
   ).freeze
 
   RETIRED_BROWSER_PATHS = %w(
@@ -71,10 +74,13 @@ module AuthBoundaryAuthorityMap
     "core-app" => { surface: "core", face: "app", actor: "client" },
     "core-com" => { surface: "core", face: "com", actor: "visitor" },
     "core-org" => { surface: "core", face: "org", actor: "operator" },
-    "side-app" => { surface: "warp", face: "app", actor: "client" },
-    "side-com" => { surface: "warp", face: "com", actor: "visitor" },
-    "side-org" => { surface: "warp", face: "org", actor: "operator" },
+    "warp-app" => { surface: "warp", face: "app", actor: "client" },
+    "warp-com" => { surface: "warp", face: "com", actor: "visitor" },
+    "warp-org" => { surface: "warp", face: "org", actor: "operator" },
     "edit-org" => { surface: "edit", face: "org", actor: "operator" },
+    "base-app-ww" => { surface: "base", face: "app", actor: "client" },
+    "base-com-ww" => { surface: "base", face: "com", actor: "visitor" },
+    "base-org-ww" => { surface: "base", face: "org", actor: "operator" },
   }.freeze
 
   CANONICAL_RP_CALLBACK_PATH = "/oidc/callback"
@@ -86,6 +92,10 @@ module AuthBoundaryAuthorityMap
 
   def first_party_rp_client_ids
     FIRST_PARTY_RP_CLIENT_IDS
+  end
+
+  def base_self_rp_client_ids
+    BASE_SELF_RP_CLIENT_IDS
   end
 
   def approved_rp_client_ids

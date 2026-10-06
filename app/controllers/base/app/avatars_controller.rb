@@ -14,8 +14,6 @@ module Base
 
       HANDLE_MAXLENGTH = 80
 
-      before_action :authenticate_client!
-
       def index
         authorize!(Avatar, to: :index?)
         avatars = switcher.available_avatars

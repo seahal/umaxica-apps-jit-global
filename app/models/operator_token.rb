@@ -12,7 +12,7 @@
 #  dbsc_public_key                    :jsonb
 #  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
-#  last_step_up_aal                   :string
+#  last_step_up_aal                   :string           # @deprecated label only; remove after AAL ledger retirement
 #  last_step_up_at                    :datetime
 #  last_step_up_audience              :string
 #  last_step_up_method                :string
@@ -33,6 +33,11 @@
 #  dbsc_session_id                    :string
 #  device_session_id                  :bigint
 #  last_step_up_session_public_id     :string
+#  last_step_up_user_verified         :boolean
+#  last_step_up_credential_ref        :string
+#  last_step_up_full_reauthentication :boolean
+#  last_step_up_resource_ref          :string
+#  last_step_up_tenant_ref            :string
 #  oidc_client_id                     :string(64)
 #  oidc_connection_id                 :bigint
 #  public_id                          :string(21)       default(""), not null
@@ -112,7 +117,7 @@ class OperatorToken < OrgTicketRecord
   belongs_to :staff_token_dbsc_status, class_name: "OperatorTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "OperatorOidcConnection"
   belongs_to :device_session, class_name: "OperatorDeviceSession", inverse_of: :staff_tokens
-  has_many :operator_rp_sessions, inverse_of: :operator_token, dependent: :delete_all
+  has_many :operator_rp_sessions, inverse_of: :operator_token
   has_many :staff_verifications, class_name: "OperatorVerification",
                                  foreign_key: :staff_token_id,
                                  dependent: :delete_all,

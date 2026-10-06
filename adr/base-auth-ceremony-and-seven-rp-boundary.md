@@ -258,6 +258,34 @@ ticket-database transaction that creates the RP Session, so a retrying or duplic
 create a second RP Session or replace the first session's metadata. Raw result and authorization
 codes are never stored in PostgreSQL; Valkey stores only their short-lived opaque transport state.
 
+## Unified implementation amendment (2026-10-06)
+
+The Unified Implementation Plan amends this ADR and its earlier naming amendments. Base has two
+explicit roles on the same FQDN: an Authority role for protocol endpoints and a self-RP role for
+control-plane UI, `/sign`, and `/oidc/callback`. Authority controllers do not use RP credentials as
+proof; self-RP controllers do not fall back to root cookies. A valid Base Browser Session is OP
+login state and may satisfy OIDC SSO for `/oauth/authorize` without creating another Browser
+Session. `prompt=none`, `prompt=login`, and `max_age` are evaluated as explicit protocol
+conditions.
+
+The Browser RP layer is shared by Base self-RP, Warp, Edit, and Core. It owns state, nonce, PKCE,
+callback validation, UserInfo validation, OIDC identity binding, RP sessions, credentials, refresh,
+and RP logout. Palm remains outside this layer. Base self-RP clients are `base-app-ww`,
+`base-com-ww`, and `base-org-ww`, with private-key-JWT keys in the dedicated `BASE_RP_*_WW`
+namespaces; those keys are separate from OP signing keys.
+
+D-82 is the current admission contract. Base creates a host-only browser nonce at initiation,
+stores only its realm/entry reference digest, and requires Auth to attach an Auth-local sid through
+an Auth POST. Base confirmation records the binding before Auth can redeem the admission. Entry,
+confirmation, and redemption are separate non-authorizing steps; invalid proofs do not consume the
+admission or rotate the Auth sid, while a committed redemption may be restarted only through the
+original Base browser and parent authority.
+
+The existing seven-RP description is partially superseded by D-63's destructive Side-to-Warp
+rename, D-53's DeviceSession parent, and the explicit self-RP registrations above. Historical
+evidence remains unchanged. The Base/Auth separation, Auth ceremony-only boundary, Palm scope, and
+external deployment prerequisites are **retained**.
+
 This amendment closes the Base/Auth OIDC finalization slice. It does not claim distributed
 atomicity across PostgreSQL and Valkey: after the durable token transaction commits, Valkey code
 cleanup is best-effort and no credential is returned from an unsuccessful database transaction.

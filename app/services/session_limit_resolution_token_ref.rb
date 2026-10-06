@@ -22,4 +22,28 @@ class SessionLimitResolutionTokenRef
   rescue ActiveSupport::MessageVerifier::InvalidSignature
     nil
   end
+
+  def self.find_visitor_token(ref)
+    data = Rails.application.message_verifier(:session_limit_resolution_token_ref).verify(ref.to_s)
+    public_id = data[:pid] || data["pid"]
+    return nil if public_id.blank?
+
+    ComTicketRecord.connected_to(role: :writing) do
+      VisitorToken.find_by(public_id: public_id)
+    end
+  rescue ActiveSupport::MessageVerifier::InvalidSignature
+    nil
+  end
+
+  def self.find_operator_token(ref)
+    data = Rails.application.message_verifier(:session_limit_resolution_token_ref).verify(ref.to_s)
+    public_id = data[:pid] || data["pid"]
+    return nil if public_id.blank?
+
+    OrgTicketRecord.connected_to(role: :writing) do
+      OperatorToken.find_by(public_id: public_id)
+    end
+  rescue ActiveSupport::MessageVerifier::InvalidSignature
+    nil
+  end
 end

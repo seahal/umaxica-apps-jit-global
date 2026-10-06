@@ -16,10 +16,9 @@
 #   - It keeps the failure semantics of single-revoke consistent across
 #     callers (current-session logout, bulk revoke, lifecycle suspend).
 #
-# This service handles the *batch-level* concerns that don't belong to a
-# single revoke: bumping `session_version` so still-valid JWTs are
-# rejected at refresh time, and emitting a batch failure event when an
-# individual revoke escapes the primitive's narrow rescue.
+# This service handles the batch-level concern that does not belong to a
+# single revoke: emitting a batch failure event when an individual revoke
+# escapes the primitive's narrow rescue.
 class AuthenticationLogoutAllSessions
   def self.call(...)
     new(...).call
@@ -31,7 +30,6 @@ class AuthenticationLogoutAllSessions
   end
 
   def call
-    increment_session_version_if_present!
     each_token { |token| revoke_one!(token) }
     true
   end
@@ -39,24 +37,6 @@ class AuthenticationLogoutAllSessions
   private
 
   attr_reader :resource, :reason
-
-  def increment_session_version_if_present!
-    return unless resource&.respond_to?(:session_version)
-
-    resource.session_version = resource.session_version.to_i + 1
-    resource.save!
-  rescue ActiveRecord::ActiveRecordError => e
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.logout_all_sessions.session_version_failed",
-        reason: reason,
-        resource_class: resource&.class&.name,
-        resource_id: resource&.id,
-        error_class: e.class.name,
-        error_message: e.message,
-      ),
-    )
-  end
 
   def each_token
     scope = token_scope

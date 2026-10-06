@@ -128,14 +128,21 @@ module CoreBrowserApiBoundary
 
     access_token = result.token_response.fetch(:access_token)
     new_refresh_token = result.token_response.fetch(:refresh_token)
-    access_expires_at = OidcRpBrowserCredentialContract.access_expires_at(access_token)
+    expiries = {
+      access_expires_at: result.access_expires_at ||
+        OidcRpBrowserCredentialContract.access_expires_at_from_response(result.token_response),
+      refresh_expires_at: result.refresh_expires_at ||
+        OidcRpBrowserCredentialContract.refresh_expires_at_from_response(result.token_response),
+    }
 
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
-      OidcRpBrowserCredentialContract.access_cookie_options(expires_at: access_expires_at).merge(
+      OidcRpBrowserCredentialContract.access_cookie_options(expires_at: expiries.fetch(:access_expires_at)).merge(
         value: access_token,
       )
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] =
-      OidcRpBrowserCredentialContract.refresh_cookie_options.merge(value: new_refresh_token)
+      OidcRpBrowserCredentialContract.refresh_cookie_options(expires_at: expiries.fetch(:refresh_expires_at)).merge(
+        value: new_refresh_token,
+      )
 
     # The rotated credentials travel as `Set-Cookie`, so there is no representation to return.
     # RFC 9110 15.3.5 and docs/reference/api-design-standards.md both call for 204 rather than a

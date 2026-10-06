@@ -6,13 +6,13 @@ class ClientSecretClaimCommitter
 
     # Commit the Ticket locator before the independent irreversible source claim.
     # This operation alone grants neither authentication evidence nor a session.
-    def bind_oidc_flow!(secret:, transaction:, ceremony:)
+    def bind_oidc_flow!(client:, secret:, transaction:, ceremony:)
       unless transaction.is_a?(ClientOidcAuthorizationTransaction) && transaction.persisted? &&
           ceremony.is_a?(ClientAuthCeremonySession) && ceremony.persisted?
         raise ArgumentError, "Secret OIDC binding requires durable app transaction and browser ceremony"
       end
 
-      credential = ClientSecretLookupQuery.call(secret: secret)
+      credential = ClientSecretLookupQuery.call(client: client, secret: secret)
       return unless credential
 
       AppZenithRecord.connected_to(role: :writing) do
@@ -33,8 +33,8 @@ class ClientSecretClaimCommitter
                 return nil
               end
               flow = ClientSignInFlow.create!(
-                principal_id: credential.client_id, status_id: ClientSignInFlowStatus::PRIMARY_PENDING,
-                state: "PRIMARY_PENDING", step: "primary", issued_at: now,
+                principal_id: credential.client_id, state_id: ClientSignInFlowState::PRIMARY_PENDING,
+                issued_at: now,
                 expires_at: [transaction.expires_at, transaction.login_challenge_expires_at,
                              ceremony.expires_at, now + ClientSignInFlow.default_ttl,].min,
                 nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)),
@@ -47,20 +47,20 @@ class ClientSecretClaimCommitter
       end
     end
 
-    def call_for_oidc!(secret:, transaction:, ceremony:)
-      flow = bind_oidc_flow!(secret: secret, transaction: transaction, ceremony: ceremony)
+    def call_for_oidc!(client:, secret:, transaction:, ceremony:)
+      flow = bind_oidc_flow!(client: client, secret: secret, transaction: transaction, ceremony: ceremony)
       return nil unless flow
 
-      call!(secret: secret, flow: flow, ceremony: ceremony, authorization_transaction: transaction)
+      call!(client: client, secret: secret, flow: flow, ceremony: ceremony, authorization_transaction: transaction)
     end
 
-    def call!(secret:, flow:, ceremony:, authorization_transaction: nil)
+    def call!(client:, secret:, flow:, ceremony:, authorization_transaction: nil)
       verify_claim_request!(flow, ceremony, authorization_transaction)
 
-      credential = ClientSecretLookupQuery.call(secret: secret)
+      credential = ClientSecretLookupQuery.call(client: client, secret: secret)
       return unless credential
 
-      actor = credential.client
+      actor = client
       claim = nil
       # The Ticket lock spans the independent source commit. A later evidence rollback
       # does not roll back the irreversible Zenith claim.
@@ -79,7 +79,8 @@ class ClientSecretClaimCommitter
                   ceremony.admitted? && claim_admission_matches?(
                     credential, flow, ceremony, authorization_transaction, ticket_now,
                   ) && !ceremony.authentication_evidence_recorded? &&
-                  credential.available_at?(at: source_now) && credential.matches_secret?(secret)
+                  credential.client_id == actor.id && credential.available_at?(at: source_now) &&
+                  credential.matches_secret?(secret)
                 return nil
               end
 

@@ -38,9 +38,8 @@ class OwnershipAndStatusGateSweepTest < ActiveSupport::TestCase
   # A checkpoint may only be shown, and only completed, while the cycle is
   # actually waiting at one -- the two answer identically by design.
   test "the checkpoint gate follows the cycle's own status and nothing else" do
-    ClientSignInFlowStatus.ensure_defaults!
-    pending = ClientSignInFlow.new(status_id: ClientSignInFlow::STATUS_NAMES.key("CHECKPOINT_PENDING"))
-    elsewhere = ClientSignInFlow.new(status_id: ClientSignInFlow::STATUS_NAMES.key("STARTED"))
+    pending = ClientSignInFlow.new(state_id: ClientSignInFlow.state_id_for("CHECKPOINT_PENDING"))
+    elsewhere = ClientSignInFlow.new(state_id: ClientSignInFlow.state_id_for("PRIMARY_PENDING"))
 
     assert_predicate SignIn::CyclePolicy.new(pending, user: clients(:one)), :show_checkpoint?
     assert_predicate SignIn::CyclePolicy.new(pending, user: clients(:one)), :complete_checkpoint?

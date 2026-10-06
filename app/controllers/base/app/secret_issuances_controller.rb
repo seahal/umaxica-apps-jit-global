@@ -5,11 +5,13 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
 
   AUTHENTICATION_MODE = :private
   declare_authentication_mode! :private
-  before_action :authenticate_client!
   before_action :load_issuance
   before_action :require_issuance_step_up
   rescue_from ClientSecretStorageConfirmationCommitter::Denied,
-              ClientSecretManualIssuanceInvalidator::Denied, with: :deny_secret_operation
+              ClientSecretManualIssuanceInvalidator::Denied,
+              ClientSecretManualReattemptIssuer::Denied, with: :deny_secret_operation
+  rescue_from ClientSecretManualReservationIssuer::CapacityFull,
+              ClientSecretIssuanceCountValue::ReservationConflict, with: :conflicting_secret_operation
 
   public
 
@@ -25,11 +27,11 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
       confirm_label: t("base.app.secrets.confirm"),
       cancel_label: t("actions.cancel"),
       notice: distribution_notice,
-      continue_href: auth_app_settings_passkeys_url(
-        ri: current_region_identifier,
-        host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-      ),
+      continue_href: base_app_identity_passkeys_path(ri: current_region_identifier),
       continue_label: t("actions.continue"),
+      reattempt_action: payload_failed? ? reattempt_base_app_secret_issuance_path(@issuance.public_id) : nil,
+      reattempt_of: payload_failed? ? @issuance.public_id : nil,
+      reattempt_label: t("base.app.secrets.reattempt"),
     }
   end
 
@@ -40,7 +42,6 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     ClientSecretStorageConfirmationCommitter.call!(
       actor_context: secret_actor_context, token: current_session_token, issuance: @issuance,
     )
-    session.delete(:client_secret_operation_id)
     redirect_to(
       (@issuance.origin == "manual") ? base_app_secrets_path : base_app_secret_issuance_path(@issuance.public_id), status: :see_other,
     )
@@ -52,8 +53,19 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
       actor_context: secret_actor_context, token: current_session_token, issuance: @issuance,
       purge_after: ClientSecretLifetimesValue.purge_delay,
     )
-    session.delete(:client_secret_operation_id)
     redirect_to(base_app_secrets_path, status: :see_other)
+  end
+
+  def reattempt
+    authorize!(ClientSecretCredential, to: :create?)
+    return deny_secret_operation unless params[:reattempt_of].is_a?(String) &&
+      params[:reattempt_of] == @issuance.public_id
+
+    successor = ClientSecretManualReattemptIssuer.call!(
+      actor_context: secret_actor_context, token: current_session_token, predecessor: @issuance,
+      purge_after: ClientSecretLifetimesValue.purge_delay,
+    )
+    redirect_to(base_app_secret_issuance_path(successor.public_id), status: :see_other)
   end
 
   private
@@ -81,7 +93,19 @@ class Base::App::SecretIssuancesController < Base::App::ApplicationController
     ActorValuesContext.empty.with(subject: current_client, actor_type: :client, tld: :app, surface: :base)
   end
 
+  def payload_failed?
+    @issuance.origin == "manual" && @issuance.canceled_at.present? && ClientSecretAuditOutbox.exists?(
+      client_ref: current_client.public_id, operation_ref: @issuance.origin_operation_id,
+      event_name: "secret.issuance_canceled", reason: "payload_unavailable",
+      occurred_at: @issuance.canceled_at, item_count: @issuance.planned_count,
+    )
+  end
+
   def deny_secret_operation
     render plain: t("errors.messages.invalid_request"), status: :forbidden
+  end
+
+  def conflicting_secret_operation
+    render plain: t("base.app.secrets.capacity_conflict"), status: :conflict
   end
 end

@@ -69,7 +69,7 @@ module StepUpEmailChallenge
 
           update!(email_code_consumed_at: now)
           transaction.record_verification!(
-            method: "email_otp", aal: "none", phishing_resistant: false,
+            method: "email_otp", aal: "none", phishing_resistant: false, user_verified: false,
             verified_at: now, verified_credential_ref: credential_ref,
           )
           true

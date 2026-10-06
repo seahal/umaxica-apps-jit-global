@@ -13,7 +13,8 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
             [@user, ClientToken.create!(user: @user), ClientAuthCeremonySession]
           when :com
             visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-            [visitor, VisitorToken.create!(visitor: visitor), VisitorAuthCeremonySession]
+            [visitor, VisitorToken.create!(visitor: visitor, skip_session_limit_check: true),
+             VisitorAuthCeremonySession,]
           when :org
             operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
             [operator, OperatorToken.create!(staff: operator), OperatorAuthCeremonySession]
@@ -21,10 +22,13 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
             raise ArgumentError, "unsupported test surface"
           end
         requirement = StepUpRequirement.new(
-          scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:#{surface}",
+          scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],
+          phishing_resistant_required: false, user_verification_required: false,
+          full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+          resource_ref: nil, tenant_ref: nil, purpose: "step_up", audience: "step_up:#{surface}",
           session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
         )
-        parent = BaseStepUpAdmissionIssuer.call!(
+        parent = issue_base_step_up_admission!(
           actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
         ).transaction
         continuity, = ceremony_model.rotate_and_admit!(

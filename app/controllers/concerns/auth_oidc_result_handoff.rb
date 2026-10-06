@@ -41,18 +41,16 @@ module AuthOidcResultHandoff
     )
     complete_auth_ceremony_session!
 
-    render "auth/shared/oidc_authorization_result",
-           layout: oidc_result_handoff_layout,
-           locals: {
-             completion_url: public_send(
-               oidc_result_base_completion_helper,
-               host: base_authority_host,
-               protocol: "https",
-             ),
-             result_token: issuance.code,
-             transaction_ref: issuance.transaction.transaction_id,
-             ri: params[:ri],
-           }
+    redirect_to(
+      public_send(
+        oidc_result_base_completion_helper,
+        result_ref: issuance.reference,
+        transaction_ref: issuance.transaction.transaction_id,
+        ri: params[:ri],
+        host: base_authority_host,
+        protocol: "https",
+      ), allow_other_host: true, status: :see_other,
+    )
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          AuthCeremonySession::InvalidTransition, ArgumentError, KeyError
     reject_oidc_result_handoff!

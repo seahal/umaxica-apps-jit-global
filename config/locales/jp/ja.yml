@@ -1107,6 +1107,7 @@ ja:
         distribution_one_confirmed: "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布しました。"
         distribution_one_present: "Secret は最大20個まで保有できます。上限を超えないよう、今回は2個ではなく1個を配布します。"
         payload_unavailable: "提示値を取得できません。新しい発行を明示的に開始してください。"
+        reattempt: "もう一度発行する"
         present: "Secretを一度だけ表示"
         rename: "名前を変更"
         revoke: "失効"
@@ -3245,6 +3246,7 @@ ja:
       authentication:
         secret:
           invalid: "Sign inできません。"
+          identifier_label: "メールアドレスまたは電話番号"
           label: "Secret"
           submit: "Sign in"
           title: "SecretでSign in"
@@ -3988,6 +3990,12 @@ ja:
           back: 戻る
           description: 本人確認のため、パスキーで認証してください。
           title: 本人確認
+        setup:
+          description: 続行する前に、パスキーまたはメールアドレスを登録してください。
+          methods:
+            email: メールを登録
+            passkey: パスキーを登録
+          title: 認証方法の登録
     common:
       birthdate_parts:
         day: 日

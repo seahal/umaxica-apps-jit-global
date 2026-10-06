@@ -17,7 +17,6 @@ module Base
           STEP_UP_SCOPE = "operator_capability"
           declare_authentication_mode! :private
 
-          before_action :authenticate_operator!
           before_action :no_store
           before_action :set_grant
           before_action :authorize_revocation!, only: :new

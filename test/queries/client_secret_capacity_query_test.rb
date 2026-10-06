@@ -37,7 +37,7 @@ class ClientSecretCapacityQueryTest < ActiveSupport::TestCase
       raw = SecureRandom.base58(32)
       ClientSecretCredential.create!(
         client: client, issuance: issuance, name: "Confirmed fixture", password: raw,
-        lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: issuance.confirmed_at,
+        confirmed_at: issuance.confirmed_at,
       )
     end
     terminal = issuance.confirmed_at
@@ -100,7 +100,7 @@ class ClientSecretCapacityQueryTest < ActiveSupport::TestCase
           raw = SecureRandom.base58(32)
           ClientSecretCredential.create!(
             client: client, issuance: issuance, name: "Fixture Secret", password: raw,
-            lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+            confirmed_at: now,
           )
         end
         if count == 21
@@ -140,7 +140,7 @@ class ClientSecretCapacityQueryTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     ClientSecretCredential.create!(
       client: client, issuance: issuance, name: "Fixture Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
 
     assert_not client.login_allowed?

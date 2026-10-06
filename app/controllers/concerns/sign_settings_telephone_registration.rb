@@ -27,7 +27,9 @@ module SignSettingsTelephoneRegistration
             "telephone candidate is already verified" unless locked.public_send(config.fetch(:status_key)) ==
               config.fetch(:unverified_status)
 
-      locked.update!(config.fetch(:status_key) => config.fetch(:verified_status))
+      attributes = { config.fetch(:status_key) => config.fetch(:verified_status) }
+      attributes[:binding_finalized_at] = config.fetch(:record_class).database_now if config[:binding]
+      locked.update!(attributes)
       record_settings_telephone_registration_audit!(config, actor, locked)
       locked
     end
@@ -41,6 +43,7 @@ module SignSettingsTelephoneRegistration
         status_key: :user_telephone_status_id,
         unverified_status: ClientTelephoneStatus::UNVERIFIED,
         verified_status: ClientTelephoneStatus::VERIFIED,
+        binding: true,
         audit_event_id: ClientChronicleEvent::TELEPHONE_REGISTERED,
       },
       "com" => {
@@ -49,6 +52,7 @@ module SignSettingsTelephoneRegistration
         status_key: :visitor_telephone_status_id,
         unverified_status: VisitorTelephoneStatus::UNVERIFIED,
         verified_status: VisitorTelephoneStatus::VERIFIED,
+        binding: true,
       },
       "org" => {
         record_class: OperatorTelephone,

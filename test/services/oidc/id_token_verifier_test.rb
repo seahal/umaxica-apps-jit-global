@@ -5,7 +5,7 @@ require "test_helper"
 
 class OidcIdTokenVerifierTest < ActiveSupport::TestCase
   setup do
-    @client = OidcClientRegistry.find!("core-next-rp")
+    @client = OidcClientRegistry.find!("core-app")
     @user = clients(:one)
     @nonce = "nonce-#{SecureRandom.hex(4)}"
     @issuer = OidcIssuer.for_client(@client)

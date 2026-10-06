@@ -22,7 +22,7 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     raw = SecureRandom.base58(32)
     @secret = ClientSecretCredential.create!(
       client: @user, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     ClientTotpCredential.create!(
       user: @user,
@@ -69,7 +69,8 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     follow_redirect!(headers: @headers)
 
-    assert_not ClientExternalIdentity.exists?(identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: identity.id)
+    assert_not_nil identity.reload.released_at
     assert @secret.reload.available_at?(at: Client.database_now)
     assert_nil @secret.claimed_at
   end
@@ -210,7 +211,7 @@ class SocialLinkUnlinkTest
       otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def insert_verified_visitor_email!(visitor_id:, address:)
@@ -566,6 +567,10 @@ class SocialLinkUnlinkTest
         last_step_up_purpose: "step_up",
         last_step_up_audience: "step_up:app",
         last_step_up_session_public_id: token.public_id,
+        last_step_up_credential_ref: "test-step-up-credential",
+        last_step_up_phishing_resistant: false,
+        last_step_up_user_verified: true,
+        last_step_up_full_reauthentication: false,
         updated_at: Time.current, }.compact,
     )
   end

@@ -14,7 +14,6 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_client!
         before_action :authorize_telephone_registration!, only: %i(new create)
 
         def index
@@ -57,7 +56,9 @@ module Base
             current_client, telephone,
           )
 
-          telephone.destroy!
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_client, credential: telephone, current_session: current_session, request: request,
+          )
           redirect_to(base_app_identity_telephones_path(ri: params[:ri]), status: :see_other)
         end
 

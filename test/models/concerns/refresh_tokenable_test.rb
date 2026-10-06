@@ -26,7 +26,7 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     assert_equal 0, token.refresh_token_generation
     assert_predicate token.device_session_id, :present?
     assert_predicate token.device_session, :present?
-    assert_nil token.device_session.current_refresh_token_id
+    assert_equal token.id, token.device_session.current_refresh_token_id
   end
 
   test "rotation makes the replacement token current for the same device session" do

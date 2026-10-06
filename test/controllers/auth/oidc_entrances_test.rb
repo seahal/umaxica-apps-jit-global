@@ -86,14 +86,16 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
   end
 
   def admission_reference(issuance)
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
   end
 
   def authorize_params(screen_hint: nil)
     params = {
       response_type: "code",
-      client_id: "core-next-rp",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+      client_id: "core-app",
+      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",

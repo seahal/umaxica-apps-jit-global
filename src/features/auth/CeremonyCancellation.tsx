@@ -6,6 +6,7 @@
 // always the one the current document carries.
 import Button from "@/components/ui/Button";
 import { csrfToken } from "@/lib/csrf";
+import { useState } from "react";
 
 export type CeremonyCancellationProps = {
   label: string;
@@ -14,12 +15,15 @@ export type CeremonyCancellationProps = {
 };
 
 export default function CeremonyCancellation({ label, action, method }: CeremonyCancellationProps) {
+  const [submitted, setSubmitted] = useState(false);
+
   return (
     <form
       action={action}
       method="post"
       data-turbo="false"
       onSubmit={(event) => {
+        setSubmitted(true);
         const field = event.currentTarget.elements.namedItem("authenticity_token");
         if (field instanceof HTMLInputElement) field.value = csrfToken();
       }}
@@ -40,6 +44,7 @@ export default function CeremonyCancellation({ label, action, method }: Ceremony
       <Button
         type="submit"
         variant="secondary"
+        isDisabled={submitted}
       >
         {label}
       </Button>

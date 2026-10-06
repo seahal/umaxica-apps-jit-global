@@ -12,21 +12,56 @@ module OidcAuthorizationResultPost
 
   public
 
+  def render_oidc_result_continuation!
+    apply_base_browser_continuation_headers!
+    result_reference = params[:result_ref]
+    transaction_reference = params[:transaction_ref]
+    unless result_reference.is_a?(String) && result_reference.match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
+        transaction_reference.is_a?(String) && transaction_reference.present?
+      raise ArgumentError, "invalid authorization result reference"
+    end
+
+    render "base/shared/result_continuation", layout: false,
+                                              locals: { action_url: request.path,
+                                                        result_ref: result_reference,
+                                                        transaction_ref: transaction_reference,
+                                                        ri: params[:ri], }
+  end
+
   def create
-    transaction =
-      OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-        surface: oidc_result_surface,
-        transaction_id: params[:transaction_ref].to_s,
+    if params[:ceremony_action].present?
+      raise ArgumentError unless params[:ceremony_action].is_a?(String) && params[:ceremony_action] == "start" &&
+        params[:result_ref].blank? && params[:transaction_ref].blank? && params[:result].blank?
+
+      validate_authorization_request!
+      return issue_authorization_code!(current_resource_for_oidc_authorization) if authorization_session_sufficient?
+
+      start_authorization_ceremony!
+      return
+    end
+
+    if params[:result_ref].present? || params[:transaction_ref].present?
+      raise ArgumentError unless params[:result_ref].is_a?(String) &&
+        params.expect(:result_ref).match?(BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN) &&
+        params[:transaction_ref].is_a?(String) && params[:transaction_ref].present? && params[:result].blank?
+
+      transaction =
+        OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+          surface: oidc_result_surface, transaction_id: params[:transaction_ref].to_s,
+        )
+      validate_authorization_request!(transaction.authorize_params)
+      validate_authorization_transaction_ready!(transaction)
+      result_payload = BaseAuthAdmissionCoordinator.read_result_reference!(
+        reference: params[:result_ref], surface: oidc_result_surface,
+        transaction_ref: params[:transaction_ref], expected_intent: transaction.intent,
       )
-    validate_authorization_request!(transaction.authorize_params)
-    validate_authorization_transaction_ready!(transaction)
-    result_payload = BaseAuthAdmissionCoordinator.read_result!(
-      raw_code: params[:result].to_s,
-      surface: oidc_result_surface,
-      transaction_ref: params[:transaction_ref].to_s,
-      expected_intent: transaction.intent,
-    )
-    resume_authorization!(transaction, result_generation: result_payload.fetch("result_generation"))
+      resume_authorization!(transaction, result_generation: result_payload.fetch("result_generation"))
+      return
+    end
+
+    raise ArgumentError, "result reference is required" if params[:result].present?
+
+    raise ArgumentError, "authorization start is required"
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri, ArgumentError
     render json: { error: "invalid_request", error_description: "invalid authorization request" },
@@ -50,14 +85,18 @@ module OidcAuthorizationResultPost
 
   private
 
-  def valid_request_origin?
-    return true if oidc_result_same_site_opaque_origin?
-
-    super
+  def render_authorization_ceremony_start!
+    render "base/shared/authorization_ceremony_start", layout: false,
+                                                       locals: { action_url: request.path, fields: authorize_params.to_h }
   end
 
-  def oidc_result_same_site_opaque_origin?
-    request.origin.to_s == "null" && sec_fetch_site_value == "same-site"
+  def current_resource_for_oidc_authorization
+    case oidc_result_surface
+    when "app" then current_client
+    when "com" then current_visitor
+    when "org" then current_operator
+    else raise ArgumentError, "unsupported OIDC surface"
+    end
   end
 
   def validate_authorization_transaction_ready!(transaction)

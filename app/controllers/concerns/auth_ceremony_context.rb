@@ -82,6 +82,36 @@ module AuthCeremonyContext
     auth_ceremony_ticket_transaction(%w(bootstrap credential_registration))
   end
 
+  # Cancellation is the one Auth lookup that must also reach an already-canceled durable
+  # transaction so a retried handoff can converge on Base's idempotent receiver. Admission and
+  # verification lookups intentionally continue to accept only live transactions.
+  def auth_cancellation_transaction
+    record = admitted_auth_ceremony_session
+    transaction_ref = record&.step_up_ceremony_transaction_ref
+    return nil if transaction_ref.blank?
+
+    purpose =
+      case record.admission_purpose
+      when "step_up_handoff" then "step_up"
+      when "reauthentication_handoff" then "reauthentication"
+      when "bootstrap_handoff" then "bootstrap"
+      when "credential_registration_handoff" then "credential_registration"
+      when "credential_change_handoff" then "credential_change"
+      else return nil
+      end
+
+    model = BaseAuthAdmissionCoordinator::STEP_UP_TRANSACTION.fetch(auth_ceremony_surface)
+    model.connection_owner.connected_to(role: :writing) do
+      transaction = model.find_by(transaction_id: transaction_ref, surface: auth_ceremony_surface)
+      return nil unless transaction && BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(purpose) &&
+        transaction.purpose == purpose && transaction.status.in?(%w(pending verified canceled))
+
+      transaction
+    end
+  rescue KeyError, ActiveRecord::RecordNotFound
+    nil
+  end
+
   def auth_ceremony_ticket_transaction(expected_purposes)
     record = admitted_auth_ceremony_session
     return nil if record&.step_up_ceremony_transaction_ref.blank?

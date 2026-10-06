@@ -9,7 +9,7 @@ class ClientSecretAuditOutbox < AppZenithRecord
   ).freeze
   REASONS = %w(
     capacity_full passkey_registration manual user_revocation withdrawal flow_expired
-    flow_canceled flow_failed login_committed payload_unavailable reissue
+    flow_canceled flow_failed flow_halted login_committed payload_unavailable reissue
   ).freeze
 
   attr_readonly :event_id, :event_name, :client_ref, :credential_ref, :actor_type,
@@ -28,7 +28,8 @@ class ClientSecretAuditOutbox < AppZenithRecord
     public
 
     def record!(actor_context:, client_ref:, operation_ref:, occurred_at:, event_name:,
-                credential_ref: nil, item_count: nil, reason: nil, executor_job_id: nil)
+                credential_ref: nil, item_count: nil, reason: nil, executor_job_id: nil,
+                issuance_origin: nil, issuance_browser_session_ref: nil, issuance_sign_up_flow_ref: nil)
       unless lease_connection.transaction_open?
         raise ArgumentError, "Secret audit requires the source Zenith transaction"
       end
@@ -40,6 +41,8 @@ class ClientSecretAuditOutbox < AppZenithRecord
         event_id: SecureRandom.uuid, event_name: event_name, client_ref: client_ref,
         credential_ref: credential_ref, operation_ref: operation_ref, occurred_at: occurred_at,
         item_count: item_count, reason: reason, executor_job_id: executor_job_id,
+        issuance_origin: issuance_origin, issuance_browser_session_ref: issuance_browser_session_ref,
+        issuance_sign_up_flow_ref: issuance_sign_up_flow_ref,
         **actor_attributes(actor_context),
       )
     end

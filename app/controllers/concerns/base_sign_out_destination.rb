@@ -47,6 +47,12 @@ module BaseSignOutDestination
            clear_history: @sign_out_notice.present? || session[:inertia_clear_history] == true
   end
 
+  def render_browser_rp_logout_continuation!
+    render inertia: "#{controller_path}/edit",
+           props: sign_out_edit_page_props(back_to_dashboard: true),
+           status: :ok
+  end
+
   def render_oidc_logout_completion
     render_oidc_end_session_confirmation
   end

@@ -39,8 +39,8 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
         surface: "app", intent: "sign_in", ttl: 10.seconds, login_challenge_ttl: 10.seconds,
         params: {
           response_type: "code",
-          client_id: "core-next-rp",
-          redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris_by_realm.fetch("client").first,
+          client_id: "core-app",
+          redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch("client").first,
           code_challenge: "challenge",
           code_challenge_method: "S256",
           state: "state",
@@ -48,7 +48,9 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       ).transaction
-      reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+      reference = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+      ).reference
       get auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference }
       csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       post auth_app_sign_in_path, params: { ri: "jp", transaction_ref: reference, authenticity_token: csrf }

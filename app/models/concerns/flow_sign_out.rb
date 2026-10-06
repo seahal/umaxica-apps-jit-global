@@ -5,6 +5,7 @@ module FlowSignOut
   extend ActiveSupport::Concern
 
   include FlowBase
+  include SignFlowStatusBacked
 
   included do
     cycle_status_column :status_id
@@ -26,10 +27,6 @@ module FlowSignOut
     cycle_status?(status_id_for("LOGICALLY_REVOKED"))
   end
 
-  def sign_out_awaiting_expiry?
-    cycle_status?(status_id_for("AWAITING_EXPIRY"))
-  end
-
   def sign_out_completed?
     cycle_status?(status_id_for("COMPLETED"))
   end
@@ -38,57 +35,50 @@ module FlowSignOut
     cycle_status?(status_id_for("FAILED"))
   end
 
-  def request_sign_out!(now: Time.current)
-    transition_sign_out_to!(
-      "REQUESTED",
-      allowed_from: ["NOTHING"],
-      changes: { requested_at: now },
-      now: now,
-    )
+  def sign_out_expired?
+    cycle_status?(status_id_for("EXPIRED"))
+  rescue KeyError
+    false
   end
 
-  def mark_access_discarded!(now: Time.current)
-    transition_sign_out_to!(
-      "ACCESS_DISCARDED",
-      allowed_from: ["REQUESTED"],
-      changes: { access_discarded_at: now },
-      now: now,
-    )
+  def sign_out_cancelled?
+    cycle_status?(status_id_for("CANCELLED"))
+  rescue KeyError
+    false
   end
 
-  def mark_logically_revoked!(now: Time.current)
-    transition_sign_out_to!(
-      "LOGICALLY_REVOKED",
-      allowed_from: ["ACCESS_DISCARDED"],
-      changes: { logically_revoked_at: now },
-      now: now,
-    )
+  def sign_out_halted?
+    cycle_status?(status_id_for("HALTED"))
+  rescue KeyError
+    false
   end
 
-  def await_sign_out_expiry!(now: Time.current)
-    transition_sign_out_to!(
-      "AWAITING_EXPIRY",
-      allowed_from: ["LOGICALLY_REVOKED"],
-      now: now,
-    )
+  def request_sign_out!
+    transition_sign_out_to!("REQUESTED", timestamp_fields: [:requested_at])
   end
 
-  def complete_sign_out!(now: Time.current)
-    transition_sign_out_to!(
-      "COMPLETED",
-      allowed_from: ["AWAITING_EXPIRY"],
-      changes: { completed_at: now },
-      now: now,
-    )
+  def mark_access_discarded!
+    transition_sign_out_to!("ACCESS_DISCARDED", timestamp_fields: [:access_discarded_at])
   end
 
-  def fail_sign_out!(now: Time.current)
-    transition_sign_out_to!(
-      "FAILED",
-      allowed_from: %w(REQUESTED ACCESS_DISCARDED LOGICALLY_REVOKED AWAITING_EXPIRY),
-      changes: { failed_at: now },
-      now: now,
-    )
+  def mark_logically_revoked!
+    transition_sign_out_to!("LOGICALLY_REVOKED", timestamp_fields: [:logically_revoked_at])
+  end
+
+  def complete_sign_out!
+    transition_sign_out_to!("COMPLETED")
+  end
+
+  def expire_sign_out!
+    transition_sign_out_to!("EXPIRED")
+  end
+
+  def cancel_sign_out!
+    transition_sign_out_to!("CANCELLED")
+  end
+
+  def halt_sign_out!
+    transition_sign_out_to!("HALTED", timestamp_fields: [:failed_at])
   end
 
   def discard_sign_out!(now: Time.current)
@@ -97,12 +87,11 @@ module FlowSignOut
 
   private
 
-  def transition_sign_out_to!(next_status_name, allowed_from:, changes: {}, now:)
+  def transition_sign_out_to!(next_status_name, changes: {}, timestamp_fields: [])
     transition_cycle_to!(
       status_id_for(next_status_name),
-      allowed_from: status_ids_for(*allowed_from),
       changes: changes,
-      now: now,
+      timestamp_fields: timestamp_fields,
     )
   end
 end

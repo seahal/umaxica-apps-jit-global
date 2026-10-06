@@ -60,7 +60,7 @@ module SignUpSequenceControllerSupport
   # sign-up definition ends with birthdate, so clearing it always finalizes, and reaching here with a
   # success is a broken invariant rather than a response to send.
   def render_sign_up_result(result)
-    if %i(ok advanced completed sign_in_handoff_accepted).include?(result.status)
+    if %i(ok advanced completed).include?(result.status)
       raise ArgumentError, "sign-up transition #{result.status} has no response body; it must redirect"
     end
 
@@ -153,7 +153,7 @@ module SignUpSequenceControllerSupport
       today: Time.zone.today,
     )
       sign_up_session_state.age_restricted = true
-      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :fail, actor_context: Actor.authn)
+      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :halt, actor_context: Actor.authn)
       return render_sign_up_result(result) unless result.success? || result.status == :failed
 
       render_sign_up_age_restricted
@@ -207,7 +207,7 @@ module SignUpSequenceControllerSupport
     # durable identity graph is provisioned, then the actor is handed off
     # to the sign-in boundary.
     finalized = nil
-    handoff = nil
+    nil
     sign_in_result = nil
 
     # Serialize the entire finalize/handoff/complete sequence under the
@@ -243,22 +243,14 @@ module SignUpSequenceControllerSupport
         if actor.login_allowed? && actor.access_enabled?
           IdentityGraphProvisioner.call!(surface: sign_up_surface, principal: actor)
         end
-        sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
-        handoff = perform_sign_up_event(
-          :handoff_to_sign_in,
-          payload: {
-            sign_in_handoff_status: sign_up_handoff_proceeds?(sign_in_result) ? :accepted : :failed,
-            sign_in_handoff: sign_in_result.status,
-          },
-        )
-        next unless handoff.success?
+        complete = perform_sign_up_event(:complete)
+        next unless complete.success?
 
-        perform_sign_up_event(:complete)
+        sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
       end
     end
 
     return render_sign_up_failure_result(finalized, json: json) unless finalized&.success?
-    return render_sign_up_failure_result(handoff, json: json) unless handoff&.success?
 
     ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: @sign_up_ticket) if @sign_up_ticket.is_a?(ClientSignUpFlow)
 
@@ -479,6 +471,13 @@ module SignUpSequenceControllerSupport
       # Email and social sign-up only need the actor promoted into the
       # verified-with-sign-up state before the durable graph is provisioned.
       Client.transaction do
+        if @sign_up_ticket.pending_contact_type == "email"
+          email = ClientEmail.lock.find(@sign_up_ticket.pending_contact_id)
+          raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
+
+          email.binding_finalized_at = ClientEmail.database_now
+          email.save!
+        end
         actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP) if
           actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
       end
@@ -503,6 +502,13 @@ module SignUpSequenceControllerSupport
       SignComUpTelephoneRegistrationFinalizer.call(telephone: telephone)
     when "email"
       # Email sign-up has no additional com-side credential finalizer here.
+      VisitorEmail.transaction do
+        email = VisitorEmail.lock.find(@sign_up_ticket.pending_contact_id)
+        raise ActiveRecord::RecordNotFound unless email.visitor_id == actor.id
+
+        email.binding_finalized_at = VisitorEmail.database_now
+        email.save!
+      end
     else
       return :failed
     end

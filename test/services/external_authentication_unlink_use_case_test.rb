@@ -19,7 +19,8 @@ class ExternalAuthenticationUnlinkUseCaseTest < ActiveSupport::TestCase
       assert_instance_of ExternalAuthentication::UnlinkResult, result
       assert_equal :unlinked, result.status
       assert_equal "google", result.provider
-      assert_not ClientExternalIdentity.exists?(identity.id)
+      assert_not ClientExternalIdentity.effective_binding.exists?(id: identity.id)
+      assert_not_nil identity.reload.released_at
     end
   end
 
@@ -44,7 +45,8 @@ class ExternalAuthenticationUnlinkUseCaseTest < ActiveSupport::TestCase
 
     ExternalAuthenticationUnlinkUseCase.call(provider: "apple", user: client)
 
-    assert_not ClientExternalIdentity.exists?(identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: identity.id)
+    assert_not_nil identity.reload.released_at
   end
 
   test "returns already unlinked when no provider identity exists" do

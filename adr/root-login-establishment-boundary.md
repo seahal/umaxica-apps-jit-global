@@ -181,3 +181,19 @@ idempotent success only when the session is genuinely absent or already revoked.
 - `adr/session-reset-on-privilege-transition.md`
 - `adr/social-login-cooldown-and-one-shot-completion.md`
 - `.agents/harnesses/rules/project/session-issuance.mdc`
+
+## Unified implementation amendment (2026-10-06)
+
+The Unified Implementation Plan partially supersedes the pending-session portion of this ADR.
+`SESSION_LIMIT_PENDING` is no longer a sign-in authority. Capacity is evaluated only while the
+parent is in `SESSION_ISSUANCE_PENDING`; when capacity is full, a realm-local durable
+session-limit-resolution transaction is issued as a child of that parent. The parent remains in
+that state while the child is open or resolved, and the same parent retries root issuance after a
+selected session is revoked.
+
+The child is bound to the parent flow, actor, browser ceremony, realm, and OIDC authorization
+transaction where applicable. It has its own row-locked named transitions, database-clock expiry,
+terminal facts, retention hold, and actor-owned session selection. It is not authentication
+evidence and cannot create a session by itself. The existing establishment point, cooldown,
+actor-before-ticket lock order, post-commit cookie behavior, and prohibition on restricted root
+sessions are **retained**.

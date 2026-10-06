@@ -9,7 +9,6 @@ class Auth::Com::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
     ApplicationRecord.clear_fixed_id_seed_cache!
-    VisitorSignInFlowStatus.ensure_defaults!
     @visitor = create_verified_visitor_with_email(email_address: "checkpoint-#{SecureRandom.hex(4)}@example.com")
     @visitor.visitor_telephones.create!(
       number: "+10000000992",
@@ -104,9 +103,7 @@ class Auth::Com::Sign::In::CheckpointsControllerTest < ActionDispatch::Integrati
     )
     cycle = VisitorSignInFlow.new(
       principal_id: @visitor.id,
-      status_id: VisitorSignInFlow.status_id_for("CHECKPOINT_PENDING"),
-      state: "CHECKPOINT_PENDING",
-      step: "checkpoint",
+      state_id: VisitorSignInFlow.state_id_for("CHECKPOINT_PENDING"),
       nonce_digest: VisitorSignInFlow.digest_nonce("pending-test-nonce"),
       issued_at: Time.current,
       expires_at: 15.minutes.from_now,

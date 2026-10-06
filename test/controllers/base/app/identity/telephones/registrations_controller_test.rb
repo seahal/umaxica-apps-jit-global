@@ -12,6 +12,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
            :client_token_dbsc_statuses
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
     @user = clients(:one)
@@ -23,6 +24,9 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+    install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @user, token: @token)
+    passkey = @user.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "telephone-test-key")
+    passkey.update!(uv_verified_at: Time.current)
     _verification, raw_verification = ClientVerification.issue_for_token!(token: @token)
     cookies[ClientVerification.cookie_name] = raw_verification
     @token.update!(
@@ -33,6 +37,10 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
       last_step_up_session_public_id: @token.public_id,
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:app",
+      last_step_up_credential_ref: passkey.public_id,
+      last_step_up_phishing_resistant: true,
+      last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
     )
     access_token = AuthenticationToken.encode(
       @user, host: @host, session_public_id: @token.public_id,

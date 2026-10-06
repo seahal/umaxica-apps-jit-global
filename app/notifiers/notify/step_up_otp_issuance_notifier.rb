@@ -17,7 +17,9 @@ module Notify::StepUpOtpIssuanceNotifier
     )
     # Ephemeral#deliver drops the return value of perform_later. Inspect that same Noticed
     # entry point so an aborted enqueue cannot be reported as successful issuance.
-    job = notifier.delivery_methods.fetch(:email).ephemeral_perform_later(name, record, notifier.params)
+    job = notifier.delivery_methods.fetch(:email).ephemeral_perform_later(
+      name, record, notifier.params, {}, context: notifier,
+    )
     raise ActiveJob::EnqueueError, "step-up email enqueue rejected" unless job
 
     notifier

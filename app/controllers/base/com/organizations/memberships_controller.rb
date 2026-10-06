@@ -8,7 +8,6 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_visitor!
         before_action :set_organization
         before_action :set_membership, only: %i(show edit update destroy)
 

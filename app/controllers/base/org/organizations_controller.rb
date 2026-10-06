@@ -9,8 +9,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_operator!
-
       def index
         authorize!(current_operator, to: :show?)
         @organizations = switcher.available_organizations

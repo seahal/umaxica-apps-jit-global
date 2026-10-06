@@ -12,12 +12,11 @@ class AuthenticationLogoutAllSessionsTest < ActiveSupport::TestCase
     assert AuthenticationLogoutAllSessions.call(resource: Object.new)
   end
 
-  test "records a session version failure without raising" do
+  test "does not require a session version on the resource" do
     resource = Object.new
-    resource.define_singleton_method(:session_version) { 1 }
-    resource.define_singleton_method(:session_version=) { |_value| nil }
-    resource.define_singleton_method(:save!) { raise ActiveRecord::RecordInvalid.new(Client.new) }
-    resource.define_singleton_method(:id) { "resource-1" }
+    def resource.session_version
+      raise "session_version is not an authority"
+    end
 
     assert AuthenticationLogoutAllSessions.call(resource: resource)
   end

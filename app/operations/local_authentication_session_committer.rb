@@ -54,7 +54,7 @@ class LocalAuthenticationSessionCommitter
     def validate_browser_binding!(flow:, actor:, nonce:, binding:, pending_resume:, now:)
       valid_delivery =
         if pending_resume
-          flow.sign_in_session_limit_pending? && flow.result_digest.present? &&
+          flow.sign_in_session_issuance_pending? && flow.result_digest.present? &&
             flow.result_generation.positive? && !flow.expired?(now)
         else
           flow.local_result_delivery_matches?(
@@ -65,7 +65,7 @@ class LocalAuthenticationSessionCommitter
       unless flow.nonce_matches?(nonce) && flow.principal_id == actor.id && valid_delivery
         raise BaseAuthAdmissionCoordinator::Denied, "local result binding mismatch"
       end
-      return if flow.base_finalized_at || flow.sign_in_session_issuance_pending? || flow.sign_in_session_limit_pending?
+      return if flow.base_finalized_at || flow.sign_in_session_issuance_pending?
 
       raise BaseAuthAdmissionCoordinator::Denied, "local result is not ready"
     end
@@ -101,9 +101,11 @@ class LocalAuthenticationSessionCommitter
         flow.reload.update!(base_finalized_at: now)
         ceremony.complete!(now: now)
       when :session_limit_pending
-        flow.advance_sign_in_to_session_limit!(now: now) if flow.sign_in_session_issuance_pending?
+        # The durable child owns session-limit continuation. The parent remains
+        # in SESSION_ISSUANCE_PENDING until the same issuance boundary succeeds.
+        nil
       when :access_locked, :login_forbidden, :dpop_proof_invalid, :invalid_request
-        flow.fail_sign_in!(now: now)
+        flow.halt_sign_in!
       else
         raise BaseAuthAdmissionCoordinator::Denied, "unexpected local finalization status"
       end

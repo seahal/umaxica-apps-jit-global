@@ -5,7 +5,7 @@ module Base
   module App
     module Edge
       module V0
-        class CookiesController < Base::App::ApplicationController
+        class CookiesController < Base::App::AuthorityController
           include ::PreferenceWebCookieEndpoint
 
           AUTHENTICATION_MODE = :open

@@ -126,7 +126,9 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
            (surface == :totp) ? ClientTotpCredentialStatus::DELETED : ClientPasskeyStatus::DELETED,]
         when :com
           actor = Visitor.create!
-          actor.visitor_emails.create!(address: "removal-#{SecureRandom.hex(8)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+          actor.visitor_emails.create!(
+            address: "removal-#{SecureRandom.hex(8)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+          ).finalize_binding!
           credential = actor.visitor_passkeys.create!(
             webauthn_id: SecureRandom.uuid, public_key: "removed-key",
             uv_verified_at: Time.current,
@@ -160,7 +162,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       )
       removed_id = credential.id
 
-      assert IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+      assert IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token), surface
 
       credential.reload
       status = (surface == :totp) ? credential.user_identity_totp_credential_status_id : credential.status_id

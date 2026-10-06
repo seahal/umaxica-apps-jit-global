@@ -44,10 +44,13 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
       assert_nil credential.last_otp_at
 
       token = ClientToken.create!(user: actor)
-      issuance = BaseStepUpAdmissionIssuer.call!(
+      issuance = issue_confirmed_base_step_up_admission!(
         actor: actor, token: token,
         requirement: StepUpRequirement.new(
-          scope: "settings_birthdate", allowed_methods: [:totp], purpose: "step_up",
+          step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
+          phishing_resistant_required: false, user_verification_required: false,
+          full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+          resource_ref: nil, tenant_ref: nil, purpose: "step_up",
           audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
           require_session_binding: true,
         ), return_to: "/identity/birthdate",
@@ -122,10 +125,13 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
     token = ClientToken.create!(user: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:totp], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:totp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -165,11 +171,15 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     email = actor.client_emails.create!(
       address: "admitted-email@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     token = ClientToken.create!(user: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:email_otp], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -213,14 +223,22 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
          params: { authenticity_token: csrf, return_to: "/identity/birthdate" }
 
     assert_response :see_other
-    assert_equal "canceled", issuance.transaction.reload.status
+    cancellation = URI.parse(response.location)
+
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), cancellation.host
+    assert_equal base_app_verification_cancellation_path, cancellation.path
+    assert_equal issuance.transaction.transaction_id,
+                 Rack::Utils.parse_nested_query(cancellation.query).fetch("transaction_ref")
+    assert_equal "pending", issuance.transaction.reload.status
     assert_predicate ClientAuthCeremonySession.find_by!(
       step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
-    ), :cancelled?
+    ), :active?
     assert_nil token.reload.last_step_up_at
     post auth_app_verification_cancellation_path(ri: "jp"), params: { authenticity_token: csrf }
 
-    assert_response :bad_request
+    assert_response :see_other
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(response.location).host
+    assert_equal base_app_verification_cancellation_path, URI.parse(response.location).path
   end
 
   test "COM Email OTP admission uses only the Visitor transaction and verified credential" do
@@ -228,11 +246,15 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     email = actor.visitor_emails.create!(
       address: "admitted-com-email@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     token = VisitorToken.create!(visitor: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:email_otp], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:email_otp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:com", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -269,10 +291,13 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
     actor.client_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
     token = ClientToken.create!(user: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ), return_to: "/identity/birthdate",
@@ -315,11 +340,17 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     form = response.parsed_body.at_css("form")
     post form["action"], params: { authenticity_token: form.at_css('input[name="authenticity_token"]')["value"] }
 
-    assert_response :success
-    result_form = response.parsed_body.at_css("form")
+    assert_response :see_other
+    completion = URI.parse(response.location)
 
-    assert_equal issuance.transaction.transaction_id, result_form.at_css('input[name="transaction_ref"]')["value"]
-    assert_not_empty result_form.at_css('input[name="result"]')["value"]
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), completion.host
+    assert_equal base_app_verification_completion_path, completion.path
+    query = Rack::Utils.parse_nested_query(completion.query)
+
+    assert_equal issuance.transaction.transaction_id, query.fetch("transaction_ref")
+    assert_match BaseAuthAdmissionCoordinator::ADMISSION_REFERENCE_PATTERN, query.fetch("result_ref")
+    assert_not_includes response.location, "jump.umaxica.net"
+    assert_not_includes response.location, "/sign"
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
@@ -328,10 +359,13 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     actor = clients(:one)
     actor.client_passkeys.create!(webauthn_id: "admission-passkey", public_key: "public-key")
     token = ClientToken.create!(user: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+        step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil, purpose: "step_up",
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       ),
@@ -366,6 +400,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     post auth_app_verification_path(ri: "jp"),
          params: { entry_ref: issuance.reference, authenticity_token: csrf }
 
-    assert_response :bad_request
+    assert_response :see_other
+    assert_equal auth_app_verification_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 end

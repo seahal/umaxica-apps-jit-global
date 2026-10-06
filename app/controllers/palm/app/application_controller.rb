@@ -22,7 +22,7 @@ module Palm
       protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       # Surface-wide default web request limit (defense-in-depth baseline).
-      # RateLimit stays a side-effect-free helper; the limit and its numeric
+      # RateLimit stays an effect-free helper; the limit and its numeric
       # value are declared here on the inheriting controller.
       rate_limit(
         to: 300,

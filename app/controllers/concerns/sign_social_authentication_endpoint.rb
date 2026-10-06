@@ -123,7 +123,6 @@ module SignSocialAuthenticationEndpoint
   def issue_sign_up_flow!(provider)
     cycle =
       AppTicketRecord.connected_to(role: :writing) do
-        ClientSignUpFlowStatus.ensure_defaults!
         ClientSignUpFlow.create!(
           principal_id: nil,
           status_id: ClientSignUpFlowStatus::STARTED,

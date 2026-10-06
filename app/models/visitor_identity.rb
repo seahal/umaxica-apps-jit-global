@@ -38,6 +38,8 @@ class VisitorIdentity < ComRpRecord
              inverse_of: :visitor_identities
   has_one :individual, dependent: :restrict_with_error, inverse_of: :visitor_identity
   has_many :individual_assignments, dependent: :destroy, inverse_of: :visitor_identity
+  has_many :oidc_identity_bindings, class_name: "VisitorOidcIdentityBinding",
+                                    dependent: :restrict_with_error, inverse_of: :visitor_identity
 
   validates :issuer, :subject, :audience, :source_record_id, presence: true
   validates :public_id, uniqueness: true

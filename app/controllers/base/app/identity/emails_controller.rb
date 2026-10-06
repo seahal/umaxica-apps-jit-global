@@ -12,7 +12,6 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_client!
         before_action :authorize_emails!, only: :index
         # The edit page carries the delete action, so it is gated with it; this matches com,
         # which requires settings_email step-up for the whole controller.
@@ -58,7 +57,9 @@ module Base
             return redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
           end
 
-          @user_email.destroy!
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_client, credential: @user_email, current_session: current_session, request: request,
+          )
           create_audit_event!(ClientChronicleEvent::EMAIL_REMOVED, subject: @user_email)
           redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
         end

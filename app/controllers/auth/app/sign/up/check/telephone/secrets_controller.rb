@@ -33,6 +33,11 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
       completion_action: path,
       notice: distribution_notice,
       checkpoint_version: @sign_up_ticket.checkpoint_version,
+      reattempt_action: payload_failed? ? auth_app_sign_up_check_telephone_secret_reattempt_path(
+        ri: current_region_identifier, pt: signed_pt_param,
+      ) : nil,
+      reattempt_of: payload_failed? ? @issuance.public_id : nil,
+      reattempt_label: t("base.app.secrets.reattempt"),
     }
   end
 
@@ -81,6 +86,21 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
     redirect_to(next_explicit_step_path, status: :see_other)
   end
 
+  def reattempt
+    return unless load_gate_context!(gate_for_create)
+    return deny_delivery unless params[:reattempt_of].is_a?(String) && params[:reattempt_of] == @issuance.public_id
+    return unless validate_sign_up_checkpoint_version!(json: false)
+
+    ClientSecretPasskeyReservationIssuer.reattempt_for_sign_up!(
+      flow: @sign_up_ticket, nonce: browser_nonce, predecessor: @issuance,
+      expires_after: ClientSecretLifetimesValue.issuance_ttl,
+    )
+    redirect_to(
+      auth_app_sign_up_check_telephone_secret_path(ri: current_region_identifier, pt: signed_pt_param),
+      status: :see_other,
+    )
+  end
+
   def destroy
     cancel_from_explicit_step
   end
@@ -92,10 +112,10 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
   private
 
   def load_secret_issuance
-    @issuance = ClientSecretIssuance.find_by!(
+    @issuance = ClientSecretIssuance.where(
       client_id: @sign_up_ticket.principal_id, sign_up_flow_ref: @sign_up_ticket.public_id,
       origin: "passkey_registration", browser_session_ref: nil,
-    )
+    ).order(attempt_number: :desc).first!
   end
 
   def browser_nonce
@@ -111,6 +131,14 @@ class Auth::App::Sign::Up::Check::Telephone::SecretsController < Auth::App::Appl
     else
       t("base.app.secrets.distribution_one_present")
     end
+  end
+
+  def payload_failed?
+    @issuance.canceled_at.present? && ClientSecretAuditOutbox.exists?(
+      client_ref: @issuance.client.public_id, operation_ref: @issuance.origin_operation_id,
+      event_name: "secret.issuance_canceled", reason: "payload_unavailable",
+      occurred_at: @issuance.canceled_at, item_count: @issuance.planned_count,
+    )
   end
 
   def deny_delivery

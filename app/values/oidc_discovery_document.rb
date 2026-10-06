@@ -21,7 +21,7 @@ module OidcDiscoveryDocument
       # RFC 9207. The authorization response carries `iss`; advertising it lets a
       # conforming client require the parameter and reject a response that omits it.
       authorization_response_iss_parameter_supported: true,
-      grant_types_supported: ["authorization_code"],
+      grant_types_supported: %w(authorization_code refresh_token),
       subject_types_supported: ["public"],
       id_token_signing_alg_values_supported: [AuthenticationTokenService::JWT_ALGORITHM],
       token_endpoint_auth_signing_alg_values_supported: [AuthenticationTokenService::JWT_ALGORITHM],

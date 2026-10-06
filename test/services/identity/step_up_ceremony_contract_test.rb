@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
   include ActiveSupport::Testing::TimeHelpers
@@ -23,7 +22,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
     travel_back
   end
 
-  test "valid grant and result serialize and verify" do
+  test "valid explicit grant and result serialize and verify" do
     travel_to @now do
       grant_token = IdentityStepUpCeremonyGrant.issue(
         valid_grant_claims,
@@ -38,6 +37,9 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
 
       assert_equal "step_up_ceremony", grant["purpose"]
       assert_equal "settings_email", grant["required_scope"]
+      assert_predicate grant, :step_up_required?
+      assert_not grant.user_verification_required?
+      assert_equal "step_up:app", grant["audience"]
 
       result_token = IdentityStepUpCeremonyResult.issue(
         valid_result_claims,
@@ -52,6 +54,23 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
 
       assert_equal "step_up_ceremony_result", result["purpose"]
       assert_equal "totp", result["method"]
+      assert_not result["user_verified"]
+      assert_not result["phishing_resistant"]
+      assert_equal "credential-public-id", result["credential_ref"]
+    end
+  end
+
+  test "wire values require explicit false evidence and requirement claims" do
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyGrant.new(valid_grant_claims.except("user_verification_required"), now: @now)
+    end
+
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyResult.new(valid_result_claims.except("user_verified"), now: @now)
+    end
+
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyResult.new(valid_result_claims.except("phishing_resistant"), now: @now)
     end
   end
 
@@ -65,232 +84,58 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "freshness committer writes token freshness and rejects replay mismatches" do
-    travel_to @now do
-      result_token = IdentityStepUpCeremonyResult.issue(
-        valid_result_claims,
-        issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id("app"),
-        now: @now,
-      )
-
-      IdentityStepUpCeremonyFreshnessCommitter.call!(
-        result_token: result_token,
-        token: @token,
-        expected_scope: "settings_email",
-        expected_aal: "aal2",
-        expected_method: "totp",
-        audience: "step_up:app",
-        surface: "app",
-        now: @now,
-      )
-
-      @token.reload
-
-      assert_equal @now.to_i, @token.last_step_up_at.to_i
-      assert_equal "settings_email", @token.last_step_up_scope
-      assert_equal "aal2", @token.last_step_up_aal
-      assert_equal "totp", @token.last_step_up_method
-      assert_equal "step_up", @token.last_step_up_purpose
-      assert_equal "step_up:app", @token.last_step_up_audience
-
+  test "explicit legacy AAL demand is refused at the signed grant boundary" do
+    error =
       assert_raises(IdentityStepUpCeremonyContract::Error) do
-        IdentityStepUpCeremonyFreshnessCommitter.call!(
-          result_token: result_token,
-          token: @token,
-          expected_scope: "settings_telephone",
-          expected_aal: "aal2",
-          expected_method: "totp",
-          audience: "step_up:app",
-          surface: "app",
-          now: @now,
-        )
+        IdentityStepUpCeremonyGrant.new(valid_grant_claims.merge("required_aal" => "aal2"), now: @now)
       end
-    end
+    assert_includes error.message, "legacy AAL requirements are unsupported"
   end
 
-  test "freshness committer rejects a blank token and mismatched actor session method or aal" do
-    travel_to @now do
-      result_token = IdentityStepUpCeremonyResult.issue(
-        valid_result_claims,
-        issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id("app"),
-        now: @now,
-      )
+  test "telephone otp is not an allowed step-up method" do
+    assert_not_includes IdentityStepUpCeremonyContract::METHODS, "telephone_otp"
 
-      error =
-        assert_raises(IdentityStepUpCeremonyContract::Error) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            result_token: result_token,
-            token: nil,
-            expected_scope: "settings_email",
-            expected_aal: "aal2",
-            expected_method: "totp",
-            audience: "step_up:app",
-            surface: "app",
-            now: @now,
-          )
-        end
-      assert_includes error.message, "token is required"
+    error =
+      assert_raises(IdentityStepUpCeremonyContract::Error) do
+        IdentityStepUpCeremonyResult.new(valid_result_claims.merge("method" => "telephone_otp"), now: @now)
+      end
 
-      other_client = Client.create!(status_id: ClientStatus::NOTHING)
-      other = ClientToken.create!(
-        user: other_client,
-        user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-        user_token_status_id: ClientTokenStatus::ACTIVE,
-      )
-      error =
-        assert_raises(IdentityStepUpCeremonyContract::Error) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            result_token: result_token,
-            token: other,
-            expected_scope: "settings_email",
-            expected_aal: "aal2",
-            expected_method: "totp",
-            audience: "step_up:app",
-            surface: "app",
-            now: @now,
-          )
-        end
-      assert_includes error.message, "result actor does not match current actor"
-
-      mismatched_session = ClientToken.create!(
-        user: @client,
-        user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-        user_token_status_id: ClientTokenStatus::ACTIVE,
-      )
-      error =
-        assert_raises(IdentityStepUpCeremonyContract::Error) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            result_token: result_token,
-            token: mismatched_session,
-            expected_scope: "settings_email",
-            expected_aal: "aal2",
-            expected_method: "totp",
-            audience: "step_up:app",
-            surface: "app",
-            now: @now,
-          )
-        end
-      assert_includes error.message, "result session does not match current session"
-
-      error =
-        assert_raises(IdentityStepUpCeremonyContract::Error) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            result_token: result_token,
-            token: @token,
-            expected_scope: "settings_email",
-            expected_aal: "aal2",
-            expected_method: "passkey",
-            audience: "step_up:app",
-            surface: "app",
-            now: @now,
-          )
-        end
-      assert_includes error.message, "result method does not match ceremony"
-    end
+    assert_includes error.message, "method is invalid"
   end
 
-  test "freshness committer rejects an insufficient AAL and records only attributes the token has" do
-    travel_to @now do
-      low_aal = IdentityStepUpCeremonyResult.issue(
-        valid_result_claims.merge("aal" => "aal1", "result_jti" => SecureRandom.uuid),
-        issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id("app"),
-        now: @now,
-      )
-      error =
-        assert_raises(IdentityStepUpCeremonyContract::Error) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            result_token: low_aal,
-            token: @token,
-            expected_scope: "settings_email",
-            expected_aal: "aal2",
-            expected_method: "totp",
-            audience: "step_up:app",
-            surface: "app",
-            now: @now,
-          )
-        end
-      assert_includes error.message, "result AAL is insufficient"
+  test "freshness revoker clears the complete explicit authority tuple" do
+    @token.update!(
+      last_step_up_at: @now,
+      last_step_up_scope: "settings_email",
+      last_step_up_aal: "aal2",
+      last_step_up_method: "totp",
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:app",
+      last_step_up_session_public_id: @token.public_id,
+      last_step_up_phishing_resistant: false,
+      last_step_up_user_verified: false,
+      last_step_up_credential_ref: "credential-public-id",
+      last_step_up_full_reauthentication: false,
+      last_step_up_resource_ref: "resource-public-id",
+      last_step_up_tenant_ref: "tenant-public-id",
+    )
 
-      result_token = IdentityStepUpCeremonyResult.issue(
-        valid_result_claims.merge(
-          "result_jti" => SecureRandom.uuid, "actor_ref" => "visitor-1",
-          "session_ref" => "visitor-session",
-        ),
-        issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id("app"),
-        now: @now,
-      )
-      visitor_token = VisitorOnlyStepUpToken.new(
-        public_id: "visitor-session", visitor: Struct.new(:public_id).new("visitor-1"),
-      )
-      IdentityStepUpCeremonyFreshnessCommitter.call!(
-        result_token: result_token,
-        token: visitor_token,
-        expected_scope: "settings_email",
-        expected_aal: "aal2",
-        expected_method: "totp",
-        audience: "step_up:app",
-        surface: "app",
-        now: @now,
-      )
+    IdentityStepUpCeremonyFreshnessRevoker.call!(@token)
 
-      assert_equal "settings_email", visitor_token.updated.fetch(:last_step_up_scope)
-      assert_equal @now.to_i, visitor_token.updated.fetch(:last_step_up_at).to_i
+    @token.reload
 
-      staff_token = StaffOnlyStepUpToken.new(
-        public_id: "visitor-session", staff: Struct.new(:public_id).new("visitor-1"),
-      )
-      IdentityStepUpCeremonyFreshnessCommitter.call!(
-        result_token: result_token,
-        token: staff_token,
-        expected_scope: "settings_email",
-        expected_aal: "aal2",
-        expected_method: "totp",
-        audience: "step_up:app",
-        surface: "app",
-        now: @now,
-      )
-
-      assert_equal "visitor-1", staff_token.staff.public_id
-    end
-  end
-
-  test "freshness revoker clears only the freshness columns the token actually has" do
-    bare = BareStepUpToken.new(public_id: "sess")
-    IdentityStepUpCeremonyFreshnessRevoker.call!(bare)
-
-    assert_equal({ last_step_up_at: nil, last_step_up_scope: nil }, bare.updated)
-  end
-
-  class BareStepUpToken
-    attr_reader :public_id, :updated
-
-    def initialize(public_id:)
-      @public_id = public_id
-    end
-
-    def update!(attrs)
-      @updated = attrs
-    end
-
-    def has_attribute?(_name) = false
-  end
-
-  class VisitorOnlyStepUpToken < BareStepUpToken
-    attr_reader :visitor
-
-    def initialize(public_id:, visitor:)
-      super(public_id: public_id)
-      @visitor = visitor
-    end
-  end
-
-  class StaffOnlyStepUpToken < BareStepUpToken
-    attr_reader :staff
-
-    def initialize(public_id:, staff:)
-      super(public_id: public_id)
-      @staff = staff
-    end
+    assert_nil @token.last_step_up_at
+    assert_nil @token.last_step_up_scope
+    assert_nil @token.last_step_up_method
+    assert_nil @token.last_step_up_purpose
+    assert_nil @token.last_step_up_audience
+    assert_nil @token.last_step_up_session_public_id
+    assert_not @token.last_step_up_phishing_resistant
+    assert_nil @token.last_step_up_user_verified
+    assert_nil @token.last_step_up_credential_ref
+    assert_nil @token.last_step_up_full_reauthentication
+    assert_nil @token.last_step_up_resource_ref
+    assert_nil @token.last_step_up_tenant_ref
   end
 
   test "fetch_surface_value rejects invalid surfaces" do
@@ -323,7 +168,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
     assert_includes error.message, "token is invalid"
   end
 
-  test "signature verification rejects wrong key and tampering" do
+  test "signature verification rejects wrong key and payload tampering" do
     travel_to @now do
       token = IdentityStepUpCeremonyGrant.issue(
         valid_grant_claims,
@@ -349,46 +194,6 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
           )
         end
       assert_includes error.message, "token verification failed"
-    end
-  end
-
-  # SMS is not an accepted step-up proof, so telephone_otp must not survive as
-  # an allowed method value.
-  test "telephone otp is not an allowed step-up method" do
-    assert_not_includes IdentityStepUpCeremonyContract::METHODS, "telephone_otp"
-
-    error =
-      assert_raises(IdentityStepUpCeremonyContract::Error) do
-        IdentityStepUpCeremonyResult.new(valid_result_claims.merge("method" => "telephone_otp"), now: @now)
-      end
-
-    assert_includes error.message, "method is invalid"
-  end
-
-  test "freshness committer rejects a result whose surface differs from the caller surface" do
-    travel_to @now do
-      result_token = IdentityStepUpCeremonyResult.issue(
-        valid_result_claims,
-        issuer_id: IdentityStepUpCeremonyContract.sign_issuer_id("app"),
-        now: @now,
-      )
-
-      error =
-        assert_raises(IdentityStepUpCeremonyContract::Error) do
-          IdentityStepUpCeremonyFreshnessCommitter.call!(
-            result_token: result_token,
-            token: @token,
-            expected_scope: "settings_email",
-            expected_aal: "aal2",
-            expected_method: "totp",
-            audience: "step_up:app",
-            surface: "org",
-            now: @now,
-          )
-        end
-
-      assert_includes error.message, "kid is unknown"
-      assert_nil @token.reload.last_step_up_at
     end
   end
 
@@ -420,7 +225,14 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
       "transaction_id" => "step-up-txn",
       "jti" => "step-up-grant",
       "required_scope" => "settings_email",
-      "required_aal" => "aal2",
+      "required_aal" => "none",
+      "step_up_required" => true,
+      "user_verification_required" => false,
+      "full_reauthentication_required" => false,
+      "phishing_resistant_required" => false,
+      "audience" => "step_up:app",
+      "token_binding" => @token.public_id,
+      "require_session_binding" => true,
       "allowed_methods" => %w(totp passkey email_otp),
       "iat" => @now.to_i,
       "exp" => (@now + 10.minutes).to_i,
@@ -440,11 +252,15 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
       "grant_jti" => "step-up-grant",
       "result_jti" => SecureRandom.uuid,
       "scope" => "settings_email",
-      "aal" => "aal2",
+      "aal" => "aal1",
       "method" => "totp",
       "verified_at" => @now.to_i,
       "challenge_id" => "challenge-1",
       "expires_at" => (@now + 10.minutes).to_i,
+      "phishing_resistant" => false,
+      "user_verified" => false,
+      "credential_ref" => "credential-public-id",
+      "full_reauthentication" => false,
       "iat" => @now.to_i,
       "exp" => (@now + 10.minutes).to_i,
     }

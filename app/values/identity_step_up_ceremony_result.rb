@@ -7,9 +7,9 @@ class IdentityStepUpCeremonyResult
 
   REQUIRED_CLAIMS = %w(
     typ iss aud purpose surface actor_ref session_ref transaction_id grant_jti result_jti scope aal method
-    verified_at challenge_id expires_at iat exp
+    verified_at challenge_id expires_at phishing_resistant user_verified credential_ref full_reauthentication iat exp
   ).freeze
-  OPTIONAL_CLAIMS = %w(attempt_count phishing_resistant).freeze
+  OPTIONAL_CLAIMS = %w(attempt_count resource_ref tenant_ref).freeze
   ALLOWED_CLAIMS = (REQUIRED_CLAIMS + OPTIONAL_CLAIMS).freeze
 
   attr_reader :payload, :kid
@@ -42,6 +42,7 @@ class IdentityStepUpCeremonyResult
   def [](key) = payload[key.to_s]
 
   def achieved_aal
+    # @deprecated This is a signed legacy label only and never authorizes a ceremony.
     value = self[:aal].to_s
     (value == StepUpRequirement::NO_AAL) ? nil : value.to_sym
   end
@@ -59,10 +60,14 @@ class IdentityStepUpCeremonyResult
       now: now,
     )
     IdentityStepUpCeremonyContract.validate_inclusion!(payload, "method", IdentityStepUpCeremonyContract::METHODS)
-    IdentityStepUpCeremonyContract.validate_boolean!(
-      payload,
-      "phishing_resistant",
-    ) if payload.key?("phishing_resistant")
+    %w(user_verified full_reauthentication).each do |key|
+      IdentityStepUpCeremonyContract.validate_boolean!(payload, key)
+    end
+    IdentityStepUpCeremonyContract.validate_boolean!(payload, "phishing_resistant")
+    return if payload["credential_ref"].is_a?(String) && payload["credential_ref"].present?
+
+    raise IdentityStepUpCeremonyContract::Error, "credential_ref is invalid"
+
   end
 
   def self.default_claims(attributes, now:)

@@ -9,14 +9,10 @@ class IdentityTotpEnrollmentFinalCommitter
   class << self
     public
 
-    def call!(actor:, token:, transaction:, raw_result:)
+    def call!(actor:, token:, transaction:, raw_result: nil, result_reference: nil)
       validate_binding!(actor, token, transaction)
-      payload = BaseAuthAdmissionCoordinator.read_result!(
-        raw_code: raw_result, surface: "app", transaction_ref: transaction.transaction_id,
-        expected_intent: transaction.purpose,
-      )
-      digest = Valkey::AuthState::OpaqueAdmissionStore.digest_for(
-        purpose: "#{transaction.purpose}_result", raw_code: raw_result,
+      payload, digest = read_result_delivery(
+        transaction: transaction, raw_result: raw_result, result_reference: result_reference,
       )
       Client.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
@@ -29,6 +25,30 @@ class IdentityTotpEnrollmentFinalCommitter
       raise IdentityTotpCeremonyContract::Error, "enrollment record unavailable"
     rescue ClientTotpCredential::SlotLimitExceeded
       raise IdentityTotpCeremonyContract::Error, "TOTP credential limit is reached"
+    end
+
+    def read_result_delivery(transaction:, raw_result:, result_reference:)
+      if result_reference.present?
+        [
+          BaseAuthAdmissionCoordinator.read_result_reference!(
+            reference: result_reference, surface: "app", transaction_ref: transaction.transaction_id,
+            expected_intent: transaction.purpose,
+          ),
+          transaction.result_digest,
+        ]
+      else
+        raise ArgumentError, "TOTP result is required" unless raw_result.is_a?(String) && raw_result.present?
+
+        [
+          BaseAuthAdmissionCoordinator.read_result!(
+            raw_code: raw_result, surface: "app", transaction_ref: transaction.transaction_id,
+            expected_intent: transaction.purpose,
+          ),
+          Valkey::AuthState::OpaqueAdmissionStore.digest_for(
+            purpose: "#{transaction.purpose}_result", raw_code: raw_result,
+          ),
+        ]
+      end
     end
 
     private
@@ -103,7 +123,8 @@ class IdentityTotpEnrollmentFinalCommitter
     end
 
     def validate_registration_evidence!(transaction, now)
-      unless transaction.required_aal == "none" && transaction.phishing_resistant_required == false &&
+      unless transaction.step_up_required == false && transaction.phishing_resistant_required == false &&
+          transaction.user_verification_required == false && transaction.full_reauthentication_required == false &&
           transaction.method == "totp" && transaction.aal == "none" && transaction.phishing_resistant == false &&
           transaction.allowed_methods_array.include?("totp") && transaction.verified_at &&
           transaction.verified_at >= transaction.created_at && transaction.verified_at <= now

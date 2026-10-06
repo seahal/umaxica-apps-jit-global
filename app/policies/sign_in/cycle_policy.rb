@@ -19,10 +19,6 @@ module SignIn
       status_allowed?("MFA_PENDING", actor_required: true)
     end
 
-    def manage_session_limit?
-      status_allowed?("SESSION_LIMIT_PENDING")
-    end
-
     def run_guardrail?
       status_allowed?("GUARDRAIL_PENDING", actor_required: actor_bound?, token_required: token_bound?)
     end
@@ -43,14 +39,6 @@ module SignIn
       status_allowed?("SELECTOR_PENDING")
     end
 
-    def show_dashboard?
-      status_allowed?("DASHBOARD_PENDING", actor_required: true, token_required: true)
-    end
-
-    def consume_return?
-      status_allowed?("RETURN_PENDING", actor_required: true, token_required: true)
-    end
-
     def fail?
       return false unless sign_in_flow?
       return false if terminal?
@@ -64,7 +52,7 @@ module SignIn
 
     def status_allowed?(status_name, actor_required: false, token_required: false)
       return false unless sign_in_flow?
-      return false unless record.status_id == record.status_id_for(status_name)
+      return false unless record.state_id == record.state_id_for(status_name)
       return false if terminal?
       return false if actor_required && !actor_matches?
       return false if token_required && !token_matches?
@@ -73,7 +61,7 @@ module SignIn
     end
 
     def sign_in_flow?
-      record.respond_to?(:status_id_for) &&
+      record.respond_to?(:state_id_for) &&
         record.respond_to?(:sign_in_completed?) &&
         record.respond_to?(:sign_in_failed?)
     end

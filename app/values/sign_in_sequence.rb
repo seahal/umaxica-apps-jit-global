@@ -14,10 +14,11 @@ class SignInSequence
     COMPLETED
     FAILED
     EXPIRED
+    HALTED
   ).freeze
 
   PARTICIPANTS = %w(guardrail checkpoint dashboard).freeze
-  TERMINAL_STATES = %w(COMPLETED FAILED EXPIRED).freeze
+  TERMINAL_STATES = %w(COMPLETED FAILED EXPIRED HALTED).freeze
 
   attr_reader :payload
 

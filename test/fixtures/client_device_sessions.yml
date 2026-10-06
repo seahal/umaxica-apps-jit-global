@@ -1,0 +1,30 @@
+# == Schema Information
+#
+#  id                       :bigint           not null, primary key
+#  public_id                :string(21)       not null
+#  user_id                  :bigint           not null
+#  status_id                :bigint           default(1), not null
+#  current_refresh_token_id :bigint
+#  refresh_token_family_id  :string
+#  last_seen_at             :datetime
+#  revoked_at               :datetime
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#
+one:
+  id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  public_id: client-device-one
+  user_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  status_id: 1
+  current_refresh_token_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+two:
+  id: <%= ActiveRecord::FixtureSet.identify(:two) %>
+  public_id: client-device-two
+  user_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
+  status_id: 1
+  current_refresh_token_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>

@@ -64,7 +64,6 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     secret = ClientSecretCredential.create!(
       client: client, issuance: issuance, name: "Pending withdrawal", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     client.update!(withdrawn_at: now, terminated_at: now)
     previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
@@ -88,7 +87,7 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
     assert_equal ClientTotpCredentialStatus::REVOKED, totp.reload.user_identity_totp_credential_status_id
     assert secret.reload.revoked_at
     assert_kind_of Time, secret.discard_at
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: client, secret: raw)
     assert issuance.reload.canceled_at
     assert_equal %w(secret.discarded secret.revoked),
                  ClientSecretAuditOutbox.where(credential_ref: secret.public_id).order(:event_name).pluck(:event_name)

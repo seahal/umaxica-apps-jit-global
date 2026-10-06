@@ -204,6 +204,7 @@ module OidcClientRegistry
         PRIVATE_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL PRIVATE_AUTH_CORPORATE_URL
         BASE_SERVICE_URL BASE_STAFF_URL BASE_CORPORATE_URL
         PUBLIC_WARP_SERVICE_URL PUBLIC_WARP_STAFF_URL PUBLIC_WARP_CORPORATE_URL
+        PUBLIC_EDIT_STAFF_URL
         PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL PUBLIC_CORE_CORPORATE_URL
         CORE_SERVICE_URL CORE_STAFF_URL CORE_CORPORATE_URL
       ).map { |name| [name, ENV.fetch(name, nil)] }
@@ -259,25 +260,35 @@ module OidcClientRegistry
       [
         normalize_host(hosts.sign_staff),
         normalize_host(hosts.auth_staff),
+        normalize_host(hosts.base_staff),
         normalize_host(hosts.core_staff),
+        normalize_host(hosts.warp_staff),
+        normalize_host(ENV.fetch("PUBLIC_EDIT_STAFF_URL", nil)),
         normalize_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL", nil)),
         normalize_host(ENV.fetch("PUBLIC_AUTH_STAFF_URL", nil)),
+        normalize_host(ENV.fetch("BASE_STAFF_URL", nil)),
       ].compact_blank.uniq
     when "visitor"
       [
         normalize_host(hosts.sign_corporate),
         normalize_host(hosts.auth_corporate),
+        normalize_host(hosts.base_corporate),
         normalize_host(hosts.core_corporate),
+        normalize_host(hosts.warp_corporate),
         normalize_host(ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", nil)),
         normalize_host(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", nil)),
+        normalize_host(ENV.fetch("BASE_CORPORATE_URL", nil)),
       ].compact_blank.uniq
     else
       [
         normalize_host(hosts.sign_service),
         normalize_host(hosts.auth_service),
+        normalize_host(hosts.base_service),
         normalize_host(hosts.core_service),
+        normalize_host(hosts.warp_service),
         normalize_host(ENV.fetch("PRIVATE_AUTH_SERVICE_URL", nil)),
         normalize_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", nil)),
+        normalize_host(ENV.fetch("BASE_SERVICE_URL", nil)),
       ].compact_blank.uniq
     end
   end

@@ -15,13 +15,6 @@ module Auth
               skip_before_action :enforce_email_flow!
 
               def show
-                if dummy_existing_email_flow?
-                  @user_email = ClientEmail.new
-                  return render_sign_up_email_edit if valid_email_session?
-
-                  return redirect_invalid_session
-                end
-
                 return unless load_gate_context!(gate_for_show)
 
                 @user_email = current_registration_email
@@ -106,8 +99,6 @@ module Auth
               end
 
               def verify_otp_ceremony!(submitted_code)
-                return verify_dummy_otp_ceremony!(submitted_code) if dummy_existing_email_flow?
-
                 SignOtpCeremony.verify!(
                   purpose: :sign_up,
                   surface: :app,
@@ -150,17 +141,6 @@ module Auth
 
               def complete_update_and_redirect
                 redirect_to(auth_app_sign_up_check_email_birthdate_path(ri: params[:ri], pt: signed_pt_param))
-              end
-
-              def verify_dummy_otp_ceremony!(submitted_code)
-                verify_dummy_otp(submitted_code)
-                SignOtpCeremony::Result.new(
-                  success?: false,
-                  status: :invalid_code,
-                  record: nil,
-                  code: nil,
-                  error: :invalid_code,
-                )
               end
 
               def submitted_pass_code

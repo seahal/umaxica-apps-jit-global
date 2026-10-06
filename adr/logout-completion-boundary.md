@@ -55,3 +55,16 @@ completion delivery remains outside the Jump graph.
 - `adr/acme-session-and-token-authority.md`
 - `adr/sign-credential-gateway-surface.md`
 - `adr/logout-primitive-and-composition.md`
+
+## Historical completion amendment (2026-10-06)
+
+This superseded ADR remains historical, but its completion distinction is retained for the current
+logout design. Browser-ceremony completion, the security commit that revokes authority, and
+retirement of already-issued access JWTs are separate facts. A completed logout records that the
+logout mutation finished; it does not claim that every access JWT is invalid before its `exp` plus
+leeway.
+
+The current Browser RP flow is defined by `two.md` and `adr/logout-ceremony-boundary.md`: authority
+revocation is the irreversible first phase, then authority cleanup, origin cleanup, initiating
+RP-session revocation, and finalization occur. This paragraph **amends the historical
+interpretation only**; the ADR's superseded route contract is not restored.

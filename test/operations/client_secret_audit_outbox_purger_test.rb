@@ -32,7 +32,7 @@ class ClientSecretAuditOutboxPurgerTest < ActiveSupport::TestCase
     assert Chronicle.exists?(event_uuid: event.event_id)
   end
 
-  test "deleted Client replay barrier is collectible after durable delivery and absence of dependent facts" do
+  test "deleted Client replay barrier without authority snapshot remains held after durable delivery" do
     reference = SecureRandom.base58(21)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
@@ -49,8 +49,8 @@ class ClientSecretAuditOutboxPurgerTest < ActiveSupport::TestCase
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 1)
     Timeout.timeout(3) { sleep 0.01 while Client.database_now < event.reload.purge_eligible_at }
 
-    assert_equal :purged, ClientSecretAuditOutboxPurger.call!(event: event)
-    assert_not ClientSecretAuditOutbox.exists?(event.id)
+    assert_equal :replay_barrier, ClientSecretAuditOutboxPurger.call!(event: event)
+    assert ClientSecretAuditOutbox.exists?(event.id)
     assert Chronicle.exists?(event_uuid: event.event_id, action: "secret.issuance_purged")
   end
 

@@ -4,38 +4,27 @@
 module Base
   module Com
     module Oauth
-      class AuthorizationsController < Base::Com::ApplicationController
+      class AuthorizationsController < Base::Com::AuthorityController
         include ::OauthAuthorizeRateLimit
         include ::OauthAuthorizeRequestSizeLimit
         include ::OidcAuthorizationResultPost
 
         AUTHENTICATION_MODE = :open
-        OIDC_RESULT_TRUSTED_ORIGINS = JitHostOriginEnv.trusted_origins(
-          ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-        ).freeze
         declare_authentication_mode! :open
-
-        protect_from_forgery using: :header_or_legacy_token,
-                             trusted_origins: OIDC_RESULT_TRUSTED_ORIGINS,
-                             with: :exception,
-                             only: :create,
-                             if: -> { params[:result].present? }
         skip_before_action :set_region, raise: false
         before_action :enforce_oauth_authorize_request_size!, only: :show
 
         def show
+          return render_oidc_result_continuation! if params[:result_ref].present? || params[:transaction_ref].present?
+
           validate_authorization_request!
 
-          # A browser already authenticated here may not start a new Sign, even for an RP that has
-          # no session yet; there is no SSO success branch
-          # (adr/sign-neutral-entry-and-logout-target-authorization.md). The Auth result POST
-          # (`create`) is the only continuation that issues a code.
-          if logged_in?
-            render_sign_in_unavailable_while_authenticated
+          if authorization_session_sufficient?
+            issue_authorization_code!(current_visitor)
           elsif prompt_none_requested?
             redirect_login_required!
           else
-            start_authorization_ceremony!
+            render_authorization_ceremony_start!
           end
         rescue OidcAuthorizeRequestResolver::InvalidScope => e
           render json: { error: "invalid_scope", error_description: e.message }, status: :bad_request
@@ -79,6 +68,17 @@ module Base
 
         def oidc_result_surface = "com"
 
+        def authorization_session_sufficient?
+          return false unless logged_in?
+          return false if OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt]) == "login"
+
+          max_age = @validated_client&.max_age
+          return true if max_age.nil?
+
+          authentication_event_at = current_authentication_event_at
+          authentication_event_at.present? && Time.current <= authentication_event_at + max_age.seconds
+        end
+
         def validate_authorization_request!(params_hash = authorize_params)
           @validated_client = OidcAuthorizeRequestResolver.call(
             params: params_hash, resource: current_visitor, resource_type: resource_type,
@@ -107,27 +107,25 @@ module Base
         end
 
         def start_authorization_ceremony!
-          issuance =
-            OidcAuthorizationTransactionCoordinator.issue!(
-              surface: "com",
-              intent: authorization_intent,
-              params: authorize_params,
-            )
-          handoff = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction)
+          ensure_base_admission_browser_nonce!
+          issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
+            surface: "com", intent: authorization_intent, params: authorize_params,
+            base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token,
+          )
           sign_url =
             if authorization_intent == "sign_up"
               auth_com_sign_up_url(
                 ri: params[:ri],
                 host: oidc_sign_host,
                 protocol: oidc_sign_protocol,
-                transaction_ref: handoff.reference,
+                entry_ref: issuance.handoff.reference,
               )
             else
               auth_com_sign_in_url(
                 ri: params[:ri],
                 host: oidc_sign_host,
                 protocol: oidc_sign_protocol,
-                transaction_ref: handoff.reference,
+                entry_ref: issuance.handoff.reference,
               )
             end
           redirect_to_jump_url(sign_url)
@@ -144,11 +142,8 @@ module Base
           finalization = finalize_authorization_transaction!(
             resource, transaction, result_generation: result_generation,
           )
-          if %i(session_limit_pending session_limit_hard_reject).include?(finalization[:status])
-            # This surface has no Base session-limit ceremony, so a full limit is
-            # refused rather than answered with a restricted session.
-            return render_session_limit_hard_reject
-          end
+          return redirect_to_session_limitation! if finalization[:status] == :session_limit_pending
+          return render_session_limit_hard_reject if finalization[:status] == :session_limit_hard_reject
           return render(
             json: { error: "invalid_request", error_description: "login_failed" },
             status: :bad_request,
@@ -167,6 +162,10 @@ module Base
 
         def render_invalid_authorization_transaction(description)
           render json: { error: "invalid_request", error_description: description }, status: :bad_request
+        end
+
+        def redirect_to_session_limitation!
+          redirect_to(base_com_sign_in_limitation_path(ri: params[:ri]), status: :see_other)
         end
 
         def finalize_authorization_transaction!(resource, transaction, result_generation: nil)
@@ -207,6 +206,8 @@ module Base
               require_totp_check: false,
               audit_context: { oidc_client_id: transaction.client_id },
               authentication_event_at: transaction.authenticated_at,
+              established_authentication_method: established_authentication_method_for(transaction.auth_method),
+              oidc_authorization_transaction: transaction,
             )
           end
         end

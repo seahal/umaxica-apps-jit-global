@@ -6,7 +6,7 @@ module Base
     class SignOutsController < Base::Com::ApplicationController
       include ::AuthenticationLogoutable
       include ::SignOutNotice
-      include ::SignOidcLogout
+      include ::OidcRpLogoutLauncher
       include ::BaseSignOutDestination
       include ::SurfaceInertiaPage
 
@@ -18,9 +18,17 @@ module Base
       layout -> { @render_surface_erb_layout ? "base/com/application" : "base/com/inertia" }
 
       declare_authentication_mode! :open
+      before_action :authenticate_oidc_rp_session!, only: :create,
+                                                    unless: -> { params[:logout_challenge].present? }
       after_action :sign_out_notice_cache_headers!, only: %i(edit create)
 
       public
+
+      def show
+        return continue_browser_rp_logout! if params[:logout_challenge].present?
+
+        complete_oidc_rp_logout!
+      end
 
       def new
         redirect_to(sign_out_edit_path, status: :see_other)
@@ -31,7 +39,13 @@ module Base
       end
 
       def create
-        finish_local_sign_out!
+        return continue_browser_rp_logout! if params[:logout_challenge].present?
+
+        launch_oidc_rp_logout!(
+          client_id: "base-com-ww",
+          issuer_resource_type: "visitor",
+          token_issuer: "visitor",
+        )
       end
 
       protected
@@ -43,11 +57,6 @@ module Base
       end
 
       private
-
-      def reject_oidc_logout_challenge!(reason)
-        @render_surface_erb_layout = true
-        super
-      end
 
       def sign_out_edit_page_props(back_to_dashboard: false)
         active = sign_out_active_context_present?

@@ -26,7 +26,7 @@ class SocialAuthLinkHandler
     existing_for_user = identity_for_current_user
     return handle_existing_for_current_user(existing_for_user) if existing_for_user
 
-    identity = repository.find_by_subject(uid, lock: true)
+    identity = repository.find_by_subject_for_link(uid, lock: true)
     Rails.logger.debug do
       "[SocialAuth] Identity with uid exists: #{identity.present?}, " \
         "belongs_to_current_user: #{identity&.user_id == current_client_id}"
@@ -130,7 +130,7 @@ class SocialAuthLinkHandler
   end
 
   def identity_for_current_user
-    repository.find_for_user(current_client)
+    repository.find_for_user_for_link(current_client)
   end
 
   def same_social_identity?(identity)

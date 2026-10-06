@@ -44,6 +44,21 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       controller: "edit/org/sign/entries",
       callback_controller: "edit/org/oidc/callbacks",
     },
+    {
+      host: -> { ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost") },
+      controller: "base/app/sign/entries",
+      callback_controller: "base/app/oidc/callbacks",
+    },
+    {
+      host: -> { ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost") },
+      controller: "base/com/sign/entries",
+      callback_controller: "base/com/oidc/callbacks",
+    },
+    {
+      host: -> { ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost") },
+      controller: "base/org/sign/entries",
+      callback_controller: "base/org/oidc/callbacks",
+    },
   ].freeze
 
   test "every first-party browser RP has neutral GET and POST sign entry routes" do
@@ -191,7 +206,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = original
   end
 
-  test "an authenticated browser receives a plain refusal instead of a new RP flow" do
+  test "a root-cookie-only browser is unauthenticated for the RP entry" do
     host = RP_ROUTES.first.fetch(:host).call
     host!(host)
 
@@ -210,11 +225,8 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
 
     post "/sign", params: { pt: "/" }, headers: authenticated_headers
 
-    assert_response :forbidden
-    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
-    assert_equal "text/plain", response.media_type
-    assert_includes response.headers["Cache-Control"], "no-store"
-    assert_nil response.location
+    assert_response :redirect
+    assert_predicate session.fetch("oidc_pending_flows"), :present?
   end
 
   test "an RP-authenticated browser receives a plain refusal instead of a new RP flow" do
@@ -222,13 +234,31 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     host!(host)
     client = clients(:one)
     oidc_client = OidcClientRegistry.find!("core-app")
+    ensure_user_token_reference_records!
+    root_token = ClientToken.create!(
+      user: client,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
+    rp_session = ClientRpSession.create!(
+      client_token: root_token,
+      oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
     access_token = AuthenticationTokenService.encode(
       client,
-      host: host,
+      host: OidcIssuer.host_for_resource_type("client"),
       resource_type: "client",
-      session_public_id: "rp-entry-contract-session",
-      oidc_sid: "rp-entry-contract-session",
-      oidc_jti: SecureRandom.uuid,
+      session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
       expires_at: 10.minutes.from_now,
       scopes: %w(openid profile),
       issuer: OidcIssuer.for_client(oidc_client),
@@ -297,5 +327,12 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     end
     ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
+  end
+
+  def ensure_user_token_reference_records!
+    ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
+    ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
+    ClientTokenBindingMethod.find_or_create_by!(id: ClientTokenBindingMethod::LEGACY)
+    ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
   end
 end

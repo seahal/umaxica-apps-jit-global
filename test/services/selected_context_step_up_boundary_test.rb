@@ -31,7 +31,7 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
         scope: scope, allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:#{surface}",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
       )
-      pending = BaseStepUpAdmissionIssuer.call!(
+      pending = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
       ).transaction
       continuity, = ceremony_model.rotate_and_admit!(
@@ -50,7 +50,7 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       assert_predicate token, :currently_usable?
       assert_predicate token, :selected_actor_context?
 
-      pending = BaseStepUpAdmissionIssuer.call!(
+      pending = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
       ).transaction
       continuity, = ceremony_model.rotate_and_admit!(
@@ -107,7 +107,7 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:com",
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
     )
-    proof = BaseStepUpAdmissionIssuer.call!(
+    proof = issue_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     ).transaction
     # This is a stored-evidence lifecycle test, not proof of a credential assertion.

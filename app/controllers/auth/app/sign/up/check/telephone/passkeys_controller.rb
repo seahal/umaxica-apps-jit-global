@@ -98,7 +98,7 @@ module Auth
               end
 
               def success_redirect_url
-                auth_app_sign_up_check_telephone_birthdate_path(ri: params[:ri], pt: signed_pt_param)
+                auth_app_sign_up_check_telephone_secret_path(ri: params[:ri], pt: signed_pt_param)
               end
 
               def load_sign_up_actor

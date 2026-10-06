@@ -458,6 +458,23 @@ Tests read: `test/models/auth_ceremony_session_test.rb`, `test/models/auth_cerem
 
 No status string/id or reference table: labels are explicit predicates over timestamps. issue! creates unadmitted; rotate_and_admit! creates an already-admitted replacement and revokes the old row atomically. TTL is 30 minutes; expired continuity is inactive but not a stored terminal. revoke! deliberately permits expiry while complete!/cancel! require active admission. Terminal timestamps are mutually exclusive by CHECK. Authentication evidence is a one-time handoff input, not Base session authority. No ordinary failure state; errors reject mutation. Row locks and unique previous_sid_digest protect conflicting replacement. Direct previous-row revoked_at update is inside rotate_and_admit!, while callers terminate through the model; token security transition revokes linked continuity.
 
+## idp-auth-admission-binding
+
+Implementation: `AuthAdmissionBinding` / `AuthAdmissionBindingPurger`. Storage: `client_auth_admission_bindings`, `visitor_auth_admission_bindings`, and `operator_auth_admission_bindings` / `base_confirmed_at`, `redeemed_at`, `retired_at`, `expires_at`.
+
+Sources: `app/models/concerns/auth_admission_binding.rb`, `app/models/client_auth_admission_binding.rb`, `app/models/visitor_auth_admission_binding.rb`, `app/models/operator_auth_admission_binding.rb`, `app/operations/auth_admission_binding_purger.rb`.
+
+| Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| idp-auth-admission-binding:T001 | INITIALIZATION | absent | admission issuer | issued | Exactly one realm-local parent; immutable entry_ref, purpose, token and browser digest; bounded expiry | Binding row and opaque entry are created in the parent Ticket transaction | app/services/base_auth_admission_coordinator.rb | CONFIRMED |
+| idp-auth-admission-binding:T002 | DOCUMENTED_TRANSITION | issued | attach_auth_session! | attached | Live binding; active unadmitted Auth session; unique confirmation_ref; binding lock before session lock | Auth session and confirmation_ref recorded as one proof pair | app/models/concerns/auth_admission_binding.rb | CONFIRMED |
+| idp-auth-admission-binding:T003 | DOCUMENTED_TRANSITION | attached | confirm_base! | Base confirmed | Matching base token and SHA-256 browser nonce digest; attachment present; binding lock | base_confirmed_at recorded once | app/models/concerns/auth_admission_binding.rb | CONFIRMED |
+| idp-auth-admission-binding:T004 | DOCUMENTED_TRANSITION | Base confirmed | redeem! | redeemed / admitted | Matching attached sid; active admitted rotated session; confirmation present; expiry not reached | redeemed_at and admitted_auth_ceremony_session_id recorded atomically with admission | app/models/concerns/auth_admission_binding.rb | CONFIRMED |
+| idp-auth-admission-binding:T005 | DOCUMENTED_TRANSITION | issued / attached / Base confirmed | retire! | retired | Unredeemed binding; explicit expiry or restart | retired_at recorded without clearing terminal proof facts | app/models/concerns/auth_admission_binding.rb | CONFIRMED |
+| idp-auth-admission-binding:T006 | CLEANUP | retired / redeemed | AuthAdmissionBindingPurger | absent | Parent retention reached; referenced Auth sessions expired/terminal and retained; restrictive child-first order | Binding is deleted before parent and Auth-session rows | app/operations/auth_admission_binding_purger.rb | CONFIRMED |
+
+The three tables have the same constraints: one parent, purpose-to-parent matching, step-up token requirement, all-or-none proof pairs, mutually exclusive redeemed/retired terminal facts, immutable identity/proof/deadline facts, and one live binding per parent. `entry_ref` and `confirmation_ref` are independent lookup references; neither is accepted as browser or Auth proof.
+
 ## idp-client-email-ceremony
 
 Implementation: `EmailCeremonyTransactionable`. Storage: `client_email_ceremony_transactions` / `status`.
@@ -1787,31 +1804,44 @@ No status FK: planned_count=0 implies omitted; positive count requires expiry. M
 
 ## idp-client-session-limit-resolution
 
-Implementation: `ClientSessionLimitResolutionTransaction / Base::App::Sign::In::LimitationsController`. Storage: `client_session_limit_resolution_transactions` / `status`.
+Implementation: `SessionLimitResolutionTransactionable / Base::App::Sign::In::LimitationsController`. Storage: `client_session_limit_resolution_transactions` / `state_id`.
 
-Sources: `app/models/client_session_limit_resolution_transaction.rb`, `app/controllers/base/app/sign/in/limitations_controller.rb`.
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`, `app/models/client_session_limit_resolution_transaction.rb`, `app/controllers/base/app/sign/in/limitations_controller.rb`.
 
-Tests read: `test/controllers/base/app/sign/in/limitations_controller_test.rb`.
+Tests executed: `test/models/session_limit_resolution_transactionable_test.rb`.
 
 | Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| idp-client-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending | mark_session_selected! | session_selected | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending | mark_resolved! / finalize! | resolved | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending | cancel! | cancelled | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | session_selected | mark_session_selected! | session_selected | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T005 | DOCUMENTED_TRANSITION | session_selected | mark_resolved! / finalize! | resolved | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T006 | DOCUMENTED_TRANSITION | session_selected | cancel! | cancelled | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T007 | DOCUMENTED_TRANSITION | resolved | mark_session_selected! | session_selected | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T008 | DOCUMENTED_TRANSITION | resolved | mark_resolved! / finalize! | resolved | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T009 | DOCUMENTED_TRANSITION | resolved | cancel! | cancelled | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T010 | DOCUMENTED_TRANSITION | cancelled | mark_session_selected! | session_selected | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T011 | DOCUMENTED_TRANSITION | cancelled | mark_resolved! / finalize! | resolved | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T012 | DOCUMENTED_TRANSITION | cancelled | cancel! | cancelled | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T013 | DOCUMENTED_TRANSITION | expired | mark_session_selected! | session_selected | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T014 | DOCUMENTED_TRANSITION | expired | mark_resolved! / finalize! | resolved | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
-| idp-client-session-limit-resolution:T015 | DOCUMENTED_TRANSITION | expired | cancel! | cancelled | Model setter has no source/TTL lock guard; controller first loads open unexpired challenge bound to actor | Selection/resolution/cancellation timestamps; finalize also consumed/finalized timestamps | app/models/client_session_limit_resolution_transaction.rb | CONFIRMED |
+| idp-client-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending | select_session! | session_selected | Actor, challenge, browser binding, parent and selected-session ownership; row locks | selected_session_ref and selected_at | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-client-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending/session_selected | resolve! | resolved | Selected session is revoked before the state write; capacity continuation remains bound | resolved_at and resolution audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-client-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending/session_selected | cancel! | cancelled | Actor, challenge, browser binding, parent and TTL | cancelled_at and cancellation audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-client-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | pending/session_selected | expire! | expired | Deadline is reached; terminal rows remain immutable | expired_at and expiry audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
 
-OIDC-only durable capacity resolution; local social sign-in uses main flow instead. Issue reuses open row and rotates challenge/extends TTL15m without changing status; this lookup/update is not serialized. Controller selects owned session then revokes it; successful root session establishment precedes finalize. Cancellation does not revoke existing sessions. expired is accepted/predicate but no production status setter found. Public setters can rewrite resolved/cancelled/expired; they are not universally absorbing terminals. Controller rejects closed or expired resolution; model alone does not guarantee replay/concurrency.
+## idp-visitor-session-limit-resolution
+
+Implementation: `SessionLimitResolutionTransactionable / Auth::Com::Sign::In::SessionsController`. Storage: `visitor_session_limit_resolution_transactions` / `state_id`.
+
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`, `app/models/visitor_session_limit_resolution_transaction.rb`, `app/controllers/auth/com/sign/in/sessions_controller.rb`.
+
+| Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| idp-visitor-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending | select_session! | session_selected | Visitor ownership, challenge, browser binding, parent and selected-session ownership; row locks | selected_session_ref and selected_at | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-visitor-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending/session_selected | resolve! | resolved | Selected session is revoked before the state write | resolved_at and resolution audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-visitor-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending/session_selected | cancel! | cancelled | Visitor ownership, challenge, browser binding, parent and TTL | cancelled_at and cancellation audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-visitor-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | pending/session_selected | expire! | expired | Deadline is reached; terminal rows remain immutable | expired_at and expiry audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+
+## idp-operator-session-limit-resolution
+
+Implementation: `SessionLimitResolutionTransactionable / Auth::Org::Sign::In::SessionsController`. Storage: `operator_session_limit_resolution_transactions` / `state_id`.
+
+Sources: `app/models/concerns/session_limit_resolution_transactionable.rb`, `app/models/operator_session_limit_resolution_transaction.rb`, `app/controllers/auth/org/sign/in/sessions_controller.rb`.
+
+| Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source file | Confidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| idp-operator-session-limit-resolution:T001 | DOCUMENTED_TRANSITION | pending | select_session! | session_selected | Operator ownership, evidence, challenge, browser binding, parent and selected-session ownership; row locks | selected_session_ref and selected_at | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-operator-session-limit-resolution:T002 | DOCUMENTED_TRANSITION | pending/session_selected | resolve! | resolved | Selected session is revoked before the state write | resolved_at and resolution audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-operator-session-limit-resolution:T003 | DOCUMENTED_TRANSITION | pending/session_selected | cancel! | cancelled | Operator ownership, evidence, challenge, browser binding, parent and TTL | cancelled_at and cancellation audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
+| idp-operator-session-limit-resolution:T004 | DOCUMENTED_TRANSITION | pending/session_selected | expire! | expired | Deadline is reached; terminal rows remain immutable | expired_at and expiry audit | app/models/concerns/session_limit_resolution_transactionable.rb | CONFIRMED |
 
 ## idp-client-apple-notification
 

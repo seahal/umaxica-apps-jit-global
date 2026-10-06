@@ -4,11 +4,11 @@
 require "test_helper"
 
 class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
-  test "seven first-party browser RPs have isolated client, audience, keys, and redirects" do
+  test "first-party browser RPs have isolated client, audience, keys, and redirects" do
     ids = AuthBoundaryAuthorityMap.first_party_rp_client_ids
     clients = ids.map { |client_id| OidcClientRegistry.find!(client_id) }
 
-    assert_equal 7, clients.size
+    assert_equal 10, clients.size
     assert_equal ids, clients.map(&:client_id)
     assert_equal ids.size, clients.map(&:aud).uniq.size
     assert_equal ids.size, clients.map(&:jwt_namespace).uniq.size
@@ -21,7 +21,7 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
 
     edit = OidcClientRegistry.find!("edit-org")
     core_org = OidcClientRegistry.find!("core-org")
-    warp_org = OidcClientRegistry.find!("side-org")
+    warp_org = OidcClientRegistry.find!("warp-org")
 
     assert_equal "operator", edit.resource_type
     assert_not_equal core_org.redirect_uris, edit.redirect_uris
@@ -30,7 +30,7 @@ class OidcSevenFirstPartyRpIsolationTest < ActiveSupport::TestCase
   end
 
   test "a first-party RP redirect is rejected for a different registered client" do
-    warp = OidcClientRegistry.find!("side-app")
+    warp = OidcClientRegistry.find!("warp-app")
 
     assert_raises(OidcClientRegistry::InvalidRedirectUri) do
       OidcAuthorizeRequestResolver.call(

@@ -25,11 +25,11 @@ module AuthStepUpResultHandoff
       "handoff_issued", transaction: @step_up_ceremony_transaction, outcome: "issued", stage: "auth_result_handoff",
                         state_before: @step_up_ceremony_transaction.status,
     )
-    render "auth/shared/oidc_authorization_result", layout: ceremony_result_layout,
-                                                    locals: { completion_url: ceremony_result_completion_url,
-                                                              result_token: issuance.code,
-                                                              transaction_ref: issuance.transaction.transaction_id,
-                                                              ri: params[:ri], }
+    redirect_to(
+      ceremony_result_completion_url(
+        result_ref: issuance.reference, transaction_ref: issuance.transaction.transaction_id, ri: params[:ri],
+      ), allow_other_host: true, status: :see_other,
+    )
   rescue BaseAuthAdmissionCoordinator::Denied, IdentityStepUpCeremonyContract::Error => e
     log_step_up_refusal(e, transaction: @step_up_ceremony_transaction, stage: "auth_result_handoff")
     render_invalid_step_up_context!

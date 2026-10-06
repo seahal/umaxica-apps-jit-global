@@ -5,7 +5,7 @@ require "test_helper"
 
 class OidcAuthorizeRequestResolverTest < ActiveSupport::TestCase
   setup do
-    @client = OidcClientRegistry.find!("core-next-rp")
+    @client = OidcClientRegistry.find!("core-app")
     @resource = clients(:one)
     @params = {
       response_type: "code",

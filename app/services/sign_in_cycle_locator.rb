@@ -94,13 +94,12 @@ class SignInCycleLocator
     return true if cycle.principal_id.blank?
 
     if actor.blank?
-      # Without an authenticated actor, only a flow that has issued nothing can
-      # be resumed, and only through the nonce this browser's session holds: an
-      # OIDC-started ceremony, or a sign-in waiting on the session limit. The
-      # pending flow itself is the authority; no principal id in the session is.
+      # Without an authenticated actor, only an OIDC-started ceremony can be
+      # resumed through the nonce this browser's session holds. Session-limit
+      # continuation is authorized by its durable child transaction instead.
       return false if cycle.token_id.present?
 
-      return @allow_principal_without_token || cycle.sign_in_session_limit_pending?
+      return @allow_principal_without_token
     end
     return false unless actor.is_a?(ACTOR_CLASSES.fetch(surface))
 

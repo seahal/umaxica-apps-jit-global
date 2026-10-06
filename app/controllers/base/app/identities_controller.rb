@@ -9,8 +9,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_client!
-
       def show
         authorize!(current_client, to: :show?)
         render inertia: true, props: {
@@ -48,8 +46,8 @@ module Base
         {
           heading: t("base.shared.identity.sections.security"),
           items: [
-            identity_auth_link(:passkey, :auth_app_settings_passkeys_url),
-            identity_auth_link(:totp, :auth_app_settings_totps_url),
+            identity_hub_link(:passkey, base_app_identity_passkeys_path(ri: params[:ri])),
+            identity_hub_link(:totp, base_app_identity_totps_path(ri: params[:ri])),
             { label: t("sign.app.settings.show.mfa"), href: base_app_identity_mfa_challenge_path(ri: params[:ri]) },
             {
               label: t("sign.app.settings.mfa.show.reset_title"),

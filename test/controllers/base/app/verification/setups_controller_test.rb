@@ -11,6 +11,7 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    https!
     host! @host
     @user = Client.create!(status_id: ClientStatus::ACTIVE)
     @token = ClientToken.create!(
@@ -19,15 +20,15 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
+    install_base_browser_rp_credentials!(surface: "app", host: @host, actor: @user, token: @token)
     access_token = AuthenticationToken.encode(
       @user, host: @host, session_public_id: @token.public_id,
              resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
     )
     @headers = { "Authorization" => "Bearer #{access_token}", "Client-Agent" => "Mozilla/5.0", "Host" => @host }.freeze
     @return_to = "/identity/telephones"
-    # The signed target is bound to the stable session identifier, which is the device session's
-    # when the session has one.
-    session_nonce = @token.reload.device_session&.public_id.presence || @token.public_id
+    # The signed target is bound to the current root token public ID used by Base's RP context.
+    session_nonce = @token.public_id
     @pt = ActiveSupport::MessageVerifier.new(
       Rails.application.key_generator.generate_key("path_target_token", 32),
       digest: "SHA256", serializer: JSON, url_safe: true,
@@ -80,7 +81,7 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   test "an actor who already holds an authenticator is sent to ordinary verification instead of the choice" do
     @user.client_emails.create!(
       address: "has-method-#{SecureRandom.hex(4)}@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).finalize_binding!
 
     get base_app_verification_setup_path(ri: "jp", scope: "settings_telephone", pt: @pt), headers: @headers
 
@@ -119,7 +120,7 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
          params: { scope: "settings_telephone", pt: @pt, registration_method: "totp" }, headers: @headers
 
     assert_response :see_other
-    transaction = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    transaction = latest_bootstrap_transaction
 
     assert_equal "bootstrap", transaction.purpose
     assert_equal ["totp"], transaction.allowed_methods_array
@@ -135,7 +136,8 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
     auth = open_session
     auth.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
-    auth.post(auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: entry_ref })
+    auth.https!
+    complete_admission_binding!(auth:, entry_ref:)
 
     auth.assert_response :see_other
 
@@ -182,7 +184,7 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
 
     assert_response :see_other
     assert_equal new_base_app_identity_emails_registration_path, URI.parse(response.location).path
-    bootstrap = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    bootstrap = latest_bootstrap_transaction
 
     assert_equal "bootstrap", bootstrap.purpose
     assert_equal ["email_otp"], bootstrap.allowed_methods_array
@@ -222,7 +224,7 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     post base_app_verification_path(ri: "jp"), params: { scope: "settings_telephone", pt: @pt }, headers: @headers
 
     assert_response :see_other
-    verification = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    verification = latest_step_up_transaction
 
     assert_not_equal bootstrap.transaction_id, verification.transaction_id
     assert_equal "step_up", verification.purpose
@@ -234,7 +236,7 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   test "a wrong email code leaves the bootstrap pending" do
     post base_app_verification_setup_path(ri: "jp"),
          params: { scope: "settings_telephone", pt: @pt, registration_method: "email_otp" }, headers: @headers
-    bootstrap = ClientStepUpCeremonyTransaction.find_by!(transaction_id: session[:base_step_up_transaction_ref])
+    bootstrap = latest_bootstrap_transaction
     post base_app_identity_emails_registration_path(ri: "jp"),
          params: { user_email: { raw_address: "wrong-code-#{SecureRandom.hex(4)}@example.com" } }, headers: @headers
     pending = ClientEmail.find_by!(public_id: session[:email_registration_public_id])
@@ -248,5 +250,57 @@ class Base::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
     assert_equal "pending", bootstrap.reload.status
     assert_equal ClientEmailStatus::UNVERIFIED, pending.reload.user_email_status_id
     assert_nil @token.reload.last_step_up_at
+  end
+
+  private
+
+  def latest_bootstrap_transaction
+    ClientStepUpCeremonyTransaction.where(
+      actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "bootstrap",
+    ).order(id: :desc).first!
+  end
+
+  def latest_step_up_transaction
+    ClientStepUpCeremonyTransaction.where(
+      actor_ref: @user.public_id, session_ref: @token.public_id, purpose: "step_up",
+    ).order(id: :desc).first!
+  end
+
+  def complete_admission_binding!(auth:, entry_ref:)
+    auth.get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: entry_ref))
+    auth.assert_response :success
+    continuation = auth.response.parsed_body.at_css("form")
+
+    auth.post(
+      continuation["action"], params: {
+        entry_ref: continuation.at_css('input[name="entry_ref"]')["value"],
+        authenticity_token: continuation.at_css('input[name="authenticity_token"]')["value"],
+      },
+    )
+    auth.assert_response :see_other
+
+    get(auth.response.location, headers: @headers)
+
+    assert_response :success
+    confirmation = response.parsed_body.at_css("form")
+    post(
+      confirmation["action"], params: {
+        binding_ref: confirmation.at_css('input[name="binding_ref"]')["value"],
+        authenticity_token: confirmation.at_css('input[name="authenticity_token"]')["value"],
+        ri: confirmation.at_css('input[name="ri"]')["value"],
+      }, headers: @headers,
+    )
+
+    assert_response :see_other
+
+    auth.get(URI.parse(response.location).request_uri)
+    auth.assert_response :success
+    admitted = auth.response.parsed_body.at_css("form")
+    auth.post(
+      admitted["action"], params: {
+        entry_ref: admitted.at_css('input[name="entry_ref"]')["value"],
+        authenticity_token: admitted.at_css('input[name="authenticity_token"]')["value"],
+      },
+    )
   end
 end

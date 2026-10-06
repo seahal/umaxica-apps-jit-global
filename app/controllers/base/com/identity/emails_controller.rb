@@ -18,7 +18,6 @@ module Base
           VisitorEmailStatus::VERIFIED_WITH_SIGN_UP,
         ].freeze
 
-        before_action :authenticate_visitor!
         before_action :authorize_emails!, only: :index
 
         def index
@@ -71,7 +70,9 @@ module Base
             return
           end
 
-          @user_email.destroy!
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_visitor, credential: @user_email, current_session: current_session, request: request,
+          )
           create_audit_event!(ClientChronicleEvent::EMAIL_REMOVED, subject: @user_email)
 
           redirect_to(

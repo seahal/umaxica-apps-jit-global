@@ -8,6 +8,14 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
 
   setup do
     @transaction_prefix = "oidc-authorization-transaction-test-#{SecureRandom.hex(8)}"
+    @previous_secret_lifetimes = ENV.to_h.slice(
+      "APP_SECRET_ISSUANCE_TTL_SECONDS", "APP_SECRET_PURGE_DELAY_SECONDS",
+      "APP_SECRET_OUTBOX_RETENTION_SECONDS", "APP_SECRET_PROOF_RETENTION_SECONDS",
+    )
+    ENV["APP_SECRET_ISSUANCE_TTL_SECONDS"] = "600"
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
+    ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "2592000"
   end
 
   teardown do
@@ -19,12 +27,18 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       transaction_class.where("login_challenge LIKE ?", "#{@transaction_prefix}-%").delete_all
     end
     @secret_flow&.destroy!
+    %w(
+      APP_SECRET_ISSUANCE_TTL_SECONDS APP_SECRET_PURGE_DELAY_SECONDS
+      APP_SECRET_OUTBOX_RETENTION_SECONDS APP_SECRET_PROOF_RETENTION_SECONDS
+    ).each do |key|
+      @previous_secret_lifetimes.key?(key) ? ENV[key] = @previous_secret_lifetimes.fetch(key) : ENV.delete(key)
+    end
   end
 
   test "app OIDC Secret flow reference is optional unique and restricts deletion of its durable proof" do
     now = ClientSignInFlow.database_now
     @secret_flow = ClientSignInFlow.create!(
-      status_id: ClientSignInFlowStatus::PRIMARY_PENDING, step: "primary", state: "PRIMARY_PENDING",
+      state_id: ClientSignInFlowState::PRIMARY_PENDING,
       nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)),
       issued_at: now, expires_at: now + 15.minutes,
     )
@@ -47,8 +61,6 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::InvalidForeignKey) { transactions.last.update!(secret_sign_in_flow_id: -1) }
     assert_raises(ActiveRecord::InvalidForeignKey) { @secret_flow.destroy! }
     assert ClientSignInFlow.exists?(@secret_flow.id)
-    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
-    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
     due_at = ClientSignInFlow.database_now
     @secret_flow.update!(discard_at: due_at, purge_eligible_at: due_at)
     RetentionPurgeJob.perform_now(batch_size: 1)
@@ -164,7 +176,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_equal(
       {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-app",
         redirect_uri: "https://example.test/callback",
         scope: "openid email",
         state: "state-one",
@@ -385,7 +397,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     transaction = transaction_class.create_transaction!(
       surface: surface,
       intent: "sign_in",
-      client_id: "core-next-rp",
+      client_id: "core-app",
       redirect_uri: "https://example.test/callback",
       response_type: "code",
       scope: "openid email",

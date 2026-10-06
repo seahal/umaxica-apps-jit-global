@@ -17,6 +17,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
 
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true,
+        user_verified: true,
         verified_at: verified_at, verified_credential_ref: "credential",
       )
 
@@ -39,6 +40,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
       )
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true,
+        user_verified: true,
         verified_at: model.database_now, verified_credential_ref: "credential",
       )
       result_jti = transaction.reload.result_jti
@@ -47,6 +49,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
         assert_raises(IdentityStepUpCeremonyContract::Error) do
           transaction.record_verification!(
             method: "passkey", aal: "aal1", phishing_resistant: true,
+            user_verified: true,
             verified_at: model.database_now, verified_credential_ref: "other-credential",
           )
         end
@@ -71,6 +74,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
         assert_raises(IdentityStepUpCeremonyContract::Error) do
           transaction.record_verification!(
             method: "passkey", aal: "aal1", phishing_resistant: true,
+            user_verified: true,
             verified_at: transaction.created_at, verified_credential_ref: "credential",
           )
         end
@@ -82,7 +86,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
     test "#{model.name} registration evidence moves a pending bootstrap to verified without assurance" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "session", required_scope: "settings_passkey",
-        required_aal: "none", allowed_methods: ["passkey"], purpose: "bootstrap",
+        required_aal: "none", step_up_required: false, allowed_methods: ["passkey"], purpose: "bootstrap",
       )
 
       transaction.record_registration_verification!(method: "passkey", verified_at: model.database_now)
@@ -128,6 +132,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
       )
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true,
+        user_verified: true,
         verified_at: model.database_now, verified_credential_ref: "credential",
       )
 
@@ -165,6 +170,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
         now = model.database_now
         transaction.record_verification!(
           method: "passkey", aal: "aal1", phishing_resistant: true, verified_at: now,
+          user_verified: true,
           verified_credential_ref: "credential",
         )
         case terminal
@@ -183,6 +189,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
           "verified" => lambda {
             transaction.record_verification!(
               method: "passkey", aal: "aal1", phishing_resistant: true, verified_at: now,
+              user_verified: true,
               verified_credential_ref: "credential",
             )
           },
@@ -213,6 +220,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
           [expired, revoked].each do |transaction|
             transaction.record_verification!(
               method: "passkey", aal: "aal1", phishing_resistant: true, verified_at: now,
+              user_verified: true,
               verified_credential_ref: "credential",
             )
           end
@@ -242,6 +250,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
 
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true, verified_at: now,
+        user_verified: true,
         verified_credential_ref: "credential",
       )
       transaction.commit_consumption!(now: now)
@@ -253,7 +262,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
     test "#{model.name} email bootstrap is consumed directly from pending without assurance" do
       transaction = model.create_transaction!(
         actor_ref: "actor", session_ref: "session", required_scope: "settings_email",
-        required_aal: "none", allowed_methods: ["email_otp"], purpose: "bootstrap",
+        required_aal: "none", step_up_required: false, allowed_methods: ["email_otp"], purpose: "bootstrap",
       )
       now = model.database_now
 
@@ -273,7 +282,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
       test "#{model.name} #{method} bootstrap cannot be consumed before its registration evidence" do
         transaction = model.create_transaction!(
           actor_ref: "actor", session_ref: "session", required_scope: "settings_email",
-          required_aal: "none", allowed_methods: %w(passkey totp), purpose: "bootstrap",
+          required_aal: "none", step_up_required: false, allowed_methods: %w(passkey totp), purpose: "bootstrap",
         )
 
         error =
@@ -321,6 +330,7 @@ class StepUpCeremonyTransactionTransitionTest < ActiveSupport::TestCase
 
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true,
+        user_verified: true,
         verified_at: model.database_now, verified_credential_ref: "credential",
       )
       _, first_generation = transaction.prepare_result_delivery!(result_digest: "a" * 64, ttl: 60.seconds)

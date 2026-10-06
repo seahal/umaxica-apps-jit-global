@@ -28,7 +28,9 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           end
         actor = actors.create!
         token = tokens.create!(token_key => actor.id)
-        flow = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in").transaction
+        flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        ).transaction
         flow.update!(principal_id: actor.id)
         ceremony, = ceremonies.rotate_and_admit!(
           admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
@@ -480,7 +482,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
-      parent = BaseStepUpAdmissionIssuer.call!(
+      parent = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
       ).transaction
       # Synthetic evidence isolates finalization and logout, not WebAuthn signature verification.
@@ -601,7 +603,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
-      parent = BaseStepUpAdmissionIssuer.call!(
+      parent = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
       ).transaction
       # Synthetic evidence isolates finalization and credential revocation, not WebAuthn signature verification.
@@ -742,7 +744,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         audience: "step_up:#{surface}", session_binding: token.public_id, token_binding: token.public_id,
         require_session_binding: true,
       )
-      parent = BaseStepUpAdmissionIssuer.call!(
+      parent = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
       ).transaction
       # Synthetic evidence isolates finalization and cancellation, not WebAuthn signature verification.

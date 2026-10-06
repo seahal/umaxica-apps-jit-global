@@ -10,6 +10,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -21,7 +23,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
 
       assert_equal 1, values.length
       assert_match ClientSecretCredential::SECRET_FORMAT, values.first
-      assert_nil ClientSecretLookupQuery.call(secret: values.first)
+      assert_nil ClientSecretLookupQuery.call(client: actor, secret: values.first)
       assert_nil issuance.reload.encrypted_payload
       assert_no_difference("ClientSecretCredential.count") do
         assert_raises(ClientSecretPresentationIssuer::AlreadyPresented) do
@@ -30,7 +32,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
       end
       ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: token, issuance: issuance)
 
-      assert_equal issuance.id, ClientSecretLookupQuery.call(secret: values.first).issuance_id
+      assert_equal issuance.id, ClientSecretLookupQuery.call(client: actor, secret: values.first).issuance_id
     end
   end
 
@@ -42,6 +44,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       issuance = ClientSecretManualReservationIssuer.call!(
@@ -96,6 +100,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
           last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
           last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
           last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+          last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+          last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
         )
         context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
         issuance = ClientSecretManualReservationIssuer.call!(
@@ -129,7 +135,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
     )
 
     assert_equal 1, values.length
-    assert_nil ClientSecretLookupQuery.call(secret: values.fetch(0))
+    assert_nil ClientSecretLookupQuery.call(client: source.fetch(:context).subject, secret: values.fetch(0))
     assert_not_nil source.fetch(:issuance).reload.presented_at
   end
 
@@ -140,6 +146,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(
@@ -168,7 +176,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
     end
     assert_nil issuance.reload.presented_at
     assert_nil issuance.confirmed_at
-    assert_nil ClientSecretLookupQuery.call(secret: payload.fetch("values").fetch(0))
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: payload.fetch("values").fetch(0))
   end
 
   test "unscoped or different browser cannot generate or present candidates" do
@@ -178,6 +186,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
     )
     context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
     issuance = ClientSecretManualReservationIssuer.call!(

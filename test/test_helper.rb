@@ -79,11 +79,18 @@ require_relative "support/inertia_page_object"
 require_relative "support/org_entra_first_stage_helper"
 require_relative "support/oidc_authorization_response_helper"
 require_relative "support/auth_ceremony_entry_helper"
+require_relative "support/auth_admission_binding_helper"
 require_relative "support/auth_email_mfa_helper"
+require_relative "support/base_browser_rp_test_helper"
+require_relative "support/social_completion_test_helper"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
 Rails.application.config.x.turnstile.verifier = "TurnstileVerifierStub"
+
+ActiveSupport.on_load(:active_support_test_case) { include AuthAdmissionBindingTestHelper }
+ActiveSupport.on_load(:active_support_test_case) { include BaseBrowserRpTestHelper }
+ActiveSupport.on_load(:active_support_test_case) { include SocialCompletionTestHelper }
 
 module AuthenticationHarness
   TEST_BROWSER_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " \

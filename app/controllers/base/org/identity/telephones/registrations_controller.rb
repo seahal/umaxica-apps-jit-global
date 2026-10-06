@@ -20,7 +20,6 @@ module Base
 
           AUTHENTICATION_MODE = :private
 
-          before_action :authenticate_operator!
           # Object-level authorization (ActionPolicy): registering a telephone is a fresh-record action
           # for the authenticated operator, so gate by actor type. Each step builds/looks up the record
           # for current_operator. Verification/turnstile guards remain on the flow.
@@ -50,7 +49,9 @@ module Base
               return
             end
 
-            tel_params = params(staff_telephone: [:raw_number, :number])
+            tel_params = params.slice(:staff_telephone).permit(staff_telephone: [:raw_number, :number]).fetch(
+              :staff_telephone, {},
+            )
             number = tel_params[:raw_number] || tel_params[:number]
 
             # adr/unified-enforcement.md, Identifier attachment enforcement: an in-force

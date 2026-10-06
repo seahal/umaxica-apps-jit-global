@@ -126,8 +126,12 @@ class ClientSecretManualIssuanceInvalidator
 
       now = ClientToken.database_now
       requirement = StepUpRequirement.new(
-        scope: scope, purpose: "step_up", audience: "step_up:app",
-        session_binding: current.public_id, token_binding: current.public_id, require_session_binding: true,
+        scope: scope, step_up_required: true, allowed_methods: %i(passkey totp email_otp),
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, purpose: "step_up", audience: "step_up:app",
+        session_binding: current.public_id, token_binding: current.public_id,
+        require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       unless current.currently_usable?(now) && !current.restricted? &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?

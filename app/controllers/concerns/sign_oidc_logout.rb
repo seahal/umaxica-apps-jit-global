@@ -52,18 +52,7 @@ module SignOidcLogout
     return reject_oidc_logout_challenge!("not_found") if @logout_transaction.blank?
     return reject_oidc_logout_challenge!("expired") if @logout_transaction.expired?
 
-    unless request.post?
-      warn_sign_out_event(
-        "auth.sign_out.legacy_handoff.used",
-        transaction: @logout_transaction,
-        auto_handoff: true,
-        user_confirmation_required: false,
-        cleanup_performed: false,
-        result: "rejected",
-        reason: "get_handoff_retired",
-      )
-      return reject_oidc_logout_challenge!("get_handoff_retired")
-    end
+    return render_oidc_end_session_confirmation unless request.post?
 
     return if finalize_oidc_logout_and_redirect!
 

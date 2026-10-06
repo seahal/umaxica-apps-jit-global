@@ -19,7 +19,8 @@ module Core
 
             skip_before_action :set_color_theme, raise: false
             skip_before_action :enforce_withdrawal_gate!
-            skip_before_action :transparent_refresh_access_token
+            skip_before_action :authenticate_browser_rp_safe_request!, raise: false
+            skip_before_action :authenticate_browser_rp_unsafe_request!, raise: false
             skip_before_action :enforce_verification_if_required
 
             private

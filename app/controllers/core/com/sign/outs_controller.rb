@@ -13,13 +13,16 @@ module Core
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
 
-        before_action :authenticate_oidc_rp_session!, only: :create
+        before_action :authenticate_oidc_rp_session!, only: :create,
+                                                      unless: -> { params[:logout_challenge].present? }
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
         after_action :sign_out_notice_cache_headers!, only: %i(show edit)
 
         def show
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
           complete_oidc_rp_logout!
         end
 
@@ -32,6 +35,8 @@ module Core
         end
 
         def create
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
           launch_oidc_rp_logout!(
             client_id: "core-com",
             issuer_resource_type: "visitor",

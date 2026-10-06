@@ -39,10 +39,6 @@ module SignUp
       mutable_ticket? && at_step?("checkpoint") && pending_actor_matches?
     end
 
-    def handoff_to_sign_in?
-      mutable_ticket? && at_step?("finalized") && pending_actor_matches?
-    end
-
     def cancel?
       surface_matches? &&
         sequence_bound? &&

@@ -20,7 +20,6 @@ class ClientSecretIssuanceCollectionJobTest < ActiveJob::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: expired, name: "Unconfirmed candidate", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     ClientSecretIssuanceCollectionJob.perform_now(batch_size: 1, after_id: live.id - 1)
 
@@ -32,7 +31,7 @@ class ClientSecretIssuanceCollectionJobTest < ActiveJob::TestCase
     assert_nil expired.reload.encrypted_payload
     assert_equal expired.discard_at, candidate.reload.discard_at
     assert_equal 1.day, expired.purge_eligible_at - expired.discard_at
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     assert_equal Float::INFINITY, live.reload.discard_at
     assert ClientSecretIssuance.exists?(expired.id)
     assert ClientSecretAuditOutbox.exists?(

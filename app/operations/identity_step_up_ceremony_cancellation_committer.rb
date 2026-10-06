@@ -6,7 +6,7 @@ class IdentityStepUpCeremonyCancellationCommitter
   class << self
     public
 
-    def call!(actor:, token:, transaction:)
+    def call!(actor:, token:, transaction:, cancellation_handoff_digest: nil)
       session_model, ceremony_model = binding_for(actor, token, transaction)
       actor.class.connection_class_for_self.connected_to(role: :writing) do
         actor.with_lock do
@@ -45,7 +45,7 @@ class IdentityStepUpCeremonyCancellationCommitter
                   return false
                 end
 
-                transaction.commit_cancellation!(now: now)
+                transaction.commit_cancellation!(now: now, cancellation_handoff_digest: cancellation_handoff_digest)
                 ceremonies = ceremony_model.where(step_up_ceremony_transaction_ref: transaction.transaction_id)
                 ceremonies.order(:id).lock.each do |sid|
                   sid.cancel!(now: now) if sid.active?(now: now) && sid.admitted?

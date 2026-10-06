@@ -56,7 +56,7 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
   test "a challenge is bound to the concrete transaction and consumed once" do
     actor = clients(:one)
     token = ClientToken.create!(user: actor)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",

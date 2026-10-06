@@ -21,10 +21,11 @@ class StepUpConfiguredMethodsTest < ActiveSupport::TestCase
   end
 
   test "includes email_otp for verified email" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "configured-verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
 
     assert_includes StepUpConfiguredMethodsQuery.call(@user), :email_otp
   end
@@ -35,10 +36,11 @@ class StepUpConfiguredMethodsTest < ActiveSupport::TestCase
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::BOTH,
     )
-    visitor.visitor_emails.create!(
+    email = visitor.visitor_emails.create!(
       address: "configured-visitor@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     passkey = visitor.visitor_passkeys.new(
       webauthn_id: "configured_visitor_passkey_#{SecureRandom.hex(4)}",
       external_id: SecureRandom.uuid,

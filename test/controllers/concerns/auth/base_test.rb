@@ -363,8 +363,7 @@ module Auth
       token = ClientToken.create!(user: user)
       cycle = ClientSignInFlow.create!(
         principal_id: user.id,
-        status_id: ClientSignInFlow.status_id_for("DASHBOARD_PENDING"),
-        step: "dashboard",
+        state_id: ClientSignInFlow.state_id_for("DASHBOARD_PENDING"),
         return_to: "/after",
         nonce_digest: ClientSignInFlow.digest_nonce("nonce"),
         issued_at: Time.current,
@@ -617,12 +616,11 @@ module Auth
       end
     end
 
-    def db_sign_in_flow(user, token, status_name:, step:)
+    def db_sign_in_flow(user, token, status_name:, step: nil)
       ClientSignInFlow.create!(
         principal_id: user.id,
         token: token,
-        status_id: ClientSignInFlow.status_id_for(status_name),
-        step: step,
+        state_id: ClientSignInFlow.state_id_for(status_name),
         return_to: "/after",
         nonce_digest: ClientSignInFlow.digest_nonce("nonce"),
         issued_at: Time.current,

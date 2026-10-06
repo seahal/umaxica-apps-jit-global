@@ -14,13 +14,6 @@ module Auth
               AUTHENTICATION_MODE = :guest
 
               def show
-                if dummy_existing_telephone_flow?
-                  @user_telephone = ClientTelephone.new
-                  return render_sign_up_telephone_edit if valid_telephone_session?
-
-                  return redirect_telephone_session_expired
-                end
-
                 return unless load_gate_context!(gate_for_show)
 
                 @user_telephone = current_registration_telephone
@@ -30,14 +23,6 @@ module Auth
               end
 
               def create
-                if dummy_existing_telephone_flow?
-                  return render_otp_resend_too_soon if otp_resend_rate_limited?
-
-                  perform_dummy_otp_generation
-                  session[:user_telephone_otp_last_sent_at] = Time.current.to_i
-                  return redirect_to(auth_app_sign_up_check_telephone_otp_path(ri: params[:ri], pt: signed_pt_param))
-                end
-
                 return unless load_gate_context!(gate_for_create)
 
                 @user_telephone = current_registration_telephone
@@ -56,15 +41,6 @@ module Auth
               end
 
               def update
-                if dummy_existing_telephone_flow?
-                  @user_telephone = ClientTelephone.new
-                  submitted_code = submitted_pass_code
-                  return render_code_required if submitted_code.blank?
-
-                  result = verify_otp_ceremony!(submitted_code)
-                  return render_otp_ceremony_result(result) unless result.success?
-                end
-
                 return unless load_gate_context!(gate_for_update)
 
                 @user_telephone = current_registration_telephone
@@ -115,8 +91,6 @@ module Auth
               end
 
               def verify_otp_ceremony!(submitted_code)
-                return verify_dummy_otp_ceremony!(submitted_code) if dummy_existing_telephone_flow?
-
                 SignOtpCeremony.verify!(
                   purpose: :sign_up,
                   surface: :app,
@@ -159,17 +133,6 @@ module Auth
 
               def complete_update_and_redirect
                 redirect_to(auth_app_sign_up_guard_telephone_path(ri: params[:ri], pt: signed_pt_param))
-              end
-
-              def verify_dummy_otp_ceremony!(submitted_code)
-                verify_dummy_otp(submitted_code)
-                SignOtpCeremony::Result.new(
-                  success?: false,
-                  status: :invalid_code,
-                  record: nil,
-                  code: nil,
-                  error: :invalid_code,
-                )
               end
 
               def submitted_pass_code

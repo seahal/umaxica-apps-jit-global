@@ -25,7 +25,7 @@ module SignIn
       cycle = create_client_cycle(nonce: "correct-nonce")
       locator = SignInCycleLocator.new(session, surface: :app)
       locator.issue!(cycle, nonce: "correct-nonce")
-      original_status_id = cycle.status_id
+      original_state_id = cycle.state_id
       original_nonce_digest = cycle.nonce_digest
 
       session[:app_sign_in_flow_locator]["nonce"] = "bad-nonce"
@@ -33,7 +33,7 @@ module SignIn
       assert_nil locator.current
       cycle.reload
 
-      assert_equal original_status_id, cycle.status_id
+      assert_equal original_state_id, cycle.state_id
       assert_equal original_nonce_digest, cycle.nonce_digest
     end
 
@@ -52,7 +52,7 @@ module SignIn
         assert_nil locator.current
       end
 
-      assert_equal ClientSignInFlowStatus::PRIMARY_PENDING, cycle.reload.status_id
+      assert_equal ClientSignInFlowState::PRIMARY_PENDING, cycle.reload.state_id
     end
 
     test "principal-bound cycle requires matching actor" do
@@ -84,8 +84,7 @@ module SignIn
       session = {}
       completed = create_client_cycle(
         nonce: "nonce",
-        status_id: ClientSignInFlowStatus::COMPLETED,
-        step: "completed",
+        state_id: ClientSignInFlowState::COMPLETED,
         completed_at: Time.current,
       )
       SignInCycleLocator.new(session, surface: :app).issue!(completed, nonce: "nonce")
@@ -94,8 +93,7 @@ module SignIn
 
       failed = create_client_cycle(
         nonce: "failed-nonce",
-        status_id: ClientSignInFlowStatus::FAILED,
-        step: "failed",
+        state_id: ClientSignInFlowState::FAILED,
       )
       SignInCycleLocator.new(session, surface: :app).issue!(failed, nonce: "failed-nonce")
 
@@ -138,8 +136,7 @@ module SignIn
       ClientSignInFlow.create!(
         {
           principal_id: nil,
-          status_id: ClientSignInFlowStatus::PRIMARY_PENDING,
-          step: "primary",
+          state_id: ClientSignInFlowState::PRIMARY_PENDING,
           return_to: "/dashboard",
           nonce_digest: ClientSignInFlow.digest_nonce(nonce),
           issued_at: Time.current,

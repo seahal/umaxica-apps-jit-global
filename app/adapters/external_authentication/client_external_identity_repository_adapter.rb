@@ -12,13 +12,27 @@ module ExternalAuthentication
     end
 
     def find_by_subject(subject, lock:)
-      scope = ClientExternalIdentity.where(provider: provider, issuer: issuer, subject: subject.to_s)
+      scope = ClientExternalIdentity.effective_binding.where(
+        provider: provider, issuer: issuer, subject: subject.to_s, state: "active",
+      )
+      scope = scope.lock if lock
+      scope.first
+    end
+
+    def find_by_subject_for_link(subject, lock:)
+      scope = ClientExternalIdentity.effective_binding.where(
+        provider: provider, issuer: issuer, subject: subject.to_s,
+      )
       scope = scope.lock if lock
       scope.first
     end
 
     def find_for_user(user)
-      user.client_external_identities.find_by(provider: provider)
+      user.client_external_identities.effective_binding.find_by(provider: provider, state: "active")
+    end
+
+    def find_for_user_for_link(user)
+      user.client_external_identities.effective_binding.find_by(provider: provider)
     end
 
     def build_for_user(user:, principal:, credential_candidate:)
@@ -60,6 +74,7 @@ module ExternalAuthentication
 
     def activate!(identity)
       validate_identity!(identity)
+      raise ArgumentError, "released external identity cannot be reactivated" if identity.released_at.present?
       raise ArgumentError, "account-deleted identity cannot be reactivated" if identity.state == "account_deleted"
 
       identity.update!(state: "active")
@@ -68,7 +83,7 @@ module ExternalAuthentication
 
     def destroy!(identity)
       validate_identity!(identity)
-      identity.destroy!
+      identity.release!
     end
 
     def ensure_active_status!

@@ -10,7 +10,9 @@ module Warp
       include ::Session
       include ::PreferenceGlobal
       include ::PreferenceAdoption
-      include ::AuthenticationOperator
+      include ::BrowserRpAuthentication
+      include ::BrowserRpSafeRequestRefresh
+      include ::BrowserRpUnsafeRequestRefresh
       include ::SignErrorResponses
       include ::SessionLimitGate
       include ::AuthorizationAudit
@@ -28,11 +30,7 @@ module Warp
 
       allow_browser versions: :modern
 
-      protect_from_forgery using: :header_or_legacy_token,
-                           trusted_origins: JitHostOriginEnv.trusted_origins(
-                             ENV.fetch("PUBLIC_WARP_STAFF_URL"),
-                           ),
-                           with: :exception
+      protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       authorize :user, through: :current_policy_user
       authorize :actor, through: :current_actor
@@ -58,7 +56,6 @@ module Warp
       before_action :set_preferences_cookie
       before_action :resolve_param_context
       before_action :set_region
-      before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
       before_action :apply_localization_preferences
       before_action :set_locale
@@ -71,7 +68,15 @@ module Warp
       prepend_around_action :with_actor_lifecycle
 
       def oidc_client_id
-        "side-org"
+        "warp-org"
+      end
+
+      def browser_rp_client_id
+        "warp-org"
+      end
+
+      def browser_rp_resource_type
+        "operator"
       end
 
       def oidc_sign_host

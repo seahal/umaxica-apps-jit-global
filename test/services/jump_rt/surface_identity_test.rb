@@ -29,7 +29,7 @@ class JumpRtSurfaceIdentityTest < ActiveSupport::TestCase
   end
 
   test "Acme, Edit, Side, and unknown namespaces have no Jump issuer capability" do
-    %w(ACME_APP ACME_COM ACME_ORG EDIT_ORG SIDE_APP JUMP_APP PALM_COM).each do |namespace|
+    %w(ACME_APP ACME_COM ACME_ORG EDIT_ORG WARP_APP JUMP_APP PALM_COM).each do |namespace|
       assert_raises(JumpRtConfigurationError, namespace) { JumpRtSurface.normalize_namespace(namespace) }
     end
     [nil, "", "0", "auth_app\u0000"].each do |namespace|

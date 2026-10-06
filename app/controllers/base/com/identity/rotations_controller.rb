@@ -6,7 +6,6 @@ module Base
     module Identity
       class RotationsController < ::Base::Com::ApplicationController
         AUTHENTICATION_MODE = :private
-        before_action :authenticate_visitor!
 
         def create
           secret = current_visitor.visitor_secret_credentials.find_by!(public_id: params.expect(:secret_id))

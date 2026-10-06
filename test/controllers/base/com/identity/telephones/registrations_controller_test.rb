@@ -12,6 +12,7 @@ class Base::Com::Identity::Telephones::RegistrationsControllerTest < ActionDispa
            :visitor_token_dbsc_statuses
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! @host
     @visitor = visitors(:reserved_visitor)
@@ -23,6 +24,7 @@ class Base::Com::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: @visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: @visitor, session: @token)
+    install_base_browser_rp_credentials!(surface: "com", host: @host, actor: @visitor, token: @token)
     _verification, raw_verification = VisitorVerification.issue_for_token!(token: @token)
     cookies[VisitorVerification.cookie_name] = raw_verification
     @token.update!(

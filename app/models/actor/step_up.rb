@@ -5,6 +5,7 @@ class Actor
   StepUp =
     Data.define(
       :scope,
+      # @deprecated Legacy AAL label only; remove with the AAL removal ledger after all consumers migrate.
       :required_aal,
       :allowed_methods,
       :satisfied,
@@ -18,6 +19,11 @@ class Actor
       :audience,
       :purpose_bound,
       :audience_bound,
+      :phishing_resistant_required,
+      :user_verification_required,
+      :full_reauthentication_required,
+      :resource_bound,
+      :tenant_bound,
     ) do
       def self.null = NULL
 
@@ -46,5 +52,10 @@ class Actor
       audience: nil,
       purpose_bound: false,
       audience_bound: false,
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
+      resource_bound: false,
+      tenant_bound: false,
     ).freeze
 end

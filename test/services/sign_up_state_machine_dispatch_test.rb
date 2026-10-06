@@ -4,14 +4,9 @@
 require "test_helper"
 
 # The sign-up state machine is the only thing that moves a ticket between states,
-# so every arm that answers without transitioning matters: an event it does not
-# know, a ticket it cannot lock, and a hand-off result it does not recognise all
-# have to answer rather than transition, because a wrong transition leaves a
-# ticket in a state no later step accepts.
+# so every arm that answers without transitioning matters.
 class SignUpStateMachineDispatchTest < ActiveSupport::TestCase
   self.fixture_table_names = []
-
-  setup { ClientSignUpFlowStatus.ensure_defaults! }
 
   def ticket(status_name = "STARTED", step: "start")
     ClientSignUpFlow.new(
@@ -28,6 +23,9 @@ class SignUpStateMachineDispatchTest < ActiveSupport::TestCase
   def social_ticket
     ticket = ticket("SOCIAL_CALLBACK_PENDING", step: "social_callback")
     ticket.entry_method = "google"
+    ticket.state = "SOCIAL_CALLBACK_PENDING"
+    ticket.nonce_digest = ClientSignUpFlow.digest_nonce("social-dispatch-nonce")
+    ticket.save!(validate: false)
     ticket
   end
 
@@ -63,50 +61,24 @@ class SignUpStateMachineDispatchTest < ActiveSupport::TestCase
     assert_predicate result.errors, :present?
   end
 
-  # A social callback that already carries a sign-in hand-off is handed straight to the hand-off
-  # step. Transitioning it to the checkpoint first would ask a signed-in social account for a
-  # confirmation it has already given.
-  test "a social callback carrying a hand-off skips the checkpoint and goes to the hand-off step" do
+  test "a social callback always enters the checkpoint" do
     result = SignUpStateMachine.call(
       ticket: social_ticket,
       event: :complete_social_callback,
       actor_context: nil,
-      payload: { sign_in_handoff: { "session" => "handed-off" } },
+      payload: { "legacy_handoff" => { "session" => "ignored" } },
     )
 
-    assert_equal :sign_in_handoff_accepted, result.status
-    assert_equal :handoff_to_sign_in, result.next_event
-    assert_equal({ "session" => "handed-off" }, result.sign_in_handoff)
+    assert_equal :advanced, result.status
+    assert_equal :clear_requirement, result.next_event
+    assert_equal "CHECKPOINT_PENDING", ClientSignUpFlow::STATUS_NAMES.fetch(result.ticket.status_id)
   end
 
-  # The hand-off arms that do not transition. `stopped` is a hand-off the sign-in side declined,
-  # and an unrecognised status must be refused rather than treated as one of the arms above -
-  # either would otherwise leave the ticket in a state no later step accepts.
-  test "a stopped hand-off is reported without transitioning the ticket" do
-    ticket = ticket("FINALIZED", step: "finalized")
-
-    result = SignUpStateMachine.call(
-      ticket: ticket,
-      event: :handoff_to_sign_in,
-      actor_context: nil,
-      payload: { sign_in_handoff_status: :stopped, sign_in_handoff: { "reason" => "limit" } },
-    )
-
-    assert_equal :sign_in_handoff_stopped, result.status
-    assert_equal({ "reason" => "limit" }, result.sign_in_handoff)
-    assert_equal "FINALIZED", ClientSignUpFlow::STATUS_NAMES.fetch(ticket.status_id)
-  end
-
-  test "a hand-off status the machine does not recognise is refused" do
-    result = SignUpStateMachine.call(
-      ticket: ticket("FINALIZED", step: "finalized"),
-      event: :handoff_to_sign_in,
-      actor_context: nil,
-      payload: { sign_in_handoff_status: :teleported, sign_in_handoff: {} },
-    )
+  test "an unsupported event is refused without a legacy handoff branch" do
+    result = SignUpStateMachine.call(ticket: ticket, event: :teleported, actor_context: nil)
 
     assert_equal :invalid_transition, result.status
-    assert_includes result.errors, "unknown sign-in handoff status"
+    assert_includes result.errors, "unknown event"
   end
 
   test "a payload that is not a hash is normalised to one rather than carried through" do

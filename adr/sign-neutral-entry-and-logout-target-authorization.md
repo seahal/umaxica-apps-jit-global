@@ -51,3 +51,18 @@ confirmed that this ended another subject's session (D1, `evidence/2026-10-02-si
   callbacks were removed on 2026-10-02. RP callbacks moved from `/sign/callback` to
   `/oidc/callback`.
 - The decision table, migration table, and P3 gate are in `plans/active/sign-fqdn-integrated-plan.md`.
+
+## Unified implementation amendment (2026-10-06)
+
+The Unified Implementation Plan partially supersedes item 2's blanket prohibition on an SSO
+success branch for Base. Base's Browser Session is legitimate OP login state. `/oauth/authorize`
+may issue a code to a registered RP from that session without creating a new Browser Session when
+the request's `prompt` and `max_age` conditions are satisfied. `prompt=none` without sufficient
+state returns `login_required`; `prompt=login` or an unmet `max_age` starts the Auth ceremony.
+
+The neutral RP `/sign` entry remains a separate self-RP action and still refuses a browser that is
+already authenticated for that RP. A plain authorization GET does not mint a browser admission
+binding, and the D-82 Base/Auth exchange is required for ceremony branches. Auth remains
+ceremony-only. The CSRF, exact-session logout-target, no automatic callback retry, and no silent
+redirect rules are **retained**. The no-SSO rule is **partially superseded** only for the explicit
+Base OP authorization decision above.

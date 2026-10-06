@@ -64,11 +64,12 @@ class ClientSecretClaimFinalizer
     def failure_reason!(credential, flow)
       return :unknown if flow.sign_in_completed?
 
-      reason = "flow_failed"
+      reason = flow.sign_in_halted? ? "flow_halted" : "flow_failed"
       if flow.expired?(ClientSignInFlow.database_now)
-        flow.expire_sign_in! unless flow.sign_in_failed?
+        flow.expire_sign_in! unless flow.sign_in_failed? || flow.sign_in_expired? || flow.sign_in_cancelled? ||
+          flow.sign_in_halted?
         reason = "flow_expired"
-      elsif !flow.sign_in_failed?
+      elsif !flow.sign_in_failed? && !flow.sign_in_expired? && !flow.sign_in_cancelled? && !flow.sign_in_halted?
         return :pending
       end
       ceremony = ClientAuthCeremonySession.lock.find_by(id: credential.claim_ceremony_session_id)
@@ -85,7 +86,7 @@ class ClientSecretClaimFinalizer
         ClientSessionLimitResolutionTransaction.exists?(
           oidc_authorization_transaction_id: ClientOidcAuthorizationTransaction.where(
             secret_sign_in_flow_id: flow.id,
-          ).select(:id), status: ClientSessionLimitResolutionTransaction::STATUS_CANCELLED,
+          ).select(:id), state_id: ClientSessionLimitResolutionTransaction::CANCELLED,
         )
       (ceremony.cancelled_at || oidc_canceled) ? "flow_canceled" : reason
     end

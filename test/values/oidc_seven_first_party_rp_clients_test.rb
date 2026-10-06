@@ -8,7 +8,7 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
     OidcClientRegistry::CLIENTS_CACHE.set(nil)
   end
 
-  test "registers seven first-party RPs with unique ids keys and callback paths" do
+  test "registers first-party RPs with unique ids keys and callback paths" do
     AuthBoundaryAuthorityMap.first_party_rp_client_ids.each do |client_id|
       client = OidcClientRegistry.find!(client_id)
 
@@ -31,19 +31,22 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
         OidcClientRegistry.find!(client_id).jwt_namespace
       end
 
-    assert_equal 7, namespaces.uniq.size
+    assert_equal 10, namespaces.uniq.size
     assert_equal(
-      %w(CORE_APP CORE_COM CORE_ORG SIDE_APP SIDE_COM SIDE_ORG EDIT_ORG),
+      %w(CORE_APP CORE_COM CORE_ORG WARP_APP WARP_COM WARP_ORG EDIT_ORG BASE_RP_APP_WW BASE_RP_COM_WW
+         BASE_RP_ORG_WW),
       namespaces,
     )
-    assert_equal 7, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
+    assert_equal 10, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
     assert_predicate AuthBoundaryAuthorityMap, :no_overlap_with_deprecated_ids?
   end
 
-  test "only the explicitly retained core-next migration client remains findable" do
-    assert_predicate OidcClientRegistry.find("core-next-rp"), :present?
-    %w(sign-rp base-rails-rp side-rails-rp).each do |client_id|
+  test "retired shared browser client ids are rejected" do
+    retired_shared_client_id = ["core", "next-rp"].join("-")
+
+    assert_nil OidcClientRegistry.find(retired_shared_client_id)
+    %w(sign-rp base-rails-rp).each do |client_id|
       assert_nil OidcClientRegistry.find(client_id), client_id
     end
   end

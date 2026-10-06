@@ -12,7 +12,13 @@ module IdentityCeremonyCandidateRecord
   end
 
   class_methods do
-    def connection_owner = AppTicketRecord
+    def connection_owner
+      return AppTicketRecord if self <= AppTicketRecord
+      return ComTicketRecord if self <= ComTicketRecord
+      return OrgTicketRecord if self <= OrgTicketRecord
+
+      raise ArgumentError, "unsupported ceremony candidate database: #{name}"
+    end
 
     def find_active_by_ref!(ref, now:, error_class:, not_found_message:, expired_message:)
       connection_owner.connected_to(role: :writing) do

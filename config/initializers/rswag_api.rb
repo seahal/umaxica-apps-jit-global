@@ -11,7 +11,7 @@ if Rails.env.development?
     # The one directory the bundled descriptions live in. Redocly writes here (redocly.yaml),
     # Committee reads here (test/support/openapi_contract.rb), and this serves the same bytes to
     # Swagger UI. Deliberately outside `public/`, which development serves statically and without
-    # credentials -- see adr/openapi-bundle-outside-public.md.
+    # credentials -- see the OpenAPI bundle location ADR.
     #
     # Rswag::Api::Middleware expands the request path against this root and refuses anything that
     # escapes it, so only the three bundles are reachable.

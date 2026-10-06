@@ -26,6 +26,7 @@ class ExternalAuthenticationUnlinkUseCase
 
       record_audit!(identity)
       repository.destroy!(identity)
+      retire_social_ceremony_evidence!(identity)
     end
     Rails.logger.info(JitLogEvent.format("social_auth.unlinked", user_id: user.id, provider: provider))
     ExternalAuthentication::UnlinkResult.new(status: :unlinked, provider: provider)
@@ -54,5 +55,32 @@ class ExternalAuthenticationUnlinkUseCase
         social_identity_type: identity.class.name,
       },
     )
+  end
+
+  def retire_social_ceremony_evidence!(identity)
+    subject_digest = IdentitySocialCeremonyContract.provider_subject_digest(
+      provider: identity.provider,
+      subject: identity.subject,
+    )
+    AppTicketRecord.connected_to(role: :writing) do
+      ClientSocialCeremonyTransaction.transaction do
+        transactions = ClientSocialCeremonyTransaction.lock.where(
+          actor_ref: user.public_id,
+          provider: identity.provider,
+          provider_subject_digest: subject_digest,
+          status: SocialCeremonyTransactionable::STATUS_PENDING,
+        )
+        ids = transactions.pluck(:transaction_id)
+        transactions.update_all(
+          status: SocialCeremonyTransactionable::STATUS_CONSUMED,
+          consumed_at: ClientSocialCeremonyTransaction.database_now,
+          updated_at: ClientSocialCeremonyTransaction.database_now,
+        )
+        IdentitySocialCeremonyCandidate.where(transaction_id: ids).update_all(
+          consumed_at: IdentitySocialCeremonyCandidate.database_now,
+          updated_at: IdentitySocialCeremonyCandidate.database_now,
+        ) if ids.any?
+      end
+    end
   end
 end

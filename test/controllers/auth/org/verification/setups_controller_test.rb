@@ -9,10 +9,13 @@ class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::Integratio
     # An operator fixture that holds no passkey: bootstrap is first registration only.
     actor = operators(:none_staff)
     token = OperatorToken.create!(staff: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_email", purpose: "bootstrap", step_up_required: false,
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, actor_ref: actor.public_id,
+        resource_ref: nil, tenant_ref: nil,
         allowed_methods: [:passkey], audience: "step_up:org", session_binding: token.public_id,
         token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
       ), return_to: "/identity/emails",
@@ -29,7 +32,7 @@ class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::Integratio
     assert_response :success
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
-    assert_equal [new_auth_org_settings_passkey_path(ri: "jp")],
+    assert_equal [new_auth_org_verification_registration_passkey_path(ri: "jp")],
                  props.fetch("methods").map { |method| method.fetch("href") }
     assert_not props.key?("back_link")
     assert_equal auth_org_verification_cancellation_path(ri: "jp"), props.fetch("cancel").fetch("action")

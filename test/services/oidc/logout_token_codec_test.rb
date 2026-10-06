@@ -137,7 +137,7 @@ class OidcLogoutTokenCodecTest < ActiveSupport::TestCase
 
       result = OidcLogoutTokenCodec.decode(
         logout_token: token,
-        client_id: "core-next-rp",
+        client_id: "core-app",
         resource_type: "client",
       )
 

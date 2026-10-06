@@ -30,10 +30,6 @@ module SocialOmniauthCallbackFlow
 
   private
 
-  def verified_request?
-    super || (action_name == "omniauth" && verified_social_callback_request?)
-  end
-
   def handle_unverified_request
     if action_name == "omniauth"
       # Every failing guard branch records its reason; when none was recorded the request is

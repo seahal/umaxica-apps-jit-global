@@ -28,8 +28,8 @@ class SignEmailRegistrableIncludedDoTest < ActiveSupport::TestCase
     assert_equal :sign_up_email_flow_state, SignEmailRegistrable::SESSION_KEY
   end
 
-  test "EXISTING_EMAIL_SESSION_KEY constant is defined" do
-    assert_equal :sign_up_existing_email_id, SignEmailRegistrable::EXISTING_EMAIL_SESSION_KEY
+  test "the signup flow does not carry a cross-flow existing-email session key" do
+    assert_not_includes SignEmailRegistrable.constants, :EXISTING_EMAIL_SESSION_KEY
   end
 
   test "STATE_INIT constant is defined" do

@@ -110,12 +110,12 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_not_empty user_email.errors[:confirm_policy]
   end
 
-  test "should require unique email addresses" do
-    ClientEmail.create!(@valid_attributes)
-    duplicate_email = ClientEmail.new(@valid_attributes)
+  test "effective email addresses are unique at finalization" do
+    ClientEmail.create!(@valid_attributes).finalize_binding!
+    duplicate_email = ClientEmail.create!(@valid_attributes)
 
-    assert_not duplicate_email.valid?
-    assert_not_empty duplicate_email.errors[:address]
+    assert_predicate duplicate_email, :valid?
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate_email.finalize_binding! }
   end
 
   test "deleted sign-up email does not reserve address forever" do
@@ -311,7 +311,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     address = "email-race-#{SecureRandom.hex(4)}@example.com"
     results = create_emails_concurrently(address, address)
 
-    assert_identifier_race_protected(results, IdentifierBlindIndex.bidx_for_email(address))
+    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_email(address))
   end
 
   test "concurrent creates for case and whitespace equivalent address commit at most one active email" do
@@ -320,7 +320,41 @@ class ClientEmailTest < ActiveSupport::TestCase
     second = "#{local}@example.com"
     results = create_emails_concurrently(first, second)
 
-    assert_identifier_race_protected(results, IdentifierBlindIndex.bidx_for_email(second))
+    assert_pending_candidates_are_independent(results, IdentifierBlindIndex.bidx_for_email(second))
+  end
+
+  test "concurrent finalization for one destination leaves one effective email binding" do
+    address = "email-finalize-destination-#{SecureRandom.hex(4)}@example.com"
+    first = create_email_record(address)
+    second = create_email_record(address)
+
+    results = finalize_emails_concurrently(first, second)
+
+    assert_equal 1, results.count { |result| result[:status] == :finalized }, results.inspect
+    assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
+    assert_equal 1, ClientEmail.effective_binding.where(address_digest: first.address_digest).count
+  end
+
+  test "concurrent finalization for one client leaves one effective email binding" do
+    first = ClientEmail.create!(@valid_attributes.merge(address: "owner-first-#{SecureRandom.hex(4)}@example.com"))
+    second = ClientEmail.create!(@valid_attributes.merge(address: "owner-second-#{SecureRandom.hex(4)}@example.com"))
+
+    results = finalize_emails_concurrently(first, second)
+
+    assert_equal 1, results.count { |result| result[:status] == :finalized }, results.inspect
+    assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
+    assert_equal 1, ClientEmail.effective_binding.where(user_id: @user.id).count
+  end
+
+  test "released email binding can be reattached without reactivating its history" do
+    original = ClientEmail.create!(@valid_attributes).finalize_binding!
+    original.release_binding!
+    replacement = ClientEmail.create!(@valid_attributes.merge(address: original.address))
+
+    replacement.finalize_binding!
+
+    assert_not_predicate original.reload, :binding_effective?
+    assert_predicate replacement.reload, :binding_effective?
   end
 
   test "active delete transaction versus same address create keeps active email invariant" do
@@ -331,6 +365,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     ready = Queue.new
     release = Queue.new
     results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
     updater =
       Thread.new do # rubocop:disable ThreadSafety/NewThread
         ClientEmail.connection_pool.with_connection do |connection|
@@ -384,9 +419,7 @@ class ClientEmailTest < ActiveSupport::TestCase
       create_email_record(address)
     end
 
-    assert_operator ClientEmail.where(address_digest: digest).where.not(user_email_status_id: ClientEmailStatus::DELETED).count,
-                    :<=,
-                    1
+    assert_operator ClientEmail.effective_binding.where(address_digest: digest).count, :<=, 1
   end
 
   test "concurrent email create while competing insert rolls back does not commit duplicates" do
@@ -396,6 +429,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     ready = Queue.new
     release = Queue.new
     results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
 
     holder =
       Thread.new do # rubocop:disable ThreadSafety/NewThread
@@ -428,9 +462,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_nothing_raised do
       create_email_record(address)
     end
-    assert_operator ClientEmail.where(address_digest: digest).where.not(user_email_status_id: ClientEmailStatus::DELETED).count,
-                    :<=,
-                    1
+    assert_operator ClientEmail.effective_binding.where(address_digest: digest).count, :<=, 1
   end
 
   private
@@ -441,6 +473,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     ready = Queue.new
     release = Queue.new
     results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
 
     [first_address, second_address].map do |address|
       Thread.new do # rubocop:disable ThreadSafety/NewThread
@@ -485,20 +518,45 @@ class ClientEmailTest < ActiveSupport::TestCase
     connection.execute("SET lock_timeout = '2000ms'")
   end
 
-  def assert_identifier_race_protected(results, digest)
+  def finalize_emails_concurrently(first, second)
+    track_email_race_address(first.address)
+    track_email_race_address(second.address)
+    ready = Queue.new
+    release = Queue.new
+    results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
+
+    threads =
+      [first.id, second.id].map do |id|
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
+          ClientEmail.connection_pool.with_connection do |connection|
+            configure_identifier_race_connection!(connection)
+            ready << true
+            release.pop
+            ClientEmail.find(id).finalize_binding!
+            results << { status: :finalized }
+          rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::LockWaitTimeout => e
+            results << { status: :conflict, error: "#{e.class}: #{e.message}" }
+          rescue StandardError => e
+            results << { status: :error, error: "#{e.class}: #{e.message}" }
+          end
+        end
+      end
+    2.times { ready.pop }
+    2.times { release << true }
+    threads.each(&:join)
+    2.times.map { results.pop }
+  end
+
+  def assert_pending_candidates_are_independent(results, digest)
     assert_equal 2, results.size
     assert results.none? { |result| result[:status] == :error }
-    assert_equal 1, results.count { |result| result[:status] == :created }, results.inspect
-    assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
-    assert_operator ClientEmail.where(address_digest: digest).where.not(user_email_status_id: ClientEmailStatus::DELETED).count,
-                    :<=,
-                    1
+    assert_equal 2, results.count { |result| result[:status] == :created }, results.inspect
+    assert_empty results.select { |result| result[:status] == :conflict }
+    assert_equal 2, ClientEmail.where(address_digest: digest).where(binding_finalized_at: nil).count
   end
 
   def active_email_digest_count(address)
-    ClientEmail
-      .where(address_digest: IdentifierBlindIndex.bidx_for_email(address))
-      .where.not(user_email_status_id: ClientEmailStatus::DELETED)
-      .count
+    ClientEmail.effective_binding.where(address_digest: IdentifierBlindIndex.bidx_for_email(address)).count
   end
 end

@@ -12,6 +12,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
            :visitor_token_dbsc_statuses
 
   setup do
+    https!
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! @host
     @visitor = visitors(:reserved_visitor)
@@ -23,6 +24,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: @visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: @visitor, session: @token)
+    install_base_browser_rp_credentials!(surface: "com", host: @host, actor: @visitor, token: @token)
     @visitor.visitor_telephones.create!(
       number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
@@ -33,13 +35,17 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     )
     requirement = StepUpRequirement.new(
       scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:com",
+      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @visitor.public_id,
+      resource_ref: nil, tenant_ref: nil,
       session_binding: @token.public_id, token_binding: @token.public_id, require_session_binding: true,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: @visitor, token: @token, requirement: requirement, return_to: "/identity/emails/registration/new",
     ).transaction
     transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true,
+      user_verified: true,
       verified_at: VisitorStepUpCeremonyTransaction.database_now, verified_credential_ref: @passkey.public_id,
     )
     ceremony, = VisitorAuthCeremonySession.rotate_and_admit!(
@@ -177,9 +183,12 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     other_token = VisitorToken.create!(visitor: @visitor)
     other_requirement = StepUpRequirement.new(
       scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:com",
+      step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @visitor.public_id,
+      resource_ref: nil, tenant_ref: nil,
       session_binding: other_token.public_id, token_binding: other_token.public_id, require_session_binding: true,
     )
-    pending_transaction = BaseStepUpAdmissionIssuer.call!(
+    pending_transaction = issue_base_step_up_admission!(
       actor: @visitor, token: other_token, requirement: other_requirement,
       return_to: "/identity/emails/registration/new",
     ).transaction
@@ -218,6 +227,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     token = VisitorToken.create!(visitor: visitor)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
+    install_base_browser_rp_credentials!(surface: "com", host: @host, actor: visitor, token: token)
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
       visitor, host: @host, session_public_id: token.public_id,
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
@@ -250,6 +260,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     token = VisitorToken.create!(visitor: visitor)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
+    install_base_browser_rp_credentials!(surface: "com", host: @host, actor: visitor, token: token)
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
       visitor, host: @host, session_public_id: token.public_id,
                resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",

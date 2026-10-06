@@ -109,40 +109,40 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     assert_settings_replacement_rejected(PROVIDERS.fetch(:apple))
   end
 
-  test "Google settings unlink succeeds when Apple remains available" do
+  test "Google settings unlink succeeds when a verified email remains available" do
     user = create_social_client
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "unlink_google")
-    apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "backup_apple")
+    ensure_verified_email!(user)
 
     delete_with_verified_session(user, PROVIDERS.fetch(:google))
 
     assert_redirected_to auth_app_settings_google_url(ri: "jp", host: @host)
-    assert_not PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
-    assert PROVIDERS.fetch(:apple).fetch(:model).exists?(apple_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
+    assert_not_nil google_identity.reload.released_at
   end
 
-  test "Apple settings unlink succeeds when Google remains available" do
+  test "Apple settings unlink succeeds when a verified email remains available" do
     user = create_social_client
-    google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "backup_google")
     apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "unlink_apple")
+    ensure_verified_email!(user)
 
     delete_with_verified_session(user, PROVIDERS.fetch(:apple))
 
     assert_redirected_to auth_app_settings_apple_path(ri: "jp")
-    assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
-    assert_not PROVIDERS.fetch(:apple).fetch(:model).exists?(apple_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: apple_identity.id)
+    assert_not_nil apple_identity.reload.released_at
   end
 
-  test "Apple settings link succeeds again after unlink while Google remains available" do
+  test "Apple settings link succeeds again after unlink" do
     user = create_social_client
-    google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "relink_backup_google")
     apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "relink_old_apple")
+    ensure_verified_email!(user)
 
     delete_with_verified_session(user, PROVIDERS.fetch(:apple))
 
     assert_redirected_to auth_app_settings_apple_path(ri: "jp")
-    assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
-    assert_not PROVIDERS.fetch(:apple).fetch(:model).exists?(apple_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: apple_identity.id)
+    assert_not_nil apple_identity.reload.released_at
 
     new_uid = "relink_new_apple_#{SecureRandom.hex(4)}"
     grant_session = seed_app_social_link_grant_session(provider: "apple", user: user, ri: "jp")
@@ -164,7 +164,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
     assert_equal user.id, relinked_identity.user_id
     assert_equal "active", relinked_identity.state
-    assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: apple_identity.id)
   end
 
   test "Google settings unlink keeps the last active login method" do
@@ -178,7 +178,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
   test "Google settings unlink redirects to verification without social unlink step-up" do
     user = create_social_client
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "step_up_google")
-    create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "step_up_backup_apple")
+    ensure_verified_email!(user)
     token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     delete(
@@ -188,13 +188,13 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_response :unauthorized
-    assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
+    assert ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
   end
 
   test "Apple settings unlink rejects a signed-in client without social unlink step-up" do
     user = create_social_client
     apple_identity = create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "step_up_apple")
-    create_social_identity(PROVIDERS.fetch(:google), user:, uid: "step_up_backup_google")
+    ensure_verified_email!(user)
     token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     delete(
@@ -204,7 +204,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_response :unauthorized
-    assert PROVIDERS.fetch(:apple).fetch(:model).exists?(apple_identity.id)
+    assert ClientExternalIdentity.effective_binding.exists?(id: apple_identity.id)
   end
 
   test "Google settings link rejects settings step-up scope" do
@@ -235,7 +235,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     raw = SecureRandom.base58(32)
     secret = ClientSecretCredential.create!(
       client: user, issuance: issuance, name: "Secret", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
 
     delete_with_verified_session(user, PROVIDERS.fetch(:google))
@@ -248,14 +248,14 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
   test "Google settings unlink rejects failed Turnstile before unlinking" do
     user = create_social_client
     google_identity = create_social_identity(PROVIDERS.fetch(:google), user:, uid: "turnstile_google")
-    create_social_identity(PROVIDERS.fetch(:apple), user:, uid: "turnstile_backup_apple")
+    ensure_verified_email!(user)
     TurnstileVerifierStub.challenge_response = { "success" => false }
 
     delete_with_verified_session(user, PROVIDERS.fetch(:google))
 
     assert_response :see_other
     assert_redirected_to auth_app_settings_google_url(ri: "jp", host: @host)
-    assert PROVIDERS.fetch(:google).fetch(:model).exists?(google_identity.id)
+    assert ClientExternalIdentity.effective_binding.exists?(id: google_identity.id)
   end
 
   private
@@ -330,8 +330,8 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_response :ok
-    assert_includes response.body, "social-completion-form"
+    assert_response :redirect
+    assert_equal "/social/authentication/completion", URI.parse(response.location).path
 
     assert_difference("Client.count", 1) do
       assert_difference("#{config.fetch(:model)}.count", 1) do
@@ -474,6 +474,13 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       last_otp_at: Time.zone.at(0),
     )
     user
+  end
+
+  def ensure_verified_email!(user)
+    email = user.client_emails.first
+    email.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+    email.finalize_binding! unless email.binding_effective?
+    email
   end
 
   def create_social_identity(config, user:, uid:)
@@ -865,6 +872,8 @@ class SocialAuthAppFlowContractTest
   end
 
   def submit_social_completion_if_present!
+    return if follow_social_completion_redirect_if_present!
+
     return unless response.media_type == "text/html"
     return unless response.body.include?("social-completion-form")
 
@@ -1066,6 +1075,10 @@ class SocialAuthAppFlowContractTest
         last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
         last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
         last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+        last_step_up_credential_ref: ("test-step-up-credential" if token.respond_to?(:last_step_up_credential_ref)),
+        last_step_up_phishing_resistant: (false if token.respond_to?(:last_step_up_phishing_resistant)),
+        last_step_up_user_verified: (true if token.respond_to?(:last_step_up_user_verified)),
+        last_step_up_full_reauthentication: (false if token.respond_to?(:last_step_up_full_reauthentication)),
         updated_at: Time.current,
       }.compact,
     )

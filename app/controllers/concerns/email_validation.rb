@@ -19,7 +19,7 @@ module EmailValidation
     start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     digest = IdentifierBlindIndex.bidx_for_email(email)
-    result = digest ? identity_email_model.find_by(address_digest: digest) : nil
+    result = digest ? identity_email_model.effective_binding.find_by(address_digest: digest) : nil
 
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
     remaining = target_seconds - elapsed

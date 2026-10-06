@@ -229,19 +229,21 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
   private
 
   REALM_BY_SURFACE = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
+  CLIENT_ID_BY_SURFACE = { "app" => "core-app", "com" => "core-com", "org" => "core-org" }.freeze
 
   # Issues a real transaction and redeems it through `BaseAuthAdmissionCoordinator`, the same path
   # `AuthOidcEntrancesTest` and `AuthRegionContractTest` use, so the code carries a genuine
   # signature rather than a stub.
   def admission_reference_for(surface, intent)
-    client = OidcClientRegistry.find!("core-next-rp")
+    client_id = CLIENT_ID_BY_SURFACE.fetch(surface)
+    client = OidcClientRegistry.find!(client_id)
     transaction =
       OidcAuthorizationTransactionCoordinator.issue!(
         surface: surface,
         intent: intent,
         params: {
           response_type: "code",
-          client_id: "core-next-rp",
+          client_id: client_id,
           redirect_uri: client.redirect_uris_by_realm.fetch(REALM_BY_SURFACE.fetch(surface)).first,
           code_challenge: SecureRandom.urlsafe_base64(32),
           code_challenge_method: "S256",
@@ -250,7 +252,9 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       ).transaction
-    BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    ).reference
   end
 
   def assert_title_shape(title, tld)

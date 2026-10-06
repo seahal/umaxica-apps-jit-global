@@ -26,8 +26,8 @@ module Auth
 
         def local_result_layout = "auth/com/application"
 
-        def local_result_completion_url
-          base_com_sign_completion_url(ri: params[:ri], host: base_authority_host, protocol: "https")
+        def local_result_completion_url(**)
+          base_com_sign_completion_url(**, host: base_authority_host, protocol: "https")
         end
       end
     end

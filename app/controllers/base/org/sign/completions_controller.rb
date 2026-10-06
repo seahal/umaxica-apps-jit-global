@@ -3,13 +3,13 @@
 module Base
   module Org
     module Sign
-      class CompletionsController < ::Base::Org::ApplicationController
+      class CompletionsController < ::Base::Org::AuthorityController
         include BaseLocalAuthenticationCompletion
 
         AUTHENTICATION_MODE = :open
+        skip_before_action :authenticate_browser_rp_unsafe_request!, raise: false
+
         declare_authentication_mode! :open
-        LOCAL_RESULT_ORIGINS = JitHostOriginEnv.trusted_origins(ENV.fetch("PUBLIC_AUTH_STAFF_URL")).freeze
-        protect_from_forgery using: :header_or_legacy_token, trusted_origins: LOCAL_RESULT_ORIGINS, with: :exception
 
         private
 
@@ -26,15 +26,11 @@ module Base
         end
 
         def authorize_local_login!(flow, actor)
-          if flow.sign_in_session_limit_pending?
-            authorize!(flow, to: :manage_session_limit?, context: { user: actor })
-          else
-            authorize!(flow, to: :issue_session?, context: { user: actor })
-          end
+          authorize!(flow, to: :issue_session?, context: { user: actor })
         end
 
         def local_login_pending_response
-          render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
+          redirect_to(base_org_sign_in_limitation_path(ri: params[:ri]), status: :see_other)
         end
       end
     end

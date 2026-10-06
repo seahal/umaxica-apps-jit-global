@@ -24,48 +24,38 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
-  # Warp renders its sign-out pages through Inertia, so the completion page clears the encrypted
-  # Inertia history itself; the Clear-Site-Data response used by the ERB surfaces is not needed
-  # here and would also unregister Warp's offline service worker.
-  test "sign-out completion redirects to Home and clears history there" do
+  test "sign-out launch leaves the parent and RP session unchanged" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
-    state = Rack::Utils.parse_nested_query(URI.parse(handoff_form["action"]).query.to_s).fetch("state")
-
-    get warp_app_sign_out_url(ri: "jp", state: state)
 
     assert_response :see_other
-    assert_equal warp_app_root_path(ri: "jp"), URI.parse(response.location).request_uri
-    get response.location
-
-    assert_response :success
-    assert_equal "warp/app/roots/index", inertia_component
-    assert inertia_page.fetch("clearHistory")
     assert_nil response.headers["Clear-Site-Data"]
+    assert_predicate token.reload, :currently_usable?
+    assert_predicate @rp_session.reload, :active?
   end
 
-  test "post sign out redirects to base oidc logout with completion state" do
+  test "post sign out redirects to the registered base authority" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
-    assert_response :success
-    transaction = AcmeLogoutTransaction.find_by!(public_id: handoff_input_value("logout_challenge"))
+    assert_response :see_other
+    location = URI.parse(response.location)
+    query = Rack::Utils.parse_nested_query(location.query.to_s)
+    transaction = AcmeLogoutTransaction.find_by!(public_id: query.fetch("logout_challenge"))
 
-    assert_equal "side", transaction.origin_surface
-    location = URI.parse(handoff_form["action"])
-    Rack::Utils.parse_nested_query(location.query.to_s)
+    assert_equal "warp", transaction.origin_surface
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_predicate handoff_input_value("logout_challenge"), :present?
-    assert_equal "jp", handoff_input_value("ri")
-    assert_predicate @rp_session.reload, :revoked?
+    assert_equal "jp", query["ri"]
+    assert_predicate query["logout_challenge"], :present?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "post sign out accepts us region" do
@@ -75,16 +65,15 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
     assert_equal "/oidc/logout", location.path
-    assert_equal "us", handoff_input_value("ri")
-    assert_includes query.fetch("post_logout_redirect_uri"), "ri=us"
-    assert_predicate handoff_input_value("logout_challenge"), :present?
-    assert_predicate @rp_session.reload, :revoked?
+    assert_equal "us", query["ri"]
+    assert_predicate query["logout_challenge"], :present?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "post sign out canonicalizes unsupported region to default" do
@@ -94,13 +83,13 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
     post warp_app_sign_out_url(ri: "xx"), headers: app_session_headers(user, token)
 
-    assert_response :success
-    location = URI.parse(handoff_form["action"])
+    assert_response :see_other
+    location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
-    assert_equal RequestContextContract.default_region, handoff_input_value("ri")
-    assert_includes query.fetch("post_logout_redirect_uri"), "ri=#{RequestContextContract.default_region}"
-    assert_predicate @rp_session.reload, :revoked?
+    assert_equal RequestContextContract.default_region, query["ri"]
+    assert_predicate query["logout_challenge"], :present?
+    assert_predicate @rp_session.reload, :active?
   end
 
   test "transaction issuance failure does not render success completion" do
@@ -125,37 +114,31 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "warp/app/sign/outs/unavailable", inertia_component
   end
 
-  test "post sign out relay advances to sign coordination hop" do
+  test "post sign out does not route through Auth" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
-    challenge = handoff_input_value("logout_challenge")
+    assert_response :see_other
+    location = URI.parse(response.location)
 
-    post acme_app_oidc_logout_url(
-      host: ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"), ri: "jp",
-      logout_challenge: challenge,
-    ), headers: {
-      "Host" => ENV["PRIVATE_BASE_SERVICE_URL"] || ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost"),
-      "Origin" => "https://#{ENV["PUBLIC_WARP_SERVICE_URL"] || "warp.app.localhost"}",
-      "Sec-Fetch-Site" => "same-site",
-    }
-
-    assert_response :forbidden
-    assert_includes response.body, I18n.t("sign.shared.sign_out.unavailable_title")
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), location.host
+    assert_equal "/oidc/logout", location.path
+    assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), location.host
   end
 
   private
 
   def authenticate_rp!(user, token)
-    oidc_client = OidcClientRegistry.find!("side-app")
+    oidc_client = OidcClientRegistry.find!("warp-app")
     @rp_session = ClientRpSession.create!(
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
@@ -164,6 +147,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       host: @host,
       resource_type: "client",
       session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
       oidc_sid: @rp_session.public_id,
       oidc_jti: @rp_session.oidc_jti,
       expires_at: 10.minutes.from_now,
@@ -181,15 +165,6 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     bearer_headers(
       jwt_access_token_for(user, session_public_id: token.public_id, resource_type: "client"),
     )
-  end
-
-  def handoff_form
-    assert_select "form#sign-out-handoff-form[method=post][data-turbo=false]", 1
-    css_select("form#sign-out-handoff-form").first
-  end
-
-  def handoff_input_value(name)
-    css_select(%(form#sign-out-handoff-form input[name="#{name}"])).first&.[]("value")
   end
 end
 

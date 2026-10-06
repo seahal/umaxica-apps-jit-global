@@ -27,7 +27,10 @@ module BaseOauthTokenEndpoint
       render json: result.token_response, status: :ok
     else
       render json: { error: result.error, error_description: result.error_description },
-             status: :bad_request
+             status: result.error.to_s.in?(
+               %w(server_error
+                  temporarily_unavailable),
+             ) ? :service_unavailable : :bad_request
     end
   end
 

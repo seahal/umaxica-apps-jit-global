@@ -18,7 +18,7 @@ module SignUpSocialBirthdateSupport
     birthdate = sign_up_birthdate_param
     unless SignUpEligibilityPolicy.minimum_age_reached?(birthdate, surface: :app, today: Time.zone.today)
       sign_up_session_state.age_restricted = true
-      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :fail, actor_context: Actor.authn)
+      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :halt, actor_context: Actor.authn)
       return render_sign_up_result(result) unless result.success? || result.status == :failed
 
       render_sign_up_age_restricted
@@ -99,22 +99,16 @@ module SignUpSocialBirthdateSupport
       candidate: candidate,
       birthdate: birthdate,
     )
+    result_reference = Valkey::AuthState::SocialCeremonyResultStore.new.issue!(
+      token: result_token, expires_at: grant.expires_at,
+    )
     sign_up_session_state.clear_all!
-    render(
-      "sign/shared/social_completion",
-      locals: {
-        # The browser posts this form, so the target must be the public base
-        # host, not the internal one, and https, because the CSP form-action
-        # allowlist carries https origins only.
-        completion_url: base_app_social_authentication_completion_url(
-          id: candidate.provider,
-          host: base_authority_host,
-          protocol: "https",
-        ),
-        result_token: result_token,
-        ri: params[:ri],
-      },
-      layout: false,
+    redirect_to(
+      base_app_social_authentication_completion_url(
+        id: candidate.provider, result_ref: result_reference, ri: params[:ri],
+        host: base_authority_host, protocol: "https",
+      ), status: :see_other,
+      allow_other_host: true,
     )
   end
 

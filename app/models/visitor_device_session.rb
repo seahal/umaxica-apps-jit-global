@@ -43,4 +43,7 @@ class VisitorDeviceSession < ComTicketRecord
   has_many :visitor_tokens, foreign_key: :device_session_id,
                             dependent: :restrict_with_exception,
                             inverse_of: :device_session
+  has_many :visitor_rp_sessions, foreign_key: :device_session_id,
+                                 dependent: :restrict_with_exception,
+                                 inverse_of: :visitor_device_session
 end

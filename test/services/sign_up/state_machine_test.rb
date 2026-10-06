@@ -18,14 +18,14 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
     assert_equal :enter_guardrail, verify.next_event
   end
 
-  test "expired tickets reject mutation before side effects" do
+  test "expired tickets become terminal before rejecting mutation" do
     ticket = create_cycle(ClientSignUpFlow, issued_at: 2.minutes.ago, expires_at: 1.minute.ago)
 
     result = SignUpStateMachine.call(ticket: ticket, event: :submit_contact, actor_context: nil)
 
     assert_equal :expired, result.status
-    assert_equal ClientSignUpFlowStatus::STARTED, ticket.reload.status_id
-    assert_equal "start", ticket.step
+    assert_equal ClientSignUpFlowStatus::EXPIRED, ticket.reload.status_id
+    assert_equal "expired", ticket.step
   end
 
   test "terminal tickets reject mutation" do
@@ -227,66 +227,53 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
 
     assert_equal :blocked, missing_result.status
     assert_equal :advanced, accepted.status
-    assert_equal ClientSignUpFlowStatus::FINALIZED, ticket.reload.status_id
-    assert_equal "finalized", ticket.step
+    assert_equal ClientSignUpFlowStatus::FINALIZING, ticket.reload.status_id
+    assert_equal "finalizing", ticket.step
   end
 
-  test "sign-in handoff accepted then complete marks sign-up completed" do
+  test "durable sign-up finalization completes directly before ordinary sign-in admission" do
     ticket = create_cycle(
       ClientSignUpFlow,
       entry_method: "email",
-      status_id: ClientSignUpFlowStatus::FINALIZED,
-      step: "finalized",
+      status_id: ClientSignUpFlowStatus::FINALIZING,
+      step: "finalizing",
       completed_requirements: { "birthdate" => { "cleared" => true } },
     )
 
-    handoff = SignUpStateMachine.call(
-      ticket: ticket,
-      event: :handoff_to_sign_in,
-      actor_context: nil,
-      payload: { sign_in_handoff_status: :accepted, sign_in_handoff: :boundary_result },
-    )
     complete = SignUpStateMachine.call(ticket: ticket.reload, event: :complete, actor_context: nil)
 
-    assert_equal :sign_in_handoff_accepted, handoff.status
-    assert_equal :complete, handoff.next_event
     assert_equal :completed, complete.status
     assert_equal ClientSignUpFlowStatus::COMPLETED, ticket.reload.status_id
     assert_equal "completed", ticket.step
     assert_predicate ticket.completed_at, :present?
   end
 
-  test "failed handoff does not mark durable sign-up completed" do
+  test "completion cannot be requested before durable account finalization" do
     ticket = create_cycle(
       ClientSignUpFlow,
       entry_method: "email",
-      status_id: ClientSignUpFlowStatus::FINALIZED,
-      step: "finalized",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
+      step: "checkpoint",
       completed_requirements: { "birthdate" => { "cleared" => true } },
     )
 
-    result = SignUpStateMachine.call(
-      ticket: ticket,
-      event: :handoff_to_sign_in,
-      actor_context: nil,
-      payload: { sign_in_handoff_status: :failed, sign_in_handoff: :boundary_result },
-    )
+    result = SignUpStateMachine.call(ticket: ticket, event: :complete, actor_context: nil)
 
-    assert_equal :sign_in_handoff_failed, result.status
-    assert_equal ClientSignUpFlowStatus::FINALIZED, ticket.reload.status_id
+    assert_equal :invalid_transition, result.status
+    assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, ticket.reload.status_id
   end
 
-  test "fail expire and cancel use terminal statuses" do
+  test "halt expire and cancel use terminal statuses" do
     failed = create_cycle(ClientSignUpFlow)
-    expired = create_cycle(ClientSignUpFlow)
+    expired = create_cycle(ClientSignUpFlow, issued_at: 2.minutes.ago, expires_at: 1.minute.ago)
     cancelled = create_cycle(ClientSignUpFlow)
 
-    fail_result = SignUpStateMachine.call(ticket: failed, event: :fail, actor_context: nil)
+    fail_result = SignUpStateMachine.call(ticket: failed, event: :halt, actor_context: nil)
     expire_result = SignUpStateMachine.call(ticket: expired, event: :expire, actor_context: nil)
     cancel_result = SignUpStateMachine.call(ticket: cancelled, event: :cancel, actor_context: nil)
 
     assert_equal :failed, fail_result.status
-    assert_equal ClientSignUpFlowStatus::FAILED, failed.reload.status_id
+    assert_equal ClientSignUpFlowStatus::HALTED, failed.reload.status_id
     assert_predicate failed.failed_at, :present?
     assert_equal :expired, expire_result.status
     assert_equal ClientSignUpFlowStatus::EXPIRED, expired.reload.status_id

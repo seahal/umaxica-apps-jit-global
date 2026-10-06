@@ -268,7 +268,7 @@ class << ConfigValues::HostFamilyValues
   # config/routes/core.rb constrains the Core surfaces on
   # `ENV["PUBLIC_CORE_*_URL"] || ENV["CORE_*_URL"]`, so the host Rails answers on already
   # prefers the PUBLIC value. Boot config feeds production Host Authorization and the
-  # core-next-rp redirect URIs, both of which must name the host the route constraint accepts;
+  # Core redirect URIs, both of which must name the host the route constraint accepts;
   # taking the opposite precedence would let a deployment that sets both keys route on one host
   # while registering a callback for the other.
   def core_key(env, surface)

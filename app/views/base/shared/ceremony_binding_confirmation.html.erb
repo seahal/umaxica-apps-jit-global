@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+  </head>
+  <body>
+    <form id="base-ceremony-binding-confirmation-form" method="post" action="<%= request.path %>" data-turbo="false">
+      <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
+      <%= hidden_field_tag :binding_ref, binding_ref %>
+      <%= hidden_field_tag :ri, params[:ri] if params[:ri].present? %>
+      <button type="submit">Continue</button>
+    </form>
+  </body>
+</html>

@@ -156,7 +156,7 @@ module RegionalRpClientMatrix
       end
     return "EDIT_ORG" if client_id.to_s == "edit-org"
 
-    surface_namespace = { "core" => "CORE", "warp" => "SIDE" }.fetch(metadata.fetch(:surface))
+    surface_namespace = { "core" => "CORE", "warp" => "WARP" }.fetch(metadata.fetch(:surface))
     parts = [surface_namespace, metadata.fetch(:face), metadata.fetch(:region)]
     parts.compact!
     parts.map! { |part| part.to_s.upcase }

@@ -9,12 +9,11 @@ module OidcClientStoresStaticClientStore
 
   def clients
     first_party_browser_rp_clients
-      .merge(deprecated_shared_browser_rp_clients)
       .merge(native_rp_clients)
       .freeze
   end
 
-  # Seven currently active first-party browser RPs. The approved thirteen-client regional target is
+  # Ten currently active first-party browser RPs. The approved thirteen-client regional target is
   # kept in AuthBoundaryAuthorityMap during expand-and-contract migration; it is not active here
   # until exact caller, URI, audience, key, and RP-session bindings are implemented.
   def first_party_browser_rp_clients
@@ -43,29 +42,29 @@ module OidcClientStoresStaticClientStore
       name: "Core Org RP",
       jwt_namespace: "CORE_ORG",
     },
-    "side-app" => {
+    "warp-app" => {
       env_key: "PUBLIC_WARP_SERVICE_URL",
       default_host: "warp.app.localhost",
       resource_type: "client",
-      aud: "side-app",
-      name: "Side App RP",
-      jwt_namespace: "SIDE_APP",
+      aud: "warp-app",
+      name: "Warp App RP",
+      jwt_namespace: "WARP_APP",
     },
-    "side-com" => {
+    "warp-com" => {
       env_key: "PUBLIC_WARP_CORPORATE_URL",
       default_host: "warp.com.localhost",
       resource_type: "visitor",
-      aud: "side-com",
-      name: "Side Com RP",
-      jwt_namespace: "SIDE_COM",
+      aud: "warp-com",
+      name: "Warp Com RP",
+      jwt_namespace: "WARP_COM",
     },
-    "side-org" => {
+    "warp-org" => {
       env_key: "PUBLIC_WARP_STAFF_URL",
       default_host: "warp.org.localhost",
       resource_type: "operator",
-      aud: "side-org",
-      name: "Side Org RP",
-      jwt_namespace: "SIDE_ORG",
+      aud: "warp-org",
+      name: "Warp Org RP",
+      jwt_namespace: "WARP_ORG",
     },
     "edit-org" => {
       env_key: "PUBLIC_EDIT_STAFF_URL",
@@ -75,14 +74,28 @@ module OidcClientStoresStaticClientStore
       name: "Edit Org RP",
       jwt_namespace: "EDIT_ORG",
     },
+    "base-app-ww" => {
+      env_key: "BASE_SERVICE_URL",
+      resource_type: "client",
+      aud: "base-app-ww",
+      name: "Base App Self RP",
+      jwt_namespace: "BASE_RP_APP_WW",
+    },
+    "base-com-ww" => {
+      env_key: "BASE_CORPORATE_URL",
+      resource_type: "visitor",
+      aud: "base-com-ww",
+      name: "Base Com Self RP",
+      jwt_namespace: "BASE_RP_COM_WW",
+    },
+    "base-org-ww" => {
+      env_key: "BASE_STAFF_URL",
+      resource_type: "operator",
+      aud: "base-org-ww",
+      name: "Base Org Self RP",
+      jwt_namespace: "BASE_RP_ORG_WW",
+    },
   }.freeze
-
-  # Shared browser clients retained during migration; prefer first_party_browser_rp_clients.
-  def deprecated_shared_browser_rp_clients
-    {
-      "core-next-rp" => core_next_rp_client,
-    }
-  end
 
   def native_rp_clients
     {
@@ -96,29 +109,6 @@ module OidcClientStoresStaticClientStore
     "app-ios-rp" => "umaxica://oidc/callback",
     "app-android-rp" => "com.umaxica.app:/oidc/callback",
   }.freeze
-
-  def core_next_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("PUBLIC_CORE_SERVICE_URL"),
-        "operator" => build_redirect_uris("PUBLIC_CORE_STAFF_URL"),
-        "visitor" => build_redirect_uris("PUBLIC_CORE_CORPORATE_URL"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("PUBLIC_CORE_SERVICE_URL") +
-        build_post_logout_redirect_uris("PUBLIC_CORE_STAFF_URL") +
-        build_post_logout_redirect_uris("PUBLIC_CORE_CORPORATE_URL"),
-      backchannel_logout_uris: build_logout_uris("PUBLIC_CORE_SERVICE_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_CORE_STAFF_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_CORE_CORPORATE_URL", "backchannel/logout"),
-      backchannel_logout_session_required: true,
-      aud: "core-next-rp",
-      resource_type: "client",
-      name: "Core Next RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "CORE_APP",
-    }
-  end
 
   def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
                      callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,
@@ -230,8 +220,7 @@ module OidcClientStoresStaticClientStore
     host.to_s
   end
 
-  private_class_method :first_party_browser_rp_clients, :deprecated_shared_browser_rp_clients,
-                       :native_rp_clients, :core_next_rp_client, :native_rp_client,
+  private_class_method :first_party_browser_rp_clients, :native_rp_clients, :native_rp_client,
                        :face_rp_client, :build_redirect_uris, :build_post_logout_redirect_uris,
                        :build_logout_uris, :public_host?, :configured_hosts_for, :boot_host_for,
                        :normalize_host

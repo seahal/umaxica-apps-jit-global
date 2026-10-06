@@ -33,6 +33,8 @@ module IdentityStepUpCeremonyContract
   SURFACES = %w(app com org).freeze
   # Telephone OTP is deliberately absent: SMS is not an accepted step-up proof.
   METHODS = %w(passkey totp email_otp secret_credential).freeze
+  # @deprecated AAL values remain only for signed/storage label validation and migration history;
+  # explicit step-up evidence is authoritative and this set must not drive policy.
   AALS = %w(none aal1 aal2).freeze
   LEEWAY = 30
 
@@ -127,7 +129,10 @@ module IdentityStepUpCeremonyContract
   end
 
   def validate_required!(payload, required)
-    missing = required.reject { |key| payload[key].present? }
+    missing =
+      required.reject do |key|
+        payload.key?(key) && (payload[key] == false || payload[key].present?)
+      end
     raise IdentityStepUpCeremonyContract::Error, "missing required claims: #{missing.join(", ")}" if missing.present?
   end
 

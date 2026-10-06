@@ -12,15 +12,19 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
     @credential = @actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
     @token = ClientToken.create!(user: @actor)
     @requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
-      require_session_binding: true,
+      require_session_binding: true, actor_ref: @actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    @transaction = BaseStepUpAdmissionIssuer.call!(
+    @transaction = issue_base_step_up_admission!(
       actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/birthdate",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: @token,
     ).transaction
     @transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true,
+      user_verified: true,
       verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: @credential.public_id,
     )
     @ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
@@ -140,6 +144,27 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
     assert_not_predicate @ceremony.reload, :completed?
   end
 
+  test "a strengthened current resource policy cannot reuse the admitted transaction" do
+    changed_requirement = StepUpRequirement.new(
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
+      audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
+      require_session_binding: true, actor_ref: @actor.public_id, resource_ref: "different-resource",
+      tenant_ref: nil,
+    )
+
+    assert_raises(IdentityStepUpCeremonyContract::Error) do
+      IdentityStepUpCeremonyFreshnessCommitter.call!(
+        actor: @actor, token: @token, transaction: @transaction, requirement: changed_requirement,
+        raw_result: @issuance.code,
+      )
+    end
+    assert_equal "verified", @transaction.reload.status
+    assert_nil @token.reload.last_step_up_at
+    assert_not_predicate @ceremony.reload, :completed?
+  end
+
   test "logout before Base completion revokes evidence and rejects the pending result" do
     @token.revoke!
 
@@ -157,19 +182,23 @@ class IdentityStepUpCeremonyFreshnessCommitterTest < ActiveSupport::TestCase
     assert_not_predicate @ceremony, :completed?
   end
 
-  test "AAL1 verification cannot become evidence for a Base requirement demanding AAL2" do
+  test "verification without required user verification cannot become Base evidence" do
     IdentityStepUpCeremonyCancellationCommitter.call!(actor: @actor, token: @token, transaction: @transaction)
     requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", required_aal: "aal2", allowed_methods: [:passkey], purpose: "step_up",
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: true,
+      full_reauthentication_required: false, ttl: 15.minutes, purpose: "step_up",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
-      require_session_binding: true,
+      require_session_binding: true, actor_ref: @actor.public_id, resource_ref: nil, tenant_ref: nil,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: @actor, token: @token, requirement: requirement, return_to: "/identity/birthdate",
+      base_browser_nonce: SecureRandom.urlsafe_base64, base_token: @token,
     ).transaction
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       transaction.record_verification!(
         method: "passkey", aal: "aal1", phishing_resistant: true,
+        user_verified: false,
         verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: @credential.public_id,
       )
     end

@@ -97,7 +97,9 @@ class ClientSecretIssuancePurger
 
     def purge_terminated_signup!(issuance, executor_job_id, duration, flow)
       return :dependent unless flow.is_a?(ClientSignUpFlow) &&
-        %w(CANCELLED EXPIRED FAILED).include?(ClientSignUpFlow::STATUS_NAMES.fetch(flow.status_id))
+        %w(CANCELLED EXPIRED FAILED HALTED FINALIZED SIGN_IN_HANDOFF_PENDING).include?(
+          ClientSignUpFlow::STATUS_NAMES.fetch(flow.status_id),
+        )
 
       issuance.lock!
       now = Client.database_now
@@ -116,7 +118,14 @@ class ClientSecretIssuancePurger
     end
 
     def terminated_signup_audit_events(issuance, flow)
-      reason = { "CANCELLED" => "flow_canceled", "EXPIRED" => "flow_expired", "FAILED" => "flow_failed" }
+      reason = {
+        "CANCELLED" => "flow_canceled",
+        "EXPIRED" => "flow_expired",
+        "FAILED" => "flow_failed",
+        "HALTED" => "flow_halted",
+        "FINALIZED" => "flow_halted",
+        "SIGN_IN_HANDOFF_PENDING" => "flow_halted",
+      }
         .fetch(ClientSignUpFlow::STATUS_NAMES.fetch(flow.status_id))
       reasons = [reason]
       if issuance.confirmed_at.nil? && issuance.expires_at && issuance.expires_at <= issuance.discard_at
@@ -271,11 +280,16 @@ class ClientSecretIssuancePurger
       operation = issuance.origin_operation_id
       client_ref = issuance.client.public_id
       count = issuance.planned_count
+      snapshot = {
+        issuance_origin: issuance.origin,
+        issuance_browser_session_ref: issuance.browser_session_ref,
+        issuance_sign_up_flow_ref: issuance.sign_up_flow_ref,
+      }
       issuance.delete
       ClientSecretAuditOutbox.record!(
         actor_context: ActorValuesContext.empty, client_ref: client_ref, operation_ref: operation,
         occurred_at: now, event_name: "secret.issuance_purged", item_count: count,
-        executor_job_id: executor_job_id,
+        executor_job_id: executor_job_id, **snapshot,
       )
       :purged
     end

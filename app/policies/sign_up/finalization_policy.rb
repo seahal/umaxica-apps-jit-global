@@ -10,10 +10,6 @@ module SignUp
         all_requirements_clear?
     end
 
-    def handoff_to_sign_in?
-      mutable_ticket? && at_step?("finalized") && pending_actor_matches?
-    end
-
     private
 
     def all_requirements_clear?

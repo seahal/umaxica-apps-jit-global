@@ -43,6 +43,10 @@ class IdentitySocialCeremonyGrant
 
   def [](key) = payload[key.to_s]
 
+  def fetch(key, *args, &block) = payload.fetch(key.to_s, *args, &block)
+
+  def expires_at = Time.zone.at(payload.fetch("exp").to_i)
+
   def validate!(now: Time.current)
     IdentitySocialCeremonyContract.validate_common_payload!(
       payload,

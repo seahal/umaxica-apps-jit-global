@@ -7,6 +7,7 @@ import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
 type Props = {
   title: string;
+  identifier_label: string;
   label: string;
   submit: string;
   error: string | null;
@@ -17,6 +18,7 @@ type Props = {
 
 export default function SecretSignIn({
   title,
+  identifier_label,
   label,
   submit,
   error,
@@ -50,6 +52,15 @@ export default function SecretSignIn({
           type="hidden"
           name="authenticity_token"
           value={csrf}
+        />
+        <label htmlFor="sign-in-secret-identifier">{identifier_label}</label>
+        <input
+          id="sign-in-secret-identifier"
+          className="min-h-12 w-full rounded-md border border-control bg-surface px-3 py-2 text-base text-fg"
+          name="identifier"
+          type="text"
+          autoComplete="username"
+          required
         />
         <label htmlFor="sign-in-secret">{label}</label>
         <input

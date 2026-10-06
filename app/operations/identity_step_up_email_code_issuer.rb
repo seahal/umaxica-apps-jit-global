@@ -79,11 +79,11 @@ class IdentityStepUpEmailCodeIssuer
     def credential_valid?(credential)
       case credential
       when ClientEmail
-        credential.class.where(
+        credential.class.effective_binding.where(
           id: credential.id, user_email_status_id: [ClientEmailStatus::VERIFIED, ClientEmailStatus::VERIFIED_WITH_SIGN_UP],
         ).where("discard_at > clock_timestamp()").exists?
       when VisitorEmail
-        credential.class.where(
+        credential.class.effective_binding.where(
           id: credential.id, visitor_email_status_id: [VisitorEmailStatus::VERIFIED, VisitorEmailStatus::VERIFIED_WITH_SIGN_UP],
         ).where("discard_at > clock_timestamp()").exists?
       end

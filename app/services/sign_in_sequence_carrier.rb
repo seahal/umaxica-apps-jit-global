@@ -66,12 +66,12 @@ class SignInSequenceCarrier
     SignInSequence.new(payload)
   end
 
-  def fail!(terminal_state: "FAILED")
-    finish!(terminal_state: terminal_state)
-  end
-
   def expire!
     finish!(terminal_state: "EXPIRED")
+  end
+
+  def halt!
+    finish!(terminal_state: "HALTED")
   end
 
   def complete!
@@ -87,6 +87,9 @@ class SignInSequenceCarrier
   def finish!(terminal_state:)
     sequence = current
     return sequence if sequence.blank?
+    unless %w(COMPLETED EXPIRED HALTED).include?(terminal_state.to_s)
+      raise ArgumentError, "unsupported sign-in sequence terminal state"
+    end
 
     payload = sequence.payload.merge(
       "state" => terminal_state.to_s,

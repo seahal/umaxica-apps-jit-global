@@ -217,7 +217,9 @@ module Auth
             params: authorize_params,
           )
         headers = as_user_headers(user, host: @host)
-        reference = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction).reference
+        reference = BaseAuthAdmissionCoordinator.issue_handoff!(
+          transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+        ).reference
 
         get auth_app_sign_in_path(ri: "jp", transaction_ref: reference), headers: headers
 
@@ -247,14 +249,16 @@ module Auth
           intent: intent,
           params: authorize_params,
         ).transaction
-        BaseAuthAdmissionCoordinator.issue_handoff!(transaction: transaction).reference
+        BaseAuthAdmissionCoordinator.issue_handoff!(
+          transaction: transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+        ).reference
       end
 
       def authorize_params
         {
           response_type: "code",
-          client_id: "core-next-rp",
-          redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+          client_id: "core-app",
+          redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
           code_challenge: "challenge",
           code_challenge_method: "S256",
           state: SecureRandom.urlsafe_base64(16),

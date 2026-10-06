@@ -36,8 +36,8 @@ class PalmAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     assert_equal "invalid_token", result.error
   end
 
-  test "rejects a core-next-rp audienced access token" do
-    result = authenticate(token: palm_token(audiences: ["core-next-rp"]))
+  test "rejects a core-app audienced access token" do
+    result = authenticate(token: palm_token(audiences: ["core-app"]))
 
     assert_not result.success?
     assert_equal "invalid_token", result.error
@@ -47,7 +47,7 @@ class PalmAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     result = authenticate(
       token: palm_token(
         audiences: [PalmAccessTokenAuthenticator::AUDIENCE],
-        client_id: "core-next-rp",
+        client_id: "core-app",
       ),
     )
 
@@ -105,7 +105,7 @@ class PalmAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   end
 
   test "rejects wrong audience client binding" do
-    token = persisted_token(oidc_client_id: "core-next-rp")
+    token = persisted_token(oidc_client_id: "core-app")
 
     result = authenticate(token: palm_token(sid: token.oidc_sid))
 

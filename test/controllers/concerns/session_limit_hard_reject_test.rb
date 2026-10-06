@@ -12,6 +12,10 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
 
     declare_authentication_mode! :open
 
+    def dbsc_route_helper(*_helpers)
+      "/test/dbsc"
+    end
+
     def create
       user = Client.find(params[:user_id])
       result = log_in(user, establishment: :root_login, require_totp_check: false)
@@ -77,5 +81,22 @@ class SessionLimitHardRejectTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
     assert_equal "session_limit_hard_reject", response.parsed_body["error_code"]
     assert_equal before_count, ClientToken.where(user_id: @user.id).count
+  end
+
+  test "a revoked device session is excluded from the active capacity count" do
+    ClientToken.where(user_id: @user.id).delete_all
+    tokens =
+      Array.new(ClientToken::MAX_SESSIONS_PER_USER) do
+        ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
+      end
+    tokens.first.device_session.revoke!(reason: "capacity-test")
+
+    post "/test/hard_reject_login", params: { user_id: @user.id }, as: :json
+
+    assert_response :ok
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER + 1, ClientToken.where(user_id: @user.id).count
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER, ClientToken.where(user_id: @user.id).joins(:device_session)
+      .where(client_device_sessions: { status_id: ClientDeviceSession::STATUS_ACTIVE, revoked_at: nil })
+      .count
   end
 end

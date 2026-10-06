@@ -10,7 +10,10 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-      required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
     )
     ClientStepUpSession.create!(
       user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -76,7 +79,10 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "bootstrap",
-      required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
     )
     ClientStepUpSession.create!(
       user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -119,7 +125,10 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-      required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
     )
     ClientStepUpSession.create!(
       user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -170,10 +179,12 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     bootstrap_requirement = StepUpRequirement.new(
       step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
-      audience: "step_up:app", allowed_methods: [:totp], session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:app", allowed_methods: [:totp],
+      session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
     )
-    transaction = BaseStepUpAdmissionIssuer.call!(
+    transaction = issue_base_step_up_admission!(
       actor: actor, token: token, requirement: bootstrap_requirement, return_to: "/identity/birthdate",
     ).transaction
     candidate = IdentityTotpEnrollmentIssuer.call!(actor: actor, token: token, transaction: transaction)
@@ -195,7 +206,10 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
       )
     end
     requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", purpose: "step_up", audience: "step_up:app", allowed_methods: [:totp],
+      scope: "settings_birthdate", step_up_required: true, purpose: "step_up", audience: "step_up:app",
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, allowed_methods: [:totp],
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
     )
 
@@ -208,7 +222,7 @@ class IdentityTotpEnrollmentFinalCommitterTest < ActiveSupport::TestCase
     # The registration window is consumed; independent reauthentication requires a new window.
     next_window = now + 30.seconds
     ClientStepUpCeremonyTransaction.stub(:database_now, next_window) do
-      step_up = BaseStepUpAdmissionIssuer.call!(
+      step_up = issue_base_step_up_admission!(
         actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
       ).transaction
       record = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: step_up.transaction_id)

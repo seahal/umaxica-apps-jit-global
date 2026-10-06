@@ -9,33 +9,41 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
 
   def self.issue!(origin_surface:, initiating_client_id:, completion_url:, actor_ref: nil, session_ref: nil,
                   callback_state: nil, now: Time.current, expires_in: 10.minutes, surface: "app",
-                  ri: RequestContextContract.default_region)
-    persisted_origin_surface = persisted_origin_surface_for(origin_surface)
+                  ri: RequestContextContract.default_region,
+                  workflow: AcmeLogoutTransaction::LEGACY_WORKFLOW)
+    persisted_origin_surface = origin_surface.to_s
+    persisted_workflow = workflow.to_s
     region = RequestContextContract.normalize_region(ri)
+    return rejected_result("unsupported logout workflow") unless AcmeLogoutTransaction::WORKFLOWS.include?(
+      persisted_workflow,
+    )
+    if persisted_workflow == AcmeLogoutTransaction::BROWSER_RP_WORKFLOW &&
+        AcmeLogoutTransaction::BROWSER_RP_ORIGIN_SURFACES.exclude?(persisted_origin_surface)
+      return rejected_result("unsupported Browser RP logout origin")
+    end
     unless allowed_completion_url?(
       origin_surface: origin_surface,
       completion_url: completion_url,
       surface: surface,
       ri: region,
     )
-      return Result.new(
-        transaction: nil,
-        status: :rejected,
-        error: "invalid_request",
-        error_description: "completion destination is not allowlisted",
-      )
+      return rejected_result("completion destination is not allowlisted")
     end
 
     transaction =
       AppTicketRecord.connected_to(role: :writing) do
         AcmeLogoutTransaction.create!(
           origin_surface: persisted_origin_surface,
+          workflow: persisted_workflow,
           initiating_client_id: initiating_client_id.to_s,
           completion_url: completion_url.to_s,
           actor_ref: actor_ref.to_s.presence,
           session_ref: session_ref.to_s.presence,
           callback_state: callback_state.to_s.presence,
-          expected_step: AcmeLogoutTransaction.step_sequence_for(persisted_origin_surface).first,
+          expected_step: AcmeLogoutTransaction.step_sequence_for(
+            persisted_origin_surface,
+            workflow: persisted_workflow,
+          ).first,
           status: AcmeLogoutTransaction::STATUS_INITIATED,
           expires_at: now + expires_in,
           completed_steps: [],
@@ -86,7 +94,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   end
 
   def self.completion_url_for(origin_surface:, ri: RequestContextContract.default_region, surface: "app")
-    route_origin_surface = route_origin_surface_for(origin_surface)
+    route_origin_surface = origin_surface.to_s
     host = completion_host_for(origin_surface: route_origin_surface, surface: surface)
     region = RequestContextContract.normalize_region(ri)
 
@@ -110,6 +118,12 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     when "warp"
       helper.public_send(
         complete_warp_out_helper_name(surface_name),
+        ri: region,
+        host: host,
+        protocol: http_or_https(host),
+      )
+    when "edit"
+      helper.edit_org_sign_out_url(
         ri: region,
         host: host,
         protocol: http_or_https(host),
@@ -140,7 +154,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   def self.completion_host_for(origin_surface:, surface:)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     surface_name = surface.to_s
-    route_origin_surface = route_origin_surface_for(origin_surface)
+    route_origin_surface = origin_surface.to_s
 
     case route_origin_surface
     when "sign"
@@ -167,6 +181,8 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
       when "com" then hosts.warp_corporate.host
       else hosts.warp_service.host
       end
+    when "edit"
+      hosts.edit_staff.host
     when "palm"
       hosts.palm_service.host
     else
@@ -186,22 +202,21 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
     "warp_#{surface_name}_sign_out_url"
   end
 
-  # `side` is the established database enum on acme_logout_transactions. Translate it only at
-  # this persistence boundary; request/controller routing uses the Warp name.
-  def self.persisted_origin_surface_for(origin_surface)
-    (origin_surface.to_s == "warp") ? "side" : origin_surface.to_s
-  end
-
-  # Existing logout rows retain the `side` enum value and can still be completed after deployment.
-  def self.route_origin_surface_for(origin_surface)
-    (origin_surface.to_s == "side") ? "warp" : origin_surface.to_s
-  end
-
   def self.base_completion_helper_name(surface_name)
     "base_#{surface_name}_sign_out_url"
   end
+
+  def self.rejected_result(description)
+    Result.new(
+      transaction: nil,
+      status: :rejected,
+      error: "invalid_request",
+      error_description: description,
+    )
+  end
+
   private_class_method :find_by_logout_challenge!, :allowed_completion_url?,
                        :complete_auth_out_helper_name, :complete_core_out_helper_name,
-                       :complete_warp_out_helper_name, :persisted_origin_surface_for,
-                       :route_origin_surface_for, :base_completion_helper_name
+                       :complete_warp_out_helper_name, :base_completion_helper_name,
+                       :rejected_result
 end

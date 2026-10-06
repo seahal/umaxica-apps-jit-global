@@ -44,15 +44,59 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
 
     result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "warp",
-      initiating_client_id: "side-app",
+      initiating_client_id: "warp-app",
       completion_url: completion_url,
       surface: "app",
       ri: "jp",
     )
 
     assert_predicate result, :success?
-    assert_equal "side", result.transaction.origin_surface
-    assert_equal AcmeLogoutTransaction.step_sequence_for("side").first, result.transaction.expected_step
+    assert_equal "warp", result.transaction.origin_surface
+    assert_equal AcmeLogoutTransaction.step_sequence_for("warp").first, result.transaction.expected_step
+  end
+
+  test "Browser RP issuance uses the registered client realm and authority-first graph" do
+    completion_url = AcmeLogoutTransactionCoordinator.completion_url_for(
+      origin_surface: "warp", ri: "jp", surface: "app",
+    )
+    result = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "warp",
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      initiating_client_id: "warp-app",
+      completion_url: completion_url,
+      session_ref: "rp-session",
+      surface: "app",
+      ri: "jp",
+    )
+
+    assert_predicate result, :success?
+    assert_equal AcmeLogoutTransaction::BROWSER_RP_WORKFLOW, result.transaction.workflow
+    assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, result.transaction.expected_step
+    assert_equal [], result.transaction.completed_steps
+  end
+
+  test "Browser RP issuance rejects Auth and unsupported origin surfaces" do
+    completion_url = AcmeLogoutTransactionCoordinator.completion_url_for(
+      origin_surface: "core", ri: "jp", surface: "app",
+    )
+
+    auth_result = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "sign",
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      initiating_client_id: "core-app",
+      completion_url: completion_url,
+    )
+    unsupported_result = AcmeLogoutTransactionCoordinator.issue!(
+      origin_surface: "palm",
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      initiating_client_id: "core-app",
+      completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+        origin_surface: "palm", ri: "jp", surface: "app",
+      ),
+    )
+
+    assert_equal :rejected, auth_result.status
+    assert_equal :rejected, unsupported_result.status
   end
 
   test "finalizing an unknown challenge reports the transaction as missing" do

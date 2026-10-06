@@ -64,7 +64,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
              auth_com_sign_in_passkey_verification_path,]
           end
         # Public Base issuance isolates admission from the separately tested Base redirect transport.
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in")
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        )
         get sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
         csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
         post sign_in_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
@@ -134,7 +136,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
              auth_com_sign_in_challenge_path,]
           end
         actor.update!(mfa_level_enabled: true)
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: surface.to_s, intent: "sign_in")
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+        )
         get sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
         csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
         post sign_in_path, params: { entry_ref: issuance.reference, authenticity_token: csrf, ri: "jp" }
@@ -186,7 +190,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "a redeemed local sign in admission cannot open the sign up ceremony" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     get auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -213,7 +219,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "local sign up admission refuses a direct sign in credential endpoint" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_up")
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_up", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     get auth_app_sign_up_path, params: { entry_ref: issuance.reference, ri: "jp" }
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -230,7 +238,9 @@ class LocalAuthenticationBoundaryTest < ActionDispatch::IntegrationTest
   test "Auth records local email evidence on the admitted Base flow and issues no root credential" do
     actor = clients(:one)
     email = actor.client_emails.create!(address: "local-boundary@example.com")
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     original_nonce_digest = issuance.transaction.nonce_digest
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     get auth_app_sign_in_path, params: { entry_ref: issuance.reference, ri: "jp" }

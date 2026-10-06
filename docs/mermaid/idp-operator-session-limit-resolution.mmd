@@ -1,0 +1,27 @@
+stateDiagram-v2
+    %% Durable child of OperatorSignInFlow; the parent stays SESSION_ISSUANCE_PENDING.
+    state "PENDING id=10" as PENDING
+    state "SESSION_SELECTED id=20" as SESSION_SELECTED
+    state "RESOLVED id=100" as RESOLVED
+    state "EXPIRED id=910" as EXPIRED
+    state "CANCELLED id=920" as CANCELLED
+
+    [*] --> PENDING: issue!
+    PENDING --> SESSION_SELECTED: select_session!
+    PENDING --> RESOLVED: resolve!
+    PENDING --> EXPIRED: expiry
+    PENDING --> CANCELLED: cancel!
+    SESSION_SELECTED --> RESOLVED: resolve!
+    SESSION_SELECTED --> EXPIRED: expiry
+    SESSION_SELECTED --> CANCELLED: cancel!
+
+    note right of PENDING
+        Operator ownership and evidence binding are rechecked at every step.
+        Parent flow, optional OIDC transaction, browser binding and challenge
+        are checked under the realm Ticket locks.
+    end note
+    note right of RESOLVED
+        Selected session was revoked before this transition.
+        Parent issuance retries through AuthenticationBase#log_in.
+        Terminal states are immutable.
+    end note

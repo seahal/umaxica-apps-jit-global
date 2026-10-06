@@ -10,8 +10,6 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_operator!
-
         def create
           authorize!(current_operator, to: :show?)
           cancel_step_up_ceremony!(
@@ -23,6 +21,12 @@ module Base
         end
 
         private
+
+        def cancellation_surface = "org"
+
+        def cancellation_actor = current_operator
+
+        def cancellation_token = current_session_token
 
         def cancellation_step_up_transaction(reference)
           OperatorStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do

@@ -16,11 +16,13 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
 
     def persisted? = false
 
-    def expired? = false
+    def self.database_now = Time.current
+
+    def expired?(_now = nil) = false
 
     def lapsed? = false
 
-    def sign_up_terminal? = %w(COMPLETED FAILED EXPIRED CANCELLED).include?(status_id)
+    def sign_up_terminal? = %w(COMPLETED FAILED EXPIRED CANCELLED HALTED).include?(status_id)
 
     def sign_up_cancelable? = true
 
@@ -30,11 +32,23 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
 
     def status_id_for(name) = name
 
-    def transition_to!(name, step: _step)
-      instance_variable_set(:@last_step, step)
-      self.status_id = name
-      self
-    end
+    def advance_sign_up_to_contact! = self.status_id = "CONTACT_PENDING"
+
+    def verify_sign_up_contact! = self.status_id = "CONTACT_VERIFIED"
+
+    def advance_sign_up_to_guardrail! = self.status_id = "GUARDRAIL_PENDING"
+
+    def advance_sign_up_to_checkpoint! = self.status_id = "CHECKPOINT_PENDING"
+
+    def start_sign_up_social_callback! = self.status_id = "SOCIAL_CALLBACK_PENDING"
+
+    def begin_sign_up_finalization! = self.status_id = "FINALIZING"
+
+    def halt_sign_up! = self.status_id = "HALTED"
+
+    def expire_sign_up! = self.status_id = "EXPIRED"
+
+    def cancel_sign_up! = self.status_id = "CANCELLED"
 
     def update!(attrs)
       attrs.each { |key, value| public_send("#{key}=", value) if respond_to?("#{key}=") }

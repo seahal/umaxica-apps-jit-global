@@ -4,21 +4,15 @@
 module Base
   module App
     module Oidc
-      class LogoutsController < Base::App::ApplicationController
+      class LogoutsController < Base::App::AuthorityController
         include CommonRedirect
         include ::AuthenticationLogoutable
         include SignOutNotice
         include SignOidcLogout
+        include ::OidcRpLogoutAuthority
         include ::SurfaceInertiaPage
 
         AUTHENTICATION_MODE = :open
-        COORDINATED_LOGOUT_TRUSTED_ORIGINS = JitHostOriginEnv.trusted_origins(
-          ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
-          ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-          ENV.fetch("PUBLIC_PALM_SERVICE_URL"),
-        ).freeze
-
         # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
         # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
         # response body.
@@ -26,25 +20,16 @@ module Base
 
         declare_authentication_mode! :open
 
-        # CSRF: ordinary POSTs keep the surface-wide `:header_or_legacy_token` check inherited from
-        # the application controller. Do not redeclare `protect_from_forgery` here: Rails keeps one
-        # `verify_authenticity_token` callback per controller, so a redeclaration with `only:`/`if:`
-        # replaces the inherited check instead of adding to it (that is how plain POSTs once ran with
-        # no CSRF check at all; adr/sign-neutral-entry-and-logout-target-authorization.md).
-        #
-        # A coordinated-logout POST cannot carry this surface's legacy token, because the initiating
-        # surface does not share this session. `SignOutNotice#verified_request?` accepts a live,
-        # unexpired, unfinalized logout challenge in its place, and the `before_action` below is the
-        # Fetch Metadata gate for that POST: Sec-Fetch-Site must be same-origin/same-site and the
-        # Origin blank, one of COORDINATED_LOGOUT_TRUSTED_ORIGINS, or `null` bound to the live
-        # challenge. Dropping this `before_action` or adding an origin is a security-boundary change
-        # that requires explicit human review.
-        before_action only: :create do
-          verify_coordinated_sign_out_post!(trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS)
+        def show
+          return show_browser_rp_logout_authority! if browser_rp_logout_challenge?
+
+          handle_oidc_end_session_request
         end
 
         def create
-          show
+          return create_browser_rp_logout_authority! if browser_rp_logout_challenge?
+
+          handle_oidc_end_session_request
         end
 
         private
@@ -88,9 +73,10 @@ module Base
 
         def sign_out_confirmation_form
           {
-            action: sign_out_post_path,
+            action: request.path,
             submit: t("sign.shared.sign_out.button"),
             logout_challenge: params[:logout_challenge].presence,
+            ri: params[:ri].presence,
             confirm_description: t("sign.shared.sign_out.confirm_description"),
           }
         end

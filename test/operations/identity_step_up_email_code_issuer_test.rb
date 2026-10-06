@@ -12,6 +12,7 @@ class IdentityStepUpEmailCodeIssuerTest < ActiveSupport::TestCase
     @credential = @actor.client_emails.create!(
       address: "step-up-issuer@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    @credential.finalize_binding!
     @token = ClientToken.create!(user: @actor)
     @transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: @actor.public_id, session_ref: @token.public_id, required_scope: "settings_email",

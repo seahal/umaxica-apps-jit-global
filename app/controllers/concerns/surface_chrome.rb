@@ -28,7 +28,7 @@ module SurfaceChrome
     "base" => { family_label: "BASE", banner_domain: :acme, footer_navigation: false },
     "auth" => { family_label: nil, banner_domain: :sign, footer_navigation: true },
     "core" => { family_label: "CORE", banner_domain: nil, footer_navigation: false },
-    "warp" => { family_label: "SIDE", banner_domain: nil, footer_navigation: false },
+    "warp" => { family_label: "WARP", banner_domain: nil, footer_navigation: false },
     "palm" => { family_label: "PALM", banner_domain: nil, footer_navigation: false },
     "edit" => { family_label: "EDIT", banner_domain: nil, footer_navigation: false },
   }.freeze

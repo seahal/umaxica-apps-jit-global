@@ -20,6 +20,10 @@ module DeviceSessionable
     revoked_at.present? || status_id == STATUS_REVOKED
   end
 
+  def usable?
+    !revoked? && status_id == STATUS_ACTIVE
+  end
+
   def dbsc_bound?
     dbsc_bound_at.present?
   end

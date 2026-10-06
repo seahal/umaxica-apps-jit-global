@@ -21,7 +21,6 @@ module Base
 
           TELEPHONE_VERIFICATION_RATE_LIMIT = 5
           TELEPHONE_VERIFICATION_RATE_WINDOW = 60
-          before_action :authenticate_visitor!
           # Object-level authorization (ActionPolicy): registering a telephone is a fresh-record action
           # for the authenticated visitor, so gate by actor type. Each step builds/looks up the record
           # for current_visitor. Verification/turnstile/rate-limit guards remain on the flow.
@@ -54,7 +53,9 @@ module Base
               return
             end
 
-            tel_params = params(user_telephone: [:raw_number, :number])
+            tel_params = params.slice(:user_telephone).permit(user_telephone: [:raw_number, :number]).fetch(
+              :user_telephone, {},
+            )
             number = tel_params[:raw_number] || tel_params[:number]
 
             # adr/unified-enforcement.md, Identifier attachment enforcement: an in-force

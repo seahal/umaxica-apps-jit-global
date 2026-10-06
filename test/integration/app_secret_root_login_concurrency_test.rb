@@ -35,6 +35,8 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up", last_step_up_full_reauthentication: false,
       )
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :base)
       issuance = ClientSecretManualReservationIssuer.call!(
@@ -178,7 +180,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
           AppTicketRecord.transaction do
             flow.lock!
             if outcome == :cancellation
-              flow.fail_sign_in!(now: ClientSignInFlow.database_now)
+              flow.halt_sign_in!
             else
               flow.update!(expires_at: ClientSignInFlow.database_now)
               flow.expire_sign_in!
@@ -198,7 +200,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
       expected = (outcome == :completion) ? [303, 409] : [302, 400]
 
       assert_equal expected, statuses.sort
-      assert_nil ClientSecretLookupQuery.call(secret: raw)
+      assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
       assert_equal (outcome == :completion) ? 2 : 1, ClientToken.where(user_id: actor.id).count
       receipts = ClientSecretSignInReceipt.where(credential_ref: credential.public_id)
 
@@ -219,7 +221,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
         assert_nil flow.reload.token_id
         assert_nil credential.reload.consumed_at
         assert_equal :abandoned, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.day)
-        assert_nil ClientSecretLookupQuery.call(secret: raw)
+        assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
         assert [base, duplicate].all? { |browser| browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY].nil? }
       end
     ensure

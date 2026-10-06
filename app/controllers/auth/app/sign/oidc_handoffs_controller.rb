@@ -20,7 +20,8 @@ module Auth
         def sign_in_sequence_surface = :app
 
         def authorize_oidc_result_handoff!
-          return reject_oidc_result_handoff! unless current_db_sign_in_flow_for_sequence&.sign_in_dashboard_pending?
+          cycle = current_db_sign_in_flow_for_sequence
+          return reject_oidc_result_handoff! unless cycle && oidc_result_handoff_cycle_ready?(cycle)
 
           authorize!(current_client, to: :show?)
         end

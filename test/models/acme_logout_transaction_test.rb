@@ -60,6 +60,43 @@ class AcmeLogoutTransactionTest < ActiveSupport::TestCase
     assert_equal "origin_cleared", transaction.expected_step
   end
 
+  test "Browser RP logout starts with its authority-first step sequence" do
+    transaction = AcmeLogoutTransaction.create!(
+      transaction_attrs(
+        origin_surface: "core",
+        workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+        initiating_client_id: "core-app",
+        expected_step: AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+      ),
+    )
+
+    assert_predicate transaction, :browser_rp_workflow?
+    assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.expected_step
+    assert_equal [], transaction.completed_steps
+
+    transaction.advance_step!(AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED)
+    transaction.advance_step!(AcmeLogoutTransaction::STEP_AUTHORITY_CLEANUP_ISSUED)
+    transaction.advance_step!(AcmeLogoutTransaction::STEP_ORIGIN_CLEANUP_ISSUED)
+    transaction.advance_step!(AcmeLogoutTransaction::STEP_ORIGIN_RP_SESSION_REVOKED)
+    transaction.finalize!
+
+    assert_predicate transaction, :finalized?
+    assert_equal AcmeLogoutTransaction.browser_rp_step_sequence + [AcmeLogoutTransaction::STEP_FINALIZED],
+                 transaction.completed_steps
+  end
+
+  test "Browser RP workflow rejects a historical origin-first step" do
+    transaction = build_transaction(
+      origin_surface: "core",
+      workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+      expected_step: AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+      completed_steps: [AcmeLogoutTransaction::STEP_ORIGIN_CLEARED],
+    )
+
+    assert_not transaction.valid?
+    assert_includes transaction.errors[:completed_steps], "contains steps from another logout workflow"
+  end
+
   test "replaying a completed step is idempotent" do
     transaction = AcmeLogoutTransaction.create!(transaction_attrs(origin_surface: "base"))
 
@@ -100,7 +137,7 @@ class AcmeLogoutTransactionTest < ActiveSupport::TestCase
     AcmeLogoutTransaction.new(transaction_attrs(**overrides))
   end
 
-  def transaction_attrs(origin_surface:, expires_at: 10.minutes.from_now)
+  def transaction_attrs(origin_surface:, expires_at: 10.minutes.from_now, **overrides)
     {
       origin_surface: origin_surface,
       initiating_client_id: "#{origin_surface}-rp",
@@ -108,6 +145,6 @@ class AcmeLogoutTransactionTest < ActiveSupport::TestCase
       expires_at: expires_at,
       expected_step: AcmeLogoutTransaction.step_sequence_for(origin_surface).first,
       status: AcmeLogoutTransaction::STATUS_INITIATED,
-    }
+    }.merge(overrides)
   end
 end

@@ -19,13 +19,29 @@ class FlowSignUpTest < ActiveSupport::TestCase
       "FAILED" => 110,
       "EXPIRED" => 120,
       "CANCELLED" => 130,
+      "HALTED" => 140,
     }.freeze
     STATUS_NAMES = STATUSES.invert.freeze
     STATUS_IDS = STATUSES.values.freeze
-    STEPS = %w(start contact credential checkpoint completed failed expired cancelled).freeze
+    STEPS = %w(start contact credential checkpoint completed failed expired cancelled halted).freeze
+    TRANSITIONS = {
+      10 => [20, 30, 40, 100, 120, 130, 140],
+      20 => [30, 40, 100, 120, 130, 140],
+      30 => [40, 100, 120, 130, 140],
+      40 => [100, 120, 130, 140],
+      100 => [],
+      110 => [],
+      120 => [],
+      130 => [],
+      140 => [],
+    }.freeze
 
     def self.status_id_for(name)
       STATUSES.fetch(name.to_s)
+    end
+
+    def self.status_name_for(id)
+      STATUS_NAMES.fetch(id)
     end
 
     def self.status_ids_for(*names)
@@ -82,7 +98,7 @@ class FlowSignUpTest < ActiveSupport::TestCase
     assert_equal [10], FlowSignUpTestRecord.sign_up_status_ids_for("STARTED", "UNKNOWN")
     assert_includes FlowSignUpTestRecord.sign_up_in_progress_status_ids, 10
     assert_includes FlowSignUpTestRecord.sign_up_cancelable_status_ids, 10
-    assert_equal [100, 110, 120, 130], FlowSignUpTestRecord.sign_up_terminal_status_ids
+    assert_equal [100, 110, 120, 130, 140], FlowSignUpTestRecord.sign_up_terminal_status_ids
   end
 
   test "sign_up_cancelled? returns false when the cancelled status is undefined" do

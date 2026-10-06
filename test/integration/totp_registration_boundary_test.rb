@@ -24,12 +24,15 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
     actor = Client.create!(id: 9_106_000_000_000, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
-        scope: "settings_birthdate", purpose: "step_up", allowed_methods: [:totp], audience: "step_up:app",
+        step_up_required: true, scope: "settings_birthdate", purpose: "step_up", allowed_methods: [:totp],
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-      ), return_to: "/identity/birthdate",
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
     )
     get auth_app_verification_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -49,17 +52,22 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     original_protection = Auth::App::Verification::SetupsController.allow_forgery_protection
     actor = Client.create!(id: 9_106_000_000_001, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
-        allowed_methods: [:totp], audience: "step_up:app",
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:totp], audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-      ), return_to: "/identity/birthdate",
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
     )
     Auth::App::Verification::SetupsController.allow_forgery_protection = true
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
     https!
+    install_confirmed_auth_admission_cookie!(
+      self, issuance: issuance, base_token: token, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+    )
     get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference))
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     assert_no_difference("ClientAuthCeremonySession.count") do
@@ -88,15 +96,20 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   test "admitted bootstrap confirms a DB TOTP candidate without Auth root credentials or freshness" do
     actor = Client.create!(id: 9_106_000_000_002, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
-        allowed_methods: [:totp], audience: "step_up:app",
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:totp], audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-      ), return_to: "/identity/birthdate",
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
     )
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    install_confirmed_auth_admission_cookie!(
+      self, issuance: issuance, base_token: token, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+    )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
 
     assert_response :success
@@ -144,11 +157,11 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
 
-    assert_response :success
-    document = response.parsed_body
+    assert_response :see_other
+    result = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
     credential = IdentityTotpEnrollmentFinalCommitter.call!(
-      actor: actor, token: token, transaction: issuance.transaction,
-      raw_result: document.at_css('input[name="result"]')["value"],
+      actor: actor, token: token, transaction: issuance.transaction.reload,
+      result_reference: result.fetch("result_ref"),
     )
 
     assert_equal actor.id, credential.user_id
@@ -182,16 +195,21 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         cancel_path = auth_org_verification_cancellation_path(ri: "jp")
         base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
       end
-      issuance = BaseStepUpAdmissionIssuer.call!(
+      issuance = issue_base_step_up_admission!(
         actor: actor, token: token,
         requirement: StepUpRequirement.new(
           scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
-          allowed_methods: [:passkey], audience: "step_up:#{surface}",
+          phishing_resistant_required: false, user_verification_required: false,
+          full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:passkey], audience: "step_up:#{surface}",
           session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-        ), return_to: "/identity/birthdate",
+          actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+        ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
       )
       browser = open_session
       browser.host!(auth_host)
+      install_confirmed_auth_admission_cookie!(
+        browser, issuance: issuance, base_token: token, host: auth_host, surface: surface,
+      )
       browser.get(display_path, params: { entry_ref: issuance.reference })
       csrf = Nokogiri::HTML(browser.response.body).at_css('input[name="authenticity_token"]')["value"]
       browser.post(create_path, params: { entry_ref: issuance.reference, authenticity_token: csrf })
@@ -200,9 +218,19 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       browser.follow_redirect!
 
       assert_equal 200, browser.response.status
-      props = JSON.parse(Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']").text).fetch("props")
+      page = JSON.parse(Nokogiri::HTML(browser.response.body).at_css("script[data-page='app']").text)
+      props = page.fetch("props")
 
-      assert_equal ["passkey"], props.fetch("methods").pluck("key")
+      assert_equal "auth/#{surface}/verification/registration/passkeys/new", page.fetch("component")
+      assert_equal(
+        public_send("auth_#{surface}_verification_registration_passkey_options_path", ri: "jp"),
+        props.fetch("panel").fetch("options_url"),
+      )
+      assert_equal(
+        public_send("auth_#{surface}_verification_registration_passkey_path", ri: "jp"),
+        props.fetch("panel").fetch("verification_url"),
+      )
+      assert_nil props.fetch("panel").fetch("challenge_id", nil)
       assert_nil browser.cookies[AuthenticationCookieName.access]
       assert_nil browser.cookies[AuthenticationCookieName.refresh]
       assert_nil token.reload.last_step_up_at
@@ -216,8 +244,9 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       end
 
       assert_equal 303, browser.response.status
-      assert_equal base_host, URI.parse(destination).host
-      assert_equal "canceled", issuance.transaction.reload.status
+      assert_equal base_host, URI.parse(browser.response.location).host
+      assert_nil destination
+      assert_equal "pending", issuance.transaction.reload.status
     end
   end
   # rubocop:enable Minitest/MultipleAssertions
@@ -227,15 +256,20 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   test "GET and repeated start preserve enrollment deadline and failures while cancel closes the permission" do
     actor = Client.create!(id: 9_106_000_000_003, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_base_step_up_admission!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
         scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
-        allowed_methods: [:totp], audience: "step_up:app",
+        phishing_resistant_required: false, user_verification_required: false,
+        full_reauthentication_required: false, ttl: 15.minutes, allowed_methods: [:totp], audience: "step_up:app",
         session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
-      ), return_to: "/identity/birthdate",
+        actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
+      ), return_to: "/identity/birthdate", base_browser_nonce: "test-browser-nonce", base_token: token,
     )
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    install_confirmed_auth_admission_cookie!(
+      self, issuance: issuance, base_token: token, host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+    )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
@@ -298,72 +332,60 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   end
   # rubocop:enable Minitest/MultipleAssertions
 
-  # This journey obtains its root cookie from the real Base completion endpoint.
+  # This journey starts from a real Base Browser-RP session. Root issuance itself is covered by
+  # the root-login integration boundary; this case focuses on bootstrap admission and completion.
   # rubocop:disable Minitest/MultipleAssertions
   test "Base begins bootstrap from its own root session and returns TOTP registration without freshness" do
     actor = Client.create!(id: 9_106_000_000_004, status_id: ClientStatus::ACTIVE)
-    email = actor.client_emails.create!(address: "bootstrap-http@example.com")
+    actor.client_emails.create!(address: "bootstrap-http@example.com")
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    destination = nil
-    JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
-      RedirectsJumpGatewayUrl.stub(
-        :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
-      ) do
-        post base_app_sign_show_path, params: { ri: "jp" }
-      end
-    end
-    entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    flow = ClientSignInFlow.find_by!(public_id: entry)
-    auth = open_session
-    auth.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
-    auth.get(auth_app_sign_in_path, params: { ri: "jp", entry_ref: entry })
-    csrf = Nokogiri::HTML(auth.response.body).at_css('input[name="authenticity_token"]')["value"]
-    auth.post(auth_app_sign_in_path, params: { ri: "jp", entry_ref: entry, authenticity_token: csrf })
-    auth.post(
-      auth_app_sign_in_email_path,
-      params: { :ri => "jp", :user_email => { address: email.address }, "cf-turnstile-response" => "test-only" },
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    base_client = OidcClientRegistry.find!("base-app-ww")
+    token = ClientToken.create!(
+      user: actor, established_authentication_method: "email",
+      root_login_established_at: ClientToken.database_now,
     )
-    key = "JBSWY3DPEHPK3PXP"
-    email.reload.store_otp(key, 7, 5.minutes.from_now.to_i)
-    auth.patch(
-      auth_app_sign_in_email_path,
-      params: { :ri => "jp",
-                :user_email => { pass_code: ROTP::HOTP.new(key).at(7).to_s },
-                "cf-turnstile-response" => "test-only", },
+    rp_session = ClientRpSession.create!(
+      client_token: token, oidc_client_id: base_client.client_id, oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: token.root_login_established_at, refresh_token_expires_at: 10.minutes.from_now,
     )
-    auth.follow_redirect!
-    auth.follow_redirect!
-    auth.post(auth_app_sign_handoff_path(ri: "jp"), params: { authenticity_token: csrf })
-    document = Nokogiri::HTML(auth.response.body)
-    headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-site" }
-    post base_app_sign_completion_path(ri: "jp"), params: {
-      result: document.at_css('input[name="result"]')["value"],
-      transaction_ref: flow.public_id,
-    }, headers: headers
-
-    assert_response :see_other
-    assert_not_nil cookies[AuthenticationCookieName.access]
-    token = flow.reload.token
+    rp_access_token = AuthenticationTokenService.encode(
+      actor,
+      host: base_host, resource_type: "client", session_public_id: token.public_id,
+      base_session_public_id: token.public_id, oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti, expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile), issuer: OidcIssuer.for_client(base_client), audiences: [base_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(base_client),
+      subject: OidcSubject.for(actor, resource_type: "client"), client_id: base_client.client_id,
+    )
+    host! base_host
+    https!
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = rp_access_token
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
+    root_access_token = as_user_headers(actor, host: base_host, session_public_id: token.public_id)
+      .fetch("Authorization").delete_prefix("Bearer ")
+    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = root_access_token
     get base_app_identity_birthdate_path(ri: "jp")
 
     assert_response :redirect
-    assert_equal "/verification", URI.parse(response.location).path
-    follow_redirect!
-
-    assert_response :success
-    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
-    post props.fetch("form").fetch("action"), params: props.fetch("form").slice("scope", "pt")
-
-    # No authenticator yet: Base shows its own method choice and has issued nothing so far.
-    assert_response :see_other
     assert_equal base_app_verification_setup_path, URI.parse(response.location).path
-    assert_equal 0, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count
     follow_redirect!
 
     assert_response :success
     props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    auth = open_session
+    auth.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
+    auth.https!
+    auth_headers = {
+      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+      "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}",
+      "Sec-Fetch-Site" => "same-origin",
+    }
+
+    assert_equal 0, ClientStepUpCeremonyTransaction.where(session_ref: token.public_id).count
+    destination = nil
     JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
       RedirectsJumpGatewayUrl.stub(
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
@@ -377,13 +399,67 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), URI.parse(destination).host
     assert_equal "/verification/setup/new", URI.parse(destination).path
     assert_nil token.reload.last_step_up_at
-    assert_nil auth.cookies[AuthenticationCookieName.access]
-    entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    auth.get(new_auth_app_verification_setup_path(ri: "jp", entry_ref: entry))
-    csrf = Nokogiri::HTML(auth.response.body).at_css('input[name="authenticity_token"]')["value"]
-    auth.post(auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: entry, authenticity_token: csrf })
+    destination_uri = URI.parse(destination)
+    entry = Rack::Utils.parse_nested_query(destination_uri.query).fetch("entry_ref")
+    auth.get(destination_uri.path, params: { entry_ref: entry, ri: "jp" }, headers: auth_headers)
+    continuation = Nokogiri::HTML(auth.response.body).at_css("form")
+    continuation_hidden =
+      continuation.css("input[type='hidden']").to_h do |input|
+        [input["name"], input["value"]]
+      end
+    continuation_token = continuation_hidden.delete("authenticity_token")
+    auth.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = "test-browser-nonce"
+    auth.post(
+      continuation["action"],
+      params: continuation_hidden.merge("authenticity_token" => continuation_token), headers: auth_headers,
+    )
+    binding_uri = URI.parse(auth.response.location)
+    _binding = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
+      surface: "app", reference: binding_uri.path.split("/").fetch(-2),
+    )
+    host! binding_uri.host
+    https!
+    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||= "test-browser-nonce"
+    base_headers = {
+      "Host" => binding_uri.host, "Origin" => "https://#{binding_uri.host}", "Sec-Fetch-Site" => "same-origin",
+    }
+    get binding_uri.request_uri, headers: base_headers
+
+    assert_equal 200, response.status
+    confirmation = response.parsed_body.at_css("form")
+    confirmation_hidden =
+      confirmation.css("input[type='hidden']").to_h do |input|
+        [input["name"], input["value"]]
+      end
+    confirmation_token = confirmation_hidden.delete("authenticity_token")
+    post(
+      confirmation["action"],
+      params: confirmation_hidden.merge("authenticity_token" => confirmation_token), headers: base_headers,
+    )
+    sync_response_cookie!(self, "session")
+    auth_uri = URI.parse(response.location)
+    auth_query = Rack::Utils.parse_nested_query(auth_uri.query.to_s)
+    auth_query["ri"] ||= "jp"
+    auth_uri.query = URI.encode_www_form(auth_query)
+    auth.host!(auth_uri.host)
+    auth.https!
+    auth.get(auth_uri.request_uri, headers: auth_headers.merge("Host" => auth_uri.host))
+
+    assert_equal 200, auth.response.status
+    final = Nokogiri::HTML(auth.response.body).at_css("form")
+    final_hidden = final.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
+    final_token = final_hidden.delete("authenticity_token")
+    auth.post(final["action"], params: final_hidden.merge("authenticity_token" => final_token), headers: auth_headers)
+
+    assert_equal 303, auth.response.status
     auth.get(new_auth_app_settings_totp_path(ri: "jp"))
-    auth.post(auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf })
+
+    assert_equal 200, auth.response.status
+    csrf = continuation_token
+    auth.post(
+      auth_app_settings_totps_enrollment_path(ri: "jp"), params: { authenticity_token: csrf },
+                                                         headers: auth_headers,
+    )
     auth.follow_redirect!
     props = JSON.parse(Nokogiri::HTML(auth.response.body).at_css("script[data-page='app']").text).fetch("props")
     candidate = IdentityTotpCeremonyCandidate.find_by!(ref: props.fetch("form").fetch("enrollment_id"))
@@ -405,36 +481,47 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal 303, auth.response.status
     auth.follow_redirect!
     auth.post(auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf })
-    document = Nokogiri::HTML(auth.response.body)
-    completion = {
-      result: document.at_css('input[name="result"]')["value"],
-      transaction_ref: document.at_css('input[name="transaction_ref"]')["value"],
+
+    assert_equal 303, auth.response.status
+    completion_uri = URI.parse(auth.response.location)
+    host! completion_uri.host
+    https!
+    get completion_uri.request_uri
+    completion_form = response.parsed_body.at_css("form")
+    completion = completion_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    completion_headers = {
+      "Origin" => "https://#{completion_uri.host}", "Sec-Fetch-Site" => "same-origin",
     }
     stranger = open_session
-    stranger.host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
+    stranger.host!(completion_uri.host)
+    stranger.https!
     assert_no_difference("ClientTotpCredential.count") do
-      stranger.post(base_app_verification_completion_path(ri: "jp"), params: completion, headers: headers)
+      stranger.post(completion_form["action"], params: completion, headers: completion_headers)
     end
 
     assert_equal 302, stranger.response.status
     assert_difference("ClientTotpCredential.count", 1) do
-      post base_app_verification_completion_path(ri: "jp"), params: completion, headers: headers
+      post completion_form["action"], params: completion, headers: completion_headers
     end
 
     assert_response :see_other
     assert_equal "/identity/birthdate", URI.parse(response.location).path
     assert_nil token.reload.last_step_up_at
     assert_no_difference("ClientTotpCredential.count") do
-      post base_app_verification_completion_path(ri: "jp"), params: completion, headers: headers
+      post base_app_verification_completion_path(ri: "jp"), params: completion, headers: completion_headers
     end
 
-    assert_response :see_other
+    assert_equal 303, response.status
     follow_redirect!
 
     assert_response :redirect
     assert_equal "/verification", URI.parse(response.location).path
     follow_redirect!
-    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    verification_page = response.parsed_body.at_css("script[data-page='app']")
+
+    assert_equal 200, response.status
+    assert_not_nil verification_page
+    props = JSON.parse(verification_page.text).fetch("props")
     JumpRtIssuer.stub(:call, ->(**args) { destination = args.fetch(:url); "opaque-jump" }) do
       RedirectsJumpGatewayUrl.stub(
         :call, ->(_code) { RedirectsTargetResult.ok(kind: :external, source: :test, value: destination) },
@@ -448,11 +535,17 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_nil auth.cookies[AuthenticationCookieName.access]
     entry = Rack::Utils.parse_nested_query(URI.parse(destination).query).fetch("entry_ref")
-    auth.get(auth_app_verification_path(ri: "jp", entry_ref: entry))
-    csrf = Nokogiri::HTML(auth.response.body).at_css('input[name="authenticity_token"]')["value"]
-    auth.post(auth_app_verification_path(ri: "jp"), params: { entry_ref: entry, authenticity_token: csrf })
+    redeem_auth_ceremony_session!(
+      auth, auth_app_verification_path(ri: "jp"), reference: entry,
+                                                  params: { ri: "jp" }, headers: auth_headers, confirm_via_http: true, base_browser: self,
+    )
+
+    assert_equal 303, auth.response.status
     auth.get(new_auth_app_verification_totp_path(ri: "jp"))
+
+    assert_equal 200, auth.response.status
     props = JSON.parse(Nokogiri::HTML(auth.response.body).at_css("script[data-page='app']").text).fetch("props")
+    csrf = props.fetch("form").fetch("csrf_token")
     credential = actor.client_totp_credentials.find_by!(title: "Bootstrap authenticator")
     future = (ClientTotpCredential.database_now + 30.seconds).change(usec: 0)
     travel_to(future) do
@@ -470,11 +563,15 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
           assert_equal 302, auth.response.status
           auth.follow_redirect!
           auth.post(auth_app_verification_handoff_path(ri: "jp"), params: { authenticity_token: csrf })
-          document = Nokogiri::HTML(auth.response.body)
-          post base_app_verification_completion_path(ri: "jp"), params: {
-            result: document.at_css('input[name="result"]')["value"],
-            transaction_ref: document.at_css('input[name="transaction_ref"]')["value"],
-          }, headers: headers
+
+          assert_equal 303, auth.response.status
+          completion_uri = URI.parse(auth.response.location)
+          host! completion_uri.host
+          https!
+          get completion_uri.request_uri
+          completion_form = response.parsed_body.at_css("form")
+          completion = completion_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+          post completion_form["action"], params: completion, headers: completion_headers
 
           assert_response :see_other
           assert_equal "totp", token.reload.last_step_up_method
@@ -488,4 +585,17 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
   # rubocop:enable Minitest/MultipleAssertions
+
+  private
+
+  def install_confirmed_auth_admission_cookie!(browser, issuance:, base_token:, host:, surface: "app")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: base_token)
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    browser.cookies.delete("auth_sid")
+    browser.cookies.delete("__Host-auth_sid")
+    browser.cookies.merge(
+      "#{cookie_name}=#{Rack::Utils.escape(raw_sid)}", URI.parse("https://#{host}/"),
+    )
+  end
 end

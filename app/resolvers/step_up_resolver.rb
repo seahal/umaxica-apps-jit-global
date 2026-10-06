@@ -3,25 +3,37 @@
 
 class StepUpResolver
   DEFAULT_TTL = StepUpRequirement::DEFAULT_TTL
-  DEFAULT_REQUIRED_AAL = StepUpRequirement::DEFAULT_AAL
 
-  def self.call(token:, scope: nil, required_aal: DEFAULT_REQUIRED_AAL, allowed_methods: nil,
-                session_binding: nil, token_binding: nil, requirement: nil,
-                now: Time.current, ttl: DEFAULT_TTL, require_session_binding: false)
-    requirement =
-      if requirement
-        StepUpRequirement.build(requirement)
-      else
-        StepUpRequirement.build(
-          scope,
-          required_aal: required_aal,
-          allowed_methods: allowed_methods || StepUpRequirement::DEFAULT_ALLOWED_METHODS,
-          session_binding: session_binding,
-          token_binding: token_binding,
-          ttl: ttl,
-          require_session_binding: require_session_binding,
-        )
-      end
+  def self.call(token:, requirement: nil, scope: nil, allowed_methods: nil,
+                session_binding: nil, token_binding: nil, now: Time.current, ttl: DEFAULT_TTL,
+                require_session_binding: true, phishing_resistant_required: false,
+                user_verification_required: false, full_reauthentication_required: false,
+                purpose: "step_up", audience: "step_up:resolver", actor_ref: "resolver",
+                resource_ref: nil, tenant_ref: nil, step_up_required: true,
+                # @deprecated Legacy AAL demands are refused and never authorize a result.
+                required_aal: nil)
+    unless required_aal.blank? || required_aal.to_s == StepUpRequirement::NO_AAL
+      raise StepUpRequirement::Invalid, "legacy AAL requirements are unsupported"
+    end
+
+    requirement ||= StepUpRequirement.new(
+      step_up_required: step_up_required,
+      scope: scope,
+      allowed_methods: allowed_methods || StepUpRequirement::DEFAULT_ALLOWED_METHODS,
+      phishing_resistant_required: phishing_resistant_required,
+      user_verification_required: user_verification_required,
+      full_reauthentication_required: full_reauthentication_required,
+      session_binding: session_binding || token&.public_id,
+      token_binding: token_binding || token&.public_id,
+      ttl: ttl,
+      purpose: purpose,
+      audience: audience,
+      require_session_binding: require_session_binding,
+      actor_ref: actor_ref,
+      resource_ref: resource_ref,
+      tenant_ref: tenant_ref,
+    )
+    requirement = StepUpRequirement.build(requirement)
     new(token: token, requirement: requirement, now: now).call
   end
 
@@ -34,7 +46,7 @@ class StepUpResolver
   def call
     Actor::StepUp.new(
       scope: requirement.scope,
-      required_aal: requirement.required_aal,
+      required_aal: nil,
       allowed_methods: requirement.allowed_methods,
       satisfied: satisfied?,
       satisfied_at: satisfied_at,
@@ -47,6 +59,11 @@ class StepUpResolver
       audience: requirement.audience,
       purpose_bound: purpose_bound?,
       audience_bound: audience_bound?,
+      phishing_resistant_required: requirement.phishing_resistant_required?,
+      user_verification_required: requirement.user_verification_required?,
+      full_reauthentication_required: requirement.full_reauthentication_required?,
+      resource_bound: resource_bound?,
+      tenant_bound: tenant_bound?,
     )
   end
 
@@ -57,26 +74,27 @@ class StepUpResolver
   def satisfied?
     # An Emergency (Restricted Mode) session is not eligible to perform
     # Step-Up-protected operations at all. This is an authentication-context
-    # decision, not a freshness one, so it precedes every freshness check: a
-    # session that somehow carried step-up columns still cannot satisfy a
-    # requirement here. See docs/security/org-emergency-access.md.
+    # decision, not a freshness one, so it precedes every freshness check.
     return true unless requirement.step_up_required?
     return false if emergency_authentication_context?
 
     usable_token? &&
-      requirement.aal_supported? &&
+      evidence_complete? &&
       satisfied_at.present? &&
       satisfied_at <= now &&
       expires_at.present? &&
       expires_at > now &&
       scope_matches? &&
-      aal_matches? &&
       method_matches? &&
       phishing_resistance_matches? &&
+      user_verification_matches? &&
+      full_reauthentication_matches? &&
       session_bound? &&
       token_bound? &&
       purpose_bound? &&
-      audience_bound?
+      audience_bound? &&
+      resource_bound? &&
+      tenant_bound?
   end
 
   def usable_token?
@@ -92,20 +110,11 @@ class StepUpResolver
   end
 
   def expires_at
-    satisfied_at + requirement.ttl if satisfied_at.present?
+    satisfied_at + requirement.ttl if satisfied_at.present? && requirement.ttl
   end
 
   def scope_matches?
-    requirement.scope.present? && token.last_step_up_scope == requirement.scope
-  end
-
-  def aal_matches?
-    return true unless requirement.aal_required?
-
-    token_value = token_attribute(:last_step_up_aal)
-    return !requirement.aal_required? if token_value.blank?
-
-    token_value.to_s == requirement.required_aal.to_s
+    requirement.scope.present? && token_attribute(:last_step_up_scope) == requirement.scope
   end
 
   def method_matches?
@@ -113,7 +122,26 @@ class StepUpResolver
   end
 
   def phishing_resistance_matches?
-    !requirement.phishing_resistant_required? || token_attribute(:last_step_up_phishing_resistant) == true
+    evidence = token_attribute(:last_step_up_phishing_resistant)
+    [true, false].include?(evidence) && (!requirement.phishing_resistant_required? || evidence)
+  end
+
+  def user_verification_matches?
+    evidence = token_attribute(:last_step_up_user_verified)
+    [true, false].include?(evidence) && (!requirement.user_verification_required? || evidence)
+  end
+
+  def full_reauthentication_matches?
+    evidence = token_attribute(:last_step_up_full_reauthentication)
+    [true, false].include?(evidence) && (!requirement.full_reauthentication_required? || evidence)
+  end
+
+  def evidence_complete?
+    credential = token_attribute(:last_step_up_credential_ref)
+    credential.is_a?(String) && credential.present? &&
+      [true, false].include?(token_attribute(:last_step_up_phishing_resistant)) &&
+      [true, false].include?(token_attribute(:last_step_up_user_verified)) &&
+      [true, false].include?(token_attribute(:last_step_up_full_reauthentication))
   end
 
   def step_up_method
@@ -131,7 +159,7 @@ class StepUpResolver
 
   def token_bound?
     expected = requirement.token_binding
-    return true if expected.blank?
+    return false if expected.blank?
 
     token.public_id.present? && ActiveSupport::SecurityUtils.secure_compare(token.public_id.to_s, expected.to_s)
   end
@@ -150,6 +178,14 @@ class StepUpResolver
 
     recorded = token_attribute(:last_step_up_audience)
     recorded.present? && ActiveSupport::SecurityUtils.secure_compare(recorded.to_s, expected.to_s)
+  end
+
+  def resource_bound?
+    token_attribute(:last_step_up_resource_ref).to_s == requirement.resource_ref.to_s
+  end
+
+  def tenant_bound?
+    token_attribute(:last_step_up_tenant_ref).to_s == requirement.tenant_ref.to_s
   end
 
   def token_attribute(name)

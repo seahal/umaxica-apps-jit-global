@@ -19,26 +19,9 @@ module Auth
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
         declare_authentication_mode! :private, only: %i(index edit update destroy)
-        TOTP_STATUS_TRANSLATION_KEYS = {
-          ClientTotpCredentialStatus::ACTIVE => "messages.totp_status.active",
-          ClientTotpCredentialStatus::INACTIVE => "messages.totp_status.inactive",
-          ClientTotpCredentialStatus::REVOKED => "messages.totp_status.revoked",
-          ClientTotpCredentialStatus::DELETED => "messages.totp_status.deleted",
-          ClientTotpCredentialStatus::NOTHING => "messages.totp_status.nothing",
-        }.freeze
         layout :settings_totps_layout
 
-        before_action :authenticate_client!, only: %i(index edit update destroy)
         before_action :require_totp_registration_context!, only: %i(new create)
-        step_up only: :destroy
-
-        def index
-          authorize!(ClientTotpCredential, to: :index?)
-          @totps = current_client.client_totp_credentials
-            .where.not(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::DELETED)
-            .order(created_at: :asc)
-          render_inertia_page(props: index_page_props)
-        end
 
         def new
           authorize!(ClientTotpCredential, to: :new?, context: { user: @step_up_ceremony_actor })
@@ -60,12 +43,6 @@ module Auth
           )
           @png = generate_qrcode(@totp_enrollment.private_key) if @totp_enrollment
           render_inertia_page(props: new_page_props)
-        end
-
-        def edit
-          find_totp
-          authorize!(@totp)
-          render_inertia_page(props: edit_page_props)
         end
 
         def create
@@ -107,37 +84,6 @@ module Auth
           ), status: :unprocessable_content
         end
 
-        def update
-          find_totp
-          authorize!(@totp)
-
-          if @totp.update(update_params)
-            redirect_to(auth_app_settings_totp_path(@totp.public_id, ri: params[:ri]), status: :see_other)
-          else
-            render_inertia_page(
-              component: "auth/app/settings/totps/edit",
-              props: edit_page_props,
-              status: :unprocessable_content,
-            )
-          end
-        end
-
-        # DELETE /settings/totps/:id
-        def destroy
-          totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
-          authorize!(totp)
-          unless IdentityCredentialRemovalCommitter.call!(
-            actor: current_client, credential: totp, current_session: current_session, request: request,
-          )
-            redirect_to(
-              auth_app_settings_totps_path(ri: params[:ri]),
-              status: :see_other,
-            )
-            return
-          end
-          redirect_to(auth_app_settings_totps_path(ri: params[:ri]), status: :see_other)
-        end
-
         private
 
         def handle_failure
@@ -147,11 +93,7 @@ module Auth
         end
 
         def current_policy_user
-          case action_name
-          when "new", "create" then @step_up_ceremony_actor
-          when "index", "edit", "update", "destroy" then current_client
-          else raise ActionController::BadRequest, "unsupported TOTP action"
-          end
+          @step_up_ceremony_actor
         end
 
         def require_totp_registration_context!
@@ -181,11 +123,7 @@ module Auth
         rescue_from ActiveRecord::RecordNotFound, with: :render_missing_totp_record!
 
         def render_missing_totp_record!
-          case action_name
-          when "new", "create" then render_invalid_step_up_context!
-          when "index", "edit", "update", "destroy" then head :not_found
-          else raise ActionController::BadRequest, "unsupported TOTP action"
-          end
+          render_invalid_step_up_context!
         end
 
         # Renders one Inertia page and tells `settings_totps_layout` that the slim Inertia shell is
@@ -205,55 +143,6 @@ module Auth
             props: new_page_props,
             status: :unprocessable_content,
           )
-        end
-
-        def index_page_props
-          {
-            title: "Totps",
-            back_link: { label: t("sign.app.settings.show.back"), href: auth_app_settings_path },
-            new_link: {
-              label: t("sign.app.settings.totp.index.new_link"),
-              href: new_auth_app_settings_totp_path(ri: params[:ri]),
-            },
-            columns: {
-              title: t("activerecord.attributes.user_totp_credential.title"),
-              last_otp_at: t("activerecord.attributes.user_totp_credential.last_otp_at"),
-              status: t("messages.totp_status_label"),
-              actions: "Actions",
-            },
-            empty_message: t("messages.no_totp_found"),
-            edit_label: t("actions.edit"),
-            totps: @totps.map { |credential| serialize_totp_row(credential) },
-          }
-        end
-
-        def serialize_totp_row(credential)
-          {
-            public_id: credential.public_id,
-            title: credential.title.presence,
-            last_otp_at: formatted_last_otp_at(credential),
-            status: totp_status_label(credential),
-            edit_href: edit_auth_app_settings_totp_path(credential.public_id, ri: params[:ri]),
-          }
-        end
-
-        def totp_status_label(credential)
-          translation_key = TOTP_STATUS_TRANSLATION_KEYS.fetch(
-            credential.user_identity_totp_credential_status_id,
-            TOTP_STATUS_TRANSLATION_KEYS.fetch(ClientTotpCredentialStatus::NOTHING),
-          )
-          t(translation_key)
-        end
-
-        # A credential that has never produced a code carries nil, so it reads as "never used"
-        # without storing a sentinel timestamp for an event that has not occurred.
-        def formatted_last_otp_at(credential)
-          last_otp_at = credential.last_otp_at
-          usable =
-            (last_otp_at.is_a?(Time) || last_otp_at.is_a?(ActiveSupport::TimeWithZone)) &&
-            last_otp_at > Time.zone.at(0)
-
-          usable ? l(last_otp_at, format: :short) : "-"
         end
 
         def new_page_props
@@ -299,37 +188,6 @@ module Auth
           }
         end
 
-        def edit_page_props
-          {
-            title: t("sign.app.setting.totp.edit.title"),
-            description: t("sign.app.setting.totp.edit.description"),
-            back_link: {
-              label: t("sign.app.settings.show.back"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
-            },
-            form: {
-              action: auth_app_settings_totp_path(@totp.public_id, ri: params[:ri]),
-              scope: "user_totp_credential",
-              title_label: t("activerecord.attributes.user_totp_credential.title"),
-              title_placeholder: t("messages.totp_title_placeholder"),
-              title_hint: t("sign.app.setting.totp.edit.title_hint"),
-              title: @totp.title,
-              submit_label: t("actions.save"),
-            },
-            cancel_link: {
-              label: t("actions.cancel"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
-            },
-            destroy: {
-              action: auth_app_settings_totp_path(@totp.public_id, ri: params[:ri]),
-              submit_label: t("actions.delete"),
-              confirm_message: t("messages.confirm_delete_totp"),
-            },
-            error_header: totp_error_header(model: false),
-            error_messages: @totp.errors.full_messages,
-          }
-        end
-
         def totp_error_header(model:)
           return nil if @totp.errors.empty?
 
@@ -338,10 +196,6 @@ module Auth
           else
             t("errors.template.header", count: @totp.errors.count)
           end
-        end
-
-        def find_totp
-          @totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
         end
 
         def render_totp_qrcode(private_key)
@@ -359,10 +213,6 @@ module Auth
 
         def submitted_totp_enrollment_id
           params.dig(:user_totp_credential, :enrollment_id)
-        end
-
-        def update_params
-          params(user_totp_credential: [:title])
         end
 
         def verification_scope

@@ -74,22 +74,22 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   test "new sends the operator back to the entry when no entra transaction is pending" do
     get new_auth_org_sign_in_passkey_url(ri: "jp")
 
-    assert_redirected_to auth_org_sign_in_path(ri: "jp")
+    assert_response :bad_request
   end
 
   test "options are refused without a pending entra transaction" do
     post auth_org_sign_in_passkey_options_url(ri: "jp"), params: { identifier: @staff.public_id }
 
-    assert_response :unprocessable_content
-    assert_includes response.body, I18n.t("errors.webauthn.sign_in_transaction_required")
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
     assert_nil session[:passkey_challenges]
   end
 
   test "verification is refused without a pending entra transaction" do
     post auth_org_sign_in_passkey_verification_url(ri: "jp"), params: { challenge_id: "anything" }
 
-    assert_response :unprocessable_content
-    assert_includes response.body, I18n.t("errors.webauthn.sign_in_transaction_required")
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
   end
 
   test "options bind the challenge to the entra-selected operator and ignore a submitted identifier" do
@@ -153,7 +153,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_includes response.body, I18n.t("errors.webauthn.challenge_invalid")
   end
 
-  test "verification logs staff in on success under the normal authentication context" do
+  test "verification records evidence without establishing an Auth session" do
     complete_org_entra_first_stage!(@staff)
     challenge_id = issue_challenge!
 
@@ -171,18 +171,15 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     json = response.parsed_body
 
     assert_equal "ok", json["status"]
-    assert_not_nil json["access_token"]
-    assert_equal "Bearer", json["token_type"]
-    assert_equal AuthenticationBase::ACCESS_TOKEN_TTL.to_i, json["expires_in"]
+    assert_nil json["access_token"]
+    assert_nil json["token_type"]
+    assert_nil json["expires_in"]
     assert_equal auth_org_sign_in_check_path(ri: "jp"), json["redirect_url"]
 
     assert_equal 1, @staff_passkey.reload.sign_count
     assert_not_nil @staff_passkey.reload.last_used_at
 
-    token = OperatorToken.where(staff_id: @staff.id).order(:id).last
-
-    assert_equal "normal", token.authentication_context_value.to_s
-    assert_not_predicate token, :emergency_authentication_context?
+    assert_empty OperatorToken.where(staff_id: @staff.id)
   end
 
   test "the pending transaction is one-shot: a replayed second stage has nothing to continue" do
@@ -196,13 +193,11 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
 
     assert_response :ok
 
-    # The browser now holds a session, so the ceremony is refused as a mode
-    # switch before it ever reaches the consumed transaction. Either way there
-    # is nothing left to replay.
+    # The credential ceremony is one-shot; the consumed/cleared transaction has
+    # no second-stage challenge to replay.
     post auth_org_sign_in_passkey_options_url(ri: "jp"), params: {}
 
-    assert_response :forbidden
-    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_response :unprocessable_content
     assert_includes response.headers["Cache-Control"], "no-store"
     assert_nil session[OrgNormalSignInTransaction::SESSION_KEY]
   end
@@ -281,7 +276,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "ok", response.parsed_body["status"]
   end
 
-  test "verification returns session_limit_pending when one logical session has many rotated ancestors" do
+  test "verification hands an at-limit local result to Base for durable resolution" do
     create_rotated_active_staff_session(@staff, rotations: 4)
     complete_org_entra_first_stage!(@staff)
     challenge_id = issue_challenge!
@@ -294,8 +289,28 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_response :ok
     json = response.parsed_body
 
-    assert_equal "session_limit_pending", json["status"]
-    assert_equal auth_org_sign_in_session_path(ri: "jp"), json["redirect_url"]
+    assert_equal "ok", json["status"]
+    assert_nil json["access_token"]
+
+    get json.fetch("redirect_url")
+    follow_redirect! if response.redirect?
+    post auth_org_sign_handoff_path(ri: "jp"), params: { ri: "jp" }
+    result_form = response.parsed_body.at_css("form")
+    result = result_form.at_css('input[name="result"]')["value"]
+    transaction_ref = result_form.at_css('input[name="transaction_ref"]')["value"]
+    host! ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    post base_org_sign_completion_path,
+         params: { result: result, transaction_ref: transaction_ref, ri: "jp" },
+         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}",
+                    "Sec-Fetch-Site" => "same-site", }
+    follow_redirect! if response.redirect?
+
+    assert_response :success
+    assert_equal "base/org/sign/in/limitations/show", inertia_component
+    flow = OperatorSignInFlow.where(principal_id: @staff.id).order(created_at: :desc).first
+
+    assert_predicate flow, :sign_in_session_issuance_pending?
+    assert_predicate OperatorSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).first, :open?
   end
 
   test "verification returns unauthorized for malformed credential payload" do

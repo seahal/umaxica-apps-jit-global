@@ -9,8 +9,6 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_visitor!
-
       def show
         authorize!(current_visitor, to: :show?)
         render inertia: true, props: {
@@ -36,6 +34,7 @@ module Base
           {
             heading: t("base.shared.identity.sections.security"),
             items: [
+              identity_hub_link(:passkey, base_com_identity_passkeys_path(ri: params[:ri])),
               identity_hub_link(:sessions, base_com_sessions_path(ri: params[:ri])),
               identity_hub_link(:secrets, base_com_identity_secrets_path(ri: params[:ri])),
               identity_hub_link(:activities, base_com_identity_activities_path(ri: params[:ri])),

@@ -33,7 +33,7 @@ class IdentityStepUpPasskeyVerificationCommitter
         end
       end
       transaction.record_verification!(
-        method: "passkey", aal: "aal1", phishing_resistant: true,
+        method: "passkey", aal: "aal1", phishing_resistant: true, user_verified: context.user_verified,
         verified_at: context.verified_at, verified_credential_ref: credential_reference(credential),
       )
     end

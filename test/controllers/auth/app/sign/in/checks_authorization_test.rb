@@ -14,8 +14,7 @@ class Auth::App::Sign::In::ChecksAuthorizationTest < ActionController::TestCase
     @cycle = ClientSignInFlow.create!(
       principal_id: @user.id,
       token: @token,
-      status_id: ClientSignInFlow.status_id_for("CHECKPOINT_PENDING"),
-      step: "checkpoint",
+      state_id: ClientSignInFlow.state_id_for("CHECKPOINT_PENDING"),
       return_to: "/after",
       nonce_digest: ClientSignInFlow.digest_nonce(nonce),
       issued_at: Time.current,

@@ -27,7 +27,7 @@ class Auth::Org::Verification::HandoffsController < ::Auth::Org::ApplicationCont
 
   def ceremony_result_layout = "auth/org/application"
 
-  def ceremony_result_completion_url
-    base_org_verification_completion_url(ri: params[:ri], host: base_authority_host, protocol: "https")
+  def ceremony_result_completion_url(**)
+    base_org_verification_completion_url(**, host: base_authority_host, protocol: "https")
   end
 end

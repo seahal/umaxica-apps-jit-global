@@ -79,8 +79,7 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     nonce = "selector-pending-nonce"
     cycle = ClientSignInFlow.create!(
       principal_id: @user.id,
-      status_id: ClientSignInFlow.status_id_for("SELECTOR_PENDING"),
-      step: "selector",
+      state_id: ClientSignInFlow.state_id_for("SELECTOR_PENDING"),
       return_to: "/",
       nonce_digest: ClientSignInFlow.digest_nonce(nonce),
       issued_at: Time.current,

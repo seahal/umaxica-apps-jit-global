@@ -34,7 +34,8 @@ class IdentityTotpEnrollmentQuery
           transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           transaction.surface == "app" && %w(bootstrap credential_registration).include?(transaction.purpose) &&
           transaction.status == "pending" && !transaction.expired?(now: now) && scope_permitted &&
-          transaction.required_aal == "none" && !transaction.phishing_resistant_required &&
+          !transaction.step_up_required && !transaction.phishing_resistant_required &&
+          !transaction.user_verification_required && !transaction.full_reauthentication_required &&
           transaction.allowed_methods_array.include?("totp")
         raise IdentityTotpCeremonyContract::Error, "TOTP display permission unavailable"
       end

@@ -19,12 +19,12 @@ module AuthLocalResultHandoff
       return reject_invalid_sign_in_sequence!
     end
 
-    code = LocalAuthenticationResultCoordinator.issue!(flow: flow, ceremony_session_ref: ceremony.id.to_s)
-    render "auth/shared/oidc_authorization_result", layout: local_result_layout,
-                                                    locals: { completion_url: local_result_completion_url,
-                                                              result_token: code,
-                                                              transaction_ref: flow.public_id,
-                                                              ri: params[:ri], }
+    issuance = LocalAuthenticationResultCoordinator.issue!(flow: flow, ceremony_session_ref: ceremony.id.to_s)
+    redirect_to(
+      local_result_completion_url(
+        result_ref: issuance.reference, transaction_ref: flow.public_id, ri: params[:ri],
+      ), allow_other_host: true, status: :see_other,
+    )
   rescue AuthCeremonySession::InvalidTransition, BaseAuthAdmissionCoordinator::Denied
     reject_invalid_sign_in_sequence!
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError

@@ -16,9 +16,11 @@ module StepUpAvailableMethods
       credentials =
         case subject
         when Client
-          subject.client_emails.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+          subject.client_emails.effective_binding.where(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
         when Visitor
-          subject.visitor_emails.where(visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES)
+          subject.visitor_emails.effective_binding.where(
+            visitor_email_status_id: AuthMethodGuard::VISITOR_VERIFIED_EMAIL_STATUSES,
+          )
         else
           raise ArgumentError, "Email OTP is unavailable for this actor type"
         end

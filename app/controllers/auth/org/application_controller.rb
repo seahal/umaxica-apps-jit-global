@@ -39,11 +39,7 @@ module Auth
 
       allow_browser versions: :modern
 
-      protect_from_forgery using: :header_or_legacy_token,
-                           trusted_origins: JitHostOriginEnv.trusted_origins(
-                             ENV.fetch("PRIVATE_AUTH_STAFF_URL"),
-                           ),
-                           with: :exception
+      protect_from_forgery using: :header_or_legacy_token, with: :exception
 
       authorize :user, through: :current_policy_user
       authorize :actor, through: :current_actor
@@ -61,9 +57,9 @@ module Auth
       # from accessing routes other than /in/session
       # NOTE: Order matters (dependencies rely on this sequence)
       # Layer order: explicit RateLimit -> CurrentContext -> Preference -> AuthN ->
-      # CurrentActor -> side-effect reflection -> Verification -> AuthZ
+      # CurrentActor -> effect reflection -> Verification -> AuthZ
       # Surface-wide default web request limit (defense-in-depth baseline).
-      # RateLimit stays a side-effect-free helper; the limit and its numeric
+      # RateLimit stays an effect-free helper; the limit and its numeric
       # value are declared here on the inheriting controller.
       rate_limit(
         to: 300,
@@ -99,6 +95,13 @@ module Auth
       end
 
       private
+
+      def verification_setup_redirect_path(pt: nil, scope: nil)
+        base_org_verification_setup_url(
+          ri: params[:ri], pt: pt || encoded_step_up_pt, scope: scope,
+          host: ENV.fetch("PUBLIC_BASE_STAFF_URL"), protocol: "https",
+        )
+      end
 
       def auth_credential_ceremony? = true
 

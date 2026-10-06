@@ -61,7 +61,8 @@ class IdentityTotpEnrollmentVerificationCommitter
       unless token.currently_usable?(now) && transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id && enrollment_scope_permitted?(transaction) &&
           %w(bootstrap credential_registration).include?(transaction.purpose) &&
-          transaction.required_aal == "none" && !transaction.phishing_resistant_required &&
+          !transaction.step_up_required && !transaction.phishing_resistant_required &&
+          !transaction.user_verification_required && !transaction.full_reauthentication_required &&
           transaction.status == "pending" && !transaction.expired?(now: now) &&
           record.status == "PENDING" && record.discard_at > now && record.attempt_count < MAX_ATTEMPTS
         raise IdentityTotpCeremonyContract::Error, "TOTP enrollment unavailable"

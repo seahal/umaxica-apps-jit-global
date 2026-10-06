@@ -15,6 +15,7 @@ class OidcDiscoveryDocumentTest < ActiveSupport::TestCase
     assert_equal "#{document.fetch(:issuer)}/.well-known/jwks.json", document.fetch(:jwks_uri)
     assert_equal "#{document.fetch(:issuer)}/oidc/logout", document.fetch(:end_session_endpoint)
     assert_equal ["code"], document.fetch(:response_types_supported)
+    assert_equal %w(authorization_code refresh_token), document.fetch(:grant_types_supported)
     assert_equal %w(private_key_jwt client_secret_post none), document.fetch(:token_endpoint_auth_methods_supported)
     assert_equal ["ES384"], document.fetch(:token_endpoint_auth_signing_alg_values_supported)
     assert_equal ["S256"], document.fetch(:code_challenge_methods_supported)

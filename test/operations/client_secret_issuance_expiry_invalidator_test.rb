@@ -15,7 +15,6 @@ class ClientSecretIssuanceExpiryInvalidatorTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Unconfirmed fixture", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     executor_id = ApplicationJob.new.job_id
     before_active = ClientSecretCapacityQuery.call(client: actor, at: now).active_count
@@ -35,7 +34,7 @@ class ClientSecretIssuanceExpiryInvalidatorTest < ActiveSupport::TestCase
     assert_equal issuance.discard_at, candidate.discard_at
     assert_equal 1.day, issuance.purge_eligible_at - issuance.discard_at
     assert_equal issuance.purge_eligible_at, candidate.purge_eligible_at
-    assert_nil ClientSecretLookupQuery.call(secret: raw)
+    assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
     events = ClientSecretAuditOutbox.where(operation_ref: issuance.origin_operation_id).order(:id).to_a
 
     assert_equal [nil, candidate.public_id], events.map(&:credential_ref)
@@ -110,7 +109,6 @@ class ClientSecretIssuanceExpiryInvalidatorTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Unconfirmed fixture", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw),
     )
     snapshots = [issuance.attributes, candidate.attributes]
     audit_ids = [SecureRandom.uuid, "invalid-event-uuid"]
@@ -165,7 +163,7 @@ class ClientSecretIssuanceExpiryInvalidatorTest < ActiveSupport::TestCase
     raw = SecureRandom.base58(32)
     candidate = ClientSecretCredential.create!(
       client: actor, issuance: issuance, name: "Inconsistent fixture", password: raw,
-      lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+      confirmed_at: now,
     )
     assert_no_difference("ClientSecretAuditOutbox.count") do
       assert_raises(ClientSecretIssuanceExpiryInvalidator::InvalidState) do

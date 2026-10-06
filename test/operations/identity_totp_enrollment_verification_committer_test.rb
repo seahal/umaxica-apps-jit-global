@@ -13,7 +13,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
       token = ClientToken.create!(user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-        required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+        required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+        require_session_binding: true, allowed_methods: ["totp"],
       )
       record = ClientStepUpSession.create!(
         user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -52,7 +55,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-      required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
     )
     ClientStepUpSession.create!(
       user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -93,7 +99,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
     assert_equal "credential_registration_result", payload.fetch("purpose")
     requirement = StepUpRequirement.new(
-      scope: "settings_totp", allowed_methods: [:totp], purpose: "step_up", audience: "step_up:app",
+      scope: "settings_totp", step_up_required: true, allowed_methods: [:totp], purpose: "step_up",
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil, audience: "step_up:app",
       session_binding: token.public_id, token_binding: token.public_id, require_session_binding: true,
     )
 
@@ -111,7 +120,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-      required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+      required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+      user_verification_required: false, full_reauthentication_required: false,
+      phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+      require_session_binding: true, allowed_methods: ["totp"],
     )
     record = ClientStepUpSession.create!(
       user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING", attempt_count: 3,
@@ -143,7 +155,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
       token = ClientToken.create!(user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-        required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+        required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+        require_session_binding: true, allowed_methods: ["totp"],
       )
       record = ClientStepUpSession.create!(
         user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -170,7 +185,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
       token = ClientToken.create!(user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-        required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+        required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+        require_session_binding: true, allowed_methods: ["totp"],
       )
       record = ClientStepUpSession.create!(
         user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",
@@ -194,7 +212,10 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
       token = ClientToken.create!(user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
-        required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],
+        required_scope: "settings_totp", required_aal: "none", step_up_required: false,
+        user_verification_required: false, full_reauthentication_required: false,
+        phishing_resistant_required: false, audience: "step_up:app", token_binding: token.public_id,
+        require_session_binding: true, allowed_methods: ["totp"],
       )
       ClientStepUpSession.create!(
         user_token: token, scope: "settings_totp", return_to: "/identity", status: "PENDING",

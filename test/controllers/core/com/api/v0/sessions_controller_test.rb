@@ -84,7 +84,7 @@ class Core::Com::Api::V0::SessionsControllerTest < ActionDispatch::IntegrationTe
     visitor = visitors(:reserved_visitor)
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(
       visitor,
-      client_id: "side-com",
+      client_id: "warp-com",
     )
 
     get("/api/v0/session", headers: json_headers)

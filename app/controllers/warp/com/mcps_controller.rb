@@ -3,7 +3,7 @@
 
 module Warp
   module Com
-    # Model Context Protocol endpoint hosted by Warp; its established realm identifier remains side.
+    # Model Context Protocol endpoint hosted by Warp; its realm identifier is warp.
     #
     # Unauthenticated by design: it exposes only liveness, deployment revision, and this endpoint's
     # own realm/surface labels. No database, session, actor, or environment data is reachable
@@ -13,7 +13,7 @@ module Warp
 
       AUTHENTICATION_MODE = :bare
 
-      rate_limit_mcp_endpoint(realm: "side", surface: "com")
+      rate_limit_mcp_endpoint(realm: "warp", surface: "com")
 
       def create
         render_mcp_response
@@ -22,7 +22,7 @@ module Warp
       private
 
       def mcp_surface_identity
-        McpSurfaceIdentity.new(realm: "side", surface: "com")
+        McpSurfaceIdentity.new(realm: "warp", surface: "com")
       end
     end
   end

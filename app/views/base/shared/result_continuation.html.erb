@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="referrer" content="no-referrer">
+  </head>
+  <body>
+    <%= form_with url: action_url, method: :post, local: true, data: { turbo: false } do %>
+      <%= hidden_field_tag :result_ref, result_ref %>
+      <%= hidden_field_tag :transaction_ref, transaction_ref if transaction_ref.present? %>
+      <%= hidden_field_tag :ri, ri if ri.present? %>
+      <%= submit_tag "Continue" %>
+    <% end %>
+  </body>
+</html>

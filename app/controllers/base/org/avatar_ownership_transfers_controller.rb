@@ -7,9 +7,9 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      step_up only: :create, scope: "avatar_transfer_request", required_aal: nil
-      step_up only: :accept, scope: "avatar_transfer_accept", required_aal: nil
-      step_up only: :cancel, scope: "avatar_transfer_cancel", required_aal: nil
+      step_up only: :create, scope: "avatar_transfer_request"
+      step_up only: :accept, scope: "avatar_transfer_accept"
+      step_up only: :cancel, scope: "avatar_transfer_cancel"
 
       public
 
@@ -87,11 +87,11 @@ module Base
         token = current_session_token || raise(AvatarOwnershipTransfers::Unauthorized, "Step-Up session token missing")
         result = nil
         token.with_lock do
-          requirement = step_up_requirement(scope: scope, required_aal: nil)
+          requirement = step_up_requirement(scope: scope)
           if StepUpResolver.call(token: token, requirement: requirement).satisfied?
             result = yield
           else
-            require_step_up!(scope: scope, required_aal: nil)
+            require_step_up!(scope: scope)
           end
         end
         result

@@ -4,19 +4,25 @@ require "test_helper"
 require "webauthn/fake_client"
 
 class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
+  SECRET_LIFETIME_VALUES = {
+    "APP_SECRET_ISSUANCE_TTL_SECONDS" => "600",
+    "APP_SECRET_PURGE_DELAY_SECONDS" => "86400",
+    "APP_SECRET_OUTBOX_RETENTION_SECONDS" => "604800",
+    "APP_SECRET_PROOF_RETENTION_SECONDS" => "2592000",
+  }.freeze
+
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    @previous_lifetimes = ENV.to_h.slice("APP_SECRET_ISSUANCE_TTL_SECONDS", "APP_SECRET_PURGE_DELAY_SECONDS")
-    ENV["APP_SECRET_ISSUANCE_TTL_SECONDS"] = "600"
-    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+    @previous_lifetimes = ENV.to_h.slice(*SECRET_LIFETIME_VALUES.keys)
+    SECRET_LIFETIME_VALUES.each { |key, value| ENV[key] = value }
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
 
   teardown do
     ActionController::Base.allow_forgery_protection = @previous_forgery_protection
-    %w(APP_SECRET_ISSUANCE_TTL_SECONDS APP_SECRET_PURGE_DELAY_SECONDS).each do |key|
+    SECRET_LIFETIME_VALUES.each_key do |key|
       @previous_lifetimes.key?(key) ? ENV[key] = @previous_lifetimes.fetch(key) : ENV.delete(key)
     end
     TurnstileVerifierStub.challenge_enabled = false
@@ -43,14 +49,29 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
       )
       target = URI.parse(payload.fetch("url"))
-      host!(host)
+      host!(target.host)
       https!
       headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
       get target.request_uri
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post auth_app_sign_in_path(ri: "jp"), headers: headers.merge("X-CSRF-Token" => csrf), params: {
-        entry_ref: Rack::Utils.parse_query(target.query).fetch("entry_ref"), authenticity_token: csrf,
-      }
+      form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      base_params = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      post form["action"], headers: { "Origin" => "https://#{target.host}", "Sec-Fetch-Site" => "same-origin" },
+                           params: base_params
+      gateway = URI.parse(response.location)
+      second_rt = Rack::Utils.parse_query(gateway.query).fetch("rt")
+      second_payload, = JWT.decode(
+        second_rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+        algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+        verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+      )
+      auth_uri = URI.parse(second_payload.fetch("url"))
+      host!(auth_uri.host)
+      entry_ref = Rack::Utils.parse_query(auth_uri.query).fetch("entry_ref")
+      redeem_auth_ceremony_entry!(
+        auth_uri.path, reference: entry_ref, params: { ri: "jp" }, headers: headers, confirm_via_http: true,
+      )
+
+      assert_response :see_other
       get new_auth_app_sign_up_telephone_path(ri: "jp")
 
       assert_response :success
@@ -83,7 +104,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         raw = SecureRandom.base58(32)
         ClientSecretCredential.create!(
           client: actor, issuance: prior, name: "Existing", password: raw,
-          lookup_digest: SignSecretLookupDigest.digest(raw), confirmed_at: now,
+          confirmed_at: now,
         )
       end
       get auth_app_sign_up_check_telephone_passkey_path(ri: "jp")
@@ -182,7 +203,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
         assert cancel_form, "single-delivery cancellation must submit the protected DELETE endpoint"
         assert_equal expected_count, values.length
-        values.each { |value| assert_nil ClientSecretLookupQuery.call(secret: value) }
+        values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
         csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       end
       confirmation = { checkpoint_version: flow.checkpoint_version }
@@ -196,7 +217,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
 
       assert_equal active_count + expected_count,
                    ClientSecretCapacityQuery.call(client: actor, at: Client.database_now).active_count
-      values.each { |value| assert_nil ClientSecretLookupQuery.call(secret: value) }
+      values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
       assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, telephone.user.reload.status_id
       get auth_app_sign_up_check_telephone_birthdate_path(ri: "jp")
 
@@ -221,7 +242,12 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
           assert_response :see_other
           assert_predicate flow.reload, :sign_up_cancelled?
         else
-          travel_to(flow.expires_at + 1.second) { SignUpExpiryJob.perform_now }
+          overdue_at = Client.database_now - 1.second
+          flow.update_columns(
+            issued_at: overdue_at - 1.second,
+            expires_at: overdue_at,
+          ) # Test setup: make the DB-clock deadline overdue.
+          SignUpExpiryJob.perform_now
 
           assert_equal ClientSignUpFlowStatus::EXPIRED, flow.reload.status_id
         end
@@ -229,7 +255,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         assert_nil issuance.reload.signup_completed_at
         assert_nil issuance.encrypted_payload
         assert_operator issuance.discard_at, :<=, Client.database_now + 1.day
-        values.each { |value| assert_nil ClientSecretLookupQuery.call(secret: value) }
+        values.each { |value| assert_nil ClientSecretLookupQuery.call(client: actor, secret: value) }
         assert_equal 0, ClientSecretCapacityQuery.call(client: telephone.user, at: Client.database_now).active_count
         reason = (outcome == :canceled) ? "flow_canceled" : "flow_expired"
 
@@ -263,7 +289,7 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
       assert_raises(ActiveRecord::ReadonlyAttributeError) { issuance.update!(signup_completed_at: nil) }
       flow.destroy!
 
-      values.each { |value| assert ClientSecretLookupQuery.call(secret: value) }
+      values.each { |value| assert ClientSecretLookupQuery.call(client: actor, secret: value) }
     end
   end
 end

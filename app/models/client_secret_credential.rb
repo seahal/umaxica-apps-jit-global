@@ -14,11 +14,10 @@ class ClientSecretCredential < AppZenithRecord
   belongs_to :client, inverse_of: :client_secret_credentials
   belongs_to :issuance, class_name: "ClientSecretIssuance"
 
-  attr_readonly :public_id, :client_id, :issuance_id, :password_digest, :lookup_digest
+  attr_readonly :public_id, :client_id, :issuance_id, :password_digest
 
   validates :name, presence: true, length: { maximum: 255 }
   validates :password_digest, presence: true, length: { maximum: 255 }
-  validates :lookup_digest, presence: true, format: { with: /\A[0-9a-f]{64}\z/ }
   validates :password, format: { with: SECRET_FORMAT }, allow_nil: true
   validate :persisted_revocation_is_immutable, on: :update
   validate :revocation_has_source_audit, on: :update
@@ -220,12 +219,8 @@ class ClientSecretCredential < AppZenithRecord
 
   def matches_secret?(raw)
     return false unless raw.is_a?(String) && raw.valid_encoding? && raw.ascii_only? && SECRET_FORMAT.match?(raw)
-    return false unless lookup_digest.present? && password_digest.present?
 
-    expected = SignSecretLookupDigest.digest(raw)
-    return false unless ActiveSupport::SecurityUtils.secure_compare(expected, lookup_digest)
-
-    authenticate(raw).present?
+    password_digest.present? && authenticate(raw).present?
   end
 
   private
@@ -264,12 +259,12 @@ class ClientSecretCredential < AppZenithRecord
           receipt.committed_at == flow.session_issued_at
         raise InvalidTransition, "Secret consumption requires its durable successful receipt"
       end
-    elsif receipt || !flow.sign_in_failed?
+    elsif receipt || !terminal_flow?(flow)
       raise InvalidTransition, "Unsuccessful Secret retirement requires its terminal flow"
     end
     verify_cancellation_outcome!(flow) if reason == "flow_canceled"
     valid_reason =
-      successful ? reason == "login_committed" : %w(flow_failed flow_expired
+      successful ? reason == "login_committed" : %w(flow_failed flow_halted flow_expired
                                                     flow_canceled).include?(reason)
     return if valid_reason && (reason != "flow_expired" || flow.expired?(ClientSignInFlow.database_now))
 
@@ -288,12 +283,16 @@ class ClientSecretCredential < AppZenithRecord
       return if transaction && transaction.base_finalized_at.nil? && transaction.browser_session_ref.nil? &&
         ClientSessionLimitResolutionTransaction.where(
           oidc_authorization_transaction_id: transaction.id,
-          status: ClientSessionLimitResolutionTransaction::STATUS_CANCELLED,
+          state_id: ClientSessionLimitResolutionTransaction::CANCELLED,
         ).where.not(cancelled_at: nil).exists?
     end
 
     raise InvalidTransition, "Secret cancellation requires its durable canceled ceremony"
 
+  end
+
+  def terminal_flow?(flow)
+    flow.sign_in_failed? || flow.sign_in_expired? || flow.sign_in_cancelled? || flow.sign_in_halted?
   end
 
   def storage_confirmation_context_matches?(context)

@@ -20,6 +20,7 @@
 #  public_id           :string(21)       not null
 #  session_ref         :string
 #  status              :string           default("initiated"), not null
+#  workflow            :string           default("legacy"), not null
 #  created_at          :datetime         not null
 #  updated_at          :datetime         not null
 #

@@ -6,17 +6,15 @@ class SignComUpTelephoneSignupCreator
   # Outcome consumed by the surface controller.
   Result = Data.define(:status, :telephone, :session_payload)
 
-  def self.call(telephone:, existing_telephone:, pending_public_id:)
+  def self.call(telephone:, pending_public_id:)
     new(
       telephone: telephone,
-      existing_telephone: existing_telephone,
       pending_public_id: pending_public_id,
     ).call
   end
 
-  def initialize(telephone:, existing_telephone:, pending_public_id:)
+  def initialize(telephone:, pending_public_id:)
     @telephone = telephone
-    @existing_telephone = existing_telephone
     @pending_public_id = pending_public_id
     @result = nil
   end
@@ -45,13 +43,6 @@ class SignComUpTelephoneSignupCreator
   def perform_create_under_lock
     cleanup_pending_signup
 
-    locked_existing = lock_existing_telephone
-    if rate_limited_existing?(locked_existing)
-      @result = Result.new(status: :rate_limited, telephone: @telephone, session_payload: nil)
-      raise ActiveRecord::Rollback
-    end
-
-    remove_existing_unverified_telephones
     create_pending_telephone
   end
 
@@ -64,27 +55,6 @@ class SignComUpTelephoneSignupCreator
     pending_visitor = pending_telephone.visitor
     pending_telephone.destroy!
     pending_visitor.destroy! if pending_visitor&.status_id == VisitorStatus::ACTIVE
-  end
-
-  def lock_existing_telephone
-    VisitorTelephone.lock.find_by(id: @existing_telephone.id) if @existing_telephone
-  end
-
-  def rate_limited_existing?(locked_existing)
-    return true if locked_existing&.locked?
-
-    locked_existing&.visitor_telephone_status_id == VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP &&
-      locked_existing.reregistration_window_active?
-  end
-
-  def remove_existing_unverified_telephones
-    number_digest = @telephone.number_digest
-    return if number_digest.blank?
-
-    VisitorTelephone.where(
-      number_digest: number_digest,
-      visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
-    ).find_each(&:destroy!)
   end
 
   def create_pending_telephone

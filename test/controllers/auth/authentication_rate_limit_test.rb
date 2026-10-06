@@ -39,7 +39,9 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
 
   test "app passkey options sign-in hits explicit rails rate limit" do
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     redeem_auth_ceremony_entry!(
       auth_app_sign_in_path, reference: admission.reference, params: { ri: "jp" },
     )

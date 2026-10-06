@@ -19,7 +19,9 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "legacy admission query is rejected without consuming a code" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
 
     get auth_app_sign_in_url(ri: "jp", admission: issuance.code), headers: { "Host" => @host }
 
@@ -30,14 +32,14 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   test "valid admission rotates ceremony session and 303s to a clean sign-in URL" do
     transaction, reference = issue_admission!
 
-    get auth_app_sign_in_url(ri: "jp", transaction_ref: reference), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
 
     assert_response :success
     assert_includes response.body, "auth-admission-continuation-form"
     assert_no_match(/name="admission"/, response.body)
 
     post auth_app_sign_in_path(ri: "jp"), params: {
-      transaction_ref: reference,
+      entry_ref: reference,
       authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
     }, headers: { "Host" => @host }
 
@@ -68,14 +70,14 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   test "admission continuation carries the existing local return target" do
     _transaction, reference = issue_admission!
 
-    get auth_app_sign_in_url(ri: "jp", pt: "/settings/sessions?ri=jp", transaction_ref: reference),
+    get auth_app_sign_in_url(ri: "jp", pt: "/settings/sessions?ri=jp", entry_ref: reference),
         headers: { "Host" => @host }
 
     assert_response :success
     assert_includes response.body, 'name="pt"'
 
     post auth_app_sign_in_path(ri: "jp"), params: {
-      transaction_ref: reference,
+      entry_ref: reference,
       pt: "/settings/sessions?ri=jp",
       authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
     }, headers: { "Host" => @host }
@@ -85,7 +87,14 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "Base-owned local admission reaches the ceremony without creating an OIDC transaction" do
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
+    cookies["auth_sid"] = raw_sid
+    reference = issuance.reference
 
     get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
 
@@ -114,8 +123,15 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal "auth/app/sign_ins/new", inertia_component
   end
 
-  test "a replayed Base-owned local admission is rejected" do
-    reference = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in").reference
+  test "a replayed Base-owned local admission returns to the clean ceremony" do
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
+    cookies["auth_sid"] = raw_sid
+    reference = issuance.reference
 
     get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
     post auth_app_sign_in_path(ri: "jp"), params: {
@@ -131,27 +147,29 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
       authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
     }, headers: { "Host" => @host }
 
-    assert_response :bad_request
+    assert_response :see_other
+    assert_equal "/sign/in", URI.parse(response.location).path
   end
 
-  test "replayed admission is rejected" do
+  test "replayed admission returns to the clean sign-in ceremony" do
     _transaction, reference = issue_admission!
 
-    get auth_app_sign_in_url(ri: "jp", transaction_ref: reference), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
     post auth_app_sign_in_path(ri: "jp"), params: {
-      transaction_ref: reference,
+      entry_ref: reference,
       authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
     }, headers: { "Host" => @host }
 
     assert_response :see_other
 
-    get auth_app_sign_in_url(ri: "jp", transaction_ref: reference), headers: { "Host" => @host }
+    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
     post auth_app_sign_in_path(ri: "jp"), params: {
-      transaction_ref: reference,
+      entry_ref: reference,
       authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
     }, headers: { "Host" => @host }
 
-    assert_response :bad_request
+    assert_response :see_other
+    assert_equal "/sign/in", URI.parse(response.location).path
   end
 
   test "google and apple callback routes remain at their existing paths" do
@@ -183,7 +201,15 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
           scope: "openid profile",
         },
       )
-    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(transaction: issuance.transaction)
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: issuance.transaction, base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: handoff.reference)
+    _auth_session, raw_sid = prepare_admission_binding_for_consumption!(binding, base_token: nil)
+    get(auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host })
+    cookies.delete("auth_sid")
+    cookies.delete("__Host-auth_sid")
+    cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = raw_sid
     [issuance.transaction, handoff.reference]
   end
 end

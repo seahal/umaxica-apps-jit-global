@@ -58,7 +58,7 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_content
     assert_nil response.location
-    assert_includes response.body, I18n.t("sign.app.social.sessions.create.failure")
+    assert_equal "Invalid browser request", response.body
   end
 
   test "base social login start delegates to sign with a login ceremony grant" do
@@ -279,6 +279,10 @@ class BaseSocialLinkCompletionTest
       last_step_up_session_public_id: (token.public_id if token.respond_to?(:last_step_up_session_public_id)),
       last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
       last_step_up_audience: (step_up_test_audience_for_token(token) if token.respond_to?(:last_step_up_audience)),
+      last_step_up_credential_ref: ("test-step-up-credential" if token.respond_to?(:last_step_up_credential_ref)),
+      last_step_up_phishing_resistant: (false if token.respond_to?(:last_step_up_phishing_resistant)),
+      last_step_up_user_verified: (true if token.respond_to?(:last_step_up_user_verified)),
+      last_step_up_full_reauthentication: (false if token.respond_to?(:last_step_up_full_reauthentication)),
       updated_at: Time.current,
     }.compact
     token.update_columns(attrs)
@@ -374,7 +378,9 @@ class BaseSocialLinkCompletionTest
   end
 
   def seed_social_auth_session(provider:, intent: "login", user: nil, entry: nil, ri: "jp", rt: nil, referer: nil)
-    host = configured_host(:sign_service)
+    # Keep the Auth request phase and callback on the same host so the Rack
+    # session carrying the ceremony state is the one the callback reads.
+    host = @host
     host!(host) if respond_to?(:host!)
     normalized_provider = SocialIdentifiable.normalize_provider(provider)
     continue_path =
@@ -416,7 +422,9 @@ class BaseSocialLinkCompletionTest
   private
 
   def seed_app_social_link_grant_session(provider:, user:, ri: "jp")
-    host = configured_host(:sign_service)
+    # Keep the Auth request phase and callback on the same host so the Rack
+    # session carrying the ceremony state is the one the callback reads.
+    host = @host
     host!(host) if respond_to?(:host!)
 
     user_headers = as_user_headers(user, host: host)
@@ -451,6 +459,8 @@ class BaseSocialLinkCompletionTest
   end
 
   def submit_social_completion_if_present!
+    return if follow_social_completion_redirect_if_present!
+
     return unless response.media_type == "text/html"
     return unless response.body.include?("social-completion-form")
 

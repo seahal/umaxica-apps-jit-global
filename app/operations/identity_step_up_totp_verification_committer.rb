@@ -29,7 +29,7 @@ class IdentityStepUpTotpVerificationCommitter
       return false unless result.accepted?
 
       transaction.record_verification!(
-        method: "totp", aal: "aal1", phishing_resistant: false,
+        method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
         verified_at: verified_at, verified_credential_ref: result.credential.public_id,
       )
       true

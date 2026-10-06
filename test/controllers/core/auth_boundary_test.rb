@@ -129,6 +129,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       :oidc_client_id => client.client_id,
       :oidc_scope => "openid profile",
       :oidc_jti => SecureRandom.uuid,
+      :oidc_nonce => SecureRandom.hex(16),
       :oidc_auth_time => 1.minute.ago,
       :refresh_token_expires_at => 10.minutes.from_now,
     )
@@ -137,6 +138,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       host: host,
       resource_type: surface.fetch(:resource_type),
       session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
       oidc_sid: rp_session.public_id,
       oidc_jti: rp_session.oidc_jti,
       expires_at: 10.minutes.from_now,
@@ -160,7 +162,11 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
     when "visitor"
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
-      visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      visitor = Visitor.create!(
+        id: 9_116_000_000_000 + SecureRandom.random_number(1_000_000),
+        status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
       token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
       [visitor, token, VisitorToken]
     else

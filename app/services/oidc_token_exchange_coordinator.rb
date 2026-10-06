@@ -13,7 +13,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
   class AuthorizationGrantAlreadyRedeemed < StandardError; end
 
   Result =
-    Data.define(:success, :token_response, :error, :error_description) do
+    Data.define(:success, :token_response, :error, :error_description, :access_expires_at, :refresh_expires_at) do
       def success? = success
     end
 
@@ -211,21 +211,22 @@ class OidcTokenExchangeCoordinator < ApplicationService
     dpop_jkt = validate_refresh_dpop_proof(usage, resource_type)
     return dpop_jkt if dpop_jkt.is_a?(Result)
 
-    rotation = rotate_refresh_token
-    return failure("invalid_grant", "refresh token could not be rotated") unless rotation.success?
-
-    usage = rotation.token
-    decision_time = usage.class.database_now
-    issue_refreshed_token_result(
-      usage: usage,
+    rotation = rotate_refresh_token(
       resource: resource,
       client: client,
-      root_token: root_token,
-      refresh_plain: rotation.refresh_token,
-      dpop_jkt: dpop_jkt,
       auth_time: auth_time,
       resource_type: resource_type,
-      now: decision_time,
+      dpop_jkt: dpop_jkt,
+    )
+    return refresh_rotation_failure(rotation) unless rotation.success?
+
+    Result.new(
+      success: true,
+      token_response: rotation.token_response,
+      error: nil,
+      error_description: nil,
+      access_expires_at: rotation.access_expires_at,
+      refresh_expires_at: rotation.refresh_expires_at,
     )
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] refresh rotation failed: #{e.class}")
@@ -248,12 +249,45 @@ class OidcTokenExchangeCoordinator < ApplicationService
     )
   end
 
-  def rotate_refresh_token
+  def rotate_refresh_token(resource:, client:, auth_time:, resource_type:, dpop_jkt:)
     OidcRefreshTokenIssuer.call(
       refresh_token: refresh_token,
       client_id: client_id,
-      resource_type: expected_resource_type,
+      resource_type: resource_type,
+      response_builder: lambda do |usage:, refresh_token:, now:, **_|
+        locked_root_token = usage.parent_token
+        locked_resource = resource_for_root_token(locked_root_token, resource_type)
+        result = issue_refreshed_token_result(
+          usage: usage,
+          resource: locked_resource || resource,
+          client: client,
+          root_token: locked_root_token,
+          refresh_plain: refresh_token,
+          dpop_jkt: dpop_jkt,
+          auth_time: auth_time,
+          resource_type: resource_type,
+          now: now,
+        )
+        raise TokenIssuanceError, "refreshed token response could not be built" unless result.success?
+
+        result.token_response
+      end,
     )
+  end
+
+  def refresh_rotation_failure(rotation)
+    case rotation.reason
+    when :delivery_publication_failed, :coordination_timeout, :delivery_receipt_invalid
+      failure("server_error", "refresh delivery unavailable")
+    when :coordination_unavailable
+      failure("server_error", "refresh coordination unavailable")
+    when :refresh_token_reuse_detected
+      failure("invalid_grant", "refresh token reuse detected")
+    when :client_mismatch, :inactive_token, :invalid_digest
+      failure("invalid_grant", "refresh token could not be rotated")
+    else
+      failure("server_error", "refresh token rotation failed")
+    end
   end
 
   def resource_for_root_token(root_token, resource_type)
@@ -332,7 +366,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
     root_token = resolve_root_token(authorization_code)
     return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
-    return failure("invalid_grant", "root session is not active") unless root_token.currently_usable?
+    return failure("invalid_grant", "root session is not active") unless root_browser_session_usable?(root_token)
     return failure("invalid_grant", "root session actor mismatch") unless root_token_actor_matches?(
       root_token,
       resource,
@@ -414,35 +448,36 @@ class OidcTokenExchangeCoordinator < ApplicationService
         # The code CAS is outside PostgreSQL. Re-lock and re-read the parent
         # after the CAS so a revoke racing with exchange wins before any RP
         # Session, refresh token, or access token authority is created.
-        locked_root_token = root_token.class.lock.find_by(id: root_token.id)
-        unless bound_session_usable_after_code_cas?(locked_root_token, resource)
-          issuance_result = failure("invalid_grant", "root session is not active")
-          next
-        end
-
         decision_time = connection_class.database_now
 
-        usage = prepare_exchanged_usage(
-          authorization_code: authorization_code,
-          resource: resource,
-          client: client,
-          root_token: locked_root_token,
-          dpop_jkt: dpop_jkt,
-          now: decision_time,
-        )
+        with_current_root_token_lock(root_token, resource) do |locked_root_token, device_session|
+          unless bound_session_usable_after_code_cas?(locked_root_token, resource, device_session: device_session)
+            issuance_result = failure("invalid_grant", "root session is not active")
+            next
+          end
 
-        refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
-        link_consumed_family!(authorization_code, usage)
-        issuance_result = issue_exchanged_token_result(
-          authorization_code: authorization_code,
-          resource: resource,
-          client: client,
-          root_token: locked_root_token,
-          usage: usage,
-          refresh_plain: refresh_plain,
-          dpop_jkt: dpop_jkt,
-          now: decision_time,
-        )
+          usage = prepare_exchanged_usage(
+            authorization_code: authorization_code,
+            resource: resource,
+            client: client,
+            root_token: locked_root_token,
+            dpop_jkt: dpop_jkt,
+            now: decision_time,
+          )
+
+          refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
+          link_consumed_family!(authorization_code, usage)
+          issuance_result = issue_exchanged_token_result(
+            authorization_code: authorization_code,
+            resource: resource,
+            client: client,
+            root_token: locked_root_token,
+            usage: usage,
+            refresh_plain: refresh_plain,
+            dpop_jkt: dpop_jkt,
+            now: decision_time,
+          )
+        end
       end
       issuance_result
     end
@@ -497,31 +532,32 @@ class OidcTokenExchangeCoordinator < ApplicationService
       return [failure("invalid_grant", "authorization grant already redeemed"), nil]
     end
 
-    locked_root_token = root_token.class.lock.find_by(id: root_token.id)
-    unless bound_session_usable_after_code_cas?(locked_root_token, resource)
-      return [failure("invalid_grant", "root session is not active"), nil]
-    end
+    with_current_root_token_lock(root_token, resource) do |locked_root_token, device_session|
+      unless bound_session_usable_after_code_cas?(locked_root_token, resource, device_session: device_session)
+        return [failure("invalid_grant", "root session is not active"), nil]
+      end
 
-    usage = prepare_exchanged_usage(
-      authorization_code: authorization_code,
-      resource: resource,
-      client: client,
-      root_token: locked_root_token,
-      dpop_jkt: dpop_jkt,
-      now: decision_time,
-    )
-    refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
-    result = issue_exchanged_token_result(
-      authorization_code: authorization_code,
-      resource: resource,
-      client: client,
-      root_token: locked_root_token,
-      usage: usage,
-      refresh_plain: refresh_plain,
-      dpop_jkt: dpop_jkt,
-      now: decision_time,
-    )
-    [result, usage]
+      usage = prepare_exchanged_usage(
+        authorization_code: authorization_code,
+        resource: resource,
+        client: client,
+        root_token: locked_root_token,
+        dpop_jkt: dpop_jkt,
+        now: decision_time,
+      )
+      refresh_plain = issue_or_rotate_usage_refresh_token!(usage, now: decision_time)
+      result = issue_exchanged_token_result(
+        authorization_code: authorization_code,
+        resource: resource,
+        client: client,
+        root_token: locked_root_token,
+        usage: usage,
+        refresh_plain: refresh_plain,
+        dpop_jkt: dpop_jkt,
+        now: decision_time,
+      )
+      [result, usage]
+    end
   end
 
   def prepare_exchanged_usage(authorization_code:, resource:, client:, root_token:, dpop_jkt:, now:)
@@ -546,14 +582,25 @@ class OidcTokenExchangeCoordinator < ApplicationService
     )
   end
 
-  def bound_session_usable_after_code_cas?(root_token, resource)
+  def bound_session_usable_after_code_cas?(root_token, resource, device_session: nil)
     return false unless root_token&.currently_usable?
     return false unless resource
+
+    device_session ||= device_session_for_root_token(root_token)
+    return false unless device_session&.usable?
+    return false unless device_session.current_refresh_token_id == root_token.id
 
     resource.reload
     resource.active? && root_token_actor_matches?(root_token, resource)
   rescue ActiveRecord::RecordNotFound
     false
+  end
+
+  def root_browser_session_usable?(root_token)
+    device_session = device_session_for_root_token(root_token)
+    device_session&.usable? &&
+      device_session.current_refresh_token_id == root_token.id &&
+      root_token.currently_usable?
   end
 
   def wrap_payload(payload)
@@ -751,16 +798,17 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def create_or_resolve_active_usage!(root_token:, client:, scope:, dpop_jkt:, auth_time:, acr:, amr:, nonce:, now:)
     usage_class = usage_class_for_root_token(root_token)
     owner = connection_owner_for(usage_class)
+    device_session = device_session_for_root_token(root_token)
+    raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session&.usable?
+    unless device_session.current_refresh_token_id == root_token.id && root_token.currently_usable?
+      raise RpSession::IssuanceRejected, "Browser Session current root token is not active"
+    end
+
     usage = nil
 
     owner.connected_to(role: :writing) do
-      # Lock the parent before looking for a child. A missing child row cannot be
-      # locked, so a child-only lock would allow two first exchanges to race into
-      # the unique index and leave one request with an ambiguous failure path.
-      locked_root_token = root_token.class.lock.find(root_token.id)
-      parent_key = parent_token_foreign_key_for(usage_class)
       lookup = { oidc_client_id: client.client_id }
-      lookup[parent_key] = locked_root_token.id
+      lookup[:device_session_id] = device_session.id
       existing_usage = usage_class.lock.where(lookup).to_a
       if existing_usage.any? { |record| record.retirement_pending? }
         raise RpSessionAlreadyExists, "an RP Session for this Browser Session and client is not retired"
@@ -776,9 +824,21 @@ class OidcTokenExchangeCoordinator < ApplicationService
         oidc_amr: JSON.generate(Array(amr).map(&:to_s)),
         oidc_nonce: nonce,
         last_used_at: now,
-        refresh_token_expires_at: refresh_expires_at_for(locked_root_token, now: now),
+        refresh_token_expires_at: refresh_expires_at_for(root_token, now: now),
+        device_session_id: device_session.id,
       }
-      attributes[parent_key] = locked_root_token
+      if usage_class == ClientRpSession
+        attributes[:client_token] = root_token
+        attributes[:client_device_session] = device_session
+      elsif usage_class == VisitorRpSession
+        attributes[:visitor_token] = root_token
+        attributes[:visitor_device_session] = device_session
+      elsif usage_class == OperatorRpSession
+        attributes[:operator_token] = root_token
+        attributes[:operator_device_session] = device_session
+      else
+        raise ArgumentError, "unsupported RP Session class: #{usage_class.name}"
+      end
       usage = usage_class.create!(**attributes)
 
       usage
@@ -828,10 +888,13 @@ class OidcTokenExchangeCoordinator < ApplicationService
         token_type: dpop_jkt.present? ? "DPoP" : "Bearer",
         expires_in: [(access_expires_at - now).to_i, 0].max,
         refresh_token: refresh_plain,
+        refresh_token_expires_in: [(usage.refresh_token_expires_at - now).to_i, 0].max,
         id_token: id_token,
       },
       error: nil,
       error_description: nil,
+      access_expires_at: access_expires_at,
+      refresh_expires_at: usage.refresh_token_expires_at,
     )
   end
 
@@ -862,10 +925,13 @@ class OidcTokenExchangeCoordinator < ApplicationService
         token_type: dpop_jkt.present? ? "DPoP" : "Bearer",
         expires_in: [(access_expires_at - now).to_i, 0].max,
         refresh_token: refresh_plain,
+        refresh_token_expires_in: [(usage.refresh_token_expires_at - now).to_i, 0].max,
         id_token: id_token,
       }.compact,
       error: nil,
       error_description: nil,
+      access_expires_at: access_expires_at,
+      refresh_expires_at: usage.refresh_token_expires_at,
     )
   end
 
@@ -987,11 +1053,39 @@ class OidcTokenExchangeCoordinator < ApplicationService
     owner
   end
 
-  def parent_token_foreign_key_for(usage_class)
-    case usage_class.name
-    when "OperatorRpSession" then :operator_token
-    when "VisitorRpSession" then :visitor_token
-    else :client_token
+  def with_current_root_token_lock(root_token, _resource)
+    device_session = device_session_for_root_token(root_token)
+    raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session
+
+    device_session.with_lock do
+      current_root_token = current_root_token_for(device_session)
+      unless current_root_token && current_root_token.id == root_token.id
+        raise RpSession::IssuanceRejected, "Browser Session current root token changed"
+      end
+
+      current_root_token.with_lock do
+        yield current_root_token, device_session
+      end
+    end
+  end
+
+  def device_session_for_root_token(root_token)
+    case root_token
+    when ClientToken then ClientDeviceSession.find_by(id: root_token.device_session_id)
+    when VisitorToken then VisitorDeviceSession.find_by(id: root_token.device_session_id)
+    when OperatorToken then OperatorDeviceSession.find_by(id: root_token.device_session_id)
+    else
+      raise ArgumentError, "unsupported root token class: #{root_token.class.name}"
+    end
+  end
+
+  def current_root_token_for(device_session)
+    case device_session
+    when ClientDeviceSession then ClientToken.find_by(id: device_session.current_refresh_token_id)
+    when VisitorDeviceSession then VisitorToken.find_by(id: device_session.current_refresh_token_id)
+    when OperatorDeviceSession then OperatorToken.find_by(id: device_session.current_refresh_token_id)
+    else
+      raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
     end
   end
 
@@ -1070,7 +1164,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def failure(error, description)
-    Result.new(success: false, token_response: nil, error: error, error_description: description)
+    Result.new(
+      success: false,
+      token_response: nil,
+      error: error,
+      error_description: description,
+      access_expires_at: nil,
+      refresh_expires_at: nil,
+    )
   end
 
   def expected_realm_matches?(actual_resource_type)

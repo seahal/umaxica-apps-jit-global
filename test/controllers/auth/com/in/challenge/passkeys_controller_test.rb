@@ -39,7 +39,9 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
     # A real Base admission precedes every Auth-only MFA assertion; no root cookie is injected.
-    @issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "com", intent: "sign_in")
+    @issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     get auth_com_sign_in_path, params: { entry_ref: @issuance.reference, ri: "jp" }
     csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_com_sign_in_path, params: { entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp" }
@@ -81,7 +83,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
         ->(**) do
           # Public verifier fault seam models the flow changing after successful signature validation.
           if interruption == :failed
-            @issuance.transaction.fail_sign_in!
+            @issuance.transaction.halt_sign_in!
           elsif interruption == :advanced
             @issuance.transaction.advance_sign_in_to_guardrail!
           else

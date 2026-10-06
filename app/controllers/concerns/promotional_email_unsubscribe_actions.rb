@@ -39,10 +39,6 @@ module PromotionalEmailUnsubscribeActions
     false
   end
 
-  def verified_request?
-    super || promotional_unsubscribe_create_request?
-  end
-
   def promotional_unsubscribe_create_request?
     return false unless action_name == "create"
 

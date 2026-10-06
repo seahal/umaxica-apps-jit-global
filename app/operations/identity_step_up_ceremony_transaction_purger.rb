@@ -14,9 +14,11 @@ class IdentityStepUpCeremonyTransactionPurger
     ],
     VisitorStepUpCeremonyTransaction => [
       VisitorAuthCeremonySession, VisitorStepUpSession, VisitorPasskeyCeremonyTransaction,
+      VisitorPasskeyCeremonyCandidate,
     ],
     OperatorStepUpCeremonyTransaction => [
       OperatorAuthCeremonySession, OperatorStepUpSession, OperatorPasskeyCeremonyTransaction,
+      OperatorPasskeyCeremonyCandidate,
     ],
   }.freeze
 
@@ -46,6 +48,9 @@ class IdentityStepUpCeremonyTransactionPurger
             cutoff = now - retention_period
             terminal_times = parent.attributes.values_at("consumed_at", "canceled_at", "revoked_at")
             next unless parent.expires_at <= cutoff && terminal_times.all? { |time| time.nil? || time <= cutoff }
+            next unless AuthAdmissionBindingPurger.purge_for_parent!(
+              parent:, now:, retention_period:,
+            )
 
             children =
               DEPENDENT_MODELS.fetch(model).map do |child_model|
@@ -78,7 +83,8 @@ class IdentityStepUpCeremonyTransactionPurger
       end
     elsif [ClientPasskeyCeremonyTransaction, VisitorPasskeyCeremonyTransaction, OperatorPasskeyCeremonyTransaction,
            ClientTotpCeremonyTransaction, IdentityTotpCeremonyCandidate,
-           IdentityPasskeyCeremonyCandidate,].include?(model)
+           IdentityPasskeyCeremonyCandidate, VisitorPasskeyCeremonyCandidate,
+           OperatorPasskeyCeremonyCandidate,].include?(model)
       relation.where(model.arel_table[:expires_at].lteq(cutoff))
         .where(model.arel_table[:consumed_at].eq(nil).or(model.arel_table[:consumed_at].lteq(cutoff)))
     else

@@ -10,8 +10,6 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_client!
-
         def show
           authorize!(current_client, to: :show?)
           @standing = AccountStandingResolver.call(

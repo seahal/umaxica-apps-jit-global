@@ -9,12 +9,16 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
     @actor = clients(:one)
     @token = ClientToken.create!(user: @actor)
     @requirement = StepUpRequirement.new(
-      scope: "settings_birthdate", allowed_methods: [:passkey], purpose: "step_up",
+      scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes, actor_ref: @actor.public_id,
+      resource_ref: nil, tenant_ref: nil, purpose: "step_up",
       audience: "step_up:app", session_binding: @token.public_id, token_binding: @token.public_id,
       require_session_binding: true,
     )
-    @transaction = BaseStepUpAdmissionIssuer.call!(
+    @transaction = issue_base_step_up_admission!(
       actor: @actor, token: @token, requirement: @requirement, return_to: "/identity/birthdate",
+      base_browser_nonce: "test-browser-nonce", base_token: @token,
     ).transaction
     @ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
       admission_purpose: "step_up_handoff", step_up_ceremony_transaction_ref: @transaction.transaction_id,
@@ -66,6 +70,7 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
     # Synthetic proof tests the cancellation/finalization boundary, not WebAuthn cryptography.
     @transaction.record_verification!(
       method: "passkey", aal: "aal1", phishing_resistant: true,
+      user_verified: true,
       verified_at: ClientStepUpCeremonyTransaction.database_now, verified_credential_ref: credential.public_id,
     )
     result = BaseAuthAdmissionCoordinator.issue_result!(

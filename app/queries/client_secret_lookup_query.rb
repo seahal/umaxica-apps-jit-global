@@ -1,23 +1,24 @@
 # frozen_string_literal: true
 
-# Indexed whole-value verification only. The caller must subsequently authorize
-# the Client and atomically claim under the canonical flow/browser binding.
+# The Client is resolved before this query. App Secrets are deliberately not
+# globally enumerable by a whole-value digest: equal values on two Clients are
+# independent credentials.
 class ClientSecretLookupQuery
   class << self
     public
 
-    def call(secret:)
+    def call(client:, secret:)
+      return nil unless client.is_a?(Client)
       return nil unless secret.is_a?(String) && secret.valid_encoding? && secret.ascii_only? &&
         ClientSecretCredential::SECRET_FORMAT.match?(secret)
 
       AppZenithRecord.connected_to(role: :writing) do
-        digest = SignSecretLookupDigest.digest(secret)
         now = ClientSecretCredential.database_now
-        credential = ClientSecretCredential.available_at(now).find_by(lookup_digest: digest)
-        if credential&.issuance&.sign_up_flow_ref
-          return nil unless credential.issuance.signup_completed_at
+        ClientSecretCredential.available_at(now).where(client_id: client.id).order(:id).find do |credential|
+          next unless credential.issuance&.sign_up_flow_ref.nil? || credential.issuance.signup_completed_at
+
+          credential.matches_secret?(secret)
         end
-        credential if credential&.matches_secret?(secret)
       end
     end
   end

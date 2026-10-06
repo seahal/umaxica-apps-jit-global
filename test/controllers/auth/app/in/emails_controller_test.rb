@@ -62,7 +62,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     # These are Auth endpoint tests. Base issuance and browser binding are exercised separately
     # in local_authentication_boundary_test; this admission grants only the credential ceremony.
-    @local_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+    @local_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+    )
     get auth_app_sign_in_url(ri: "jp", entry_ref: @local_admission.reference), headers: { "Host" => @host }
     admission_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
     post auth_app_sign_in_url(ri: "jp"),
@@ -120,7 +122,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     existing_session = open_session
     missing_session = open_session
     [existing_session, missing_session].each do |browser|
-      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(surface: "app", intent: "sign_in")
+      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: "app", intent: "sign_in", base_browser_nonce: "test-browser-nonce", base_token: nil,
+      )
       browser.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host })
       csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       browser.post(

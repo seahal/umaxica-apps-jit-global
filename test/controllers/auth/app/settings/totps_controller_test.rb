@@ -98,104 +98,17 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "should get index" do
-    with_prosopite_paused do
-      get auth_app_settings_totps_url(ri: "jp"), headers: @headers
+  test "retired TOTP management paths have no route or redirect" do
+    %w(
+      /settings/totps
+      /settings/totps/1
+      /settings/totps/1/edit
+    ).each do |path|
+      get path
+
+      assert_response :not_found, path
+      assert_nil response.headers["Location"], path
     end
-
-    assert_response :ok
-    assert_equal "auth/app/settings/totps/index", inertia_component
-    assert_equal(
-      [@totp.public_id],
-      inertia_props.fetch("totps").map { |row| row.fetch("public_id") },
-    )
-  end
-
-  test "index displays active and revoked statuses without removing revoked credentials" do
-    @totp.update!(
-      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::REVOKED,
-      otp_attempts_count: ClientTotpCredential::MAX_CONSECUTIVE_FAILURES,
-    )
-
-    with_prosopite_paused do
-      get auth_app_settings_totps_url(ri: "jp"), headers: @headers
-    end
-
-    assert_response :ok
-    row = inertia_props.fetch("totps").find { |candidate| candidate.fetch("public_id") == @totp.public_id }
-
-    assert_equal I18n.t("messages.totp_status.revoked"), row.fetch("status")
-    assert_equal I18n.t("messages.totp_status_label"), inertia_props.fetch("columns").fetch("status")
-  end
-
-  test "index stays accessible when no totp is registered" do
-    user = Client.create!(status_id: ClientStatus::NOTHING)
-    token = ClientToken.create!(user_id: user.id, root_login_established_at: Time.current)
-    satisfy_user_verification(token)
-    access_token = AuthenticationToken.encode(
-      user,
-      host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      session_public_id: token.public_id,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
-    )
-    headers = {
-      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      "Authorization" => "Bearer #{access_token}",
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
-    cookies["csrf_token"] = "test_csrf_token"
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
-    with_prosopite_paused do
-      get auth_app_settings_totps_url(ri: "jp"), headers: headers
-    end
-
-    assert_response :ok
-    assert_empty inertia_props.fetch("totps")
-    assert_equal I18n.t("messages.no_totp_found"), inertia_props.fetch("empty_message")
-  end
-
-  test "index requires step up when multi factor status is active even without totp" do
-    user = Client.create!(status_id: ClientStatus::NOTHING)
-    ClientEmail.create!(
-      user: user,
-      address: "totp-active-with-email@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
-    token = ClientToken.create!(user_id: user.id, root_login_established_at: Time.current)
-    token.update!(created_at: 1.hour.ago, last_step_up_at: nil, last_step_up_scope: nil)
-    access_token = AuthenticationToken.encode(
-      user,
-      host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      session_public_id: token.public_id,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
-    )
-    headers = {
-      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      "Authorization" => "Bearer #{access_token}",
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
-    cookies["csrf_token"] = "test_csrf_token"
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-
-    with_prosopite_paused do
-      get auth_app_settings_totps_url(ri: "jp"), headers: headers
-    end
-
-    assert_response :ok
-    assert_equal ClientMfaStatus::ACTIVE, user.reload.mfa_status_id
-  end
-
-  test "should show up link on index page" do
-    with_prosopite_paused do
-      get auth_app_settings_totps_url(ri: "jp"), headers: @headers
-    end
-
-    assert_response :ok
-    assert_equal(
-      new_auth_app_settings_totp_path(ri: "jp"),
-      inertia_props.fetch("new_link").fetch("href"),
-    )
   end
 
   # ===================================================================
@@ -215,10 +128,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -269,10 +185,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -321,10 +240,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -360,7 +282,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
       assert_response :bad_request
     end
-    replacement = BaseStepUpAdmissionIssuer.call!(
+    replacement = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference)
@@ -392,10 +314,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -426,7 +351,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil session[:totp_enrollment]
     assert_nil session[:private_key]
     assert_nil token.reload.last_step_up_at
-    replacement = BaseStepUpAdmissionIssuer.call!(
+    replacement = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: replacement.reference)
@@ -462,10 +387,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -538,10 +466,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -582,10 +513,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -625,10 +559,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -665,10 +602,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -703,10 +643,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -744,11 +687,11 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
-    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+        actor: actor, token: token, transaction: issuance.transaction.reload, result_reference: raw_result,
       )
     end
 
@@ -758,84 +701,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "consumed", issuance.transaction.reload.status
     assert_nil token.reload.last_step_up_at
     assert_equal before_secrets, ClientSecretCredential.where(client_id: actor.id).count
-  end
-
-  test "should get edit with public_id" do
-    with_prosopite_paused do
-      get edit_auth_app_settings_totp_url(@totp.public_id, ri: "jp"), headers: @headers
-    end
-
-    assert_response :ok
-    assert_equal "auth/app/settings/totps/edit", inertia_component
-    assert_equal(
-      auth_app_settings_totp_path(@totp.public_id, ri: "jp"),
-      inertia_props.fetch("form").fetch("action"),
-    )
-    assert_equal @totp.public_id, request.path_parameters[:id]
-    assert_nil request.path_parameters[:public_id]
-  end
-
-  test "should update title with public_id" do
-    with_prosopite_paused do
-      patch auth_app_settings_totp_url(@totp.public_id, ri: "jp"),
-            params: { user_totp_credential: { title: "Updated TOTP" } },
-            headers: @headers
-    end
-
-    assert_redirected_to auth_app_settings_totp_path(@totp.public_id, ri: "jp")
-    assert_equal "Updated TOTP", @totp.reload.title
-  end
-
-  test "removal with public_id retains deleted TOTP history" do
-    headers = headers_for_client_token(@token, scope: "settings_totp")
-
-    before_count = ClientTotpCredential.count
-    with_prosopite_paused do
-      delete auth_app_settings_totp_url(@totp.public_id, ri: "jp"), headers: headers
-    end
-
-    assert_redirected_to auth_app_settings_totps_path(ri: "jp")
-    assert_equal before_count, ClientTotpCredential.count
-    assert_predicate @totp.reload, :deleted?
-    assert_nil @token.reload.last_step_up_at
-    get auth_app_settings_totps_path(ri: "jp"),
-        headers: headers.merge("X-Inertia" => "true", "X-Inertia-Version" => ViteRuby.digest)
-
-    assert_response :success
-    rows = response.parsed_body.fetch("props").fetch("totps")
-
-    assert rows.none? { |row| row.fetch("public_id") == @totp.public_id }
-  end
-
-  test "destroy requires fresh settings totp step up" do
-    @token.update!(last_step_up_at: 20.minutes.ago, last_step_up_scope: "settings_totp")
-    headers = headers_for_client_token(@token, scope: "settings_totp", step_up_at: 20.minutes.ago)
-
-    assert_no_difference("ClientTotpCredential.count") do
-      with_prosopite_paused do
-        delete auth_app_settings_totp_url(@totp.public_id, ri: "jp"), headers: headers
-      end
-    end
-
-    assert_response :unauthorized
-    assert_includes response.body, "Step-up authentication required"
-  end
-
-  test "should return 404 for other user's totp" do
-    other_user = clients(:two)
-    other_totp = ClientTotpCredential.create!(
-      user: other_user,
-      private_key: ROTP::Base32.random_base32,
-      last_otp_at: Time.zone.at(0),
-      title: "Other TOTP",
-      user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-    )
-
-    with_prosopite_paused do
-      get edit_auth_app_settings_totp_url(other_totp.public_id, ri: "jp"), headers: @headers
-    end
-
-    assert_response :not_found
   end
 
   test "admitted valid first code creates a credential only at Base finalization" do
@@ -849,10 +714,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -889,11 +757,11 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
-    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+        actor: actor, token: token, transaction: issuance.transaction.reload, result_reference: raw_result,
       )
     end
 
@@ -915,10 +783,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -955,11 +826,11 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
-    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+        actor: actor, token: token, transaction: issuance.transaction.reload, result_reference: raw_result,
       )
     end
 
@@ -970,7 +841,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil token.reload.last_step_up_at
     assert_no_difference("ClientTotpCredential.count") do
       repeated = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+        actor: actor, token: token, transaction: issuance.transaction.reload, result_reference: raw_result,
       )
 
       assert_equal credential.id, repeated.id
@@ -989,10 +860,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -1030,11 +904,11 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
-    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+        actor: actor, token: token, transaction: issuance.transaction.reload, result_reference: raw_result,
       )
     end
 
@@ -1056,10 +930,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -1110,10 +987,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -1160,10 +1040,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -1207,34 +1090,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, record.attempt_count
   end
 
-  test "initial setup user can access totp pages without step-up" do
-    user = create_verified_user_with_email(email_address: "initial_totp_access@example.com")
-    token = ClientToken.create!(user_id: user.id, root_login_established_at: Time.current)
-    token.rotate_refresh_token!
-    token.update!(last_step_up_at: 5.minutes.ago, last_step_up_scope: "settings_totp")
-    satisfy_user_verification(token)
-    access_token = AuthenticationToken.encode(
-      user,
-      host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      session_public_id: token.public_id,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), "client"),
-    )
-    headers = {
-      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-      "Authorization" => "Bearer #{access_token}",
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-    }
-    cookies["csrf_token"] = "test_csrf_token"
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
-    satisfy_user_verification(token)
-
-    with_prosopite_paused do
-      get auth_app_settings_totps_url(ri: "jp"), headers: headers
-    end
-
-    assert_response :ok
-  end
-
   test "first TOTP registration uses explicit bootstrap without granting step up freshness" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
@@ -1246,10 +1101,13 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
       allowed_methods: [:totp], audience: "step_up:app", session_binding: token.public_id,
-      token_binding: token.public_id, require_session_binding: true,
+      token_binding: token.public_id, require_session_binding: true, actor_ref: actor.public_id,
+      resource_ref: nil, tenant_ref: nil,
     )
-    issuance = BaseStepUpAdmissionIssuer.call!(
+    issuance = issue_confirmed_base_step_up_admission!(
       actor: actor, token: token, requirement: requirement, return_to: "/identity/birthdate",
     )
     get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
@@ -1286,11 +1144,11 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     follow_redirect!
     post auth_app_settings_totps_handoff_path(ri: "jp"), params: { authenticity_token: csrf }
-    raw_result = response.parsed_body.at_css('input[name="result"]')["value"]
+    raw_result = Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("result_ref")
     credential = nil
     assert_difference("ClientTotpCredential.count", 1) do
       credential = IdentityTotpEnrollmentFinalCommitter.call!(
-        actor: actor, token: token, transaction: issuance.transaction, raw_result: raw_result,
+        actor: actor, token: token, transaction: issuance.transaction.reload, result_reference: raw_result,
       )
     end
 

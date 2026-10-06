@@ -7,15 +7,16 @@ class ClientExternalIdentity < AppPrincipalRecord
 
   encrypts :subject, deterministic: true
 
+  scope :effective_binding, -> { where(released_at: nil) }
+
   belongs_to :client, inverse_of: :client_external_identities
   has_many :client_apple_notification_events,
            dependent: :nullify,
            inverse_of: :client_external_identity
 
-  validates :provider, inclusion: { in: PROVIDERS }, uniqueness: { scope: :client_id }
+  validates :provider, inclusion: { in: PROVIDERS }
   validates :issuer, :subject, :audience, :verification_authority, presence: true
   validates :state, inclusion: { in: STATES }
-  validates :subject, uniqueness: { scope: :issuer }
   validates :verified_at, presence: true
 
   alias_attribute :uid, :subject
@@ -25,10 +26,16 @@ class ClientExternalIdentity < AppPrincipalRecord
   alias_method :user=, :client=
 
   def active?
-    state == "active"
+    state == "active" && released_at.blank?
   end
 
   def touch_authenticated!
     update!(last_authenticated_at: Time.current)
+  end
+
+  def release!(at: self.class.database_now)
+    return self if released_at.present?
+
+    update!(state: "consent_revoked", released_at: at)
   end
 end
